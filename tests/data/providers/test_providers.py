@@ -1,0 +1,295 @@
+"""AKShareProvider 与 TushareProvider 测试 — 0102 验收。
+
+测试策略：mock 外部 SDK 调用，验证字段映射、协议对接、时点字段、频率限制。
+不实际调用 akshare/tushare 外部 API。
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from unittest.mock import MagicMock, patch
+
+from margin.core.provider import MarketDataProvider
+from margin.data.providers import AKShareProvider, TushareProvider
+
+
+class TestAKShareProvider:
+    def test_descriptor(self):
+        p = AKShareProvider()
+        assert p.descriptor.name == "akshare"
+        assert p.descriptor.provider_type.value == "market_data"
+        assert "get_bars" in p.descriptor.capabilities
+        assert p.descriptor.secret_refs == []
+
+    def test_implements_market_data_protocol(self):
+        p = AKShareProvider()
+        assert isinstance(p, MarketDataProvider)
+
+    def test_get_bars_field_mapping(self):
+        """验证 get_bars 返回标准字段与时点字段。"""
+        p = AKShareProvider()
+
+        mock_df = MagicMock()
+        mock_df.iterrows.return_value = [
+            (
+                0,
+                {
+                    "日期": "2026-06-17",
+                    "开盘": 10.5,
+                    "收盘": 11.0,
+                    "最高": 11.2,
+                    "最低": 10.3,
+                    "成交量": 1000000.0,
+                    "成交额": 11000000.0,
+                },
+            ),
+        ]
+
+        with patch("akshare.stock_zh_a_hist", return_value=mock_df):
+            bars = p.get_bars(
+                ["000001.SZ"],
+                datetime(2026, 6, 1),
+                datetime(2026, 6, 18),
+            )
+
+        assert len(bars) == 1
+        bar = bars[0]
+        assert bar["symbol"] == "000001.SZ"
+        assert bar["open"] == 10.5
+        assert bar["close"] == 11.0
+        assert bar["volume"] == 1000000.0
+        assert bar["frequency"] == "1d"
+        assert bar["source"] == "akshare"
+        assert "fetched_at" in bar
+        assert "available_at" in bar
+        assert bar["available_at"] == datetime(2026, 6, 17, 15, 0)
+
+    def test_get_securities_field_mapping(self):
+        p = AKShareProvider()
+        mock_df = MagicMock()
+        mock_df.iterrows.return_value = [
+            (0, {"代码": "000001", "名称": "平安银行", "最新价": 12.5}),
+            (1, {"代码": "600000", "名称": "浦发银行", "最新价": 8.3}),
+        ]
+
+        with patch("akshare.stock_zh_a_spot_em", return_value=mock_df):
+            securities = p.get_securities(datetime(2026, 6, 18))
+
+        assert len(securities) == 2
+        assert securities[0]["symbol"] == "000001.SZ"
+        assert securities[1]["symbol"] == "600000.SH"
+        assert securities[0]["name"] == "平安银行"
+        assert securities[0]["source"] == "akshare"
+
+    def test_get_index_members(self):
+        p = AKShareProvider()
+        mock_df = MagicMock()
+        mock_df.iterrows.return_value = [
+            (0, {"成份券代码": "000001", "成份券名称": "平安银行"}),
+        ]
+
+        with patch("akshare.index_stock_cons_csindex", return_value=mock_df):
+            members = p.get_index_members("000300", datetime(2026, 6, 18))
+
+        assert len(members) == 1
+        assert members[0]["symbol"] == "000001.SZ"
+        assert members[0]["index_code"] == "000300"
+        assert members[0]["source"] == "akshare"
+
+    def test_healthcheck_healthy(self):
+        p = AKShareProvider()
+        with patch("akshare.stock_zh_a_spot_em", return_value=MagicMock()):
+            result = p.healthcheck()
+        assert result.status.value == "healthy"
+        assert result.provider_name == "akshare"
+
+    def test_healthcheck_unhealthy(self):
+        p = AKShareProvider()
+        with patch("akshare.stock_zh_a_spot_em", side_effect=Exception("network error")):
+            result = p.healthcheck()
+        assert result.status.value == "unhealthy"
+        assert "network error" in result.message
+
+
+class TestTushareProvider:
+    def test_descriptor(self):
+        p = TushareProvider(token="fake")
+        assert p.descriptor.name == "tushare"
+        assert p.descriptor.provider_type.value == "market_data"
+        assert "tushare_token" in p.descriptor.secret_refs
+
+    def test_implements_market_data_protocol(self):
+        p = TushareProvider(token="fake")
+        assert isinstance(p, MarketDataProvider)
+
+    def test_set_token_resets_pro(self):
+        p = TushareProvider(token="old")
+        p._pro = MagicMock()
+        p.set_token("new")
+        assert p._token == "new"
+        assert p._pro is None
+
+    def test_get_bars_field_mapping(self):
+        p = TushareProvider(token="fake")
+        mock_pro = MagicMock()
+        mock_df = MagicMock()
+        mock_df.iterrows.return_value = [
+            (
+                0,
+                {
+                    "trade_date": "20260617",
+                    "open": 10.5,
+                    "close": 11.0,
+                    "high": 11.2,
+                    "low": 10.3,
+                    "vol": 1000000.0,
+                    "amount": 11000000.0,
+                },
+            ),
+        ]
+        mock_pro.daily.return_value = mock_df
+        p._pro = mock_pro
+
+        bars = p.get_bars(
+            ["000001.SZ"],
+            datetime(2026, 6, 1),
+            datetime(2026, 6, 18),
+        )
+
+        assert len(bars) == 1
+        bar = bars[0]
+        assert bar["symbol"] == "000001.SZ"
+        assert bar["open"] == 10.5
+        assert bar["close"] == 11.0
+        assert bar["volume"] == 100000000.0
+        assert bar["amount"] == 11000000000.0
+        assert bar["source"] == "tushare"
+        assert bar["available_at"] == datetime(2026, 6, 17, 15, 0)
+        mock_pro.daily.assert_called_once_with(
+            ts_code="000001.SZ",
+            start_date="20260601",
+            end_date="20260618",
+        )
+
+    def test_get_securities_field_mapping(self):
+        p = TushareProvider(token="fake")
+        mock_pro = MagicMock()
+        mock_df = MagicMock()
+        mock_df.iterrows.return_value = [
+            (
+                0,
+                {
+                    "ts_code": "000001.SZ",
+                    "name": "平安银行",
+                    "industry": "银行",
+                    "market": "主板",
+                    "list_date": "19910403",
+                },
+            ),
+        ]
+        mock_pro.stock_basic.return_value = mock_df
+        p._pro = mock_pro
+
+        securities = p.get_securities(datetime(2026, 6, 18))
+        assert len(securities) == 1
+        assert securities[0]["symbol"] == "000001.SZ"
+        assert securities[0]["name"] == "平安银行"
+        assert securities[0]["industry"] == "银行"
+        assert securities[0]["source"] == "tushare"
+
+    def test_get_adjustment_factors(self):
+        p = TushareProvider(token="fake")
+        mock_pro = MagicMock()
+        mock_df = MagicMock()
+        mock_df.iterrows.return_value = [
+            (0, {"trade_date": "20260617", "adj_factor": 1.5}),
+        ]
+        mock_pro.adj_factor.return_value = mock_df
+        p._pro = mock_pro
+
+        factors = p.get_adjustment_factors(
+            ["000001.SZ"], datetime(2026, 6, 1), datetime(2026, 6, 18)
+        )
+        assert len(factors) == 1
+        assert factors[0]["adj_factor"] == 1.5
+        assert factors[0]["source"] == "tushare"
+
+    def test_get_financials(self):
+        p = TushareProvider(token="fake")
+        mock_pro = MagicMock()
+        mock_df = MagicMock()
+        mock_df.iterrows.return_value = [
+            (0, {"ann_date": "20260430", "roe": 0.12, "eps": 1.5, "gross_profit_margin": 0.3}),
+        ]
+        mock_pro.fina_indicator.return_value = mock_df
+        p._pro = mock_pro
+
+        financials = p.get_financials(
+            ["000001.SZ"], datetime(2026, 1, 1), datetime(2026, 6, 18)
+        )
+        assert len(financials) == 1
+        assert financials[0]["roe"] == 0.12
+        assert financials[0]["source"] == "tushare"
+
+    def test_healthcheck_healthy(self):
+        p = TushareProvider(token="fake")
+        mock_pro = MagicMock()
+        p._pro = mock_pro
+        result = p.healthcheck()
+        assert result.status.value == "healthy"
+        mock_pro.stock_basic.assert_called_once()
+
+    def test_healthcheck_unhealthy(self):
+        p = TushareProvider(token="bad")
+        with patch("tushare.pro_api", side_effect=Exception("invalid token")):
+            result = p.healthcheck()
+        assert result.status.value == "unhealthy"
+
+
+class TestProviderRegistryIntegration:
+    """0102.4 频率限制与响应哈希 — 验证 Provider 在 Registry 中可注册调用。"""
+
+    def test_register_and_call_akshare(self, tmp_path, monkeypatch):
+        from margin.core.audit import AuditLogger
+        from margin.core.registry import ProviderRegistry
+        from margin.core.secret import SecretManager
+
+        monkeypatch.setenv("MARGIN_SECRET_TUSHARE_TOKEN", "test")
+        registry = ProviderRegistry(
+            secret_manager=SecretManager(secrets_dir=tmp_path / "secrets"),
+            audit_logger=AuditLogger(log_path=tmp_path / "audit.jsonl"),
+        )
+
+        provider = AKShareProvider()
+        registry.register(provider)
+
+        mock_df = MagicMock()
+        mock_df.iterrows.return_value = [
+            (
+                0,
+                {
+                    "日期": "2026-06-17",
+                    "开盘": 10.0,
+                    "收盘": 11.0,
+                    "最高": 11.0,
+                    "最低": 10.0,
+                    "成交量": 100.0,
+                    "成交额": 1000.0,
+                },
+            ),
+        ]
+
+        with patch("akshare.stock_zh_a_hist", return_value=mock_df):
+            data, result = registry.call(
+                "akshare", "get_bars",
+                args=(["000001.SZ"], datetime(2026, 6, 1), datetime(2026, 6, 18)),
+            )
+
+        assert result.success is True
+        assert result.provider_name == "akshare"
+        assert result.response_hash.startswith("sha256:")
+        assert len(data) == 1
+
+        records = registry._audit_logger.read_all()
+        assert len(records) == 1
+        assert records[0].provider_name == "akshare"
