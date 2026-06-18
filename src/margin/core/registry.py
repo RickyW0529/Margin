@@ -1,10 +1,8 @@
-"""Provider Registry — 轻量级注册中心（架构 §27: 自研轻量注册表）。
+"""Provider Registry — lightweight registration center for Provider instances.
 
-整合 Provider 注册、健康检查、限流、重试、Fallback、Secret 引用、
-成本统计、版本号与审计日志。
-
-对应 spec 01 §3 接口契约。
-对应 plan 0101 全部工作项。
+The registry combines Provider registration, health checks, rate limiting,
+retry, fallback, Secret references, cost tracking, versioning, and audit
+logging into a single integration point.
 """
 
 from __future__ import annotations
@@ -33,23 +31,25 @@ T = TypeVar("T")
 
 
 class ProviderNotFoundError(KeyError):
-    """Provider 未注册。"""
+    """Raised when a requested Provider has not been registered."""
 
 
 class ProviderAlreadyRegisteredError(ValueError):
-    """Provider 已注册且不允许覆盖。"""
+    """Raised when registering a Provider whose name is already taken."""
 
 
 class ProviderRegistry:
-    """Provider 注册中心。
+    """Central registry for Provider instances.
 
-    职责：
-    - 注册/获取 Provider 实例；
-    - 按 type 查询可用 Provider 列表；
-    - 对 Provider 调用包装限流、重试、Fallback、审计与成本统计；
-    - 批量健康检查。
+    Responsibilities:
+        - Register and retrieve Provider instances.
+        - List Providers by type or name.
+        - Resolve configured Secret references.
+        - Wrap calls with rate limiting, retry, fallback, audit logging, and
+          cost tracking.
+        - Run health checks for individual Providers or all registered ones.
 
-    用法::
+    Example::
 
         registry = ProviderRegistry()
         registry.register(akshare_provider)
@@ -57,6 +57,15 @@ class ProviderRegistry:
             "akshare", "get_bars",
             args=(["000001.SZ"], start, end),
         )
+
+    Attributes:
+        _providers: Mapping from Provider name to instance.
+        _rate_limiters: Mapping from Provider name to rate limiter.
+        _retry_configs: Mapping from Provider name to retry configuration.
+        _cost_rates: Mapping from Provider name to cost per call.
+        _fallbacks: Mapping from primary Provider name to fallback chain.
+        _secret_manager: Secret resolver used during registration.
+        _audit_logger: Audit logger used for every call.
     """
 
     def __init__(
@@ -64,6 +73,12 @@ class ProviderRegistry:
         secret_manager: SecretManager | None = None,
         audit_logger: AuditLogger | None = None,
     ) -> None:
+        """Initialize the registry.
+
+        Args:
+            secret_manager: Secret resolver. Defaults to ``SecretManager()``.
+            audit_logger: Audit logger. Defaults to ``AuditLogger()``.
+        """
         self._providers: dict[str, BaseProvider] = {}
         self._rate_limiters: dict[str, RateLimiter] = {}
         self._retry_configs: dict[str, RetryConfig] = {}
@@ -82,15 +97,23 @@ class ProviderRegistry:
         fallback_names: list[str] | None = None,
         allow_override: bool = False,
     ) -> None:
-        """注册一个 Provider 实例。
+        """Register a Provider instance.
 
         Args:
-            provider: Provider 实例。
-            rate_limiter: 限流器，默认 60 次/分钟。
-            retry_config: 重试配置，默认 3 次指数退避。
-            cost_per_call: 每次调用成本（用于成本统计）。
-            fallback_names: 备用 Provider 名称列表（主源失败时依次尝试）。
-            allow_override: 是否允许覆盖同名 Provider。
+            provider: Provider instance to register.
+            rate_limiter: Rate limiter for this Provider. Defaults to
+                ``RateLimiter()``.
+            retry_config: Retry configuration for this Provider. Defaults to
+                ``RetryConfig()``.
+            cost_per_call: Cost charged for each successful or failed call.
+            fallback_names: Ordered list of fallback Provider names tried when
+                this Provider fails.
+            allow_override: Whether to replace an existing Provider with the
+                same name.
+
+        Raises:
+            ProviderAlreadyRegisteredError: When the Provider name is already
+                registered and ``allow_override`` is ``False``.
         """
         name = provider.descriptor.name
         if name in self._providers and not allow_override:
@@ -107,13 +130,31 @@ class ProviderRegistry:
             self._fallbacks[name] = list(fallback_names)
 
     def get(self, name: str) -> BaseProvider:
-        """按名称获取 Provider 实例。"""
+        """Retrieve a registered Provider by name.
+
+        Args:
+            name: Registered Provider name.
+
+        Returns:
+            The registered Provider instance.
+
+        Raises:
+            ProviderNotFoundError: When no Provider with the given name is
+                registered.
+        """
         if name not in self._providers:
             raise ProviderNotFoundError(f"Provider '{name}' not registered")
         return self._providers[name]
 
     def list_by_type(self, provider_type: ProviderType) -> list[str]:
-        """按类型列出已注册 Provider 名称。"""
+        """List registered Provider names filtered by capability type.
+
+        Args:
+            provider_type: Capability category to filter by.
+
+        Returns:
+            List of matching Provider names.
+        """
         return [
             name
             for name, p in self._providers.items()
@@ -121,20 +162,42 @@ class ProviderRegistry:
         ]
 
     def list_all(self) -> list[str]:
-        """列出全部已注册 Provider 名称。"""
+        """List all registered Provider names.
+
+        Returns:
+            List of registered Provider names.
+        """
         return list(self._providers.keys())
 
     def resolve_secrets(self, name: str) -> dict[str, str]:
-        """解析 Provider 的全部 Secret 引用。"""
+        """Resolve all Secret references for a registered Provider.
+
+        Args:
+            name: Registered Provider name.
+
+        Returns:
+            Mapping from reference name to resolved Secret value.
+        """
         provider = self.get(name)
         return {ref: self._secret_manager.resolve(ref) for ref in provider.descriptor.secret_refs}
 
     def healthcheck(self, name: str) -> HealthCheckResult:
-        """对单个 Provider 执行健康检查。"""
+        """Run a health check for a single Provider.
+
+        Args:
+            name: Registered Provider name.
+
+        Returns:
+            The Provider's health check result.
+        """
         return self.get(name).healthcheck()
 
     def healthcheck_all(self) -> dict[str, HealthCheckResult]:
-        """对所有已注册 Provider 执行健康检查。"""
+        """Run health checks for all registered Providers.
+
+        Returns:
+            Mapping from Provider name to health check result.
+        """
         return {name: self.get(name).healthcheck() for name in self._providers}
 
     def call(
@@ -145,17 +208,17 @@ class ProviderRegistry:
         kwargs: dict[str, Any] | None = None,
         trace_id: str = "",
     ) -> tuple[Any, CallResult]:
-        """调用 Provider 方法，自动包装限流、重试、Fallback、审计与成本统计。
+        """Call a Provider method with retry, fallback, audit, and cost tracking.
 
         Args:
-            provider_name: Provider 名称。
-            method: 要调用的方法名（如 ``get_bars``）。
-            args: 位置参数。
-            kwargs: 关键字参数。
-            trace_id: 追踪 ID（用于审计与可观测性）。
+            provider_name: Name of the primary Provider to call.
+            method: Method name to invoke (e.g. ``get_bars``).
+            args: Positional arguments passed to the method.
+            kwargs: Keyword arguments passed to the method.
+            trace_id: Optional trace identifier for observability.
 
         Returns:
-            (方法返回值, CallResult 审计元数据)。
+            A tuple of (method return value, ``CallResult`` metadata).
         """
         kwargs = kwargs or {}
         chain = [provider_name] + self._fallbacks.get(provider_name, [])
@@ -184,7 +247,19 @@ class ProviderRegistry:
         trace_id: str,
         is_fallback: bool,
     ) -> tuple[Any, CallResult]:
-        """对单个 Provider 执行带限流与重试的调用。"""
+        """Execute a single Provider call with rate limiting and retry.
+
+        Args:
+            name: Provider name to call.
+            method: Method name to invoke.
+            args: Positional arguments for the method.
+            kwargs: Keyword arguments for the method.
+            trace_id: Optional trace identifier.
+            is_fallback: Whether this Provider is being used as a fallback.
+
+        Returns:
+            A tuple of (method return value or ``None``, ``CallResult`` metadata).
+        """
         provider = self.get(name)
         descriptor = provider.descriptor
         func = getattr(provider, method, None)
@@ -271,7 +346,11 @@ class ProviderRegistry:
         return data, result
 
     def _inject_secrets(self, provider: BaseProvider) -> None:
-        """Resolve configured Secret refs and inject them into providers that opt in."""
+        """Resolve configured Secret refs and inject them into Providers that opt in.
+
+        Args:
+            provider: Provider being registered.
+        """
         refs = provider.descriptor.secret_refs
         if not refs:
             return
@@ -297,7 +376,16 @@ class ProviderRegistry:
 
 
 def _positional_args(func: Callable, args: tuple) -> dict[str, Any]:
-    """将位置参数映射到参数名（用于审计摘要）。"""
+    """Map positional arguments to parameter names for audit summaries.
+
+    Args:
+        func: Target callable.
+        args: Positional arguments passed to ``func``.
+
+    Returns:
+        Dictionary mapping parameter names to argument values. Falls back to
+        ``argN`` keys when inspection fails.
+    """
     try:
         import inspect
 
@@ -309,4 +397,12 @@ def _positional_args(func: Callable, args: tuple) -> dict[str, Any]:
 
 
 def _raw_positional_args(args: tuple) -> dict[str, Any]:
+    """Map positional arguments to generic ``argN`` keys.
+
+    Args:
+        args: Positional arguments.
+
+    Returns:
+        Dictionary of the form ``{"arg0": value0, ...}``.
+    """
     return {f"arg{i}": arg for i, arg in enumerate(args)}

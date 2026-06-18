@@ -1,4 +1,4 @@
-"""SecretManager 测试。"""
+"""Tests for the ``SecretManager`` secret-resolution layer."""
 
 from pathlib import Path
 
@@ -8,12 +8,16 @@ from margin.core.secret import SecretManager, SecretNotFoundError
 
 
 class TestSecretManager:
+    """Unit tests covering how ``SecretManager`` resolves, checks, and caches secrets."""
+
     def test_resolve_from_env(self, monkeypatch):
+        """A secret prefixed with ``MARGIN_SECRET_`` is resolved from the environment."""
         monkeypatch.setenv("MARGIN_SECRET_TUSHARE_TOKEN", "abc123")
         sm = SecretManager(secrets_dir=Path("/tmp/nonexistent"))
         assert sm.resolve("tushare_token") == "abc123"
 
     def test_resolve_from_file(self, tmp_path):
+        """A secret stored as a file in ``secrets_dir`` is read and stripped."""
         secrets_dir = tmp_path / "secrets"
         secrets_dir.mkdir()
         (secrets_dir / "my_key").write_text("file_secret_value\n", encoding="utf-8")
@@ -22,6 +26,7 @@ class TestSecretManager:
         assert sm.resolve("my_key") == "file_secret_value"
 
     def test_env_takes_priority_over_file(self, tmp_path, monkeypatch):
+        """Environment variables win when both an env var and a file secret exist."""
         secrets_dir = tmp_path / "secrets"
         secrets_dir.mkdir()
         (secrets_dir / "key1").write_text("from_file", encoding="utf-8")
@@ -31,22 +36,26 @@ class TestSecretManager:
         assert sm.resolve("key1") == "from_env"
 
     def test_resolve_missing_raises(self, tmp_path, monkeypatch):
+        """Resolving an unknown secret raises ``SecretNotFoundError``."""
         monkeypatch.delenv("MARGIN_SECRET_MISSING", raising=False)
         sm = SecretManager(secrets_dir=tmp_path / "empty", env_prefix="MARGIN_SECRET_")
         with pytest.raises(SecretNotFoundError):
             sm.resolve("missing")
 
     def test_has_true(self, monkeypatch):
+        """``has`` returns ``True`` when the secret exists in the environment."""
         monkeypatch.setenv("MARGIN_SECRET_EXISTS", "val")
         sm = SecretManager(secrets_dir=Path("/tmp/nonexistent"))
         assert sm.has("exists") is True
 
     def test_has_false(self, tmp_path, monkeypatch):
+        """``has`` returns ``False`` when the secret is missing from both env and files."""
         monkeypatch.delenv("MARGIN_SECRET_MISSING", raising=False)
         sm = SecretManager(secrets_dir=tmp_path / "empty")
         assert sm.has("missing") is False
 
     def test_list_refs(self, tmp_path, monkeypatch):
+        """``list_refs`` collects secret names from environment variables and files."""
         monkeypatch.setenv("MARGIN_SECRET_REF_A", "1")
         monkeypatch.setenv("MARGIN_SECRET_REF_B", "2")
         secrets_dir = tmp_path / "secrets"
@@ -60,6 +69,7 @@ class TestSecretManager:
         assert "ref_c" in refs
 
     def test_caches_resolved_value(self, monkeypatch):
+        """A resolved secret is cached and later environment changes are ignored."""
         monkeypatch.setenv("MARGIN_SECRET_CACHED", "v1")
         sm = SecretManager(secrets_dir=Path("/tmp/nonexistent"))
         sm.resolve("cached")

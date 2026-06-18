@@ -1,7 +1,8 @@
-"""Secret 管理器 — API Key 走本地引用，不明文存配置（架构 §22 安全设计）。
+"""Secret manager — API keys are referenced locally, never stored in plain text.
 
-对应 spec 01 §3：Provider 必须记录 Secret 的本地引用。
-对应 plan 0101.3：Secret 引用与审计日志。
+Secrets are resolved at runtime from environment variables or a local secrets
+directory. Configuration files only store reference names, never the actual
+credential values.
 """
 
 from __future__ import annotations
@@ -13,18 +14,24 @@ from pydantic import BaseModel
 
 
 class SecretNotFoundError(KeyError):
-    """Secret 引用未找到。"""
+    """Raised when a Secret reference cannot be resolved."""
 
 
 class SecretManager:
-    """基于引用的 Secret 管理。
+    """Reference-based Secret manager.
 
-    支持两种来源（按优先级）：
-    1. 环境变量（``MARGIN_SECRET_<REF>``）
-    2. 本地 Secret 文件（``~/.margin/secrets/<ref>`` 或自定义目录）
+    Supports two sources in priority order:
+        1. Environment variables (``MARGIN_SECRET_<REF>``).
+        2. Local Secret files (``~/.margin/secrets/<ref>`` or a custom directory).
 
-    ProviderDescriptor 的 ``secret_refs`` 列表中的每个引用名，
-    通过 ``resolve()`` 获取真实凭据值。配置文件中只存引用名，不存明文。
+    Each reference name in a ``ProviderDescriptor.secret_refs`` list is resolved
+    to the real credential value via ``resolve()``. Only reference names live in
+    configuration files; plain text credentials do not.
+
+    Attributes:
+        _secrets_dir: Directory used for local Secret files.
+        _env_prefix: Prefix for environment variable lookups.
+        _cache: In-memory cache of resolved Secret values.
     """
 
     def __init__(
@@ -32,21 +39,30 @@ class SecretManager:
         secrets_dir: Path | None = None,
         env_prefix: str = "MARGIN_SECRET_",
     ) -> None:
+        """Initialize the Secret manager.
+
+        Args:
+            secrets_dir: Directory containing local Secret files. Defaults to
+                ``~/.margin/secrets``.
+            env_prefix: Prefix for environment variables. Defaults to
+                ``MARGIN_SECRET_``.
+        """
         self._secrets_dir = secrets_dir or Path.home() / ".margin" / "secrets"
         self._env_prefix = env_prefix
         self._cache: dict[str, str] = {}
 
     def resolve(self, ref: str) -> str:
-        """根据引用名解析 Secret 值。
+        """Resolve a Secret value by its reference name.
 
         Args:
-            ref: Secret 引用名（如 ``tushare_token``）。
+            ref: Secret reference name (e.g. ``tushare_token``).
 
         Returns:
-            Secret 值字符串。
+            The Secret value as a string.
 
         Raises:
-            SecretNotFoundError: 引用名在环境变量和文件中均未找到。
+            SecretNotFoundError: When the reference is not found in either the
+                environment variables or the local secrets directory.
         """
         if ref in self._cache:
             return self._cache[ref]
@@ -68,7 +84,14 @@ class SecretManager:
         )
 
     def has(self, ref: str) -> bool:
-        """检查 Secret 引用是否可解析。"""
+        """Check whether a Secret reference can be resolved.
+
+        Args:
+            ref: Secret reference name.
+
+        Returns:
+            ``True`` if the reference resolves to a value, otherwise ``False``.
+        """
         try:
             self.resolve(ref)
             return True
@@ -76,7 +99,12 @@ class SecretManager:
             return False
 
     def list_refs(self) -> list[str]:
-        """列出所有可解析的 Secret 引用名（不含值）。"""
+        """List all resolvable Secret reference names without exposing values.
+
+        Returns:
+            Sorted list of reference names found in environment variables and
+            local Secret files.
+        """
         refs: set[str] = set()
 
         for key, value in os.environ.items():
@@ -93,7 +121,7 @@ class SecretManager:
 
 
 class SecretRefInfo(BaseModel):
-    """Secret 引用信息（用于展示，不含值）。"""
+    """Secret reference metadata for display (does not contain the value)."""
 
     ref: str
     resolvable: bool

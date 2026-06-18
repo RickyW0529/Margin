@@ -1,3 +1,3 @@
-"""Margin — 开源投资研究系统。"""
+"""Margin — an open-source investment research system."""
 
 __version__ = "0.1.0"

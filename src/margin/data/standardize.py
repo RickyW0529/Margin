@@ -1,14 +1,15 @@
-"""字段标准化模块 — 将多源外部数据统一为标准格式。
+"""Field standardization module — unify multi-source external data into a standard format.
 
-对应 spec 01 §2 / §4、架构 §4.3 数据标准化流程。
-对应 plan 0103 全部工作项：
-  0103.1 字段映射与代码映射
-  0103.2 单位与币种统一
-  0103.3 时间标准化
-  0103.4 标准数据事件发布
+Corresponds to spec 01 §2 / §4 and architecture §4.3 (data standardization flow).
+Corresponds to all plan 0103 work items:
+  0103.1 Field mapping and code mapping
+  0103.2 Unit and currency unification
+  0103.3 Time standardization
+  0103.4 Standard data event publication
 
-标准化流程（架构 §4.3）：
-  外部数据 → 字段映射 → 代码映射 → 单位和币种统一 → 时间标准化 → 质量校验 → 标准数据事件
+Standardization flow (architecture §4.3):
+  External data → Field mapping → Code mapping → Unit/currency unification
+  → Time standardization → Quality validation → Standard data event
 """
 
 from __future__ import annotations
@@ -20,25 +21,43 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
-# 0103.1 代码映射
+# 0103.1 Code mapping
 # ---------------------------------------------------------------------------
 
 
 class Exchange(StrEnum):
-    """A 股交易所。"""
+    """A-share stock exchanges.
+
+    Attributes:
+        SH: Shanghai Stock Exchange.
+        SZ: Shenzhen Stock Exchange.
+    """
 
     SH = "SH"
     SZ = "SZ"
 
 
 def normalize_symbol(raw: str) -> str:
-    """将各种格式代码统一为 ``000001.SZ`` / ``600000.SH`` 口径。
+    """Normalize various symbol formats to ``<code>.<EXCHANGE>`` form.
 
-    支持输入格式：
-    - ``000001`` / ``600000``（纯数字，按规则推断交易所）
-    - ``000001.SZ`` / ``600000.SH``（已标准）
-    - ``SZ000001`` / ``SH600000``（前缀格式）
-    - ``000001.sz`` / ``600000.sh``（小写）
+    Supported input formats:
+    - ``000001`` / ``600000`` (numeric only, exchange inferred by rules)
+    - ``000001.SZ`` / ``600000.SH`` (already standard)
+    - ``SZ000001`` / ``SH600000`` (exchange prefix)
+    - ``000001.sz`` / ``600000.sh`` (lowercase exchange)
+
+    Args:
+        raw: The raw symbol string.
+
+    Returns:
+        A standardized symbol such as ``000001.SZ`` or ``600000.SH``.
+        If the input cannot be normalized, it is returned upper-cased.
+
+    Example:
+        >>> normalize_symbol("000001")
+        '000001.SZ'
+        >>> normalize_symbol("sh600000")
+        '600000.SH'
     """
     raw = str(raw).strip().upper()
 
@@ -58,7 +77,17 @@ def normalize_symbol(raw: str) -> str:
 
 
 def symbol_components(symbol: str) -> tuple[str, str]:
-    """拆分标准 symbol 为 (code, exchange)。"""
+    """Split a standardized symbol into its code and exchange components.
+
+    Args:
+        symbol: A standardized symbol, e.g. ``000001.SZ``.
+
+    Returns:
+        A tuple of ``(code, exchange)`` where ``exchange`` is upper-cased.
+
+    Raises:
+        ValueError: If ``symbol`` does not contain a dot separator.
+    """
     if "." not in symbol:
         raise ValueError(f"Invalid symbol format: {symbol}")
     code, exchange = symbol.split(".", 1)
@@ -66,12 +95,21 @@ def symbol_components(symbol: str) -> tuple[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# 0103.1 字段映射
+# 0103.1 Field mapping
 # ---------------------------------------------------------------------------
 
 
 class DataDomain(StrEnum):
-    """数据域（架构 §4.1）。"""
+    """Data domains in the standardization layer (architecture §4.1).
+
+    Attributes:
+        MARKET_BAR: Market bar (OHLCV) data.
+        FINANCIAL: Financial report data.
+        SECURITY_META: Security metadata.
+        INDEX_MEMBER: Index constituent data.
+        ADJUSTMENT_FACTOR: Price adjustment factors.
+        CORPORATE_ACTION: Corporate action events.
+    """
 
     MARKET_BAR = "market_bar"
     FINANCIAL = "financial"
@@ -82,7 +120,14 @@ class DataDomain(StrEnum):
 
 
 class FieldMapping(BaseModel):
-    """单个字段的映射规则。"""
+    """Mapping rule for a single field from a source to the standard schema.
+
+    Attributes:
+        source_field: Name of the field in the external source.
+        target_field: Name of the field in the standard schema.
+        transform: Optional transform function name to apply, e.g. ``normalize_symbol``.
+        unit_factor: Multiplicative factor for unit conversion. Defaults to 1.0.
+    """
 
     source_field: str
     target_field: str
@@ -108,22 +153,37 @@ FIELD_MAPPINGS: dict[DataDomain, dict[str, FieldMapping]] = {
 
 
 # ---------------------------------------------------------------------------
-# 0103.2 单位与币种统一
+# 0103.2 Unit and currency unification
 # ---------------------------------------------------------------------------
 
 
 class UnitConverter:
-    """单位与币种统一。
+    """Unify units and currency for A-share data.
 
-    A 股数据默认人民币 CNY，金额单位统一为元，成交量统一为股。
-    部分外部源返回万元或手，需通过 unit_factor 转换。
+    A-share data defaults to CNY. Monetary amounts are unified to yuan,
+    and trading volume is unified to shares. Some external sources return
+    amounts in ``wan_yuan`` (10k yuan) or volume in ``shou`` (lots of 100),
+    which are converted via explicit source units.
+
+    Attributes:
+        CURRENCY: Default currency code, ``CNY``.
     """
 
     CURRENCY = "CNY"
 
     @staticmethod
     def convert_amount(value: float, source_unit: str = "yuan") -> float:
-        """金额统一为元。"""
+        """Convert a monetary amount to yuan.
+
+        Args:
+            value: The raw monetary amount.
+            source_unit: Source unit identifier. Supported values are ``yuan``,
+                ``qian_yuan`` (1,000 yuan), ``wan_yuan`` (10,000 yuan), and
+                ``yi_yuan`` (100,000,000 yuan). Defaults to ``yuan``.
+
+        Returns:
+            The amount expressed in yuan.
+        """
         if source_unit == "qian_yuan":
             return value * 1000.0
         if source_unit == "wan_yuan":
@@ -134,23 +194,46 @@ class UnitConverter:
 
     @staticmethod
     def convert_volume(value: float, source_unit: str = "gu") -> float:
-        """成交量统一为股。"""
+        """Convert trading volume to shares.
+
+        Args:
+            value: The raw volume value.
+            source_unit: Source unit identifier. Supported values are ``gu``
+                (shares) and ``shou`` (lots, 1 lot = 100 shares).
+                Defaults to ``gu``.
+
+        Returns:
+            The volume expressed in shares.
+        """
         if source_unit == "shou":
             return value * 100.0
         return value
 
 
 # ---------------------------------------------------------------------------
-# 0103.3 时间标准化
+# 0103.3 Time standardization
 # ---------------------------------------------------------------------------
 
 
 class TimeStandardizer:
-    """时间标准化，产出五项时点字段（架构 §4.4）。"""
+    """Standardize timestamps, producing the five point-in-time fields.
+
+    The five point-in-time (PIT) fields are ``event_at``, ``published_at``,
+    ``available_at``, ``fetched_at``, and ``revised_at`` (architecture §4.4).
+    """
 
     @staticmethod
     def parse_date(value: Any) -> datetime | None:
-        """解析多种日期格式为 datetime。"""
+        """Parse a value in multiple date formats into a ``datetime``.
+
+        Args:
+            value: A date-like value. Supported types are ``datetime``,
+                strings in formats such as ``%Y-%m-%d``, ``%Y%m%d``,
+                ``%Y/%m/%d``, and ``%Y-%m-%d %H:%M:%S``.
+
+        Returns:
+            A ``datetime`` if parsing succeeds, otherwise ``None``.
+        """
         if value is None or value == "":
             return None
         if isinstance(value, datetime):
@@ -180,7 +263,21 @@ class TimeStandardizer:
         fetched_at: datetime | None = None,
         revised_at: datetime | None = None,
     ) -> dict[str, datetime]:
-        """生成完整的时点字段集。"""
+        """Generate the full set of point-in-time fields.
+
+        Missing timestamps are back-filled from ``event_at`` / ``published_at``
+        or the current local time where appropriate.
+
+        Args:
+            event_at: The moment the event actually occurred.
+            published_at: The moment the data was officially published.
+            available_at: The moment the data becomes usable for downstream logic.
+            fetched_at: The moment the data was fetched from the source.
+            revised_at: The moment of the latest revision, if any.
+
+        Returns:
+            A dictionary containing all five PIT fields.
+        """
         now = datetime.now()
         return {
             "event_at": event_at or now,
@@ -192,24 +289,54 @@ class TimeStandardizer:
 
 
 def market_bar_available_at(trade_date: datetime) -> datetime:
-    """Daily A-share bars are only usable after the close of their trade date."""
+    """Return the earliest usable timestamp for a daily A-share bar.
+
+    Daily bars are considered available after the market close at 15:00
+    on their trade date.
+
+    Args:
+        trade_date: The trade date of the market bar.
+
+    Returns:
+        A ``datetime`` combining the trade date with 15:00.
+    """
     return datetime.combine(trade_date.date(), time(hour=15))
 
 
 def next_market_open_after(value: datetime) -> datetime:
-    """Conservative availability for announcements without an exact release time."""
+    """Return a conservative availability timestamp for an untimed announcement.
+
+    Args:
+        value: The datetime from which to compute the next market open.
+
+    Returns:
+        A ``datetime`` for the next trading day's market open at 09:30.
+    """
     return datetime.combine((value + timedelta(days=1)).date(), time(hour=9, minute=30))
 
 
 # ---------------------------------------------------------------------------
-# 0103.4 标准数据事件
+# 0103.4 Standard data event
 # ---------------------------------------------------------------------------
 
 
 class StandardDataEvent(BaseModel):
-    """标准数据事件（架构 §4.3 标准数据事件发布）。
+    """Standard data event published after standardization (architecture §4.3).
 
-    所有经标准化后的数据以事件形式发布，供存储层 ODS→DWD→PIT 消费。
+    All standardized data is emitted as an event for consumption by the
+    storage layer (ODS → DWD → PIT).
+
+    Attributes:
+        domain: The data domain this event belongs to.
+        symbol: Standardized symbol, if applicable.
+        data: The standardized payload as a dictionary.
+        event_at: The moment the event actually occurred.
+        published_at: The moment the data was officially published.
+        available_at: The moment the data becomes usable.
+        fetched_at: The moment the data was fetched from the source.
+        revised_at: The moment of the latest revision, if any.
+        source: Identifier of the external data source.
+        mapping_version: Version of the field mapping used.
     """
 
     domain: DataDomain
@@ -227,12 +354,23 @@ class StandardDataEvent(BaseModel):
 
 
 class Standardizer:
-    """标准化器：将外部 Provider 返回的原始数据转为标准数据事件。
+    """Convert raw data returned by an external provider into standard data events.
 
-    流程：字段映射 → 代码映射 → 单位币种统一 → 时间标准化 → 标准数据事件。
+    The standardization pipeline is:
+      Field mapping → Code mapping → Unit/currency unification
+      → Time standardization → Standard data event.
+
+    Attributes:
+        _mapping_version: The mapping version to attach to produced events.
     """
 
     def __init__(self, mapping_version: str = "v1") -> None:
+        """Initialize a ``Standardizer``.
+
+        Args:
+            mapping_version: Mapping version tag to use for emitted events.
+                Defaults to ``v1``.
+        """
         self._mapping_version = mapping_version
 
     def standardize_bars(
@@ -240,7 +378,18 @@ class Standardizer:
         raw_records: list[dict[str, Any]],
         source: str,
     ) -> list[StandardDataEvent]:
-        """标准化行情数据。"""
+        """Standardize market bar (OHLCV) records.
+
+        Args:
+            raw_records: List of raw market bar dictionaries. Expected keys
+                include ``symbol``, ``date``, ``open``, ``close``, ``high``,
+                ``low``, ``volume``, ``amount``, and optional unit fields
+                ``volume_unit`` / ``amount_unit``.
+            source: Identifier of the external data source.
+
+        Returns:
+            A list of ``StandardDataEvent`` objects in the ``MARKET_BAR`` domain.
+        """
         events: list[StandardDataEvent] = []
         for record in raw_records:
             symbol = normalize_symbol(record.get("symbol", ""))
@@ -287,7 +436,17 @@ class Standardizer:
         raw_records: list[dict[str, Any]],
         source: str,
     ) -> list[StandardDataEvent]:
-        """标准化证券元数据。"""
+        """Standardize security metadata records.
+
+        Args:
+            raw_records: List of raw security metadata dictionaries. Expected
+                keys include ``symbol``, ``name``, ``industry``, ``market``,
+                ``list_date``, and optional timing fields.
+            source: Identifier of the external data source.
+
+        Returns:
+            A list of ``StandardDataEvent`` objects in the ``SECURITY_META`` domain.
+        """
         events: list[StandardDataEvent] = []
         for record in raw_records:
             symbol = normalize_symbol(record.get("symbol", ""))
@@ -321,7 +480,19 @@ class Standardizer:
         raw_records: list[dict[str, Any]],
         source: str,
     ) -> list[StandardDataEvent]:
-        """标准化财务数据。"""
+        """Standardize financial report records.
+
+        Args:
+            raw_records: List of raw financial report dictionaries. Expected keys
+                include ``symbol``, ``report_date``, ``ann_date``, and financial
+                metrics such as ``total_assets``, ``total_liabilities``,
+                ``total_equity``, ``roe``, ``eps``, ``gross_profit_margin``,
+                ``revenue``, and ``net_profit``.
+            source: Identifier of the external data source.
+
+        Returns:
+            A list of ``StandardDataEvent`` objects in the ``FINANCIAL`` domain.
+        """
         events: list[StandardDataEvent] = []
         for record in raw_records:
             symbol = normalize_symbol(record.get("symbol", ""))
@@ -371,7 +542,17 @@ class Standardizer:
         raw_records: list[dict[str, Any]],
         source: str,
     ) -> list[StandardDataEvent]:
-        """标准化指数成分数据。"""
+        """Standardize index constituent records.
+
+        Args:
+            raw_records: List of raw index member dictionaries. Expected keys
+                include ``symbol``, ``as_of``, ``index_code``, ``name``, and
+                ``weight``.
+            source: Identifier of the external data source.
+
+        Returns:
+            A list of ``StandardDataEvent`` objects in the ``INDEX_MEMBER`` domain.
+        """
         events: list[StandardDataEvent] = []
         for record in raw_records:
             symbol = normalize_symbol(record.get("symbol", ""))

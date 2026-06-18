@@ -1,7 +1,7 @@
-"""容错机制：限流、重试、Fallback（架构 §8.1 Provider 必须具备限流、重试）。
+"""Resilience primitives: rate limiting, retry with exponential backoff, and fallback.
 
-对应 plan 0101.2：健康检查、限流、重试、Fallback 通用机制。
-对应架构 §25 故障降级：数据源失败 → 备用源/使用旧数据并降级。
+These utilities wrap Provider calls so that transient failures can be retried,
+rate limits can be enforced, and non-retryable errors propagate quickly.
 """
 
 from __future__ import annotations
@@ -15,19 +15,26 @@ T = TypeVar("T")
 
 
 class RateLimitError(Exception):
-    """限流触发。"""
+    """Raised when a rate limiter has no available tokens."""
 
 
 class ProviderError(Exception):
-    """Provider 调用失败。"""
+    """Raised when a Provider call fails."""
 
 
 @dataclass
 class RateLimiter:
-    """令牌桶限流器。
+    """Token-bucket rate limiter.
 
-    按 ``max_calls`` / ``per_seconds`` 控制调用频率。
-    线程不安全（MVP 单线程 Worker 场景足够）。
+    Controls call frequency using ``max_calls`` per ``per_seconds``. This
+    implementation is not thread-safe, which is acceptable for the MVP single-
+    threaded worker use case.
+
+    Attributes:
+        max_calls: Maximum number of tokens (calls) in the bucket.
+        per_seconds: Time window over which ``max_calls`` tokens are allocated.
+        _tokens: Current number of available tokens.
+        _last_refill: Timestamp of the last token refill.
     """
 
     max_calls: int = 60
@@ -36,10 +43,12 @@ class RateLimiter:
     _last_refill: float = field(init=False)
 
     def __post_init__(self) -> None:
+        """Initialize the token bucket to full capacity."""
         self._tokens = float(self.max_calls)
         self._last_refill = time.monotonic()
 
     def _refill(self) -> None:
+        """Refill tokens based on elapsed time since the last refill."""
         now = time.monotonic()
         elapsed = now - self._last_refill
         new_tokens = elapsed * (self.max_calls / self.per_seconds)
@@ -47,7 +56,11 @@ class RateLimiter:
         self._last_refill = now
 
     def acquire(self) -> None:
-        """获取一个令牌，不足时抛 RateLimitError。"""
+        """Acquire one token, raising if the bucket is empty.
+
+        Raises:
+            RateLimitError: When no tokens are available.
+        """
         self._refill()
         if self._tokens < 1.0:
             raise RateLimitError(
@@ -56,7 +69,11 @@ class RateLimiter:
         self._tokens -= 1.0
 
     def try_acquire(self) -> bool:
-        """尝试获取令牌，成功返回 True，不抛异常。"""
+        """Try to acquire one token without raising.
+
+        Returns:
+            ``True`` if a token was acquired, otherwise ``False``.
+        """
         try:
             self.acquire()
             return True
@@ -66,7 +83,15 @@ class RateLimiter:
 
 @dataclass
 class RetryConfig:
-    """重试配置。"""
+    """Configuration for retry behavior.
+
+    Attributes:
+        max_retries: Maximum number of retry attempts.
+        base_delay: Initial delay between retries in seconds.
+        max_delay: Maximum delay between retries in seconds.
+        backoff_factor: Multiplier applied to the delay on each retry.
+        retry_on: Tuple of exception types that should trigger a retry.
+    """
 
     max_retries: int = 3
     base_delay: float = 1.0
@@ -75,7 +100,14 @@ class RetryConfig:
     retry_on: tuple[type[Exception], ...] = (ProviderError,)
 
     def compute_delay(self, attempt: int) -> float:
-        """计算第 attempt 次重试的延迟（指数退避）。"""
+        """Compute the delay before retry ``attempt`` using exponential backoff.
+
+        Args:
+            attempt: The retry attempt number (1-based).
+
+        Returns:
+            Delay in seconds, capped at ``max_delay``.
+        """
         delay = self.base_delay * (self.backoff_factor ** (attempt - 1))
         return min(delay, self.max_delay)
 
@@ -88,21 +120,22 @@ def with_retry(
     rate_limiter: RateLimiter | None = None,
     sleep: Callable[[float], None] = time.sleep,
 ) -> tuple[T, int]:
-    """带重试与限流的函数调用包装。
+    """Call a function with retry, backoff, and optional rate limiting.
 
     Args:
-        func: 要调用的函数。
-        args: 位置参数。
-        kwargs: 关键字参数。
-        config: 重试配置，默认 3 次指数退避。
-        rate_limiter: 可选限流器。
-        sleep: 睡眠函数（可注入用于测试）。
+        func: The callable to invoke.
+        args: Positional arguments passed to ``func``.
+        kwargs: Keyword arguments passed to ``func``.
+        config: Retry configuration. Defaults to ``RetryConfig()``.
+        rate_limiter: Optional rate limiter to acquire before each attempt.
+        sleep: Sleep function used between retries. Injectable for testing.
 
     Returns:
-        (结果, 实际尝试次数)。
+        A tuple of (``func`` return value, number of attempts made).
 
     Raises:
-        最后一次重试仍失败时抛出原始异常。
+        Exception: The last exception encountered when all retries are exhausted.
+            Non-retryable exceptions propagate immediately.
     """
     config = config or RetryConfig()
     kwargs = kwargs or {}

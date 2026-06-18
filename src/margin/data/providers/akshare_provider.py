@@ -1,7 +1,8 @@
-"""AKShare 数据 Provider — A 股行情、基础财务、指数、部分公告元数据。
+"""AKShare data provider for A-share quotes, fundamentals, indices and announcement metadata.
 
-对应 spec 01 §3 接口契约、架构 §4.2.1。
-对应 plan 0102.1 / 0102.3 / 0102.4。
+This module implements the provider contract defined in spec 01 §3 and the
+architecture described in §4.2.1. It covers the work items planned in
+plan 0102.1, 0102.3 and 0102.4.
 """
 
 from __future__ import annotations
@@ -19,7 +20,19 @@ from margin.core.provider import (
 
 
 def _sz_sh_symbol(raw: str) -> str:
-    """将 AKShare 原始代码转为标准 ``000001.SZ`` / ``600000.SH`` 口径。"""
+    """Convert an AKShare raw symbol into the standard ``000001.SZ`` / ``600000.SH`` format.
+
+    Args:
+        raw: The raw symbol string as returned by AKShare. It may already be
+            prefixed with ``SH`` or ``SZ`` (e.g. ``SH600000``), or it may be a
+            six-digit numeric code.
+
+    Returns:
+        A standardized symbol string. Numeric codes starting with ``60``, ``68``
+        or ``9`` are mapped to the ``.SH`` suffix, all other six-digit codes are
+        mapped to ``.SZ``. If the input does not match any known format it is
+        returned unchanged.
+    """
     raw = str(raw).strip()
     if raw.startswith(("SH", "SZ")):
         return f"{raw[2:]}.{raw[:2]}"
@@ -31,14 +44,45 @@ def _sz_sh_symbol(raw: str) -> str:
 
 
 def _fmt_date(d: datetime) -> str:
+    """Format a datetime as an AKShare-compatible date string.
+
+    Args:
+        d: The datetime value to format.
+
+    Returns:
+        The date formatted as ``%Y%m%d``.
+    """
     return d.strftime("%Y%m%d")
 
 
 def _market_bar_available_at(trade_date: datetime) -> datetime:
+    """Return the availability timestamp for a daily market bar.
+
+    Daily OHLCV bars are considered available after the market closes at 15:00
+    on the corresponding trade date.
+
+    Args:
+        trade_date: The trade date for which the bar was computed.
+
+    Returns:
+        A datetime combining the trade date and 15:00 local time.
+    """
     return datetime.combine(trade_date.date(), time(hour=15))
 
 
 def _parse_optional_date(value: Any) -> datetime | None:
+    """Parse an optional date value into a datetime.
+
+    Supports both ``%Y-%m-%d`` and ``%Y%m%d`` formats. Only the first ten
+    characters of the string representation are considered.
+
+    Args:
+        value: The value to parse. ``None`` and empty strings yield ``None``.
+
+    Returns:
+        The parsed datetime, or ``None`` if the value is missing or cannot be
+        parsed by any supported format.
+    """
     if value is None or value == "":
         return None
     if isinstance(value, datetime):
@@ -53,13 +97,19 @@ def _parse_optional_date(value: Any) -> datetime | None:
 
 
 class AKShareProvider(BaseProvider):
-    """基于 AKShare 的 A 股市场数据 Provider。
+    """A-share market data provider backed by AKShare.
 
-    AKShare 免 token，但需遵守其频率限制。
-    所有方法返回标准格式 dict 列表，含时点字段。
+    AKShare does not require an API token, but callers must respect its rate
+    limits. Every public method returns a list of standard-format dictionaries
+    that include timing fields such as ``fetched_at`` and ``available_at``.
+
+    Attributes:
+        _descriptor: The cached provider descriptor containing metadata,
+            capabilities and configuration.
     """
 
     def __init__(self) -> None:
+        """Initialize the provider and build its descriptor."""
         self._descriptor = ProviderDescriptor(
             name="akshare",
             version="1.0.0",
@@ -77,9 +127,26 @@ class AKShareProvider(BaseProvider):
 
     @property
     def descriptor(self) -> ProviderDescriptor:
+        """Return the provider descriptor.
+
+        Returns:
+            A ``ProviderDescriptor`` describing the provider name, version,
+            type, capabilities and configuration.
+        """
         return self._descriptor
 
     def healthcheck(self) -> HealthCheckResult:
+        """Check whether AKShare is reachable by fetching the A-share spot snapshot.
+
+        Returns:
+            A ``HealthCheckResult`` with status ``HEALTHY`` when the snapshot
+            endpoint responds successfully, otherwise ``UNHEALTHY`` with the
+            exception message.
+
+        Raises:
+            Does not raise exceptions; failures are captured in the returned
+            result.
+        """
         import akshare as ak
 
         try:
@@ -99,6 +166,17 @@ class AKShareProvider(BaseProvider):
             )
 
     def get_securities(self, as_of: datetime) -> list[dict[str, Any]]:
+        """Fetch the current A-share security list and latest spot prices.
+
+        Args:
+            as_of: The reference datetime for the security universe request.
+                Currently reserved for interface compatibility; the snapshot
+                returned by AKShare reflects the latest available market state.
+
+        Returns:
+            A list of dictionaries, each containing ``symbol``, ``name``,
+            ``close``, ``fetched_at``, ``available_at`` and ``source``.
+        """
         import akshare as ak
 
         df = ak.stock_zh_a_spot_em()
@@ -124,6 +202,22 @@ class AKShareProvider(BaseProvider):
         end: datetime,
         frequency: str = "1d",
     ) -> list[dict[str, Any]]:
+        """Fetch historical OHLCV bars for the given symbols.
+
+        Args:
+            symbols: A list of standard-format symbols such as
+                ``["000001.SZ", "600000.SH"]``.
+            start: The inclusive start date of the requested range.
+            end: The inclusive end date of the requested range.
+            frequency: Bar frequency. Supported values are ``"1d"``,
+                ``"1w"`` and ``"1M"``. Defaults to ``"1d"``.
+
+        Returns:
+            A list of OHLCV bar dictionaries. Each dictionary contains
+            ``symbol``, ``date``, ``open``, ``close``, ``high``, ``low``,
+            ``volume``, ``amount``, ``frequency``, ``fetched_at``,
+            ``available_at`` and ``source``.
+        """
         import akshare as ak
 
         period_map = {"1d": "daily", "1w": "weekly", "1M": "monthly"}
@@ -168,6 +262,23 @@ class AKShareProvider(BaseProvider):
         start: datetime,
         end: datetime,
     ) -> list[dict[str, Any]]:
+        """Fetch historical adjustment factors for the given symbols.
+
+        Uses AKShare's ``hfq`` (backward-adjusted) price series and returns the
+        adjusted close, which can be used to compute split- and dividend-aware
+        cumulative returns.
+
+        Args:
+            symbols: A list of standard-format symbols such as
+                ``["000001.SZ", "600000.SH"]``.
+            start: The inclusive start date of the requested range.
+            end: The inclusive end date of the requested range.
+
+        Returns:
+            A list of adjustment factor dictionaries. Each dictionary contains
+            ``symbol``, ``date``, ``hfq_close``, ``fetched_at``,
+            ``available_at`` and ``source``.
+        """
         import akshare as ak
 
         fetched_at = datetime.now()
@@ -203,6 +314,23 @@ class AKShareProvider(BaseProvider):
         start: datetime,
         end: datetime,
     ) -> list[dict[str, Any]]:
+        """Fetch balance-sheet fundamentals for the given symbols.
+
+        Args:
+            symbols: A list of standard-format symbols such as
+                ``["000001.SZ", "600000.SH"]``.
+            start: The inclusive start report date of the requested range.
+            end: The inclusive end report date of the requested range.
+
+        Returns:
+            A list of financial statement dictionaries. Each dictionary
+            contains ``symbol``, ``report_date``, ``ann_date``,
+            ``total_assets``, ``total_liabilities``, ``total_equity``,
+            ``fetched_at``, ``available_at`` and ``source``. Announcement dates
+            are derived from ``NOTICE_DATE``, ``ANN_DATE`` or ``公告日期`` when
+            present; otherwise the fetch timestamp is used as the availability
+            time.
+        """
         import akshare as ak
 
         fetched_at = datetime.now()
@@ -239,6 +367,18 @@ class AKShareProvider(BaseProvider):
         return result
 
     def get_index_members(self, index_code: str, as_of: datetime) -> list[dict[str, Any]]:
+        """Fetch the current constituent list for the given index.
+
+        Args:
+            index_code: The standard index code, e.g. ``"000300.SH"`` for CSI
+                300.
+            as_of: The reference datetime for the membership request.
+
+        Returns:
+            A list of constituent dictionaries. Each dictionary contains
+            ``symbol``, ``index_code``, ``name``, ``as_of``, ``fetched_at``,
+            ``available_at`` and ``source``.
+        """
         import akshare as ak
 
         fetched_at = datetime.now()

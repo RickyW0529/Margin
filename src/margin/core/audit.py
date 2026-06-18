@@ -1,7 +1,7 @@
-"""审计日志 — 记录每次 Provider 调用的参数摘要与结果状态（架构 §22 审计日志不可修改）。
+"""Immutable audit logging for every Provider call.
 
-对应 plan 0101.3：每次调用记录参数摘要与结果状态。
-对应架构 §4.2.1：Provider 必须记录 fetched_at、available_at、原始响应哈希。
+Each call records a parameter summary and the result status. Audit records are
+append-only and must not be modified after writing.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from margin.core.provider import CallResult
 
 
 class AuditRecord(BaseModel):
-    """一条不可变的审计记录。"""
+    """A single immutable audit record describing a Provider call."""
 
     provider_name: str
     provider_version: str
@@ -39,7 +39,14 @@ class AuditRecord(BaseModel):
 
 
 def compute_hash(data: Any) -> str:
-    """计算数据的 SHA256 哈希，用于原始响应哈希校验。"""
+    """Compute a deterministic SHA256 hash for arbitrary data.
+
+    Args:
+        data: Any JSON-serializable value. ``None`` is handled explicitly.
+
+    Returns:
+        A string of the form ``sha256:<hex_digest>`` or ``sha256:none``.
+    """
     if data is None:
         return "sha256:none"
     serialized = json.dumps(data, sort_keys=True, default=str, ensure_ascii=False)
@@ -47,13 +54,22 @@ def compute_hash(data: Any) -> str:
 
 
 class AuditLogger:
-    """审计日志写入器。
+    """Append-only audit log writer.
 
-    MVP 阶段使用追加写 JSONL 文件，保证只追加不修改。
-    后续 1002 会迁移到 PostgreSQL 不可变审计表。
+    The MVP implementation writes JSON Lines to a local file. Future iterations
+    will migrate to an immutable PostgreSQL audit table.
+
+    Attributes:
+        _log_path: Path to the JSONL audit log file.
     """
 
     def __init__(self, log_path: Path | None = None) -> None:
+        """Initialize the audit logger.
+
+        Args:
+            log_path: Path to the JSONL log file. Defaults to
+                ``~/.margin/audit/provider_calls.jsonl``.
+        """
         self._log_path = log_path or Path.home() / ".margin" / "audit" / "provider_calls.jsonl"
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -66,7 +82,19 @@ class AuditLogger:
         result: CallResult,
         trace_id: str = "",
     ) -> AuditRecord:
-        """记录一次 Provider 调用，返回不可变的 AuditRecord。"""
+        """Log a single Provider call and return the immutable record.
+
+        Args:
+            provider_name: Name of the Provider that was called.
+            provider_version: Version of the Provider.
+            method: Method name that was invoked.
+            params: Original call parameters; sensitive values are redacted.
+            result: Call result containing status, timing, and cost metadata.
+            trace_id: Optional trace identifier for observability.
+
+        Returns:
+            The immutable ``AuditRecord`` that was appended to the log.
+        """
         params_summary = _summarize_params(params)
 
         record = AuditRecord(
@@ -90,12 +118,22 @@ class AuditLogger:
         return record
 
     def _append(self, record: AuditRecord) -> None:
+        """Append a JSON-encoded record to the log file.
+
+        Args:
+            record: The audit record to append.
+        """
         line = record.model_dump_json() + "\n"
         with open(self._log_path, "a", encoding="utf-8") as f:
             f.write(line)
 
     def read_all(self) -> list[AuditRecord]:
-        """读取全部审计记录（用于测试与审计查询）。"""
+        """Read all audit records from the log file.
+
+        Returns:
+            List of parsed ``AuditRecord`` objects. Returns an empty list when
+            the log file does not exist.
+        """
         if not self._log_path.is_file():
             return []
         records: list[AuditRecord] = []
@@ -107,7 +145,17 @@ class AuditLogger:
 
 
 def _summarize_params(params: dict[str, Any]) -> dict[str, Any]:
-    """对参数做摘要：截断长值，隐藏敏感字段。"""
+    """Summarize call parameters for audit logging.
+
+    Sensitive keys are redacted, long strings are truncated, and long sequences
+    are replaced by a length summary.
+
+    Args:
+        params: Original call parameters.
+
+    Returns:
+        A sanitized copy suitable for persistent audit logs.
+    """
     sensitive_keys = {"token", "api_key", "password", "secret"}
     summary: dict[str, Any] = {}
     for key, value in params.items():

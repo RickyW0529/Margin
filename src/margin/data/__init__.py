@@ -1,4 +1,4 @@
-"""数据层：Provider 接入、字段标准化与数据质量。"""
+"""Data layer: provider adapters, field standardization, and data quality checks."""
 
 from margin.data.quality import (
     DataQualityChecker,

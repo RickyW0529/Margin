@@ -1,6 +1,8 @@
-"""Provider 类型定义、描述符与基类协议。
+"""Provider type definitions, descriptors, base class, and business protocols.
 
-对应 spec 01 §3 接口契约、架构 §4.2 连接器接口、§8.1 Provider 接入层、§20.1 插件协议。
+This module defines the contracts that every Provider must satisfy, including
+metadata descriptors, health check results, call results, and typed protocols
+for specific capability domains such as market data.
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from pydantic import BaseModel, Field
 
 
 class ProviderType(StrEnum):
-    """Provider 能力类型（架构 §8.1）。"""
+    """Capability category of a Provider."""
 
     MARKET_DATA = "market_data"
     WEB_SEARCH = "web_search"
@@ -26,7 +28,7 @@ class ProviderType(StrEnum):
 
 
 class ProviderStatus(StrEnum):
-    """Provider 健康状态。"""
+    """Health status returned by a Provider health check."""
 
     HEALTHY = "healthy"
     DEGRADED = "degraded"
@@ -35,7 +37,7 @@ class ProviderStatus(StrEnum):
 
 
 class HealthCheckResult(BaseModel):
-    """健康检查结果。"""
+    """Result of a Provider health check."""
 
     provider_name: str
     status: ProviderStatus
@@ -46,7 +48,7 @@ class HealthCheckResult(BaseModel):
 
 
 class CallResult(BaseModel):
-    """Provider 调用结果（含审计与成本元数据）。"""
+    """Result of a Provider method call, including audit and cost metadata."""
 
     provider_name: str
     provider_version: str
@@ -63,9 +65,19 @@ class CallResult(BaseModel):
 
 
 class ProviderDescriptor(BaseModel):
-    """Provider 元数据描述符（对应架构 §20.1 插件协议 + §8.1 Provider 要求）。
+    """Immutable metadata descriptor for a Provider.
 
-    描述 Provider 的身份、能力、Secret 引用与配置，不含敏感凭据。
+    Describes the Provider's identity, capabilities, Secret references, and
+    configuration. Sensitive credentials are never stored here; only reference
+    names are kept.
+
+    Attributes:
+        name: Unique Provider name.
+        version: Provider version string.
+        provider_type: Capability category.
+        capabilities: List of supported method names.
+        secret_refs: List of Secret reference names required by the Provider.
+        config: Provider-specific configuration dictionary.
     """
 
     name: str
@@ -79,32 +91,49 @@ class ProviderDescriptor(BaseModel):
 
 
 class BaseProvider(ABC):
-    """所有 Provider 的抽象基类。
+    """Abstract base class for all Providers.
 
-    子类必须实现 descriptor 和 healthcheck。
-    具体业务方法（如 get_bars）由各类型的 Protocol 定义（见下方）。
+    Subclasses must implement ``descriptor`` and ``healthcheck``. Concrete
+    business methods (for example ``get_bars``) are defined by the typed
+    protocols below.
     """
 
     @property
     @abstractmethod
     def descriptor(self) -> ProviderDescriptor:
-        """返回此 Provider 的元数据描述符。"""
+        """Return the metadata descriptor for this Provider.
+
+        Returns:
+            The Provider's immutable ``ProviderDescriptor``.
+        """
 
     @abstractmethod
     def healthcheck(self) -> HealthCheckResult:
-        """执行健康检查，返回状态。"""
+        """Execute a health check and return the status.
+
+        Returns:
+            A ``HealthCheckResult`` describing the Provider's health.
+        """
 
 
 # ---------------------------------------------------------------------------
-# 业务 Protocol — 结构化子类型（架构 §4.2）
+# Business protocols — structural subtyping for Provider capability domains.
 # ---------------------------------------------------------------------------
 
 
 @runtime_checkable
 class MarketDataProvider(Protocol):
-    """A 股市场数据 Provider 协议（架构 §4.2）。"""
+    """Protocol for A-share market data Providers."""
 
     def get_securities(self, as_of: datetime) -> list[dict[str, Any]]:
+        """Return the universe of available securities as of a given date.
+
+        Args:
+            as_of: Date for which the security universe is requested.
+
+        Returns:
+            List of security metadata records.
+        """
         ...
 
     def get_bars(
@@ -114,6 +143,17 @@ class MarketDataProvider(Protocol):
         end: datetime,
         frequency: str = "1d",
     ) -> list[dict[str, Any]]:
+        """Return OHLCV bars for the requested symbols and date range.
+
+        Args:
+            symbols: List of standardized symbols (e.g. ``000001.SZ``).
+            start: Start of the requested range.
+            end: End of the requested range.
+            frequency: Bar frequency (e.g. ``1d``, ``1w``, ``1M``).
+
+        Returns:
+            List of bar records.
+        """
         ...
 
     def get_adjustment_factors(
@@ -122,6 +162,16 @@ class MarketDataProvider(Protocol):
         start: datetime,
         end: datetime,
     ) -> list[dict[str, Any]]:
+        """Return adjustment factors for the requested symbols and date range.
+
+        Args:
+            symbols: List of standardized symbols.
+            start: Start of the requested range.
+            end: End of the requested range.
+
+        Returns:
+            List of adjustment factor records.
+        """
         ...
 
     def get_financials(
@@ -130,15 +180,43 @@ class MarketDataProvider(Protocol):
         start: datetime,
         end: datetime,
     ) -> list[dict[str, Any]]:
+        """Return financial statement indicators for the requested symbols.
+
+        Args:
+            symbols: List of standardized symbols.
+            start: Start of the requested reporting range.
+            end: End of the requested reporting range.
+
+        Returns:
+            List of financial indicator records.
+        """
         ...
 
     def get_index_members(self, index_code: str, as_of: datetime) -> list[dict[str, Any]]:
+        """Return the constituents of an index as of a given date.
+
+        Args:
+            index_code: Standardized index code.
+            as_of: Date for which index membership is requested.
+
+        Returns:
+            List of index constituent records.
+        """
         ...
 
 
 @runtime_checkable
 class WebSearchProvider(Protocol):
-    """WebSearch Provider 协议（架构 §6.2.1）。"""
+    """Protocol for web search Providers."""
 
     def search(self, query: str, max_results: int = 10) -> list[dict[str, Any]]:
+        """Execute a web search.
+
+        Args:
+            query: Search query string.
+            max_results: Maximum number of results to return.
+
+        Returns:
+            List of search result records.
+        """
         ...

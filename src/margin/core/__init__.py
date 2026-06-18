@@ -1,4 +1,8 @@
-"""核心基础设施：Provider Registry、Secret 管理、审计日志、容错机制。"""
+"""Core infrastructure: Provider Registry, Secret management, audit logging, and resilience.
+
+This module re-exports the public building blocks used by the data layer and
+other Margin subsystems.
+"""
 
 from margin.core.audit import AuditLogger, AuditRecord, compute_hash
 from margin.core.provider import (
