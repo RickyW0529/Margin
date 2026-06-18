@@ -320,6 +320,28 @@ class TestThesis:
         assert history[0].thesis == "thesis v1"
         assert history[1].thesis == "thesis v2"
 
+    def test_positions_attach_latest_thesis_version(self):
+        """Position views must expose the latest thesis, not the first version."""
+        service = PortfolioService()
+        pf = service.create_portfolio("user_001", "test")
+        service.add_trade(
+            pf.portfolio_id,
+            "000001.SZ",
+            "buy",
+            100,
+            10.0,
+            datetime(2026, 6, 1),
+        )
+        position_id = service.get_positions(pf.portfolio_id)[0].position_id
+        service.update_thesis(pf.portfolio_id, position_id, "thesis v1")
+        service.update_thesis(pf.portfolio_id, position_id, "thesis v2")
+
+        position = service.get_positions(pf.portfolio_id)[0]
+
+        assert position.thesis is not None
+        assert position.thesis.version == 2
+        assert position.thesis.thesis == "thesis v2"
+
 
 class TestNoAutoTrade:
     """Tests confirming the system does not perform or store real trading credentials."""

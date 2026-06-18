@@ -9,9 +9,9 @@
   ·
   <a href="./docs/README.md">文档索引</a>
   ·
-  <a href="./docs/spec/v0.1/README.md">功能规格</a>
+  <a href="docs/specs/v0.1/README.md">功能规格</a>
   ·
-  <a href="./docs/plan/v0.1/README.md">实施计划</a>
+  <a href="docs/plans/v0.1/README.md">实施计划</a>
 </p>
 
 <p align="center">
@@ -144,8 +144,8 @@ export MARGIN_SECRET_TUSHARE_TOKEN="your-token"
 | English Product Design | [`docs/design/v0.1/product/Margin_Product_Design_v0.1_EN.md`](./docs/design/v0.1/product/Margin_Product_Design_v0.1_EN.md) |
 | 中文架构设计 | [`docs/design/v0.1/architecture/Margin_架构设计_v0.1_中文.md`](./docs/design/v0.1/architecture/Margin_架构设计_v0.1_中文.md) |
 | English Architecture Design | [`docs/design/v0.1/architecture/Margin_Architecture_Design_v0.1_EN.md`](./docs/design/v0.1/architecture/Margin_Architecture_Design_v0.1_EN.md) |
-| 功能规格 | [`docs/spec/v0.1/`](./docs/spec/v0.1/) |
-| 实施计划 | [`docs/plan/v0.1/`](./docs/plan/v0.1/) |
+| 功能规格 | [`docs/spec/v0.1/`](docs/specs/v0.1/) |
+| 实施计划 | [`docs/plan/v0.1/`](docs/plans/v0.1/) |
 | 协作约定 | [`AGENTS.md`](./AGENTS.md) |
 
 ## 安全边界
@@ -181,7 +181,7 @@ gantt
     持仓监控                    :c3, after c1, 21d
 ```
 
-完整任务拆解见 [`docs/plan/v0.1/README.md`](./docs/plan/v0.1/README.md)。
+完整任务拆解见 [`docs/plan/v0.1/README.md`](docs/plans/v0.1/README.md)。
 
 ## 参与贡献
 

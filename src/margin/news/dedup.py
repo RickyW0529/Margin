@@ -3,7 +3,7 @@
 Implements multi-layer deduplication, repost-chain detection, L1-L5 compliance grading,
 and quality scoring as defined in the project specification.
 
-Corresponds to spec 03 sections 3 and 4, architecture section 6.4 deduplication rules,
+Corresponds to specs 03 sections 3 and 4, architecture section 6.4 deduplication rules,
 and section 6.1 source priority.
 
 Plan 0303 coverage:
@@ -26,11 +26,15 @@ from __future__ import annotations
 
 import hashlib
 import re
-from typing import Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
 from margin.news.models import DocumentEvent, SourceLevel, utc_now
+
+if TYPE_CHECKING:
+    from margin.news.repository import NewsRepository
 
 # ---------------------------------------------------------------------------
 # Deduplication result
@@ -192,6 +196,8 @@ class Deduplicator:
         self,
         simhash_threshold: int = 3,
         title_similarity_threshold: float = 0.85,
+        vector_similarity_func: Callable[[DocumentEvent, DocumentEvent], float] | None = None,
+        vector_similarity_threshold: float = 0.92,
     ) -> None:
         """Initialize the deduplicator with configurable thresholds.
 
@@ -201,10 +207,29 @@ class Deduplicator:
         """
         self._simhash_threshold = simhash_threshold
         self._title_threshold = title_similarity_threshold
+        self._vector_similarity_func = vector_similarity_func
+        self._vector_similarity_threshold = vector_similarity_threshold
         self._seen_urls: dict[str, DocumentEvent] = {}
         self._seen_hashes: dict[str, DocumentEvent] = {}
         self._seen_title_dates: dict[str, DocumentEvent] = {}
         self._seen_simhashes: list[tuple[int, DocumentEvent]] = []
+        self._seen_events: list[DocumentEvent] = []
+
+    def seed(self, events: list[DocumentEvent]) -> None:
+        """Seed the deduplicator with already-known canonical events."""
+        for event in events:
+            self._record_seen(event)
+
+    def find_duplicate(
+        self,
+        event: DocumentEvent,
+    ) -> tuple[str, DocumentEvent] | None:
+        """Public duplicate probe used by persistent processors."""
+        return self._check_duplicate(event)
+
+    def record_event(self, event: DocumentEvent) -> None:
+        """Record a canonical event after it is persisted."""
+        self._record_seen(event)
 
     def deduplicate(
         self,
@@ -282,6 +307,12 @@ class Deduplicator:
                     return f"repost_of:{existing_event.event_id}", existing_event
                 return "simhash_duplicate", existing_event
 
+        if self._vector_similarity_func is not None:
+            for existing_event in self._seen_events:
+                similarity = self._vector_similarity_func(event, existing_event)
+                if similarity >= self._vector_similarity_threshold:
+                    return "vector_similarity", existing_event
+
         return None
 
     def _record_seen(self, event: DocumentEvent) -> None:
@@ -298,6 +329,8 @@ class Deduplicator:
         content_text = event.content or event.title
         event_simhash = compute_simhash(content_text)
         self._seen_simhashes.append((event_simhash, event))
+        if event.event_id not in {seen.event_id for seen in self._seen_events}:
+            self._seen_events.append(event)
 
 
 # ---------------------------------------------------------------------------
@@ -521,3 +554,73 @@ class NewsProcessor:
             e for e in events
             if min_level <= e.source_level <= max_level
         ]
+
+
+class PersistentNewsProcessor:
+    """News processor that persists unique events, duplicate decisions, and repost chains."""
+
+    def __init__(
+        self,
+        repository: NewsRepository,
+        *,
+        simhash_threshold: int = 3,
+        vector_similarity_func: Callable[[DocumentEvent, DocumentEvent], float] | None = None,
+        vector_similarity_threshold: float = 0.92,
+        quality_scorer: QualityScorer | None = None,
+    ) -> None:
+        self._repository = repository
+        self._simhash_threshold = simhash_threshold
+        self._vector_similarity_func = vector_similarity_func
+        self._vector_similarity_threshold = vector_similarity_threshold
+        self._quality_scorer = quality_scorer or QualityScorer()
+
+    def process(self, events: list[DocumentEvent]) -> DedupResult:
+        """Deduplicate against persisted canonical events and record every decision."""
+        deduplicator = Deduplicator(
+            simhash_threshold=self._simhash_threshold,
+            vector_similarity_func=self._vector_similarity_func,
+            vector_similarity_threshold=self._vector_similarity_threshold,
+        )
+        deduplicator.seed(self._repository.list_unique_events())
+
+        unique: list[DocumentEvent] = []
+        duplicates: list[dict[str, Any]] = []
+        for event in sorted(events, key=lambda item: (item.source_level, item.published_at)):
+            match = deduplicator.find_duplicate(event)
+            if match is None:
+                self._repository.add_document_event(event, publishable=True)
+                deduplicator.record_event(event)
+                unique.append(event)
+                continue
+
+            reason, canonical = match
+            self._repository.add_document_event(event, publishable=False)
+            self._repository.add_dedup_record(
+                duplicate_event_id=event.event_id,
+                canonical_event_id=canonical.event_id,
+                reason=reason,
+                similarity_score=None,
+            )
+            self._repository.add_repost_edge(
+                parent_event_id=canonical.event_id,
+                child_event_id=event.event_id,
+                reason=reason,
+            )
+            duplicates.append(
+                {
+                    "event_id": event.event_id,
+                    "source_url": event.source_url,
+                    "reason": reason,
+                    "duplicate_of": canonical.event_id,
+                }
+            )
+
+        return DedupResult(
+            unique_events=unique,
+            duplicate_count=len(duplicates),
+            duplicates=duplicates,
+        )
+
+    def score(self, event: DocumentEvent) -> QualityScore:
+        """Compute quality score for a persisted or incoming event."""
+        return self._quality_scorer.score(event)

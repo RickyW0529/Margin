@@ -1,8 +1,8 @@
 """Position import module — manual entry, CSV/Excel import, broker plugin protocol,
 validation, and audit.
 
-Corresponds to spec 02 §3 interface contracts (POST /portfolios/{id}/trades, /imports).
-Corresponds to plan 0201 work items:
+Corresponds to specs 02 §3 interface contracts (POST /portfolios/{id}/trades, /imports).
+Corresponds to plans 0201 work items:
   0201.1 Manual trade entry interface
   0201.2 CSV/Excel import, field validation, and error reporting
   0201.3 Broker export file adapter plugin protocol
@@ -18,7 +18,7 @@ import csv
 import hashlib
 import io
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -145,7 +145,12 @@ def validate_trade_fields(
     if price <= 0:
         raise TradeValidationError(f"price must be positive, got {price}")
 
-    if traded_at > datetime.now():
+    normalized_traded_at = (
+        traded_at.replace(tzinfo=UTC)
+        if traded_at.tzinfo is None
+        else traded_at.astimezone(UTC)
+    )
+    if normalized_traded_at > datetime.now(UTC):
         raise TradeValidationError(
             f"traded_at cannot be in the future: {traded_at}"
         )
@@ -362,7 +367,7 @@ class TradeImporter:
     ) -> tuple[list[Trade], ImportRecord]:
         """Import trades from a broker export file using a plugin.
 
-        Corresponds to plan 0201.3: broker export file adapter plugin protocol.
+        Corresponds to plans 0201.3: broker export file adapter plugin protocol.
         Plugins only parse the file format and must not store broker passwords or
         connect to broker accounts.
 

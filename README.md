@@ -9,9 +9,9 @@
   ·
   <a href="./docs/README.md">Documentation</a>
   ·
-  <a href="./docs/spec/v0.1/README.md">Specs</a>
+  <a href="docs/specs/v0.1/README.md">Specs</a>
   ·
-  <a href="./docs/plan/v0.1/README.md">Plans</a>
+  <a href="docs/plans/v0.1/README.md">Plans</a>
 </p>
 
 <p align="center">
@@ -147,8 +147,8 @@ export MARGIN_SECRET_TUSHARE_TOKEN="your-token"
 | Product design, English | [`docs/design/v0.1/product/Margin_Product_Design_v0.1_EN.md`](./docs/design/v0.1/product/Margin_Product_Design_v0.1_EN.md) |
 | Architecture design, Chinese | [`docs/design/v0.1/architecture/Margin_架构设计_v0.1_中文.md`](./docs/design/v0.1/architecture/Margin_架构设计_v0.1_中文.md) |
 | Architecture design, English | [`docs/design/v0.1/architecture/Margin_Architecture_Design_v0.1_EN.md`](./docs/design/v0.1/architecture/Margin_Architecture_Design_v0.1_EN.md) |
-| Specs | [`docs/spec/v0.1/`](./docs/spec/v0.1/) |
-| Plans | [`docs/plan/v0.1/`](./docs/plan/v0.1/) |
+| Specs | [`docs/spec/v0.1/`](docs/specs/v0.1/) |
+| Plans | [`docs/plan/v0.1/`](docs/plans/v0.1/) |
 | Collaboration rules | [`AGENTS.md`](./AGENTS.md) |
 
 ## Safety Boundaries
@@ -186,7 +186,7 @@ gantt
     Holdings monitoring            :c3, after c1, 21d
 ```
 
-See the full task breakdown in [`docs/plan/v0.1/README.md`](./docs/plan/v0.1/README.md).
+See the full task breakdown in [`docs/plan/v0.1/README.md`](docs/plans/v0.1/README.md).
 
 ## Contributing
 

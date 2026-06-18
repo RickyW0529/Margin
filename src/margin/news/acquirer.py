@@ -1,7 +1,7 @@
 """Source registry and filing acquirer — Source Registry + Connector + Downloader + Snapshot.
 
-Corresponds to spec 03 §3 interface contract and architecture §6.2 acquisition components.
-Corresponds to plan 0301:
+Corresponds to specs 03 §3 interface contract and architecture §6.2 acquisition components.
+Corresponds to plans 0301:
   0301.1 Source Registry and Connector
   0301.2 Scheduler and Downloader
   0301.3 Snapshot and format detection

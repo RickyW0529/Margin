@@ -1,9 +1,9 @@
 """WebSearch Provider — configurable web search provider.
 
-Implements spec 03 §3 interface contract and architecture §6.2.1 WebSearch Provider
+Implements specs 03 §3 interface contract and architecture §6.2.1 WebSearch Provider
 with news compliance requirements.
 
-Corresponds to plan 0302:
+Corresponds to plans 0302:
   0302.1 WebSearchProvider integration — user-configured API key.
   0302.2 Search result snapshot — persist query/URL/title/snippet/crawl time/
       original content snapshot hash.
@@ -28,7 +28,7 @@ Compliance constraints (architecture §6.2.1):
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
@@ -56,6 +56,9 @@ from margin.news.models import (
     make_document_event,
     utc_now,
 )
+
+if TYPE_CHECKING:
+    from margin.news.repository import NewsRepository
 
 # ---------------------------------------------------------------------------
 # Search result models
@@ -465,6 +468,7 @@ class WebSearchService:
         provider: WebSearchProvider,
         registry: SourceRegistry,
         snapshot_store: SnapshotStore,
+        repository: NewsRepository | None = None,
     ) -> None:
         """Initialize the service.
 
@@ -475,6 +479,7 @@ class WebSearchService:
         """
         self._provider = provider
         self._verifier = OriginalContentVerifier(registry, snapshot_store)
+        self._repository = repository
 
     def search(
         self,
@@ -497,6 +502,7 @@ class WebSearchService:
         query: str,
         max_results: int = 10,
         source_level: SourceLevel = SourceLevel.L4,
+        searched_at: datetime | None = None,
     ) -> tuple[SearchQueryRecord, list[DocumentEvent]]:
         """Search and acquire original content, returning the query record and
         document events for successfully acquired results.
@@ -515,6 +521,10 @@ class WebSearchService:
         record = self._provider.search(
             query, max_results=max_results, source_level=source_level
         )
+        if searched_at is not None:
+            record = record.model_copy(update={"searched_at": searched_at})
+        if self._repository is not None:
+            self._repository.add_search_record(record)
 
         verified = self._verifier.verify_batch(record.results)
 
@@ -543,4 +553,6 @@ class WebSearchService:
             events.append(event)
 
         audited_record = record.model_copy(update={"results": tuple(audited_results)})
+        if self._repository is not None:
+            self._repository.add_search_record(audited_record)
         return audited_record, events

@@ -2,8 +2,8 @@
 
 Implements supplemental market data, financial data, and index membership
 queries through the Tushare Pro API. The provider is designed around the
-contract defined in spec 01 §3 and architecture §4.2.1, and covers the
-planned interfaces in plan 0102.2 / 0102.3 / 0102.4.
+contract defined in specs 01 §3 and architecture §4.2.1, and covers the
+planned interfaces in plans 0102.2 / 0102.3 / 0102.4.
 
 Users must configure their own Tushare token, referenced via
 ``tushare_token`` through SecretManager. Respect Tushare licensing and

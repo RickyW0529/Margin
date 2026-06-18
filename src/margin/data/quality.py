@@ -1,9 +1,9 @@
 """Point-in-time validation and data quality checking module.
 
-Corresponds to spec 01 §4 point-in-time fields and §7 risks and degradation.
+Corresponds to specs 01 §4 point-in-time fields and §7 risks and degradation.
 Corresponds to architecture §4.4 point-in-time fields, §4.5 anti-future data
 leakage prevention, and §25 fault degradation.
-Corresponds to plan 0104 work items:
+Corresponds to plans 0104 work items:
   0104.1 point-in-time field persistence
   0104.2 anti-future data leakage validation
   0104.3 data quality checks

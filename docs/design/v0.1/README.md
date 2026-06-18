@@ -28,6 +28,7 @@
 - 标题与版本行 `V2` / `V2.0` → `v0.1`；
 - 架构设计英文版同步补齐 §19–§28（盘中监控、插件、部署、安全、可观测性、测试、降级、实施顺序、技术选型、总结），与中文版章节对齐；
 - 产品设计中文版与英文版章节结构已一致，未做内容增补。
+- 架构设计中英文版同步明确前端技术栈：Next.js App Router + TypeScript、Tailwind CSS、shadcn/ui、TanStack Table + shadcn Table、Apache ECharts、lucide-react、TanStack Query。
 
 ## 章节对照
 

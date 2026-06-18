@@ -4,7 +4,7 @@
 > 版本：v0.1  
 > 架构模式：模块化单体优先，异步任务分离，插件化扩展  
 > 部署目标：单用户本地部署优先，可扩展至多用户服务  
-> 推荐技术栈：FastAPI + PostgreSQL + Parquet/DuckDB + pgvector/Qdrant + Provider Registry + LangGraph/自研编排 + Next.js + Docker Compose
+> 推荐技术栈：FastAPI + PostgreSQL + Parquet/DuckDB + pgvector/Qdrant + Provider Registry + LangGraph/自研编排 + Next.js App Router + TypeScript + Tailwind CSS + shadcn/ui + TanStack Table/Query + Apache ECharts + lucide-react + Docker Compose
 
 ---
 
@@ -768,6 +768,12 @@ System Guardrail Prompt
 
 ### 16.2 前端页面
 
+前端统一使用 Next.js App Router + TypeScript。样式层采用 Tailwind CSS；
+通用 UI 组件采用 shadcn/ui；表格采用 TanStack Table + shadcn Table；
+图表采用 Apache ECharts；图标采用 lucide-react；服务端状态与 API 请求采用
+TanStack Query。所有研究候选、持仓、证据展开和运行状态页面必须基于同一套
+组件与请求规范，避免每个页面各自维护表格、图表和加载/错误状态。
+
 ```mermaid
 flowchart TD
     A[研究候选首页] --> B[今日候选]
@@ -996,7 +1002,7 @@ margin/
 ```mermaid
 flowchart TB
     subgraph Host[本地主机/云主机]
-        WEB[Next.js]
+        WEB[Next.js App Router + TypeScript]
         API[FastAPI]
         WORKER[Worker/Scheduler]
         PG[(PostgreSQL + pgvector)]
@@ -1168,7 +1174,13 @@ gantt
 
 ```text
 Backend: FastAPI
-Frontend: Next.js
+Frontend: Next.js App Router + TypeScript
+Styling: Tailwind CSS
+Components: shadcn/ui
+Tables: TanStack Table + shadcn Table
+Charts: Apache ECharts
+Icons: lucide-react
+Client Requests/Server State: TanStack Query
 Primary DB: PostgreSQL
 Vector: pgvector（MVP）/ Qdrant（可插拔）
 Analytics: Parquet + DuckDB

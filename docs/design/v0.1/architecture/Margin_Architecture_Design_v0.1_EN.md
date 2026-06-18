@@ -4,7 +4,7 @@
 > Version: v0.1  
 > Architecture style: Modular monolith first, asynchronous workers, provider-based integration, plugin-based extension  
 > Deployment target: Local single-user first, extensible to hosted multi-user deployments  
-> Recommended stack: FastAPI + PostgreSQL + Parquet/DuckDB + pgvector/Qdrant + Provider Registry + LangGraph/custom orchestration + Next.js + Docker Compose
+> Recommended stack: FastAPI + PostgreSQL + Parquet/DuckDB + pgvector/Qdrant + Provider Registry + LangGraph/custom orchestration + Next.js App Router + TypeScript + Tailwind CSS + shadcn/ui + TanStack Table/Query + Apache ECharts + lucide-react + Docker Compose
 
 ---
 
@@ -542,6 +542,14 @@ Services:
 - Report Renderer;
 - Export Service.
 
+The frontend uses Next.js App Router + TypeScript. Styling is built with
+Tailwind CSS; reusable UI components come from shadcn/ui; tables use TanStack
+Table with shadcn Table; charts use Apache ECharts; icons use lucide-react; and
+server state plus API requests use TanStack Query. Research candidates,
+holdings, evidence expansion, and job-status pages must share the same
+component and request conventions so each page does not reimplement table,
+chart, loading, and error-state behavior independently.
+
 ```mermaid
 flowchart TD
     A[Research Candidate Dashboard] --> B[Candidates]
@@ -719,7 +727,7 @@ margin/
 ```mermaid
 flowchart TB
     subgraph Host[Local or Cloud Host]
-        WEB[Next.js]
+        WEB[Next.js App Router + TypeScript]
         API[FastAPI]
         WORKER[Worker/Scheduler]
         PG[(PostgreSQL + pgvector)]
@@ -863,7 +871,13 @@ gantt
 
 ```text
 Backend: FastAPI
-Frontend: Next.js
+Frontend: Next.js App Router + TypeScript
+Styling: Tailwind CSS
+Components: shadcn/ui
+Tables: TanStack Table + shadcn Table
+Charts: Apache ECharts
+Icons: lucide-react
+Client Requests/Server State: TanStack Query
 Primary DB: PostgreSQL
 Vector: pgvector first, Qdrant optional
 Analytics: Parquet + DuckDB

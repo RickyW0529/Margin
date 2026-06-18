@@ -1,7 +1,7 @@
 """Portfolio risk engine — eight-dimensional risk measurement.
 
-Corresponds to spec 02 §4 data model (architecture §17.2 portfolio risk).
-Corresponds to plan 0202.2 / 0202.3 / 0202.4.
+Corresponds to specs 02 §4 data model (architecture §17.2 portfolio risk).
+Corresponds to plans 0202.2 / 0202.3 / 0202.4.
 
 The eight dimensions (architecture §17.2) are:
 1. single_position
@@ -79,7 +79,7 @@ class PortfolioRiskEngine:
 
     Computes risk metrics across eight dimensions and compares them against strategy thresholds.
     When market data is missing the engine falls back to single-position validation and avoids
-    high-confidence portfolio-wide conclusions (corresponds to spec 02 §7).
+    high-confidence portfolio-wide conclusions (corresponds to specs 02 §7).
 
     Attributes:
         _max_single: Maximum allowed weight for a single position.
@@ -446,7 +446,7 @@ class PortfolioRiskEngine:
     def _event_concentration(
         self, positions: list[Position], upcoming_events: dict[str, datetime]
     ) -> RiskMetric:
-        """Dimension 8: event concentration risk (corresponds to plan 0202.3).
+        """Dimension 8: event concentration risk (corresponds to plans 0202.3).
 
         Args:
             positions: Positions to evaluate.

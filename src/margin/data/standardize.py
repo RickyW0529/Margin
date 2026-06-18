@@ -1,7 +1,7 @@
 """Field standardization module — unify multi-source external data into a standard format.
 
-Corresponds to spec 01 §2 / §4 and architecture §4.3 (data standardization flow).
-Corresponds to all plan 0103 work items:
+Corresponds to specs 01 §2 / §4 and architecture §4.3 (data standardization flow).
+Corresponds to all plans 0103 work items:
   0103.1 Field mapping and code mapping
   0103.2 Unit and currency unification
   0103.3 Time standardization

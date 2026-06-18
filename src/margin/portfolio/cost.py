@@ -1,7 +1,7 @@
 """Cost and profit/loss calculation — moving weighted average method.
 
-Corresponds to spec 02 §4 data model and architecture §17 position service architecture.
-Corresponds to plan 0202.1: cost and quantity calculation (position cost, market value,
+Corresponds to specs 02 §4 data model and architecture §17 position service architecture.
+Corresponds to plans 0202.1: cost and quantity calculation (position cost, market value,
 profit/loss).
 """
 

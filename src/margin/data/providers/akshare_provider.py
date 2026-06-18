@@ -1,8 +1,8 @@
 """AKShare data provider for A-share quotes, fundamentals, indices and announcement metadata.
 
-This module implements the provider contract defined in spec 01 §3 and the
+This module implements the provider contract defined in specs 01 §3 and the
 architecture described in §4.2.1. It covers the work items planned in
-plan 0102.1, 0102.3 and 0102.4.
+plans 0102.1, 0102.3 and 0102.4.
 """
 
 from __future__ import annotations

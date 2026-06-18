@@ -1,9 +1,9 @@
 """PortfolioService — portfolio service integrating trades, cost, risk, and dashboards.
 
-Corresponds to spec 02 §3 interface contract (architecture §17.3 portfolio API).
+Corresponds to specs 02 §3 interface contract (architecture §17.3 portfolio API).
 Corresponds to architecture §17 portfolio service architecture:
 Portfolio Service → cost/quantity calculation / portfolio risk engine / investment thesis tracking.
-Corresponds to plan 0203: portfolio overview view / single-position detail view / API integration.
+Corresponds to plans 0203: portfolio overview view / single-position detail view / API integration.
 """
 
 from __future__ import annotations
@@ -24,6 +24,10 @@ from margin.portfolio.models import (
     ThesisStatus,
     Trade,
     TradeSide,
+)
+from margin.portfolio.repository import (
+    MemoryPortfolioRepository,
+    PortfolioRepository,
 )
 from margin.portfolio.risk import PortfolioRiskEngine, PortfolioRiskReport
 
@@ -130,10 +134,7 @@ class PortfolioService:
         overview = service.get_overview(portfolio.portfolio_id)
 
     Attributes:
-        _portfolios: In-memory mapping from portfolio_id to Portfolio.
-        _trades: In-memory mapping from portfolio_id to list of Trade records.
-        _positions_cache: Cached positions per portfolio (invalidated on trade changes).
-        _theses: In-memory mapping from portfolio_id to list of PositionThesis records.
+        _repository: Portfolio, trade, and thesis persistence boundary.
         _importer: Trade importer used for manual and CSV imports.
         _cost_calculator: Calculator used to derive positions from trades.
         _risk_engine: Engine used to compute portfolio risk metrics.
@@ -143,17 +144,16 @@ class PortfolioService:
         self,
         cost_calculator: CostCalculator | None = None,
         risk_engine: PortfolioRiskEngine | None = None,
+        repository: PortfolioRepository | None = None,
     ) -> None:
         """Initialize the portfolio service.
 
         Args:
             cost_calculator: Optional CostCalculator instance. A default is created if omitted.
             risk_engine: Optional PortfolioRiskEngine instance. A default is created if omitted.
+            repository: Persistence implementation. Defaults to an in-memory repository.
         """
-        self._portfolios: dict[str, Portfolio] = {}
-        self._trades: dict[str, list[Trade]] = {}
-        self._positions_cache: dict[str, list[Position]] = {}
-        self._theses: dict[str, list[PositionThesis]] = {}
+        self._repository = repository or MemoryPortfolioRepository()
         self._importer = TradeImporter()
         self._cost_calculator = cost_calculator or CostCalculator()
         self._risk_engine = risk_engine or PortfolioRiskEngine()
@@ -182,9 +182,7 @@ class PortfolioService:
             name=name,
             cash=cash,
         )
-        self._portfolios[portfolio.portfolio_id] = portfolio
-        self._trades[portfolio.portfolio_id] = []
-        self._theses[portfolio.portfolio_id] = []
+        self._repository.add_portfolio(portfolio)
         return portfolio
 
     def get_portfolio(self, portfolio_id: str) -> Portfolio:
@@ -199,9 +197,10 @@ class PortfolioService:
         Raises:
             KeyError: If the portfolio does not exist.
         """
-        if portfolio_id not in self._portfolios:
+        portfolio = self._repository.get_portfolio(portfolio_id)
+        if portfolio is None:
             raise KeyError(f"Portfolio '{portfolio_id}' not found")
-        return self._portfolios[portfolio_id]
+        return portfolio
 
     def add_trade(
         self,
@@ -308,7 +307,7 @@ class PortfolioService:
             A copy of the portfolio's trade list.
         """
         self._ensure_portfolio(portfolio_id)
-        return list(self._trades[portfolio_id])
+        return self._repository.list_trades(portfolio_id)
 
     def get_positions(
         self,
@@ -325,21 +324,23 @@ class PortfolioService:
             List of Position instances with attached theses.
         """
         self._ensure_portfolio(portfolio_id)
-        trades = self._trades[portfolio_id]
+        trades = self._repository.list_trades(portfolio_id)
         positions = self._cost_calculator.calculate(
             portfolio_id=portfolio_id,
             trades=trades,
             current_prices=current_prices,
         )
 
-        for pos in positions:
-            theses = self._theses.get(portfolio_id, [])
-            for thesis in theses:
-                if thesis.position_id == pos.position_id:
-                    object.__setattr__(pos, "thesis", thesis)
-                    break
-
-        return positions
+        latest_thesis = {
+            thesis.position_id: thesis
+            for thesis in self._repository.list_theses(portfolio_id)
+        }
+        return [
+            position.model_copy(
+                update={"thesis": latest_thesis.get(position.position_id)}
+            )
+            for position in positions
+        ]
 
     def get_risk(
         self,
@@ -476,7 +477,7 @@ class PortfolioService:
         if position is None:
             raise KeyError(f"Position '{position_id}' not found in portfolio '{portfolio_id}'")
 
-        trades = self._trades[portfolio_id]
+        trades = self._repository.list_trades(portfolio_id)
         trade_history = [
             {
                 "trade_id": t.trade_id,
@@ -546,8 +547,8 @@ class PortfolioService:
         import uuid
 
         self._ensure_portfolio(portfolio_id)
-        existing = self._theses.get(portfolio_id, [])
-        version = len([t for t in existing if t.position_id == position_id]) + 1
+        existing = self._repository.list_theses(portfolio_id, position_id)
+        version = len(existing) + 1
 
         new_thesis = PositionThesis(
             thesis_id=f"th_{uuid.uuid4().hex[:12]}",
@@ -561,7 +562,7 @@ class PortfolioService:
             status=status,
             version=version,
         )
-        self._theses.setdefault(portfolio_id, []).append(new_thesis)
+        self._repository.add_thesis(portfolio_id, new_thesis)
         return new_thesis
 
     def get_thesis_history(
@@ -579,10 +580,7 @@ class PortfolioService:
             All thesis versions for the position, oldest to newest.
         """
         self._ensure_portfolio(portfolio_id)
-        return [
-            t for t in self._theses.get(portfolio_id, [])
-            if t.position_id == position_id
-        ]
+        return self._repository.list_theses(portfolio_id, position_id)
 
     @property
     def importer(self) -> TradeImporter:
@@ -598,7 +596,7 @@ class PortfolioService:
         Raises:
             KeyError: If the portfolio does not exist.
         """
-        if portfolio_id not in self._portfolios:
+        if self._repository.get_portfolio(portfolio_id) is None:
             raise KeyError(f"Portfolio '{portfolio_id}' not found")
 
     def _append_trades(self, portfolio_id: str, trades: list[Trade]) -> None:
@@ -608,9 +606,8 @@ class PortfolioService:
             portfolio_id: Identifier of the portfolio.
             trades: Trades to append.
         """
-        self._trades[portfolio_id].extend(trades)
+        self._repository.add_trades(trades)
         self._apply_cash_delta(portfolio_id, trades)
-        self._invalidate_cache(portfolio_id)
 
     def _apply_cash_delta(self, portfolio_id: str, trades: list[Trade]) -> None:
         """Adjust portfolio cash by the net cash impact of the given trades.
@@ -623,18 +620,10 @@ class PortfolioService:
             return
 
         delta = sum(_cash_delta(t) for t in trades)
-        portfolio = self._portfolios[portfolio_id]
-        self._portfolios[portfolio_id] = portfolio.model_copy(
-            update={"cash": portfolio.cash + delta}
+        portfolio = self.get_portfolio(portfolio_id)
+        self._repository.update_portfolio(
+            portfolio.model_copy(update={"cash": portfolio.cash + delta})
         )
-
-    def _invalidate_cache(self, portfolio_id: str) -> None:
-        """Clear the cached positions for a portfolio after a trade change.
-
-        Args:
-            portfolio_id: Identifier of the portfolio whose cache should be cleared.
-        """
-        self._positions_cache.pop(portfolio_id, None)
 
 
 def _cash_delta(trade: Trade) -> float:

@@ -6,13 +6,36 @@ portfolios, investment theses, alert events, and import audit records.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from margin.data.standardize import normalize_symbol
+
+
+def _utc_now() -> datetime:
+    """Return the current UTC timestamp.
+
+    Returns:
+        The current date and time in UTC.
+    """
+    return datetime.now(UTC)
+
+
+def _ensure_utc(value: datetime) -> datetime:
+    """Ensure a datetime is timezone-aware in UTC.
+
+    Args:
+        value: A datetime instance, which may be naive or aware.
+
+    Returns:
+        The input datetime normalized to UTC.
+    """
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -130,10 +153,16 @@ class Trade(BaseModel):
     source: TradeSource = TradeSource.MANUAL
     source_ref: str | None = None
     raw_hash: str | None = None
-    imported_at: datetime = Field(default_factory=lambda: datetime.now())
+    imported_at: datetime = Field(default_factory=_utc_now)
     note: str | None = None
 
     model_config = {"frozen": True}
+
+    @field_validator("traded_at", "imported_at")
+    @classmethod
+    def normalize_trade_timestamp(cls, value: datetime) -> datetime:
+        """Normalize trade timestamps to UTC."""
+        return _ensure_utc(value)
 
     def model_post_init(self, __context: Any) -> None:
         """Compute the trade amount if it was not provided.
@@ -182,9 +211,15 @@ class PositionThesis(BaseModel):
     next_review_at: datetime | None = None
     status: ThesisStatus = ThesisStatus.THESIS_VALID
     version: int = 1
-    created_at: datetime = Field(default_factory=lambda: datetime.now())
+    created_at: datetime = Field(default_factory=_utc_now)
 
     model_config = {"frozen": True}
+
+    @field_validator("next_review_at", "created_at")
+    @classmethod
+    def normalize_thesis_timestamp(cls, value: datetime | None) -> datetime | None:
+        """Normalize thesis timestamps to UTC."""
+        return _ensure_utc(value) if value is not None else None
 
 
 # ---------------------------------------------------------------------------
@@ -228,9 +263,15 @@ class Position(BaseModel):
     industry: str | None = None
     health_status: PositionHealthStatus = PositionHealthStatus.HEALTHY
     thesis: PositionThesis | None = None
-    updated_at: datetime = Field(default_factory=lambda: datetime.now())
+    updated_at: datetime = Field(default_factory=_utc_now)
 
     model_config = {"frozen": True}
+
+    @field_validator("updated_at")
+    @classmethod
+    def normalize_position_timestamp(cls, value: datetime) -> datetime:
+        """Normalize position timestamps to UTC."""
+        return _ensure_utc(value)
 
 
 # ---------------------------------------------------------------------------
@@ -255,9 +296,15 @@ class Portfolio(BaseModel):
     user_id: str
     name: str
     cash: float = 0.0
-    created_at: datetime = Field(default_factory=lambda: datetime.now())
+    created_at: datetime = Field(default_factory=_utc_now)
 
     model_config = {"frozen": True}
+
+    @field_validator("created_at")
+    @classmethod
+    def normalize_portfolio_timestamp(cls, value: datetime) -> datetime:
+        """Normalize portfolio timestamps to UTC."""
+        return _ensure_utc(value)
 
 
 # ---------------------------------------------------------------------------
@@ -286,10 +333,16 @@ class AlertEvent(BaseModel):
     alert_type: str
     severity: str = "P2"
     message: str
-    triggered_at: datetime = Field(default_factory=lambda: datetime.now())
+    triggered_at: datetime = Field(default_factory=_utc_now)
     evidence_refs: list[str] = Field(default_factory=list)
 
     model_config = {"frozen": True}
+
+    @field_validator("triggered_at")
+    @classmethod
+    def normalize_alert_timestamp(cls, value: datetime) -> datetime:
+        """Normalize alert timestamps to UTC."""
+        return _ensure_utc(value)
 
 
 # ---------------------------------------------------------------------------
@@ -321,11 +374,17 @@ class ImportRecord(BaseModel):
     file_name: str | None = None
     trade_count: int = 0
     rejected_count: int = 0
-    imported_at: datetime = Field(default_factory=lambda: datetime.now())
+    imported_at: datetime = Field(default_factory=_utc_now)
     raw_hash: str | None = None
     errors: list[str] = Field(default_factory=list)
 
     model_config = {"frozen": True}
+
+    @field_validator("imported_at")
+    @classmethod
+    def normalize_import_timestamp(cls, value: datetime) -> datetime:
+        """Normalize import timestamps to UTC."""
+        return _ensure_utc(value)
 
 
 # ---------------------------------------------------------------------------

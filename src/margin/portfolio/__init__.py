@@ -28,6 +28,11 @@ from margin.portfolio.models import (
     TradeSource,
     make_trade,
 )
+from margin.portfolio.repository import (
+    MemoryPortfolioRepository,
+    PortfolioRepository,
+    SQLAlchemyPortfolioRepository,
+)
 from margin.portfolio.risk import PortfolioRiskEngine, PortfolioRiskReport, RiskMetric
 from margin.portfolio.service import (
     PortfolioOverview,
@@ -43,6 +48,7 @@ __all__ = [
     "ImportValidationError",
     "Portfolio",
     "PortfolioOverview",
+    "PortfolioRepository",
     "PortfolioRiskEngine",
     "PortfolioRiskReport",
     "PortfolioService",
@@ -51,12 +57,14 @@ __all__ = [
     "PositionHealthStatus",
     "PositionThesis",
     "RiskMetric",
+    "SQLAlchemyPortfolioRepository",
     "ThesisStatus",
     "Trade",
     "TradeImporter",
     "TradeSide",
     "TradeSource",
     "TradeValidationError",
+    "MemoryPortfolioRepository",
     "compute_raw_hash",
     "make_trade",
     "validate_trade_fields",

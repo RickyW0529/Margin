@@ -1,0 +1,415 @@
+:root {
+  --surface: #f7f8fb;
+  --panel: #ffffff;
+  --panel-muted: #f0f3f7;
+  --border: #d8dee8;
+  --border-strong: #b9c3d1;
+  --text: #17202f;
+  --muted: #627085;
+  --subtle: #8793a6;
+  --brand: #25636f;
+  --brand-soft: #e3f0f2;
+  --positive: #147a47;
+  --positive-soft: #def6e9;
+  --negative: #b42318;
+  --negative-soft: #fde7e3;
+  --warning: #8a5a00;
+  --warning-soft: #fff0c2;
+  --shadow: 0 12px 36px rgba(23, 32, 47, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--surface);
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+  color: var(--text);
+  background: var(--surface);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.workspace-shell {
+  width: min(1180px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 28px 0 40px;
+}
+
+.detail-shell {
+  width: min(980px, calc(100vw - 32px));
+}
+
+.workspace-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 0;
+  font-size: 30px;
+  line-height: 1.15;
+}
+
+h2 {
+  margin-bottom: 0;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+h3 {
+  margin-bottom: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.status-strip span,
+.badge {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 8px;
+  color: var(--muted);
+  background: var(--panel);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.badge.watch,
+.badge.risk,
+.badge.event_pending {
+  color: var(--warning);
+  border-color: var(--warning-soft);
+  background: var(--warning-soft);
+}
+
+.badge.invalidated,
+.badge.data_missing {
+  color: var(--negative);
+  border-color: var(--negative-soft);
+  background: var(--negative-soft);
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.detail-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metric-tile,
+.panel,
+.notice-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.metric-tile {
+  min-height: 108px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 8px;
+  padding: 14px;
+}
+
+.metric-icon {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand);
+  border-radius: 8px;
+  background: var(--brand-soft);
+}
+
+.metric-tile span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.metric-tile strong {
+  overflow-wrap: anywhere;
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.positive {
+  color: var(--positive);
+}
+
+.negative {
+  color: var(--negative);
+}
+
+.neutral {
+  color: var(--text);
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 14px;
+  align-items: start;
+}
+
+.panel {
+  padding: 14px;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  color: var(--text);
+}
+
+.panel-heading span {
+  color: var(--subtle);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.positions-panel {
+  min-width: 0;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 8px;
+  text-align: left;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.symbol-cell {
+  font-weight: 800;
+}
+
+.side-rail {
+  display: grid;
+  gap: 14px;
+}
+
+.empty-state {
+  min-height: 128px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  color: var(--muted);
+  background: var(--panel-muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.empty-state.compact {
+  min-height: 64px;
+}
+
+.exposure-list,
+.event-list,
+.trade-list,
+.condition-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.exposure-list {
+  display: grid;
+  gap: 12px;
+}
+
+.exposure-list li {
+  display: grid;
+  gap: 6px;
+}
+
+.exposure-list div,
+.event-list li,
+.trade-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.exposure-list span,
+.event-list span,
+.trade-list span,
+.fact-list span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+meter {
+  width: 100%;
+  height: 8px;
+}
+
+.event-list,
+.trade-list {
+  display: grid;
+  gap: 10px;
+}
+
+.event-list li,
+.trade-list li {
+  min-height: 36px;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--panel-muted);
+}
+
+.risk-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.notice-panel {
+  min-height: 96px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px;
+  color: var(--negative);
+  background: var(--negative-soft);
+}
+
+.thesis-block p {
+  margin-bottom: 18px;
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.condition-list {
+  margin-top: 14px;
+}
+
+.condition-list li {
+  margin-bottom: 8px;
+  border-left: 3px solid var(--brand);
+  padding-left: 10px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.fact-list {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px 12px;
+  align-items: center;
+}
+
+.fact-list strong,
+.trade-list strong,
+.event-list strong {
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+@media (max-width: 860px) {
+  .workspace-shell,
+  .detail-shell {
+    width: min(100vw - 20px, 680px);
+    padding-top: 18px;
+  }
+
+  .workspace-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+
+  .metric-grid,
+  .detail-metrics,
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-tile {
+    min-height: 94px;
+  }
+}

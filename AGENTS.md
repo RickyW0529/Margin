@@ -202,8 +202,14 @@ ruff check --fix src tests
 
 - `ruff check` 必须 0 error。
 - `pytest` 必须全绿。
-- 当前已实现子任务：`0101-provider_registry`、`0102-akshare_tushare_access`、`0103-field_standardization`、`0104-point_in_time_and_quality`、`0201-manual_csv_import`、`0202-cost_and_position`。
-- 部分实现：`0203-basic_dashboard` 已有 PortfolioService 与概览/明细模型，FastAPI 端点和 Next.js 页面待实现。
-- 部分实现：`0301-filing_acquisition` 已有来源注册、下载、快照、解析和证券映射，Scheduler、增量游标、真实交易所 Connector、表格定位与 Event Publisher 待实现。
-- 部分实现：`0302-websearch_provider` 已有 Provider、Secret 注入、原文校验与快照审计，真实搜索 API 适配、robots 执行和查询记录持久化待实现。
-- 部分实现：`0303-dedup_and_compliance` 已有 URL/哈希/标题时间/SimHash 去重和来源评分，向量相似度与持久化转载链待实现。
+- 当前已实现子任务：`0101-provider_registry`、`0102-akshare_tushare_access`、`0103-field_standardization`、`0104-point_in_time_and_quality`、`0201-manual_csv_import`、`0202-cost_and_position`、`0203-basic_dashboard`、`0301-filing_acquisition`、`0302-websearch_provider`、`0303-dedup_and_compliance`、`0401-parse_and_chunk`、`0402-embedding_pipeline`、`0403-hybrid_recall`、`0501-evidence_tiering`、`0502-citation_locator`、`0503-claim_validation`。
+- `0203-basic_dashboard` 已补齐 PostgreSQL repository、FastAPI 端点、Next.js App Router 面板、前端测试与 build 验证。
+- `0301-filing_acquisition` 已补齐 PostgreSQL 游标/快照/事件/outbox、SSE/SZSE discovery adapter、增量 runner 与 DocumentEventPublisher；真实交易所实网 smoke 需要网络与目标站点可访问。
+- `0302-websearch_provider` 已补齐 Tavily adapter、robots 执行、查询/结果持久化与原文校验前审计；实网 smoke 需要 `MARGIN_WEBSEARCH_API_KEY`。
+- `0303-dedup_and_compliance` 已补齐向量相似度回调、跨进程持久化去重决策与转载链。
+- `0401-parse_and_chunk` 已补齐结构化 HTML/PDF/CSV/JSON/Text parser、表格/页码/quote_span 定位与 structured block 分块。
+- `0402-embedding_pipeline` 已补齐 OpenAI-compatible EmbeddingProvider、pgvector 持久化 chunk/vector/index audit；实网 smoke 需要 `MARGIN_EMBEDDING_API_KEY`、`MARGIN_EMBEDDING_BASE_URL`、`MARGIN_EMBEDDING_MODEL`、`MARGIN_EMBEDDING_DIMENSION`。
+- `0403-hybrid_recall` 已补齐 HTTP RerankProvider、持久化检索 audit 与 replay；实网 smoke 需要 `MARGIN_RERANK_API_KEY`、`MARGIN_RERANK_BASE_URL`、`MARGIN_RERANK_MODEL`。
+- `0501-evidence_tiering` 已补齐 Evidence/Claim 结构、source level 质量评分、locator 快照字段、跨 Claim 冲突检测、L4/L5 限制与 PostgreSQL append-only Claim/Evidence 持久化。
+- `0502-citation_locator` 已补齐 PDF/HTML/表格 locator、PIT 校验、WebSearch 原文/快照校验与 snapshot resolver，可接 `NewsRepository.get_snapshot` 校验快照 URL/hash/status。
+- `0503-claim_validation` 已补齐 CitationValidator 批量冲突校验、引用失败具体 FAIL reason、ABSTAINED 判定、反方审查标记、校验审计持久化与 `research_evidence` 关联表。
