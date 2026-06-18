@@ -1,4 +1,4 @@
-"""AuditLogger 测试。"""
+"""Tests for ``AuditLogger`` and the response-hash utility."""
 
 from datetime import datetime
 
@@ -7,22 +7,31 @@ from margin.core.provider import CallResult
 
 
 class TestComputeHash:
+    """Tests covering the format and stability of ``compute_hash``."""
+
     def test_dict_hash(self):
+        """A dictionary hash is returned with the expected ``sha256:`` prefix."""
         h = compute_hash({"a": 1, "b": 2})
         assert h.startswith("sha256:")
 
     def test_none_hash(self):
+        """``None`` is hashed to the sentinel value ``sha256:none``."""
         assert compute_hash(None) == "sha256:none"
 
     def test_deterministic(self):
+        """Hashing the same input twice produces the same digest."""
         assert compute_hash({"a": 1}) == compute_hash({"a": 1})
 
     def test_order_independent(self):
+        """Dictionary key order does not affect the resulting hash."""
         assert compute_hash({"a": 1, "b": 2}) == compute_hash({"b": 2, "a": 1})
 
 
 class TestAuditLogger:
+    """Tests covering JSONL persistence, reading, and parameter summarization."""
+
     def test_log_call_writes_jsonl(self, tmp_path):
+        """``log_call`` persists a record and returns an ``AuditRecord`` instance."""
         log_path = tmp_path / "audit.jsonl"
         logger = AuditLogger(log_path=log_path)
 
@@ -54,6 +63,7 @@ class TestAuditLogger:
         assert log_path.is_file()
 
     def test_read_all(self, tmp_path):
+        """``read_all`` returns every persisted record in chronological order."""
         log_path = tmp_path / "audit.jsonl"
         logger = AuditLogger(log_path=log_path)
 
@@ -71,10 +81,12 @@ class TestAuditLogger:
         assert records[0].params_summary == {"i": 0}
 
     def test_read_all_empty(self, tmp_path):
+        """``read_all`` returns an empty list when the log file does not exist."""
         logger = AuditLogger(log_path=tmp_path / "nonexist.jsonl")
         assert logger.read_all() == []
 
     def test_sensitive_params_redacted(self, tmp_path):
+        """Sensitive parameter keys such as ``token`` are redacted in the summary."""
         logger = AuditLogger(log_path=tmp_path / "audit.jsonl")
         result = CallResult(
             provider_name="tushare",
@@ -91,6 +103,7 @@ class TestAuditLogger:
         assert record.params_summary["symbols"] == ["000001.SZ"]
 
     def test_long_value_truncated(self, tmp_path):
+        """String parameter values longer than 200 characters are truncated with an ellipsis."""
         logger = AuditLogger(log_path=tmp_path / "audit.jsonl")
         result = CallResult(
             provider_name="p", provider_version="1", success=True,
@@ -102,6 +115,7 @@ class TestAuditLogger:
         assert len(record.params_summary["key"]) == 203
 
     def test_long_list_summarized(self, tmp_path):
+        """Long list parameters are summarized with their length instead of full contents."""
         logger = AuditLogger(log_path=tmp_path / "audit.jsonl")
         result = CallResult(
             provider_name="p", provider_version="1", success=True,
@@ -112,6 +126,7 @@ class TestAuditLogger:
         assert "len=20" in record.params_summary["ids"]
 
     def test_record_is_frozen(self, tmp_path):
+        """``AuditRecord`` instances are immutable after creation."""
         logger = AuditLogger(log_path=tmp_path / "audit.jsonl")
         result = CallResult(
             provider_name="p", provider_version="1", success=True,

@@ -1,4 +1,4 @@
-"""ProviderDescriptor 与 Provider 基类协议测试。"""
+"""Tests for ``ProviderDescriptor`` and ``BaseProvider`` protocol compliance."""
 
 from datetime import datetime
 
@@ -15,7 +15,19 @@ from margin.core.provider import (
 
 
 class FakeProvider(BaseProvider):
+    """A configurable stub provider implementing ``BaseProvider`` for protocol tests.
+
+    Attributes:
+        _descriptor: The provider descriptor exposed via ``descriptor``.
+    """
+
     def __init__(self, name: str = "fake", version: str = "1.0.0") -> None:
+        """Initialize the stub with a market-data descriptor.
+
+        Args:
+            name: Provider name returned by the descriptor.
+            version: Provider version returned by the descriptor.
+        """
         self._descriptor = ProviderDescriptor(
             name=name,
             version=version,
@@ -26,9 +38,15 @@ class FakeProvider(BaseProvider):
 
     @property
     def descriptor(self) -> ProviderDescriptor:
+        """Returns:
+            The configured provider descriptor.
+        """
         return self._descriptor
 
     def healthcheck(self) -> HealthCheckResult:
+        """Returns:
+            A healthy status for this provider.
+        """
         return HealthCheckResult(
             provider_name=self._descriptor.name,
             status=ProviderStatus.HEALTHY,
@@ -52,7 +70,10 @@ class FakeProvider(BaseProvider):
 
 
 class TestProviderDescriptor:
+    """Tests covering ``ProviderDescriptor`` immutability and default values."""
+
     def test_descriptor_is_frozen(self):
+        """A ``ProviderDescriptor`` cannot be modified after creation."""
         desc = ProviderDescriptor(
             name="akshare",
             version="1.0.0",
@@ -62,6 +83,7 @@ class TestProviderDescriptor:
             desc.name = "changed"
 
     def test_descriptor_defaults(self):
+        """Optional descriptor fields default to empty containers when omitted."""
         desc = ProviderDescriptor(
             name="x", version="1", provider_type=ProviderType.LLM
         )
@@ -71,22 +93,28 @@ class TestProviderDescriptor:
 
 
 class TestBaseProvider:
+    """Tests covering protocol conformance of a concrete ``BaseProvider``."""
+
     def test_fake_provider_descriptor(self):
+        """The stub provider exposes the expected name and type."""
         p = FakeProvider()
         assert p.descriptor.name == "fake"
         assert p.descriptor.provider_type == ProviderType.MARKET_DATA
 
     def test_fake_provider_healthcheck(self):
+        """The stub provider reports itself as healthy."""
         p = FakeProvider()
         result = p.healthcheck()
         assert result.status == ProviderStatus.HEALTHY
         assert result.provider_name == "fake"
 
     def test_market_data_provider_protocol(self):
+        """A complete market-data implementation satisfies the ``MarketDataProvider`` protocol."""
         p = FakeProvider()
         assert isinstance(p, MarketDataProvider)
 
     def test_non_market_data_provider_fails_protocol(self):
+        """An incomplete provider does not satisfy the ``MarketDataProvider`` protocol."""
         class NonMarketProvider(BaseProvider):
             @property
             def descriptor(self):
