@@ -1,4 +1,7 @@
-"""时点校验与数据质量检查测试 — 0104 验收。"""
+"""Tests for point-in-time (PIT) validation and data quality checks.
+
+Acceptance: 0104.
+"""
 
 from __future__ import annotations
 
@@ -26,6 +29,18 @@ def _make_bar(
     close: float = 11.0,
     revised_at: datetime | None = None,
 ) -> StandardDataEvent:
+    """Create a ``StandardDataEvent`` market-bar fixture for testing.
+
+    Args:
+        symbol: The ticker symbol to use.
+        available_at: The timestamp when the bar becomes available. Defaults to 2026-06-17.
+        fetched_at: The timestamp when the bar was fetched. Defaults to 2026-06-18.
+        close: The closing price stored in the bar payload.
+        revised_at: Optional revision timestamp.
+
+    Returns:
+        A fully populated ``StandardDataEvent`` with the provided or default values.
+    """
     available = available_at or datetime(2026, 6, 17)
     return StandardDataEvent(
         domain=DataDomain.MARKET_BAR,
@@ -41,11 +56,15 @@ def _make_bar(
 
 
 class TestValidatePITFields:
+    """Unit tests for ``validate_pit_fields`` ensuring required PIT fields are present and typed."""
+
     def test_valid_event(self):
+        """A complete ``StandardDataEvent`` passes validation without raising."""
         event = _make_bar()
         validate_pit_fields(event)
 
     def test_valid_dict(self):
+        """A dictionary containing all required PIT datetime fields passes validation."""
         record = {
             "event_at": datetime(2026, 6, 17),
             "published_at": datetime(2026, 6, 17),
@@ -56,6 +75,7 @@ class TestValidatePITFields:
         validate_pit_fields(record)
 
     def test_missing_field_raises(self):
+        """Validation raises ``PITFieldError`` when a required PIT field is missing."""
         record = {
             "event_at": datetime(2026, 6, 17),
             "published_at": datetime(2026, 6, 17),
@@ -64,6 +84,7 @@ class TestValidatePITFields:
             validate_pit_fields(record)
 
     def test_wrong_type_raises(self):
+        """Validation raises ``PITFieldError`` when a PIT field has the wrong type."""
         record = {
             "event_at": "2026-06-17",
             "published_at": datetime(2026, 6, 17),
@@ -74,41 +95,53 @@ class TestValidatePITFields:
             validate_pit_fields(record)
 
     def test_revised_at_none_ok(self):
+        """A ``None`` ``revised_at`` value is accepted."""
         event = _make_bar(revised_at=None)
         validate_pit_fields(event)
 
     def test_revised_at_datetime_ok(self):
+        """A datetime ``revised_at`` value is accepted."""
         event = _make_bar(revised_at=datetime(2026, 6, 19))
         validate_pit_fields(event)
 
 
 class TestCheckNoLookahead:
+    """Unit tests for ``check_no_lookahead`` preventing future data leakage."""
+
     def test_passes_when_available_before_decision(self):
+        """Returns ``True`` when ``available_at`` is earlier than ``decision_at``."""
         event = _make_bar(available_at=datetime(2026, 6, 17))
         assert check_no_lookahead(event, datetime(2026, 6, 18)) is True
 
     def test_passes_when_equal(self):
+        """Returns ``True`` when ``available_at`` equals ``decision_at``."""
         event = _make_bar(available_at=datetime(2026, 6, 17))
         assert check_no_lookahead(event, datetime(2026, 6, 17)) is True
 
     def test_raises_when_available_after_decision(self):
+        """Raises ``LookaheadError`` when ``available_at`` is after ``decision_at``."""
         event = _make_bar(available_at=datetime(2026, 6, 18))
         with pytest.raises(LookaheadError, match="Lookahead detected"):
             check_no_lookahead(event, datetime(2026, 6, 17))
 
     def test_dict_record(self):
+        """Detects lookahead for a plain dictionary record."""
         record = {"available_at": datetime(2026, 6, 18)}
         with pytest.raises(LookaheadError):
             check_no_lookahead(record, datetime(2026, 6, 17))
 
     def test_none_available_at_raises(self):
+        """Raises ``LookaheadError`` when ``available_at`` is ``None``."""
         record = {"available_at": None}
         with pytest.raises(LookaheadError, match="None"):
             check_no_lookahead(record, datetime(2026, 6, 17))
 
 
 class TestFilterByDecisionAt:
+    """Unit tests for ``filter_by_decision_at`` splitting records by availability."""
+
     def test_split_passed_rejected(self):
+        """Splits records into passed and rejected groups based on ``decision_at``."""
         records = [
             _make_bar(available_at=datetime(2026, 6, 15)),
             _make_bar(available_at=datetime(2026, 6, 16)),
@@ -120,12 +153,14 @@ class TestFilterByDecisionAt:
         assert len(rejected) == 1
 
     def test_all_pass(self):
+        """Returns all records as passed when every ``available_at`` is before ``decision_at``."""
         records = [_make_bar(available_at=datetime(2026, 6, 15))]
         passed, rejected = filter_by_decision_at(records, datetime(2026, 6, 17))
         assert len(passed) == 1
         assert len(rejected) == 0
 
     def test_all_rejected(self):
+        """Returns all records as rejected when every ``available_at`` is after ``decision_at``."""
         records = [_make_bar(available_at=datetime(2026, 6, 20))]
         passed, rejected = filter_by_decision_at(records, datetime(2026, 6, 17))
         assert len(passed) == 0
@@ -133,7 +168,10 @@ class TestFilterByDecisionAt:
 
 
 class TestDataQualityChecker:
+    """Unit tests for ``DataQualityChecker`` (missing values, outliers, revisions, stale data)."""
+
     def test_clean_records_pass(self):
+        """Clean records produce a passing report with no issues."""
         records = [_make_bar()]
         checker = DataQualityChecker()
         report = checker.check(records)
@@ -141,6 +179,7 @@ class TestDataQualityChecker:
         assert report.issue_count == 0
 
     def test_missing_value_detected(self):
+        """Detects a missing ``volume`` field and reports it as a missing-value issue."""
         event = StandardDataEvent(
             domain=DataDomain.MARKET_BAR,
             symbol="000001.SZ",
@@ -159,6 +198,7 @@ class TestDataQualityChecker:
         )
 
     def test_outlier_negative_price_critical(self):
+        """A negative closing price is flagged as a critical outlier issue."""
         event = _make_bar(close=-5.0)
         checker = DataQualityChecker()
         report = checker.check([event])
@@ -167,12 +207,14 @@ class TestDataQualityChecker:
         assert any(i.issue_type.value == "outlier" for i in report.issues)
 
     def test_revision_tracked(self):
+        """A non-null ``revised_at`` timestamp is reported as a revision issue."""
         event = _make_bar(revised_at=datetime(2026, 6, 19))
         checker = DataQualityChecker()
         report = checker.check([event])
         assert any(i.issue_type.value == "revision" for i in report.issues)
 
     def test_stale_data_detected(self):
+        """Data older than the configured stale threshold is flagged as stale."""
         event = _make_bar(
             available_at=datetime(2026, 6, 1),
             fetched_at=datetime(2026, 6, 18),
@@ -182,6 +224,7 @@ class TestDataQualityChecker:
         assert any(i.issue_type.value == "stale_data" for i in report.issues)
 
     def test_no_stale_within_threshold(self):
+        """Fresh data within the stale threshold is not flagged."""
         event = _make_bar(
             available_at=datetime(2026, 6, 17),
             fetched_at=datetime(2026, 6, 18),
@@ -191,6 +234,7 @@ class TestDataQualityChecker:
         assert not any(i.issue_type.value == "stale_data" for i in report.issues)
 
     def test_empty_records(self):
+        """An empty input produces a passing report with zero records."""
         checker = DataQualityChecker()
         report = checker.check([])
         assert report.passed is True
@@ -198,7 +242,10 @@ class TestDataQualityChecker:
 
 
 class TestQualityEventEmitter:
+    """Unit tests for ``QualityEventEmitter`` converting quality reports into domain events."""
+
     def test_no_issues_returns_none(self):
+        """An empty issue list results in no event being emitted."""
         from margin.data.quality import QualityReport
 
         emitter = QualityEventEmitter()
@@ -207,6 +254,7 @@ class TestQualityEventEmitter:
         assert event is None
 
     def test_warning_event(self):
+        """A warning issue emits a warning event that does not suppress research."""
         from margin.data.quality import QualityIssue, QualityIssueType, QualityReport
 
         emitter = QualityEventEmitter()
@@ -228,6 +276,7 @@ class TestQualityEventEmitter:
         assert event.should_suppress_research is False
 
     def test_critical_event_suppresses_research(self):
+        """A critical issue emits a critical event that suppresses downstream research."""
         from margin.data.quality import QualityIssue, QualityIssueType, QualityReport
 
         emitter = QualityEventEmitter()
@@ -249,6 +298,7 @@ class TestQualityEventEmitter:
         assert event.should_suppress_research is True
 
     def test_has_critical_flag(self):
+        """The emitter records that a critical event was emitted."""
         emitter = QualityEventEmitter()
         emitter.emit_custom(
             QualityEventSeverity.CRITICAL, "akshare", "market_bar", "data conflict"
@@ -256,6 +306,7 @@ class TestQualityEventEmitter:
         assert emitter.has_critical is True
 
     def test_no_critical_flag(self):
+        """The emitter does not set the critical flag for warning events."""
         emitter = QualityEventEmitter()
         emitter.emit_custom(
             QualityEventSeverity.WARNING, "akshare", "market_bar", "stale"
@@ -263,12 +314,14 @@ class TestQualityEventEmitter:
         assert emitter.has_critical is False
 
     def test_event_id_unique(self):
+        """Each emitted event receives a unique ``event_id``."""
         emitter = QualityEventEmitter()
         e1 = emitter.emit_custom(QualityEventSeverity.INFO, "s", "d", "m1")
         e2 = emitter.emit_custom(QualityEventSeverity.INFO, "s", "d", "m2")
         assert e1.event_id != e2.event_id
 
     def test_affected_symbols_collected(self):
+        """Affected symbols from all report issues are aggregated on the emitted event."""
         from margin.data.quality import QualityIssue, QualityIssueType, QualityReport
 
         emitter = QualityEventEmitter()
@@ -295,6 +348,7 @@ class TestQualityEventEmitter:
         assert "600000.SH" in event.affected_symbols
 
     def test_event_frozen(self):
+        """Emitted events are immutable and raise an exception when modified."""
         emitter = QualityEventEmitter()
         event = emitter.emit_custom(QualityEventSeverity.INFO, "s", "d", "m")
         with pytest.raises(Exception):
@@ -302,9 +356,10 @@ class TestQualityEventEmitter:
 
 
 class TestEndToEnd:
-    """端到端：标准化 → 时点校验 → 质量检查 → 事件发射。"""
+    """End-to-end tests for the pipeline: standardize -> PIT validate -> quality check -> emit."""
 
     def test_full_pipeline_suppresses_on_critical(self):
+        """Critical quality issues propagate through the pipeline and suppress research."""
         from margin.data.standardize import Standardizer
 
         std = Standardizer()
@@ -341,6 +396,7 @@ class TestEndToEnd:
         assert emitter.has_critical is True
 
     def test_future_data_rejected_before_quality_check(self):
+        """Future data is filtered out before it reaches the quality checker."""
         from margin.data.standardize import Standardizer
 
         std = Standardizer()

@@ -202,4 +202,8 @@ ruff check --fix src tests
 
 - `ruff check` 必须 0 error。
 - `pytest` 必须全绿。
-- 当前已实现子任务：`0101-provider_registry`、`0102-akshare_tushare_access`、`0103-field_standardization`、`0104-point_in_time_and_quality`。
+- 当前已实现子任务：`0101-provider_registry`、`0102-akshare_tushare_access`、`0103-field_standardization`、`0104-point_in_time_and_quality`、`0201-manual_csv_import`、`0202-cost_and_position`。
+- 部分实现：`0203-basic_dashboard` 已有 PortfolioService 与概览/明细模型，FastAPI 端点和 Next.js 页面待实现。
+- 部分实现：`0301-filing_acquisition` 已有来源注册、下载、快照、解析和证券映射，Scheduler、增量游标、真实交易所 Connector、表格定位与 Event Publisher 待实现。
+- 部分实现：`0302-websearch_provider` 已有 Provider、Secret 注入、原文校验与快照审计，真实搜索 API 适配、robots 执行和查询记录持久化待实现。
+- 部分实现：`0303-dedup_and_compliance` 已有 URL/哈希/标题时间/SimHash 去重和来源评分，向量相似度与持久化转载链待实现。

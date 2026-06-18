@@ -1,7 +1,9 @@
-"""AKShareProvider 与 TushareProvider 测试 — 0102 验收。
+"""Tests for ``AKShareProvider`` and ``TushareProvider``.
 
-测试策略：mock 外部 SDK 调用，验证字段映射、协议对接、时点字段、频率限制。
-不实际调用 akshare/tushare 外部 API。
+Acceptance: 0102.
+
+Testing strategy: mock external SDK calls, verify field mapping, protocol integration,
+point-in-time fields, and rate limiting. No real akshare/tushare APIs are invoked.
 """
 
 from __future__ import annotations
@@ -14,7 +16,10 @@ from margin.data.providers import AKShareProvider, TushareProvider
 
 
 class TestAKShareProvider:
+    """Unit tests for ``AKShareProvider`` covering descriptors, mapping, and health checks."""
+
     def test_descriptor(self):
+        """The provider descriptor exposes the expected name, type and capabilities."""
         p = AKShareProvider()
         assert p.descriptor.name == "akshare"
         assert p.descriptor.provider_type.value == "market_data"
@@ -22,11 +27,12 @@ class TestAKShareProvider:
         assert p.descriptor.secret_refs == []
 
     def test_implements_market_data_protocol(self):
+        """The provider implements the ``MarketDataProvider`` protocol."""
         p = AKShareProvider()
         assert isinstance(p, MarketDataProvider)
 
     def test_get_bars_field_mapping(self):
-        """验证 get_bars 返回标准字段与时点字段。"""
+        """``get_bars`` maps Chinese column names to canonical fields and PIT timestamps."""
         p = AKShareProvider()
 
         mock_df = MagicMock()
@@ -65,6 +71,7 @@ class TestAKShareProvider:
         assert bar["available_at"] == datetime(2026, 6, 17, 15, 0)
 
     def test_get_securities_field_mapping(self):
+        """``get_securities`` maps raw security rows to canonical symbols and names."""
         p = AKShareProvider()
         mock_df = MagicMock()
         mock_df.iterrows.return_value = [
@@ -82,6 +89,7 @@ class TestAKShareProvider:
         assert securities[0]["source"] == "akshare"
 
     def test_get_index_members(self):
+        """``get_index_members`` maps raw constituent rows to canonical symbols."""
         p = AKShareProvider()
         mock_df = MagicMock()
         mock_df.iterrows.return_value = [
@@ -97,6 +105,7 @@ class TestAKShareProvider:
         assert members[0]["source"] == "akshare"
 
     def test_healthcheck_healthy(self):
+        """A successful SDK call returns a healthy status."""
         p = AKShareProvider()
         with patch("akshare.stock_zh_a_spot_em", return_value=MagicMock()):
             result = p.healthcheck()
@@ -104,6 +113,7 @@ class TestAKShareProvider:
         assert result.provider_name == "akshare"
 
     def test_healthcheck_unhealthy(self):
+        """An SDK exception returns an unhealthy status containing the error."""
         p = AKShareProvider()
         with patch("akshare.stock_zh_a_spot_em", side_effect=Exception("network error")):
             result = p.healthcheck()
@@ -112,17 +122,22 @@ class TestAKShareProvider:
 
 
 class TestTushareProvider:
+    """Unit tests for ``TushareProvider`` covering token handling, mapping, and health checks."""
+
     def test_descriptor(self):
+        """The provider descriptor exposes the expected name, type and token secret ref."""
         p = TushareProvider(token="fake")
         assert p.descriptor.name == "tushare"
         assert p.descriptor.provider_type.value == "market_data"
         assert "tushare_token" in p.descriptor.secret_refs
 
     def test_implements_market_data_protocol(self):
+        """The provider implements the ``MarketDataProvider`` protocol."""
         p = TushareProvider(token="fake")
         assert isinstance(p, MarketDataProvider)
 
     def test_set_token_resets_pro(self):
+        """Setting a new token clears the cached ``pro`` client."""
         p = TushareProvider(token="old")
         p._pro = MagicMock()
         p.set_token("new")
@@ -130,6 +145,7 @@ class TestTushareProvider:
         assert p._pro is None
 
     def test_get_bars_field_mapping(self):
+        """``get_bars`` maps tushare daily fields to canonical fields and PIT timestamps."""
         p = TushareProvider(token="fake")
         mock_pro = MagicMock()
         mock_df = MagicMock()
@@ -172,6 +188,7 @@ class TestTushareProvider:
         )
 
     def test_get_securities_field_mapping(self):
+        """``get_securities`` maps stock_basic rows to canonical security metadata."""
         p = TushareProvider(token="fake")
         mock_pro = MagicMock()
         mock_df = MagicMock()
@@ -198,6 +215,7 @@ class TestTushareProvider:
         assert securities[0]["source"] == "tushare"
 
     def test_get_adjustment_factors(self):
+        """``get_adjustment_factors`` returns mapped adjustment factor records."""
         p = TushareProvider(token="fake")
         mock_pro = MagicMock()
         mock_df = MagicMock()
@@ -215,6 +233,7 @@ class TestTushareProvider:
         assert factors[0]["source"] == "tushare"
 
     def test_get_financials(self):
+        """``get_financials`` maps fina_indicator rows to canonical financial fields."""
         p = TushareProvider(token="fake")
         mock_pro = MagicMock()
         mock_df = MagicMock()
@@ -232,6 +251,7 @@ class TestTushareProvider:
         assert financials[0]["source"] == "tushare"
 
     def test_healthcheck_healthy(self):
+        """A configured pro client returns a healthy status."""
         p = TushareProvider(token="fake")
         mock_pro = MagicMock()
         p._pro = mock_pro
@@ -240,6 +260,7 @@ class TestTushareProvider:
         mock_pro.stock_basic.assert_called_once()
 
     def test_healthcheck_unhealthy(self):
+        """An invalid token yields an unhealthy status."""
         p = TushareProvider(token="bad")
         with patch("tushare.pro_api", side_effect=Exception("invalid token")):
             result = p.healthcheck()
@@ -247,9 +268,13 @@ class TestTushareProvider:
 
 
 class TestProviderRegistryIntegration:
-    """0102.4 频率限制与响应哈希 — 验证 Provider 在 Registry 中可注册调用。"""
+    """Integration tests for provider registration and invocation via ``ProviderRegistry``."""
 
     def test_register_and_call_akshare(self, tmp_path, monkeypatch):
+        """Registers ``AKShareProvider`` and calls ``get_bars`` through the registry.
+
+        Verifies success tracking, response hashing, and audit logging.
+        """
         from margin.core.audit import AuditLogger
         from margin.core.registry import ProviderRegistry
         from margin.core.secret import SecretManager
