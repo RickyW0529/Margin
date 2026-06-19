@@ -202,6 +202,10 @@ class PortfolioService:
             raise KeyError(f"Portfolio '{portfolio_id}' not found")
         return portfolio
 
+    def list_portfolios(self) -> list[Portfolio]:
+        """Return all portfolios visible to the local v0.1 instance."""
+        return self._repository.list_portfolios()
+
     def add_trade(
         self,
         portfolio_id: str,

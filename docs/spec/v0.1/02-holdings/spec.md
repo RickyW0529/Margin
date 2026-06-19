@@ -3,7 +3,7 @@ module_id: 02-holdings
 product_version: v0.1
 doc_version: v0.1
 source_refs: [产品设计 §4.8, §8, §13.2-2; 架构设计 §17, §26-Phase2]
-status: draft
+status: active
 ---
 
 # 02 持仓模块 — 功能规格

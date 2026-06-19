@@ -1,4 +1,8 @@
-"""Tests for health endpoints."""
+"""Tests for health endpoints.
+
+Covers liveness, readiness, degraded aggregation, and the guarantee that the
+ready endpoint never leaks internal error details in its JSON body.
+"""
 
 from __future__ import annotations
 
@@ -28,3 +32,22 @@ def test_degraded_endpoint_returns_status():
     response = client.get("/health/degraded")
     assert response.status_code == 200
     assert "degraded" in response.json()
+
+
+def test_ready_endpoint_returns_valid_sanitized_json_on_database_failure(monkeypatch):
+    def fail_engine(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError('database "secret" unavailable')
+
+    monkeypatch.setattr(
+        "margin.api.routes.health.create_database_engine",
+        fail_engine,
+    )
+    client = TestClient(create_app())
+
+    response = client.get("/health/ready")
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "not_ready"}
+    # Internal error text must not appear in the externally visible response.
+    assert "secret" not in response.text

@@ -4,7 +4,7 @@ parent_module: 08-research_candidate_dashboard
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §26-Phase5: 研究候选面板; §16.2, 产品设计 §7.1, §7.2]
-status: draft
+status: active
 estimate_days: 10
 depends_on: [0605, 0703]
 ---

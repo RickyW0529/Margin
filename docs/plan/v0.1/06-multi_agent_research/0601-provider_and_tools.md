@@ -4,7 +4,7 @@ parent_module: 06-multi_agent_research
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §26-Phase4: 多 Agent 工具调用; §8, §9, §11, §14]
-status: draft
+status: active
 estimate_days: 7
 depends_on: [0503]
 ---

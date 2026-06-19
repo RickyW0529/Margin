@@ -4,7 +4,7 @@ parent_module: 05-rag_evidence
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §10.2 RAG 工作流; §25 故障降级]
-status: draft
+status: active
 estimate_days: 7
 depends_on: [0502]
 ---

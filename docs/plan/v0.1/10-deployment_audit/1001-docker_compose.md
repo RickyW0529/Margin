@@ -4,7 +4,7 @@ parent_module: 10-deployment_audit
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §26-Phase1: PostgreSQL/Parquet 与快照; §21, 产品设计 §13.1]
-status: draft
+status: active
 estimate_days: 10
 depends_on: [0101]
 ---
@@ -13,7 +13,7 @@ depends_on: [0101]
 
 ## 1. 任务目标
 
-实现一键本地部署：Docker Compose 服务（web/api/worker/postgres/optional-redis/optional-qdrant/prometheus/grafana）。部署架构为 Next.js（web）→ FastAPI（api）→ PostgreSQL+pgvector；Worker/Scheduler → PostgreSQL / Raw-Parquet / LLM API / 外部数据源。MVP 可在 4C8G 主机运行，不依赖 GPU。
+实现一键本地部署：Docker Compose 服务（migrate/seed/web/api/worker/postgres/prometheus/grafana）。部署架构为 Next.js（web）→ FastAPI（api）→ PostgreSQL+pgvector；Worker/Scheduler → PostgreSQL / 本地快照 / LLM API / 外部数据源。Redis/Qdrant 不进入 v0.1 默认栈。
 
 ## 2. 工作项拆解
 

@@ -4,7 +4,7 @@ parent_module: 04-text_indexing
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §7.1 数据流; §8.1 EmbeddingProvider]
-status: draft
+status: active
 estimate_days: 7
 depends_on: [0401]
 ---

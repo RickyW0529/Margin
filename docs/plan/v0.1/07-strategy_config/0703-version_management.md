@@ -4,7 +4,7 @@ parent_module: 07-strategy_config
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §15.3 策略沙箱; 产品设计 §6.4]
-status: draft
+status: active
 estimate_days: 7
 depends_on: [0702]
 ---

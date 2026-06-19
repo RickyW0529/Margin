@@ -3,7 +3,7 @@ module_id: 07-strategy_config
 product_version: v0.1
 doc_version: v0.1
 source_refs: [产品设计 §6, §13.2-7; 架构设计 §15, §26-Phase5]
-status: draft
+status: active
 ---
 
 # 07 策略配置模块 — 功能规格

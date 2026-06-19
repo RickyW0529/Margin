@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Container readiness probe."""
+"""Container readiness probe.
+
+Invoked by Docker healthcheck (and CI) to determine whether the API container
+is accepting traffic. Exits 0 only when /health/ready returns HTTP 200.
+"""
 
 from __future__ import annotations
 

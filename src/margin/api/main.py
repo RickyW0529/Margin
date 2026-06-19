@@ -65,6 +65,7 @@ def create_app(
     settings = get_settings()
     configure_logging(log_level=settings.log_level, log_format=settings.log_format)
     application = FastAPI(title="Margin API", version=settings.service_version)
+    # TraceIdMiddleware runs first so downstream middleware and routes can read the trace id.
     application.add_middleware(TraceIdMiddleware)
     application.add_middleware(MetricsMiddleware)
     application.include_router(metrics_router)
@@ -75,6 +76,7 @@ def create_app(
     application.include_router(dashboard_router)
     application.include_router(monitoring_router)
 
+    # Override production dependencies with injected services for testing.
     if portfolio_service is not None:
         application.dependency_overrides[get_portfolio_service] = (
             lambda: portfolio_service

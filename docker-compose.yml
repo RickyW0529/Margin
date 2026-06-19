@@ -1,4 +1,5 @@
 services:
+  # PostgreSQL with pgvector extension for embeddings.
   postgres:
     image: pgvector/pgvector:pg16
     environment:
@@ -15,69 +16,124 @@ services:
       timeout: 5s
       retries: 20
 
+  # One-shot migration service; runs to completion before seed/api/worker start.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment: &backend-environment
+      MARGIN_DATABASE_URL: postgresql+psycopg://margin:margin@postgres:5432/margin
+      MARGIN_LLM_BASE_URL: ${MARGIN_LLM_BASE_URL:-}
+      MARGIN_LLM_API_KEY: ${MARGIN_LLM_API_KEY:-}
+      MARGIN_LLM_MODEL: ${MARGIN_LLM_MODEL:-deepseek-v4-flash}
+      MARGIN_EMBEDDING_BASE_URL: ${MARGIN_EMBEDDING_BASE_URL:-}
+      MARGIN_EMBEDDING_API_KEY: ${MARGIN_EMBEDDING_API_KEY:-}
+      MARGIN_EMBEDDING_MODEL: ${MARGIN_EMBEDDING_MODEL:-embedding-3}
+      MARGIN_EMBEDDING_DIMENSION: ${MARGIN_EMBEDDING_DIMENSION:-2048}
+      MARGIN_WEBSEARCH_API_KEY: ${MARGIN_WEBSEARCH_API_KEY:-}
+      MARGIN_RERANK_BASE_URL: ${MARGIN_RERANK_BASE_URL:-}
+      MARGIN_RERANK_API_KEY: ${MARGIN_RERANK_API_KEY:-}
+      MARGIN_RERANK_MODEL: ${MARGIN_RERANK_MODEL:-}
+      MARGIN_SECRET_TUSHARE_TOKEN: ${MARGIN_SECRET_TUSHARE_TOKEN:-}
+      MARGIN_LOG_LEVEL: ${MARGIN_LOG_LEVEL:-INFO}
+      MARGIN_LOG_FORMAT: ${MARGIN_LOG_FORMAT:-json}
+      MARGIN_METRICS_ENABLED: ${MARGIN_METRICS_ENABLED:-true}
+      MARGIN_ENVIRONMENT: ${MARGIN_ENVIRONMENT:-development}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "scripts/migrate.py"]
+    restart: "no"
+
+  # One-shot seed service; populates demo data after migrations finish.
+  seed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      <<: *backend-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: ["python", "scripts/seed_demo.py"]
+    restart: "no"
+
+  # Main API service exposing REST endpoints and Prometheus metrics.
   api:
     build:
       context: .
       dockerfile: Dockerfile
     environment:
-      MARGIN_DATABASE_URL: postgresql+psycopg://margin:margin@postgres:5432/margin
-      MARGIN_LOG_LEVEL: INFO
-      MARGIN_LOG_FORMAT: json
-      MARGIN_METRICS_ENABLED: "true"
+      <<: *backend-environment
     ports:
       - "8000:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
     volumes:
-      - margin-audit:/root/.margin/audit
-      - margin-snapshots:/root/.margin/snapshots
+      # Persistent volumes for audit logs and snapshots survive container restarts.
+      - margin-audit:/home/margin/.margin/audit
+      - margin-snapshots:/home/margin/.margin/snapshots
     command: ["uvicorn", "margin.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test: ["CMD", "python", "scripts/health_check.py"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
+  # Background worker (runs scheduled or async tasks).
   worker:
     build:
       context: .
       dockerfile: Dockerfile
     environment:
-      MARGIN_DATABASE_URL: postgresql+psycopg://margin:margin@postgres:5432/margin
-      MARGIN_LOG_LEVEL: INFO
-      MARGIN_LOG_FORMAT: json
+      <<: *backend-environment
     depends_on:
-      postgres:
-        condition: service_healthy
-    command: ["python", "-m", "scripts.seed_demo"]
+      seed:
+        condition: service_completed_successfully
+    volumes:
+      - margin-audit:/home/margin/.margin/audit
+      - margin-snapshots:/home/margin/.margin/snapshots
+    command: ["python", "-m", "margin.worker"]
 
+  # Next.js frontend.
   web:
     build:
       context: ./web
       dockerfile: Dockerfile
     environment:
-      NEXT_PUBLIC_API_URL: http://api:8000
+      MARGIN_API_BASE_URL: http://api:8000
     ports:
       - "3000:3000"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
+  # Prometheus scrapes the API /metrics endpoint.
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.12.0
     volumes:
       - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
+  # Grafana visualizes Prometheus metrics with provisioned dashboards.
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:13.0.2
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: margin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-margin}
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
     volumes:
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
       - margin-grafana:/var/lib/grafana
     ports:
-      - "3001:3000"
+      - "${GRAFANA_PORT:-3002}:3000"
     depends_on:
-      - prometheus
+      prometheus:
+        condition: service_started
 
 volumes:
   margin-postgres:

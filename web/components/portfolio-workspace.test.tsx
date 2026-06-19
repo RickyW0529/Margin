@@ -63,7 +63,10 @@ describe("PortfolioWorkspace", () => {
 
     expect(screen.getByRole("heading", { name: "核心组合" })).toBeInTheDocument();
     expect(screen.getByText("总资产")).toBeInTheDocument();
-    expect(screen.getByText("000001.SZ")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "000001.SZ" })).toHaveAttribute(
+      "href",
+      "/positions/pos_1?portfolioId=pf_demo",
+    );
     expect(screen.getByText("行业暴露")).toBeInTheDocument();
     expect(screen.getByText("即将发生")).toBeInTheDocument();
   });

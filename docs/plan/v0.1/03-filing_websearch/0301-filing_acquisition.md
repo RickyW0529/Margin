@@ -4,7 +4,7 @@ parent_module: 03-filing_websearch
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §26-Phase3: 公告获取与原文快照; §6.2, §6.3]
-status: draft
+status: active
 estimate_days: 14
 depends_on: [0104]
 ---

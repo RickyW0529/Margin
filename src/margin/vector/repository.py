@@ -190,6 +190,28 @@ class VectorRepository:
             row = session.get(ChunkRow, chunk_id)
             return _chunk_from_row(row) if row is not None else None
 
+    def list_chunks(
+        self,
+        *,
+        symbol: str | None = None,
+        doc_types: tuple[str, ...] | None = None,
+    ) -> list[Chunk]:
+        """Return persisted chunks for keyword fallback retrieval."""
+        statement = select(ChunkRow)
+        if symbol:
+            statement = statement.where(ChunkRow.symbol == symbol)
+        if doc_types:
+            statement = statement.where(ChunkRow.doc_type.in_(doc_types))
+        statement = statement.order_by(
+            ChunkRow.available_at.desc(),
+            ChunkRow.chunk_id,
+        )
+        with self._session_factory() as session:
+            return [
+                _chunk_from_row(row)
+                for row in session.scalars(statement).all()
+            ]
+
     def record_index_audit(
         self,
         *,

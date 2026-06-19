@@ -4,7 +4,7 @@ parent_module: 06-multi_agent_research
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §12.1 Agent #1,#2; 产品设计 §5.2 量化初筛]
-status: draft
+status: active
 estimate_days: 5
 depends_on: [0601]
 ---

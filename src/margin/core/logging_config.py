@@ -1,4 +1,9 @@
-"""Structured logging configuration using structlog."""
+"""Structured logging configuration using structlog.
+
+Renders logs either as JSON (production) or as a colored console stream
+(development). Both stdlib ``logging`` and structlog bound loggers share the
+same processors so that third-party library output is formatted consistently.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +14,7 @@ import structlog
 
 
 def configure_logging(*, log_level: str = "INFO", log_format: str = "json") -> None:
+    # Shared processors run for both stdlib logging and structlog bound loggers.
     shared_processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
@@ -33,6 +39,7 @@ def configure_logging(*, log_level: str = "INFO", log_format: str = "json") -> N
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
     root_logger = logging.getLogger()
+    # Remove existing handlers to avoid duplicate log lines after reconfiguration.
     root_logger.handlers.clear()
     root_logger.addHandler(handler)
     root_logger.setLevel(log_level.upper())

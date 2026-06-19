@@ -3,7 +3,7 @@ module_id: 05-rag_evidence
 product_version: v0.1
 doc_version: v0.1
 source_refs: [产品设计 §9, §13.2-5; 架构设计 §10, §26-Phase4]
-status: draft
+status: active
 ---
 
 # 05 RAG 证据模块 — 功能规格

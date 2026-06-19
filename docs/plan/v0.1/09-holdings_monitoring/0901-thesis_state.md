@@ -4,7 +4,7 @@ parent_module: 09-holdings_monitoring
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §26-Phase5: 持仓面板增强; §17.1, 产品设计 §8.3]
-status: draft
+status: active
 estimate_days: 7
 depends_on: [0703]
 ---

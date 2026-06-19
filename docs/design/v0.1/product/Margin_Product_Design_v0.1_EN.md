@@ -1,706 +1,211 @@
-# Margin（安全边际）Open-Source Investment Research System — Product Design v0.1
+# Margin Open Investment Research System | Product Design v0.1
 
-> Type: Product Design Document  
-> Version: v0.1  
-> Positioning: A local-first, evidence-driven, strategy-configurable open-source investment research and portfolio decision system.  
-> Default market: China A-shares; initial universe: CSI 300 and user watchlists.  
-> Execution model: The system generates research signals, evidence summaries, and risk alerts. Users execute manually through their own broker.  
-> Disclaimer: Margin is a research and decision-support tool. It does not constitute investment advice, guarantee returns, replace licensed investment advisers, or execute trades by default.
+> Document type: Product Design
+> Product version: v0.1
+> Document version: v0.1
+> Status: active
+> Current implementation: all 10 v0.1 modules are wired into a local Docker Compose stack
+> Positioning: local-first, evidence-driven, configurable personal investment research software
+> Disclaimer: Margin is research assistance software. It is not financial advice and does not place trades.
 
 ---
 
 ## 1. Product Summary
 
-Margin converts personal investment research into a traceable, configurable, and reviewable workflow:
+Margin turns a scattered personal investment workflow into an auditable loop:
 
-1. Collect market, fundamental, filing, news, and industry data;
-2. Store structured data and index unstructured text separately;
-3. Use quantitative screening to reduce the candidate universe;
-4. Use RAG evidence to generate facts, inferences, risks, and counterarguments from source documents;
-5. Apply user-defined strategies, prompts, risk limits, and investment horizons;
-6. Display valuation ranges, evidence, catalysts, invalidation conditions, and observation windows in the Research Candidate Dashboard;
-7. Monitor positions, P&L, exposure, new evidence, and thesis state in the Holdings Dashboard;
-8. Record each research signal, user action, and outcome for attribution and validation.
+1. import or seed portfolios and trades;
+2. ingest market data, filings, WebSearch results, LLM output, and embeddings through typed providers;
+3. snapshot and index source documents;
+4. retrieve evidence through hybrid search;
+5. run a multi-agent research workflow through audited internal tools;
+6. publish candidate cards only when evidence and validation pass;
+7. abstain when market data, evidence, citation, or provider quality is insufficient;
+8. monitor existing holdings through deterministic alert rules;
+9. keep research snapshots, dashboard items, alerts, reviews, and audit records in PostgreSQL.
 
 ```mermaid
 flowchart LR
-    A[Structured Market Data] --> B[Quant Screening]
-    N[Filings/News/Reports] --> C[Text Parsing and Vector Retrieval]
-    B --> D[AI Research Workflow]
-    C --> D
-    S[User Strategy Configuration] --> D
-    D --> R[Research Candidate Dashboard]
-    P[User Portfolio] --> H[Holdings Dashboard]
-    R --> H
-    H --> F[Review and Attribution]
-    F --> S
+    User[User portfolio/trades] --> Portfolio[Portfolio workspace]
+    Data[Market/filing/web data] --> Index[Snapshot + indexing]
+    Index --> Retrieval[RAG retrieval]
+    Strategy[Strategy + prompt + thresholds] --> Workflow[Research workflow]
+    Portfolio --> Workflow
+    Retrieval --> Workflow
+    Workflow --> Cards[Research candidate dashboard]
+    Cards --> Evidence[Evidence / valuation / audit / report]
+    Portfolio --> Monitoring[Holdings monitoring]
+    Evidence --> Monitoring
+    Monitoring --> Reviews[Alerts + reviews + operation history]
 ```
 
----
+## 2. Product Principles
 
-## 2. Vision and Principles
-
-### 2.1 Vision
-
-> Give individual investors a self-hosted investment research operating system with configurable strategies, auditable evidence, repeatable analysis, and portfolio feedback.
-
-### 2.2 Core Values
-
-| Value | Description |
-|---|---|
-| Local-first | Portfolio, prompts, and research data can remain local |
-| Evidence-driven | Material conclusions link to sources, timestamps, and evidence levels |
-| Strategy-configurable | Users control universe, valuation, prompts, horizons, and risk thresholds |
-| Human-in-the-loop | AI researches; users retain final execution authority |
-| Verifiable | Backtests, paper trading, shadow portfolios, and attribution |
-| Extensible | Typed providers and internal tool adapters |
-
-### 2.3 Non-Goals
-
-Margin v0.1 does not target:
-
-- High-frequency trading;
-- Exact target-price date prediction;
-- Centralized “daily stock picks”;
-- Default automatic execution;
-- Multi-agent debate that creates false certainty;
-- One valuation model for every industry;
-- LLM-only numerical calculations;
-- No MCP servers, custom HTTP tools, or arbitrary third-party runtime tools.
-
-### 2.4 Compliance and Wording Boundaries
-
-“Margin” means **Margin of Safety / 安全边际**. It does not refer to margin trading, leverage, or broker financing.
-
-The product outputs research candidates, evidence summaries, risk alerts, and conditional observation items. It does not output unconditional buy/sell instructions. User-facing language must:
-
-- Prefer “research signal”, “research candidate”, “risk review”, and “observation window”;
-- Avoid promises such as “guaranteed”, “must rise”, or “daily winner”;
-- Describe position thesis state and risk exposure without making trading decisions for the user;
-- Include evidence, timestamp, source level, unknowns, and counterarguments;
-- Default to `ABSTAINED` when evidence is insufficient, conflicting, or stale.
-
----
+| Principle | v0.1 behavior |
+| --- | --- |
+| Local-first | data, snapshots, audit, and provider keys stay in the local runtime |
+| Evidence-first | every important conclusion must expose source, time, evidence, or abstain reason |
+| Human decision | no broker integration, no automatic orders, no hidden brokerage credentials |
+| Configurable strategy | strategy templates, custom JSON config, prompt generation, version lifecycle |
+| Conservative degradation | missing data or failed providers produce `ABSTAINED` / `DATA_MISSING` |
+| Auditable | runs, items, alerts, reviews, tool calls, and snapshots are persisted |
 
 ## 3. Target Users
 
-### 3.1 Core Users
+Margin v0.1 is built for:
 
-- Individual investors who research and trade manually;
-- Users focused on value, quality, catalysts, and medium-term holding periods;
-- Users who want AI to reduce filing and report reading time;
-- Users who prefer configurable strategies over centralized conclusions;
-- Privacy-conscious users willing to self-host;
-- Technical users or users comfortable with one-click deployment.
+- individual investors who manually execute their own trades;
+- builders who want a reproducible research loop around A-share data;
+- users who want AI output to cite source material instead of returning unsupported opinions;
+- developers who want to extend providers, tools, strategies, and monitoring rules.
 
-### 3.2 User Roles
+It is not built for high-frequency trading, broker automation, guaranteed-return recommendations, multi-tenant SaaS, or regulated advisory workflows.
+
+## 4. v0.1 Scope
+
+Included:
+
+- portfolio, trade, CSV import, cost and position calculation;
+- AKShare/Tushare data provider boundaries;
+- filing snapshots, document events, outbox, WebSearch adapter, deduplication;
+- parser, chunker, OpenAI-compatible embedding provider, pgvector persistence, hybrid retrieval;
+- evidence records, claims, locators, validation audits;
+- audited internal `ToolRegistry`, LLM provider, research workflow and agents;
+- strategy templates, custom strategy config, prompt generation, lifecycle states;
+- research dashboard: runs, candidate cards, evidence, valuation, audit, report, export, feedback;
+- holdings monitoring: P0-P3 alerts, reviews, operation history, behavior metrics;
+- Docker Compose deployment, health checks, metrics, Grafana, append-only audit records.
+
+Explicitly excluded from v0.1:
+
+- MCP Server or MCP Gateway;
+- user-defined HTTP tools or arbitrary third-party tool runtime;
+- broker order placement;
+- multi-tenant permissions;
+- cloud account system;
+- redistribution of paid research reports or paywalled content.
+
+## 5. User Workflows
+
+### 5.1 Local startup
 
 ```mermaid
-mindmap
-  root((Margin Users))
-    Investor
-      Default strategy
-      Research candidates and evidence
-      Portfolio monitoring
-    Advanced User
-      Custom prompts
-      Factor weights
-      Configured providers and data
-    Developer
-      Providers
-      Internal tool adapters
-      Agents and valuation modules
-    Researcher
-      Backtests
-      Shadow portfolios
-      AI attribution
+sequenceDiagram
+    participant User
+    participant Compose as Docker Compose
+    participant DB as PostgreSQL
+    participant API as FastAPI
+    participant Web as Next.js
+    participant Worker as APScheduler Worker
+
+    User->>Compose: docker compose up -d --build
+    Compose->>DB: start postgres
+    Compose->>API: run migrations
+    Compose->>API: seed demo data
+    Compose->>API: start API
+    Compose->>Worker: start monitoring/indexing worker
+    Compose->>Web: start web app
+    User->>Web: open localhost:3000
 ```
 
----
+### 5.2 Research candidate workflow
 
-## 4. Eight Product Layers
+```mermaid
+flowchart TD
+    A[Create research run] --> B[DashboardResearchService]
+    B --> C[ResearchService]
+    C --> D[ToolRegistry]
+    D --> E[Market / portfolio / retrieval / WebSearch tools]
+    C --> F[LLM provider]
+    C --> G[Citation validation]
+    G --> H{Validation passes?}
+    H -->|yes| P[Published card]
+    H -->|no| Q[Abstained card]
+    P --> R[Evidence / valuation / audit / report]
+    Q --> R
+```
+
+### 5.3 Holdings monitoring workflow
+
+The worker periodically reads current positions, fetches latest prices when available, evaluates deterministic rules, writes alert events, and lets the user record reviews from the position detail page.
+
+## 6. Product Surface
 
 ```mermaid
 flowchart TB
-    L1[1. Data Layer]
-    L2[2. Data Storage Layer]
-    L3[3. News and WebSearch Acquisition Layer]
-    L4[4. Text Vector Database]
-    L5[5. AI Layer]
-    L6[6. Research Signal Strategy Configuration]
-    L7[7. Research Candidate Dashboard]
-    L8[8. Current Holdings Dashboard]
-
-    L1 --> L2
-    L3 --> L2
-    L3 --> L4
-    L2 --> L5
-    L4 --> L5
-    L6 --> L5
-    L5 --> L7
-    L7 --> L8
-    L2 --> L8
+    Home[/ / Home] --> Portfolio[/portfolios/:portfolioId]
+    Portfolio --> Position[/positions/:positionId]
+    Home --> Research[/research]
+    Research --> Item[/research/items/:itemId]
+    Research --> Run[/research/runs/:runId]
+    Position --> Alerts[Alerts / reviews / history]
+    Item --> Evidence[Evidence]
+    Item --> Valuation[Valuation]
+    Item --> Audit[Audit]
+    Item --> Report[Report / export]
 ```
 
-### 4.1 Data Layer
-
-Market data, financial statements, index membership, corporate actions, macro/industry data, user trades, and factor inputs.
-
-### 4.2 Data Storage Layer
-
-Raw snapshots, normalized records, point-in-time data, features, model outputs, strategy versions, research signal snapshots, portfolio data, and audit logs.
-
-### 4.3 News and WebSearch Acquisition Layer
-
-Exchange filings, reports, investor-relations materials, industry datasets, financial media, RSS/API sources, WebSearch results, and user-defined sources.
-
-MVP structured A-share data supports only:
-
-- AKShare;
-- Tushare, with user-provided token and user compliance with its terms and rate limits.
-
-News discovery starts with configurable WebSearch Providers. Users provide API keys. The system stores source URL, query, title, snapshot hash, retrieval time, and source level. It must not bypass paywalls, login walls, robots restrictions, or redistribute copyrighted full text as open-source sample data.
-
-### 4.4 Text Vector Database
-
-Parsing, chunking, embeddings, metadata filtering, vector retrieval, keyword retrieval, hybrid search, reranking, and citation-level source locations.
-
-### 4.5 AI Layer
-
-- Routing layer;
-- Provider layer;
-- RAG evidence system;
-- Tool system;
-- Multi-agent orchestration;
-- Model gateway;
-- Prompt templates;
-- Structured output;
-- Automated agent acquisition and role-based workflow;
-- Reflection and counterargument review;
-- Guardrails and abstention.
-
-### 4.6 Research Signal Strategy Configuration
-
-Users configure universe, industry preferences, horizon, risk tolerance, valuation methods, factor weights, news sources, model providers, custom prompts, signal thresholds, invalidation rules, portfolio limits, and report style.
-
-### 4.7 Research Candidate Dashboard
-
-Candidates, valuation ranges, valuation margin of safety, value-trap risk score, catalysts, evidence, counterarguments, observation windows, conditional research plans, and abstention reasons.
-
-### 4.8 Current Holdings Dashboard
-
-Positions, cost basis, P&L, portfolio exposure, single-name risk, thesis state, next events, invalidation conditions, alerts, trades, and reviews.
-
----
-
-## 5. Main User Workflows
-
-### 5.1 First Run
-
-```mermaid
-flowchart TD
-    A[Start Margin] --> B[Choose Deployment Mode]
-    B --> C[Configure Data Providers]
-    C --> D[Configure Models/API Keys]
-    D --> E[Select Universe]
-    E --> F[Select Strategy Template]
-    F --> G[Import Portfolio or Start Empty]
-    G --> H[Initialize Data]
-    H --> I[Generate First Research Report]
-```
-
-### 5.2 Nightly Workflow
-
-```mermaid
-flowchart TD
-    A[Post-Close Start] --> B[Update Market/Fundamental/Filings/WebSearch]
-    B --> C{Data Quality}
-    C -->|Fail| X[Suppress High-Confidence Research Signals]
-    C -->|Pass| D[Quant Screening]
-    D --> E[Fetch Candidate Documents]
-    E --> F[Index and Retrieve]
-    F --> G[Load User Strategy]
-    G --> H[Multi-Agent Research and Evidence]
-    H --> I[Valuation and Risk Review]
-    I --> J[Reflect and Counterargument]
-    J --> K[Portfolio Constraints]
-    K --> L[Structured Research Signals]
-    L --> M[Research Candidate Dashboard]
-    L --> N[Update Position Thesis State]
-```
-
-### 5.3 Intraday Monitoring
-
-```mermaid
-flowchart TD
-    A[Trading Session] --> B[Update Position Prices]
-    B --> C[Deterministic Rules]
-    C --> D{Trigger?}
-    D -->|No| E[Continue]
-    D -->|Yes| F[Retrieve New Filings/News]
-    F --> G[RAG Evidence Check]
-    G --> H{Thesis Changed?}
-    H -->|No| I[Informational Alert]
-    H -->|Yes| J[High-Priority Risk Alert]
-```
-
----
-
-## 6. Research Signal Strategy Configuration Center
-
-### 6.1 Strategy Templates
-
-1. Value quality;
-2. Undervaluation repair;
-3. High dividend;
-4. Growth at reasonable valuation;
-5. Cycle reversal;
-6. Fully custom strategy.
-
-### 6.2 Strategy Definition
-
-```yaml
-strategy:
-  id: value_quality_v1
-  name: Value Quality
-  universe:
-    type: index
-    value: CSI300
-    data_providers:
-      - akshare
-      - tushare
-  horizon:
-    min_trading_days: 20
-    max_trading_days: 120
-  valuation:
-    min_valuation_margin_of_safety: 0.20
-    preferred_methods:
-      - relative_valuation
-      - dcf
-  risk:
-    max_value_trap_risk_score: 0.30
-    max_single_position: 0.05
-    max_industry_exposure: 0.20
-  ai:
-    provider: openai_compatible
-    model: user_defined
-    websearch_provider: user_configured
-    custom_instructions: |
-      Prefer improving cash flow and valuation below industry median.
-      Exclude high pledge ratios, large goodwill, and repeated insider selling.
-  evidence:
-    required_levels: [1, 2, 3]
-    min_evidence_count: 3
-  decision:
-    research_states:
-      - RESEARCH_CANDIDATE
-      - WATCH
-      - ABSTAINED
-    position_review_states:
-      - THESIS_VALID
-      - REVIEW_REQUIRED
-      - RISK_ALERT
-      - THESIS_INVALIDATED
-    prohibited_outputs:
-      - GUARANTEED_RETURN
-      - DIRECT_BUY_SELL_ORDER
-```
-
-### 6.3 Prompt Composition
-
-```mermaid
-flowchart LR
-    A[Platform Guardrails] --> D[Final Prompt]
-    B[Strategy Template Prompt] --> D
-    C[User Custom Prompt] --> D
-    D --> E[Schema and Safety Constraints]
-```
-
-User prompts may not override evidence requirements, point-in-time rules, risk disclosure, schemas, no-return-promise rules, no-auto-trade rules, or system safety policies.
-
-### 6.4 Strategy Lifecycle
-
-```mermaid
-stateDiagram-v2
-    [*] --> Draft
-    Draft --> Validating
-    Validating --> Invalid
-    Validating --> Backtesting
-    Backtesting --> PaperTrading
-    PaperTrading --> Active
-    Active --> Archived
-    Active --> Suspended
-```
-
----
-
-## 7. Research Candidate Dashboard Design
-
-### 7.1 Homepage Hierarchy
-
-```mermaid
-flowchart TD
-    A[Research Candidate Dashboard] --> B[Market Summary]
-    A --> C[Today's Candidates]
-    A --> D[Position Reviews]
-    A --> E[High-Priority Risks]
-    A --> F[Abstentions]
-    A --> G[Strategy and Job Status]
-```
-
-### 7.2 Candidate Cards
-
-Each card includes:
-
-- Symbol and price;
-- Quant rank;
-- Research/position state;
-- Base and bear valuation ranges;
-- Valuation margin of safety;
-- Value-trap risk score;
-- 20/60/120-day event observation windows;
-- Catalysts;
-- Strongest counterargument;
-- Evidence count and levels;
-- Research entry conditions;
-- Thesis invalidation conditions;
-- Observation window;
-- Strategy version;
-- Explicit note that the card is not a buy/sell instruction.
-
-### 7.3 Research and Position States
-
-| Research Signal State | Meaning |
-|---|---|
-| RESEARCH_CANDIDATE | Meets research gates and deserves evidence review |
-| WATCH | Potential exists, but conditions are not met |
-| ABSTAINED | Evidence is insufficient, conflicting, or too uncertain |
-
-| Position Review State | Meaning |
-|---|---|
-| THESIS_VALID | Current thesis remains valid |
-| REVIEW_REQUIRED | Valuation, evidence, or exposure changed and needs review |
-| RISK_ALERT | Risk threshold is close or triggered |
-| THESIS_INVALIDATED | Investment thesis failed and requires manual decision |
-
-### 7.4 Research Detail Page
-
-```mermaid
-flowchart LR
-    A[Research Detail] --> B[Conclusion]
-    A --> C[Quant Factors]
-    A --> D[Valuation]
-    A --> E[Evidence]
-    A --> F[Catalysts]
-    A --> G[Risks]
-    A --> H[Counterarguments]
-    A --> I[Historical Signals]
-```
-
----
-
-## 8. Current Holdings Dashboard Design
-
-### 8.1 Portfolio Summary
-
-- Total assets;
-- Cash;
-- Market value;
-- Daily and cumulative P&L;
-- Portfolio volatility;
-- Maximum drawdown;
-- Industry and style exposure;
-- High-risk positions;
-- Upcoming events.
-
-### 8.2 Position Detail
-
-```mermaid
-flowchart TD
-    A[Position Detail] --> B[Cost and P&L]
-    A --> C[Original Thesis]
-    A --> D[Current Evidence]
-    A --> E[Valuation Change]
-    A --> F[Rank Change]
-    A --> G[Catalyst Timeline]
-    A --> H[Invalidation Conditions]
-    A --> I[Trade History]
-```
-
-### 8.3 Position Health States
-
-| State | Meaning |
-|---|---|
-| HEALTHY | Thesis and risk are normal |
-| WATCH | One or more indicators deteriorated but thesis is not invalidated |
-| RISK | Near invalidation or risk threshold |
-| INVALIDATED | Thesis has failed |
-| DATA_MISSING | Key data is missing |
-| EVENT_PENDING | Waiting for filing, report, or event |
-
-### 8.4 Position Input Methods
-
-- Manual entry;
-- CSV/Excel import;
-- Broker export parser plugins;
-- Future read-only broker connector;
-- Broker passwords are not stored by default.
-
----
-
-## 9. RAG Evidence Experience
-
-### 9.1 Expandable Conclusions
-
-Every material conclusion must expand into fact evidence, original location, system inference, conflicts, unknowns, and confidence.
-
-### 9.2 Evidence Levels
-
-| Level | Source |
-|---|---|
-| L1 | Exchange, regulator, statutory filing |
-| L2 | IR, earnings call, formal guidance |
-| L3 | Industry prices, volume, inventory, tenders |
-| L4 | Reputable media and professional research |
-| L5 | Social and unverified sources |
-
-L5 evidence cannot directly change research or position states. It can only trigger investigation.
-
-### 9.3 Citation Locator Fields
-
-```json
-{
-  "evidence_id": "ev_001",
-  "document_id": "doc_001",
-  "source_type": "filing_pdf | web_page | table | api_record | user_file",
-  "source_url": "https://...",
-  "source_level": "L1",
-  "content_hash": "sha256:...",
-  "published_at": "2026-06-17T18:30:00+08:00",
-  "available_at": "2026-06-18T09:30:00+08:00",
-  "retrieved_at": "2026-06-18T20:10:00+08:00",
-  "page": 86,
-  "section": "Cash Flow",
-  "paragraph_index": 12,
-  "table_id": "cash_flow_table",
-  "row_id": "net_operating_cash_flow",
-  "quote_span": [120, 188]
-}
-```
-
-WebSearch results must resolve to an accessible original page or compliant snapshot. Search summaries alone are not sufficient citations.
-
----
-
-## 10. Alerts and Notifications
-
-Alert types:
-
-- Data anomalies;
-- New filings;
-- Major negative events;
-- Price threshold events;
-- Significant rank changes;
-- Industry exposure limits;
-- Valuation range events;
-- Strategy run failures;
-- Upcoming key events.
-
-```mermaid
-flowchart TD
-    A[New Event] --> B{Priority}
-    B -->|P0| C[Immediate and Pinned]
-    B -->|P1| D[Trading-Hour Notification]
-    B -->|P2| E[Dashboard + Nightly Summary]
-    B -->|P3| F[Research Log Only]
-```
-
----
-
-## 11. Open-Source Ecosystem
-
-Users and contributors can extend:
-
-- Data providers;
-- News and WebSearch providers;
-- Embedding providers;
-- Vector stores;
-- LLM providers;
-- Internal tool adapters implemented as typed code extensions;
-- Agent workflows;
-- Quant models;
-- Valuation templates;
-- Strategies;
-- Notification channels;
-- Broker-import parsers.
-
-```mermaid
-mindmap
-  root((Margin Plugins))
-    Data
-      AKShare
-      Tushare
-      OpenBB
-      CSV
-    AI
-      OpenAI
-      DeepSeek
-      Qwen
-      Local Models
-    WebSearch
-      SearchAPI
-      SerpAPI
-      Custom API
-    Tools
-      Filings
-      Retrieval
-      Portfolio
-      Valuation
-    Strategy
-      Value
-      Dividend
-      Growth
-      Cycle
-```
-
----
-
-## 12. Product Metrics
-
-### 12.1 System Metrics
-
-- Nightly job success rate;
-- Data completeness;
-- News deduplication rate;
-- Document parse success;
-- RAG citation correctness;
-- Unsupported claim rate;
-- Research signal generation time;
-- Alert latency.
-
-### 12.2 Research Quality Metrics
-
-- 20/60/120-day post-signal performance;
-- Relative benchmark performance;
-- Maximum drawdown;
-- Post-cost performance;
-- Value-trap risk score effectiveness;
-- Event-window hit calibration;
-- AI filtering quality difference;
-- Strategy-version performance.
-
-### 12.3 User Behavior Metrics
-
-- Unplanned trade ratio;
-- Evidence expansion rate;
-- Custom strategy usage;
-- Difference between research signals and user actions;
-- Time to respond after invalidation triggers.
-
----
-
-## 13. MVP Scope and Modular Implementation Path
-
-### 13.1 Required MVP Loop
-
-The MVP is the smallest complete investment research loop, not a shallow demo. It must include:
-
-- CSI 300 and user watchlists;
-- AKShare and Tushare data providers;
-- Market data, basic fundamentals, index membership, and corporate actions;
-- Filing acquisition and local snapshots;
-- Configurable WebSearch Provider;
-- PostgreSQL and local file storage;
-- pgvector or Qdrant;
-- One OpenAI-compatible LLM Provider;
-- Citation-backed RAG and locator fields;
-- One default strategy;
-- Custom prompts;
-- Research Candidate Dashboard;
-- Holdings Dashboard;
-- Manual/CSV trade import;
-- Nightly automated agent acquisition and research workflow;
-- Basic intraday alerts;
-- Docker Compose.
-
-### 13.2 Module-by-Module Delivery
-
-1. Data Provider module;
-2. Holdings module;
-3. Filing and WebSearch module;
-4. Text indexing module;
-5. RAG evidence module;
-6. Multi-agent research workflow module;
-7. Strategy configuration module;
-8. Research Candidate Dashboard module;
-9. Holdings monitoring module;
-10. Deployment and audit module.
-
-### 13.3 Deferred Features
-
-- RD-Agent challenger;
-- Multi-model optimization;
-- Full A-share universe;
-- Automatic broker sync;
-- Survival models or strict calibrated probability models;
-- Multi-user SaaS;
-- Complex knowledge graphs;
-- Automatic execution;
-- HK/US expansion.
-
----
-
-## 14. Product Roadmap
-
-```mermaid
-gantt
-    title Margin v0.1 Modular Roadmap
-    dateFormat YYYY-MM-DD
-    section v0.1 Data and Holdings
-    AKShare/Tushare Providers       :a1, 2026-07-01, 14d
-    PostgreSQL and Snapshots        :a2, after a1, 14d
-    Holdings Import and Basic UI    :a3, after a1, 14d
-    section v0.2 Filings and WebSearch
-    Filing Acquisition              :b1, after a2, 14d
-    WebSearch Provider and Dedup    :b2, after b1, 14d
-    section v0.3 Indexing and Evidence
-    Text Parsing and Vector Index   :c1, after b2, 21d
-    RAG Locator and Claim Check     :c2, after c1, 21d
-    section v0.4 Multi-Agent Research
-    Provider Layer and Tools        :d1, after c2, 14d
-    WebSearch/Summary/Reflect Agents :d2, after d1, 21d
-    section v0.5 Dashboards and Strategy
-    Strategy Configuration          :e1, after d2, 21d
-    Research Candidate Dashboard    :e2, after e1, 21d
-    Holdings Monitoring             :e3, after e1, 21d
-    section v0.6 Validation and Ecosystem
-    Backtest and Shadow Portfolio   :f1, after e2, 30d
-    Provider and Built-in Tool Extensions :f2, after f1, 30d
-```
-
----
-
-## 15. Product Acceptance Criteria
-
-The MVP passes when:
-
-1. Users can deploy locally with documented commands;
-2. At least one AKShare/Tushare source, one WebSearch/news source, and one LLM can be configured;
-3. The full nightly workflow runs;
-4. Material conclusions include evidence citations and locator fields;
-5. Users can create and version custom strategies;
-6. The Research Candidate Dashboard shows candidates and abstentions;
-7. The Holdings Dashboard shows P&L, risk, and thesis state;
-8. Data errors suppress high-confidence research signals;
-9. Research signals are immutable and auditable;
-10. Real trades are not executed automatically.
-
----
-
-## 16. Summary
-
-Margin v0.1 is not “an LLM that trades for the user.” It is:
-
-> A local-first, evidence-driven, strategy-configurable investment research OS built on structured data, compliant WebSearch, RAG evidence, controlled multi-agent workflows, and human final decision-making.
-
-The eight layers create a loop from data acquisition to research, personalized constraints, candidate presentation, holdings monitoring, and post-action review.
+Current pages:
+
+- home summary;
+- portfolio workspace with clickable position rows;
+- position detail with thesis, monitoring alerts, history, and metrics;
+- research dashboard with latest run and candidate cards;
+- research item detail with evidence, valuation, audit, report, and export;
+- research run detail.
+
+## 7. Candidate Card Semantics
+
+| Field | Meaning |
+| --- | --- |
+| `symbol` | target security |
+| `research_status` | `published`, `abstained`, `invalidated`, etc. |
+| `statement` | concise conclusion |
+| `confidence` | confidence in the research conclusion, not a return probability |
+| `valuation_range` | valuation band |
+| `value_trap_score` | value-trap risk indicator |
+| `counter_arguments` | strongest opposing reasons |
+| `evidence_summary` | evidence count and source distribution |
+| `disclaimer` | compliance notice |
+
+When data or evidence is insufficient, the product must show the abstain state instead of hiding or inventing a conclusion.
+
+## 8. Alerts and Reviews
+
+v0.1 alerts are local structured records, not email/SMS/IM notifications.
+
+| Priority | Meaning |
+| --- | --- |
+| P0 | immediate review required |
+| P1 | high-priority review |
+| P2 | medium-priority observation |
+| P3 | low-priority information update |
+
+Alerts are appended to `alert_events`; human decisions are appended to `position_reviews`; both appear in operation history.
+
+## 9. Acceptance Criteria
+
+| ID | Criterion |
+| --- | --- |
+| P-01 | Docker Compose can start postgres, migrate, seed, api, worker, web, prometheus, and grafana |
+| P-02 | demo portfolio is visible with holdings |
+| P-03 | portfolio rows link to position detail |
+| P-04 | research run can create dashboard cards |
+| P-05 | insufficient data produces `abstained` rather than a high-confidence signal |
+| P-06 | DeepSeek-compatible LLM and Zhipu-compatible embedding providers can be configured through `.env` |
+| P-07 | position detail shows alerts, reviews, and history |
+| P-08 | `/metrics`, `/health`, `/health/ready`, and `/health/degraded` are available |
+| P-09 | all v0.1 specs and plans are active and traceable |
+
+## 10. Known Limitations
+
+- Tavily WebSearch requires `MARGIN_WEBSEARCH_API_KEY`;
+- Tushare requires `MARGIN_SECRET_TUSHARE_TOKEN`;
+- Rerank is optional;
+- real market data availability depends on upstream accessibility and rate limits;
+- strategy configuration has backend APIs but not a full v0.1 frontend editor;
+- large-scale Parquet/DuckDB analytics are future work.
+
+## 11. Summary
+
+Margin v0.1 delivers a working local research loop: portfolio, evidence, research workflow, candidate dashboard, holdings monitoring, audit, and deployment are connected. Its default behavior is conservative: when evidence is weak or providers degrade, the product abstains instead of generating false confidence.

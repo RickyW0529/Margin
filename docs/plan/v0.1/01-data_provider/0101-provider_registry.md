@@ -4,7 +4,7 @@ parent_module: 01-data_provider
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §26-Phase1: Provider Registry; §8.1]
-status: draft
+status: active
 estimate_days: 10
 depends_on: []
 ---

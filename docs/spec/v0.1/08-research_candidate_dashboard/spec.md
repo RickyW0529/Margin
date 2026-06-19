@@ -3,7 +3,7 @@ module_id: 08-research_candidate_dashboard
 product_version: v0.1
 doc_version: v0.1
 source_refs: [产品设计 §7, §9.1, §13.2-8; 架构设计 §16, §26-Phase5]
-status: draft
+status: active
 ---
 
 # 08 研究候选面板模块 — 功能规格

@@ -4,7 +4,7 @@ parent_module: 10-deployment_audit
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §25 故障降级; §24 测试策略]
-status: draft
+status: active
 estimate_days: 5
 depends_on: [1003]
 ---

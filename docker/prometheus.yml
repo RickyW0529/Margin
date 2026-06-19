@@ -1,7 +1,9 @@
+# Prometheus scrape configuration for the Margin stack.
 global:
   scrape_interval: 15s
 
 scrape_configs:
+  # Scrape the Margin API metrics endpoint exposed by the "api" service.
   - job_name: "margin-api"
     static_configs:
       - targets: ["api:8000"]

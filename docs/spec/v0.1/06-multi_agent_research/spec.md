@@ -3,7 +3,7 @@ module_id: 06-multi_agent_research
 product_version: v0.1
 doc_version: v0.1
 source_refs: [产品设计 §4.5, §5.2, §13.2-6; 架构设计 §8, §9, §11, §12, §14, §26-Phase4]
-status: draft
+status: active
 ---
 
 # 06 多 Agent 研究流程模块 — 功能规格

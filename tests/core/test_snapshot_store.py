@@ -1,4 +1,8 @@
-"""Tests for local snapshot store."""
+"""Tests for local snapshot store.
+
+Verifies that payloads are persisted, content-addressed by SHA-256, and round-trip
+through the read/list API without data loss.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +16,7 @@ def test_snapshot_store_writes_and_reads(tmp_path):
         object_id="rep_1",
         payload={"summary": "buy"},
     )
+    # The store prefixes the digest to make the algorithm explicit for auditors.
     assert entry.sha256.startswith("sha256:")
     loaded = store.read(entry.snapshot_id)
     assert loaded.payload["summary"] == "buy"

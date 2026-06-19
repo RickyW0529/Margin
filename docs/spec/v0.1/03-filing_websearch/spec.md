@@ -3,7 +3,7 @@ module_id: 03-filing_websearch
 product_version: v0.1
 doc_version: v0.1
 source_refs: [产品设计 §4.3, §4.3.1, §13.2-3; 架构设计 §6, §26-Phase3]
-status: draft
+status: active
 ---
 
 # 03 公告与 WebSearch 模块 — 功能规格

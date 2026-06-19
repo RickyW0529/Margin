@@ -3,25 +3,25 @@ module_id: 10-deployment_audit
 product_version: v0.1
 doc_version: v0.1
 source_refs: [产品设计 §13.1, §13.2-10; 架构设计 §5, §21, §22, §23, §24, §25, §26-Phase1]
-status: draft
+status: active
 ---
 
 # 10 部署与审计模块 — 功能规格
 
 ## 1. 模块目标
 
-提供一键本地部署（Docker Compose）、存储分层与不可变快照、安全设计、可观测性（指标与 Trace）、测试策略与故障降级。承载所有模块的基础设施：PostgreSQL + pgvector、Parquet/DuckDB、本地文件/对象存储、Worker/Scheduler、日志与审计。MVP 可在 4C8G 主机运行，不依赖 GPU。
+提供一键本地部署（Docker Compose）、存储分层与不可变快照、安全设计、可观测性（指标与 Trace）、测试策略与故障降级。v0.1 运行时采用 PostgreSQL + pgvector、本地不可变文件快照、Worker/Scheduler、日志与审计；Parquet/DuckDB 与外部对象存储保留为后续扩展。MVP 可在 4C8G 主机运行，不依赖 GPU。
 
 ## 2. 输入 / 输出
 
 - **输入**：所有业务模块的持久化需求、调度配置、Secret 配置、外部 Provider 健康状态。
 - **触发**：部署启动、调度任务、异常事件、审计查询。
-- **输出**：运行中的服务集合（web/api/worker/postgres/可选 redis/可选 qdrant/prometheus/grafana）、不可变审计日志与快照、指标与 Trace、降级处理结果。
+- **输出**：运行中的服务集合（migrate/seed/web/api/worker/postgres/prometheus/grafana）、不可变审计日志与快照、指标与 Trace、降级处理结果。
 - **消费方**：全部模块（存储、调度、审计、可观测性横切能力）。
 
 ## 3. 接口契约
 
-Docker Compose 服务（架构 §21.2）：web、api、worker、postgres、optional-redis、optional-qdrant、prometheus、grafana。
+Docker Compose 服务（架构 §21.2）：migrate、seed、web、api、worker、postgres、prometheus、grafana。Redis/Qdrant 不进入 v0.1 默认栈。
 
 部署架构（架构 §21.1）：Next.js（web）→ FastAPI（api）→ PostgreSQL+pgvector；Worker/Scheduler → PostgreSQL / Raw-Parquet / LLM API / 外部数据源。
 
@@ -29,7 +29,7 @@ Trace 字段（架构 §23）：`trace_id`、`job_run_id`、`strategy_version_id
 
 ## 4. 数据模型
 
-存储组合（架构 §5.1）：PostgreSQL（主业务数据、策略、持仓、研究信号、证据元数据）、Parquet（大规模行情/特征/回测）、DuckDB（本地分析与批处理）、本地文件/S3 兼容对象存储（原始 PDF/HTML/JSON/CSV 快照）、pgvector/Qdrant（文本向量）、Redis 可选（缓存/锁/短任务状态）。
+存储组合（架构 §5.1）：PostgreSQL（主业务数据、策略、持仓、研究信号、证据元数据）、本地不可变文件（原始 PDF/HTML/JSON/CSV 快照）与 pgvector（文本向量）。Parquet/DuckDB、S3、Qdrant、Redis 属于后续可插拔扩展。
 
 数据分层（架构 §5.2）：ODS 原始层 → DWD 标准明细层 → PIT 时点层 → DWS 特征与主题层 → ADS 研究信号与面板层。
 

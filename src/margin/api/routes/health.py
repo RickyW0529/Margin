@@ -1,10 +1,19 @@
-"""Health, readiness and degradation endpoints."""
+"""Health, readiness and degradation endpoints.
+
+Provides Kubernetes-style probes:
+
+* ``/health`` - lightweight liveness check.
+* ``/health/ready`` - readiness check that verifies database connectivity.
+* ``/health/degraded`` - aggregated degradation status across providers and DB.
+"""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, status
+from fastapi.responses import JSONResponse
+from sqlalchemy import Engine
 
 from margin.core.provider import HealthCheckResult, ProviderStatus
 from margin.settings import get_settings
@@ -19,27 +28,42 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/health/ready")
-def ready() -> Response:
-    """Readiness probe: database must be reachable."""
+def _database_health() -> tuple[bool, str | None]:
+    """Check database connectivity and always release the temporary engine.
+
+    Creating a dedicated engine for the probe avoids coupling health status to
+    the lifespan-managed application engine and guarantees connection cleanup.
+    """
     settings = get_settings()
+    engine: Engine | None = None
     try:
         engine = create_database_engine(
             DatabaseSettings(url=str(settings.database_url))
         )
         with engine.connect() as conn:
             conn.exec_driver_sql("SELECT 1")
-        return Response(
-            content='{"status":"ready"}',
-            media_type="application/json",
+        return True, None
+    except Exception as exc:  # noqa: BLE001
+        return False, f"{type(exc).__name__}: {exc}"
+    finally:
+        # Dispose must run even when connect() succeeds so the probe does not leak pools.
+        if engine is not None:
+            engine.dispose()
+
+
+@router.get("/health/ready")
+def ready() -> JSONResponse:
+    """Readiness probe: database must be reachable."""
+    healthy, _ = _database_health()
+    if healthy:
+        return JSONResponse(
+            content={"status": "ready"},
             status_code=status.HTTP_200_OK,
         )
-    except Exception as exc:  # noqa: BLE001
-        return Response(
-            content=f'{{"status":"not_ready","detail":"{exc}"}}',
-            media_type="application/json",
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        )
+    return JSONResponse(
+        content={"status": "not_ready"},
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
 
 
 @router.get("/health/degraded")
@@ -47,19 +71,14 @@ def degraded() -> dict[str, object]:
     """Return true if database is not ready or any provider is degraded."""
     settings = get_settings()
     degraded_providers: list[HealthCheckResult] = []
-    try:
-        engine = create_database_engine(
-            DatabaseSettings(url=str(settings.database_url))
-        )
-        with engine.connect() as conn:
-            conn.exec_driver_sql("SELECT 1")
-    except Exception as exc:  # noqa: BLE001
+    healthy, error = _database_health()
+    if not healthy:
         degraded_providers.append(
             HealthCheckResult(
                 provider_name="database",
                 status=ProviderStatus.UNHEALTHY,
                 checked_at=datetime.now(UTC),
-                message=str(exc),
+                message=error,
             )
         )
     return {

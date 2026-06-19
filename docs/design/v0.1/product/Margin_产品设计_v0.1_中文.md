@@ -1,859 +1,351 @@
 # Margin（安全边际）开源投资研究系统｜产品设计文档 v0.1
 
-> 文档类型：产品设计文档（Product Design Document）  
-> 版本：v0.1  
-> 产品定位：本地优先、证据驱动、策略可配置的开源个人投资研究与持仓决策系统  
-> 默认市场：A 股；首期股票池：沪深 300 / 用户自选池  
-> 默认执行方式：系统生成研究信号、证据摘要与风险提示，用户自行在券商完成交易  
-> 重要说明：本系统用于研究和决策辅助，不构成投资建议，不承诺收益，不替代持牌投资顾问，不默认提供自动下单能力。
+> 文档类型：产品设计文档
+> 产品版本：v0.1
+> 文档版本：v0.1
+> 状态：active
+> 当前实现：10 个 v0.1 模块已打通，支持本地 Docker Compose 全栈运行
+> 产品定位：本地优先、证据驱动、策略可配置、用户保留最终决策权的个人投资研究系统
+> 合规声明：本系统只提供研究辅助，不构成投资建议，不承诺收益，不自动下单。
 
 ---
 
 ## 1. 产品摘要
 
-Margin 的核心目标不是“预测明天哪只股票上涨”，而是将个人投资研究拆解成一套可追溯、可配置、可复盘的工作流：
+Margin 的目标不是替用户“预测明天涨跌”，而是把个人投资研究中最容易失控的部分结构化：
 
-1. 采集行情、财务、公告、新闻和行业数据；
-2. 将结构化数据与非结构化文本分别清洗、存储和索引；
-3. 使用量化筛选缩小候选范围；
-4. 使用 RAG 证据系统让 AI 基于原文生成事实、推断、风险与反方意见；
-5. 根据用户自定义策略、持有周期、风险偏好和提示词生成个性化候选；
-6. 在研究候选面板展示估值区间、证据、催化剂、失效条件和观察窗口；
-7. 在当前持仓面板持续监控仓位、盈亏、组合暴露、公告和投资逻辑状态；
-8. 记录每次研究信号、用户操作和后续结果，验证策略与 AI 是否真正产生增量价值。
+- 数据来源分散；
+- 公告、新闻、财报难以长期追溯；
+- AI 结论容易脱离原文；
+- 策略和 Prompt 难以版本化；
+- 持仓后的投资逻辑缺少持续复核；
+- 事后很难知道一次判断到底基于什么证据。
+
+v0.1 已经形成一条可运行的研究闭环：
+
+1. 用户通过 demo seed、手工交易或 CSV 导入形成组合与持仓；
+2. 系统接入 AKShare/Tushare、公告事件、WebSearch、Embedding、LLM 等 Provider；
+3. 公告与网页材料以快照、事件、outbox 和索引任务进入文本管线；
+4. 文本被解析、分块、向量化，并通过混合检索供 RAG 使用；
+5. 研究工作流通过内部工具注册、工具权限和多 Agent 节点生成结构化研究结果；
+6. 候选面板展示研究 run、candidate card、证据、估值、审计、报告和导出；
+7. 持仓监控根据价格、证据、事件和策略失效条件生成 P0-P3 告警；
+8. 所有关键产物进入 PostgreSQL 和 append-only audit，便于复盘。
 
 ```mermaid
 flowchart LR
-    A[结构化市场数据] --> B[量化筛选]
-    N[公告/新闻/财报文本] --> C[文本解析与向量检索]
-    B --> D[AI研究工作流]
-    C --> D
-    S[用户策略配置] --> D
-    D --> R[研究候选面板]
-    P[用户持仓] --> H[当前持仓面板]
-    R --> H
-    H --> F[复盘与归因]
-    F --> S
+    U[用户: 导入交易/查看组合] --> P[持仓与成本计算]
+    P --> M[持仓监控]
+    D[行情/财务/公告/WebSearch] --> I[快照与文本索引]
+    I --> RAG[RAG 证据检索]
+    S[策略模板/自定义 Prompt/阈值] --> A[多 Agent 研究工作流]
+    RAG --> A
+    P --> A
+    A --> C[研究候选面板]
+    C --> E[证据/估值/审计/报告]
+    E --> M
+    M --> H[告警/复盘/操作历史]
+    H --> S
 ```
 
----
+## 2. 产品原则
 
-## 2. 产品愿景
-
-### 2.1 愿景
-
-> 让个人投资者拥有一套可本地部署、可自定义策略、可检查证据、可回测和可复盘的投资研究操作系统。
-
-### 2.2 核心价值
-
-| 价值    | 说明                         |
-| ----- | -------------------------- |
-| 本地优先  | 用户持仓、策略提示词和研究数据可保存在本地      |
-| 证据驱动  | 每个关键结论都绑定原始证据、时间和来源等级      |
-| 策略可配置 | 用户可以配置股票池、估值偏好、风险阈值、提示词和模型 |
-| 人机协同  | AI 负责信息处理与研究，用户保留最终交易决策    |
-| 可验证   | 通过回测、模拟盘、影子组合和归因验证模块贡献     |
-| 可扩展   | 通过类型化 Provider 和内部工具适配器扩展能力   |
-
-### 2.3 非目标
-
-Margin 首期不追求：
-
-- 高频交易；
-- 精确预测某一天达到目标价；
-- 官方集中发布“每日金股”；
-- 自动替用户操作券商账户；
-- 通过堆叠多个 Agent 制造虚假的确定性；
-- 对所有公司使用同一套估值模型；
-- 让大模型直接完成不可复现的数值计算；
-- 不支持 MCP Server、自定义 HTTP 工具或任意第三方运行时工具接入。
-
-### 2.4 合规与表达边界
-
-Margin（安全边际）中的 “Margin” 指 **Margin of Safety / 安全边际**，不表示保证金交易、融资融券或杠杆交易。
-
-产品默认只输出研究候选、证据摘要、风险提示和条件式观察项，不输出无条件的买入/卖出指令。所有用户可见表达必须遵守：
-
-- 使用“研究信号”“研究候选”“风险复核”“观察窗口”等表述，避免直接使用“金股”“稳赚”“必涨”等承诺性语言；
-- 持仓相关输出只描述投资逻辑是否仍成立、风险暴露是否需要复核，不替用户作出交易决定；
-- AI 输出必须附带证据、时间、来源等级、未知项和反方理由；
-- 当证据不足、来源冲突或数据异常时，默认输出 `ABSTAINED`；
-- 自动下单、券商账户控制和收益承诺均不属于默认能力。
-
----
+| 原则 | v0.1 设计要求 | 当前实现 |
+| --- | --- | --- |
+| 本地优先 | 用户数据、策略、审计、快照默认保存在本地 | Docker Compose + PostgreSQL volume + 本地 audit/snapshot volume |
+| 证据优先 | 研究结论必须绑定来源、时间、证据等级或降级原因 | EvidenceView、ResearchSnapshot、AuditView、ABSTAINED |
+| 用户决策 | 系统不替用户下单，只提供研究、告警和复盘 | 无券商接口、无自动交易能力 |
+| 策略可配置 | 策略模板、Prompt、阈值、版本可追踪 | `strategy_profiles` / `strategy_versions` |
+| 降级保守 | 数据缺失或 Provider 失败时不输出高置信信号 | DATA_MISSING alert、ABSTAINED candidate |
+| 可审计 | 运行、工具、研究、反馈、告警均有审计链路 | audit_records、research_snapshots、dashboard_*、alert_events |
 
 ## 3. 目标用户
 
 ### 3.1 核心用户
 
-- 自主研究和手工交易的个人投资者；
-- 关注价值、质量、催化剂和中期持有周期；
-- 希望通过 AI 减少阅读公告和财报的时间；
-- 希望自定义策略，而不是接受统一研究结论；
-- 关注隐私，愿意本地部署；
-- 有一定技术能力，或愿意使用一键部署版本。
+- 自主研究、手动交易的个人投资者；
+- 关注 A 股、价值/质量/催化剂/风险复核；
+- 愿意本地部署或使用 Docker Compose；
+- 希望 AI 研究输出能回到证据，而不是只看聊天式总结；
+- 希望持仓后持续监控“买入逻辑是否仍成立”。
 
-### 3.2 用户角色
+### 3.2 开发者用户
 
-```mermaid
-mindmap
-  root((Margin 用户))
-    普通投资者
-      使用默认策略
-      查看研究候选与证据
-      管理持仓
-    高级用户
-      自定义提示词
-      调整因子权重
-      自定义工具和数据源
-    开发者
-      开发连接器
-      开发MCP服务
-      扩展Agent和估值模板
-    研究者
-      回测策略
-      对比影子组合
-      验证AI增量
-```
+- 希望扩展数据 Provider、Embedding、Rerank 或 WebSearch；
+- 希望新增策略模板、估值视图或监控规则；
+- 希望所有新增能力能通过 spec/plan、测试和审计追溯。
 
----
+### 3.3 非目标用户
 
-## 4. 核心产品架构与功能边界
+v0.1 不面向高频交易、自动下单、融资融券、券商账户托管、投顾业务或多租户 SaaS。
 
-产品按八个核心层组织：
+## 4. 产品边界
 
-```mermaid
-flowchart TB
-    L1[数据层]
-    L2[数据存储层]
-    L3[新闻获取层]
-    L4[文本向量数据库]
-    L5[AI层]
-    L6[研究信号策略配置层]
-    L7[研究候选面板]
-    L8[当前持仓面板]
+### 4.1 v0.1 包含
 
-    L1 --> L2
-    L3 --> L2
-    L3 --> L4
-    L2 --> L5
-    L4 --> L5
-    L6 --> L5
-    L5 --> L7
-    L7 --> L8
-    L2 --> L8
-```
+- 组合与持仓：demo seed、交易记录、CSV 导入、成本/仓位/组合概览；
+- 数据 Provider：AKShare、Tushare 协议、WebSearch、LLM、Embedding、Rerank 可选；
+- 文档处理：公告事件、原始快照、outbox、解析、分块、Embedding、检索；
+- RAG 证据：claim/evidence、来源等级、locator、冲突校验、引用失败原因；
+- 多 Agent 研究：Universe、WebSearch、Summary、Reflect、Citation Validator；
+- 策略配置：模板、自定义策略、Prompt 合成、版本生命周期；
+- 候选面板：research run、candidate card、证据展开、估值、反方理由、审计、报告、导出；
+- 持仓监控：P0-P3 alert、复盘记录、操作历史、行为指标；
+- 部署审计：Docker Compose、migrate、seed、worker、Prometheus、Grafana、健康检查。
 
-### 4.1 数据层
+### 4.2 v0.1 不包含
 
-负责获取和标准化：
+- MCP Server / MCP Gateway；
+- 用户自定义 HTTP 工具或任意第三方工具运行时；
+- 自动买卖、券商 API 下单、券商密码保存；
+- 多租户权限、团队协作、云端账号体系；
+- 大规模历史行情 Parquet/DuckDB 分析层的完整生产化；
+- 付费研报全文分发或绕过网站访问控制。
 
-- 行情；
-- 财务指标；
-- 财务报表；
-- 指数成分；
-- 公司行动；
-- 行业与宏观数据；
-- 用户导入的交易和持仓数据；
-- 量化因子输入。
-
-### 4.2 数据存储层
-
-负责：
-
-- 原始快照；
-- 标准化结构化数据；
-- Point-in-Time 时点数据；
-- 特征数据；
-- 模型输出；
-- 策略版本；
-- 研究信号记录；
-- 持仓和交易记录；
-- 审计日志。
-
-### 4.3 新闻获取层
-
-“新闻”是广义概念，包括：
-
-- 交易所公告；
-- 财报和业绩说明会；
-- 公司官网与投资者关系材料；
-- 行业硬数据；
-- 权威财经媒体；
-- 用户自行配置的 RSS、API 或网页来源。
-
-### 4.3.1 数据源与新闻合规边界
-
-MVP 阶段结构化 A 股数据只支持：
-
-- AKShare；
-- Tushare（用户自行配置 token，并遵守其授权和频率限制）。
-
-新闻和网页信息的初始方案是可配置 WebSearch Provider：用户填写相关 API Key，系统保存搜索结果快照、原文 URL、抓取时间和内容哈希。系统不得绕过网站访问控制，不抓取付费墙内容，不将版权受限全文作为开源样例数据分发。
-
-### 4.4 文本向量数据库
-
-负责对公告、财报、新闻和用户自有或授权研报进行：
-
-- 文档解析；
-- 分块；
-- Embedding；
-- 元数据过滤；
-- 向量检索；
-- 关键词检索；
-- 混合召回；
-- 重排序；
-- 引用定位。
-
-### 4.5 AI 层
-
-包括：
-
-- 模型路由层；
-- Provider 接入层；
-- RAG 证据系统；
-- 工具系统；
-- Agent 编排层；
-- 模型网关；
-- Prompt 模板；
-- 结构化输出；
-- 自动 Agent 抓取与多职能编排；
-- 反方审查；
-- 安全约束与拒绝机制。
-
-### 4.6 研究信号策略配置层
-
-用户可配置：
-
-- 股票池；
-- 行业偏好；
-- 持有周期；
-- 风险容忍度；
-- 估值方法；
-- 因子权重；
-- 新闻来源；
-- 模型供应商；
-- 自定义 Prompt；
-- 研究信号门槛；
-- 失效规则；
-- 组合限制；
-- 报告风格。
-
-### 4.7 研究候选面板
-
-用于展示：
-
-- 今日候选；
-- 估值区间；
-- 安全边际；
-- 价值陷阱风险评分；
-- 催化剂；
-- 证据；
-- 反方理由；
-- 预期观察周期；
-- 条件式研究计划；
-- 拒绝判断原因。
-
-### 4.8 当前持仓面板
-
-用于展示和监控：
-
-- 当前仓位；
-- 成本；
-- 盈亏；
-- 组合行业暴露；
-- 单票风险；
-- 当前投资逻辑；
-- 下一关键事件；
-- 逻辑失效条件；
-- 盘中提醒；
-- 历史操作与复盘。
-
----
+工具扩展统一采用内部 `ToolRegistry`、固定权限等级、类型化 Provider Adapter 和审计记录。
 
 ## 5. 用户主流程
 
-### 5.1 首次使用
+### 5.1 本地启动流程
+
+```mermaid
+sequenceDiagram
+    participant User as 用户
+    participant Compose as Docker Compose
+    participant DB as PostgreSQL/pgvector
+    participant API as FastAPI
+    participant Web as Next.js
+    participant Worker as APScheduler Worker
+
+    User->>Compose: docker compose up -d --build
+    Compose->>DB: 启动 postgres
+    Compose->>API: migrate 执行 Alembic
+    Compose->>API: seed 写入 demo portfolio/trades/events
+    Compose->>API: 启动 API 并健康检查
+    Compose->>Worker: 启动监控/索引任务
+    Compose->>Web: 启动前端
+    User->>Web: 打开 http://localhost:3000
+```
+
+### 5.2 研究候选流程
+
+1. 用户进入研究面板；
+2. 发起 research run，传入策略版本、组合和候选股票；
+3. 系统收集市场数据、持仓约束、检索证据和 WebSearch 结果；
+4. 多 Agent 工作流生成结构化结论；
+5. Citation Validator 判断证据是否足够；
+6. 结果进入 `dashboard_runs`、`dashboard_items` 和 `research_snapshots`；
+7. 前端展示候选卡、估值区间、反方理由、证据、报告和导出。
 
 ```mermaid
 flowchart TD
-    A[启动 Margin] --> B[选择部署模式]
-    B --> C[配置数据源]
-    C --> D[配置模型/API]
-    D --> E[选择股票池]
-    E --> F[选择默认策略模板]
-    F --> G[导入持仓或使用空组合]
-    G --> H[运行数据初始化]
-    H --> I[生成第一份研究报告]
+    A[点击/调用创建 research run] --> B[DashboardResearchService]
+    B --> C[ResearchService + Workflow]
+    C --> D[ToolRegistry]
+    D --> D1[MarketDataTool]
+    D --> D2[PortfolioTool]
+    D --> D3[RetrievalTool]
+    D --> D4[WebSearchTool]
+    C --> E[LLM Provider]
+    C --> F[Citation Validator]
+    F --> G{证据足够?}
+    G -->|是| H[PUBLISHED]
+    G -->|否| I[ABSTAINED]
+    H --> J[Candidate Card]
+    I --> J
+    J --> K[证据/估值/审计/报告]
 ```
 
-### 5.2 每日晚间流程
+### 5.3 持仓监控流程
+
+1. Worker 周期性读取当前持仓；
+2. 从 AKShare 获取最新价格，失败时写入数据缺失告警而不是中断；
+3. 按确定性规则检查价格、证据、排名变化、行业暴露、事件窗口和策略失败；
+4. 生成 P0-P3 alert；
+5. 用户在持仓详情页查看告警、操作历史和复盘记录；
+6. 用户记录处理结果，系统计算行为指标。
+
+## 6. 页面与信息架构
+
+当前前端使用 Next.js App Router，页面已覆盖研究和持仓核心路径。
 
 ```mermaid
-flowchart TD
-    A[收盘后任务开始] --> B[更新行情/财务/公告/新闻]
-    B --> C{数据完整性检查}
-    C -->|失败| X[停止高置信研究信号并告警]
-    C -->|通过| D[量化初筛]
-    D --> E[获取候选股相关文本]
-    E --> F[向量化与检索]
-    F --> G[加载用户策略配置]
-    G --> H[AI研究与证据整合]
-    H --> I[估值与风险计算]
-    I --> J[反方审查]
-    J --> K[组合约束检查]
-    K --> L[生成结构化研究信号]
-    L --> M[研究候选面板]
-    L --> N[同步更新持仓研究状态]
+flowchart TB
+    Home[/ / 首页摘要] --> Portfolio[/portfolios/demo 组合工作台]
+    Portfolio --> Position[/positions/:positionId 持仓详情]
+    Home --> Research[/research 研究候选面板]
+    Research --> ResearchItem[/research/items/:itemId 研究项详情]
+    Research --> ResearchRun[/research/runs/:runId 研究运行详情]
+
+    Position --> Alerts[告警/复盘/操作历史]
+    ResearchItem --> Evidence[证据展开]
+    ResearchItem --> Valuation[估值视图]
+    ResearchItem --> Audit[审计视图]
+    ResearchItem --> Report[报告与导出]
 ```
 
-### 5.3 盘中持仓流程
+### 6.1 首页
 
-```mermaid
-flowchart TD
-    A[交易时间] --> B[更新持仓价格]
-    B --> C[确定性规则检测]
-    C --> D{触发阈值?}
-    D -->|否| E[继续监控]
-    D -->|是| F[查询最新公告与新闻]
-    F --> G[RAG验证是否有新证据]
-    G --> H{投资逻辑是否改变?}
-    H -->|否| I[普通提醒]
-    H -->|是| J[高优先级风险提醒]
-    J --> K[用户手工决策]
-```
+首页承担入口职责：
 
----
+- 展示系统定位；
+- 引导用户进入 demo 组合；
+- 引导用户进入研究候选面板；
+- 对开源用户解释 v0.1 能力边界。
 
-## 6. 研究信号策略配置中心
+### 6.2 组合工作台
 
-这是产品差异化最强的模块之一。
+组合页展示：
 
-### 6.1 策略模板
+- 组合名称、现金、总资产、市值、累计盈亏；
+- 当前持仓表；
+- 持仓代码可点击进入持仓详情；
+- 行业/风格暴露；
+- 即将发生事件；
+- 风险摘要。
 
-系统预置：
+### 6.3 持仓详情页
 
-1. 价值质量策略；
-2. 低估修复策略；
-3. 高股息策略；
-4. 成长合理估值策略；
-5. 周期反转策略；
-6. 用户完全自定义策略。
+持仓详情展示：
 
-### 6.2 策略配置结构
+- 代码、数量、成本、市值、盈亏；
+- 买入逻辑/投资 thesis；
+- 监控告警；
+- 操作历史；
+- 行为指标。
 
-```yaml
-strategy:
-  id: value_quality_v1
-  name: 价值质量策略
-  universe:
-    type: index
-    value: CSI300
-    data_providers:
-      - akshare
-      - tushare
-  horizon:
-    min_trading_days: 20
-    max_trading_days: 120
-  valuation:
-    min_valuation_margin_of_safety: 0.20
-    preferred_methods:
-      - relative_valuation
-      - dcf
-  quality:
-    min_roe: 0.10
-    min_cash_conversion: 0.80
-  risk:
-    max_value_trap_risk_score: 0.30
-    max_single_position: 0.05
-    max_industry_exposure: 0.20
-  ai:
-    provider: openai_compatible
-    model: user_defined
-    websearch_provider: user_configured
-    system_prompt_template: value_research_v1
-    custom_instructions: |
-      优先寻找现金流改善且估值低于行业中位数的公司。
-      排除高质押、高商誉和持续减持公司。
-  evidence:
-    required_levels: [1, 2, 3]
-    min_evidence_count: 3
-  decision:
-    research_states:
-      - RESEARCH_CANDIDATE
-      - WATCH
-      - ABSTAINED
-    position_review_states:
-      - THESIS_VALID
-      - REVIEW_REQUIRED
-      - RISK_ALERT
-      - THESIS_INVALIDATED
-    prohibited_outputs:
-      - GUARANTEED_RETURN
-      - DIRECT_BUY_SELL_ORDER
-```
+### 6.4 研究候选面板
 
-### 6.3 自定义 Prompt
+研究面板展示：
 
-用户可编辑：
-
-- 研究目标；
-- 风格偏好；
-- 重点关注指标；
-- 必须排除的公司类型；
-- 允许使用的信息源；
-- 输出风格；
-- 风险偏好；
-- 反方审查强度。
-
-系统必须区分：
-
-```mermaid
-flowchart LR
-    A[平台系统Prompt] --> D[最终Prompt]
-    B[策略模板Prompt] --> D
-    C[用户自定义Prompt] --> D
-    D --> E[安全和结构化输出约束]
-```
-
-用户 Prompt 不得覆盖：
-
-- 证据引用要求；
-- 数据时点限制；
-- 风险披露；
-- 结构化输出 Schema；
-- 禁止收益承诺；
-- 禁止自动下单；
-- 系统安全策略。
-
-### 6.4 策略版本管理
-
-每次修改生成新版本：
-
-```mermaid
-stateDiagram-v2
-    [*] --> Draft
-    Draft --> Validating
-    Validating --> Invalid: 配置错误
-    Validating --> Backtesting
-    Backtesting --> PaperTrading
-    PaperTrading --> Active: 用户启用
-    Active --> Archived: 新版本替代
-    Active --> Suspended: 数据或风险异常
-```
-
----
-
-## 7. 研究候选面板设计
-
-### 7.1 首页信息层级
-
-```mermaid
-flowchart TD
-    A[研究候选面板] --> B[市场状态摘要]
-    A --> C[今日候选]
-    A --> D[现有持仓复核]
-    A --> E[高优先级风险]
-    A --> F[拒绝判断]
-    A --> G[策略运行状态]
-```
-
-### 7.2 候选卡片
-
-每张卡片必须包含：
-
-- 股票名称与代码；
-- 当前价格；
-- 量化排名；
-- 研究/持仓状态；
-- 基准估值区间；
-- 悲观估值区间；
-- 估值安全边际；
-- 价值陷阱风险评分；
-- 20/60/120 日事件关注窗口；
-- 主要催化剂；
+- 最新 research run；
+- candidate card；
+- 研究状态：`published`、`abstained`、`invalidated` 等；
+- 置信度、估值区间、价值陷阱风险；
+- 证据数量和来源分布；
 - 最强反方理由；
-- 证据数量和等级；
-- 进入研究观察条件；
-- 逻辑失效条件；
-- 观察窗口；
-- 使用的策略版本；
-- 明确提示：该卡片不是买卖指令。
-
-### 7.3 研究/持仓状态
-
-状态分为“研究信号状态”和“持仓复核状态”，避免把研究结论误表达成交易指令。
-
-| 研究信号状态 | 含义 |
-|---|---|
-| RESEARCH_CANDIDATE | 满足研究候选门槛，值得进一步阅读证据 |
-| WATCH | 有潜力但条件未满足，仅进入观察列表 |
-| ABSTAINED | 信息不足、冲突或不确定性过高，系统拒绝输出高置信结论 |
-
-| 持仓复核状态 | 含义 |
-|---|---|
-| THESIS_VALID | 当前持仓逻辑仍成立 |
-| REVIEW_REQUIRED | 估值、证据或组合暴露变化，需要人工复核 |
-| RISK_ALERT | 接近或触发风险阈值，需要优先查看 |
-| THESIS_INVALIDATED | 投资逻辑失效，应进入人工决策流程 |
-
-### 7.4 研究详情页
-
-```mermaid
-flowchart LR
-    A[研究详情] --> B[结论]
-    A --> C[量化因子]
-    A --> D[估值]
-    A --> E[证据]
-    A --> F[催化剂]
-    A --> G[风险]
-    A --> H[反方分析]
-    A --> I[历史研究信号]
-```
-
----
-
-## 8. 当前持仓面板设计
-
-### 8.1 持仓总览
-
-- 总资产；
-- 可用现金；
-- 持仓市值；
-- 今日盈亏；
-- 累计盈亏；
-- 组合波动率；
-- 最大回撤；
-- 行业暴露；
-- 风格暴露；
-- 高风险持仓数；
-- 即将发生的重要事件。
-
-### 8.2 单个持仓详情
-
-```mermaid
-flowchart TD
-    A[持仓详情] --> B[成本与盈亏]
-    A --> C[原始买入逻辑]
-    A --> D[当前证据]
-    A --> E[估值变化]
-    A --> F[模型排名变化]
-    A --> G[催化剂时间线]
-    A --> H[失效条件]
-    A --> I[操作历史]
-```
-
-### 8.3 持仓健康状态
-
-| 状态 | 说明 |
-|---|---|
-| HEALTHY | 逻辑与风险均正常 |
-| WATCH | 某项指标恶化，尚未失效 |
-| RISK | 接近失效条件 |
-| INVALIDATED | 投资逻辑已失效 |
-| DATA_MISSING | 关键数据缺失 |
-| EVENT_PENDING | 等待关键公告或财报 |
-
-### 8.4 持仓录入方式
-
-- 手工录入；
-- CSV/Excel 导入；
-- 券商导出文件适配插件；
-- 后续可选只读券商连接器；
-- 不默认保存券商密码。
-
----
-
-## 9. RAG 证据产品体验
-
-### 9.1 每个结论必须可展开
-
-```text
-结论：公司经营现金流质量改善。
-
-事实证据：
-1. 2025 年年度报告第 86 页：经营现金流同比增长 32%。
-2. 2026 年一季度报告第 18 页：现金流/净利润由 0.71 提升至 0.93。
-
-系统推断：
-现金转换能力正在恢复，但仍需验证应收账款是否同步下降。
-
-置信度：0.82
-```
-
-### 9.2 证据等级
-
-| 等级 | 来源 |
-|---|---|
-| L1 | 交易所公告、监管文件、定期报告 |
-| L2 | 公司 IR、业绩说明会、管理层正式指引 |
-| L3 | 行业价格、销量、库存、招投标等硬数据 |
-| L4 | 权威媒体、专业研究 |
-| L5 | 社交媒体和未经验证信息 |
-
-L5 不能直接改变研究/持仓状态，只能触发调查。
-
-### 9.3 引用定位字段
-
-RAG 引用不能只依赖页码，因为数据来源可能是 PDF、HTML、表格、WebSearch 结果或用户上传文件。每条证据至少记录：
-
-```json
-{
-  "evidence_id": "ev_001",
-  "document_id": "doc_001",
-  "source_type": "filing_pdf | web_page | table | api_record | user_file",
-  "source_url": "https://...",
-  "source_level": "L1",
-  "content_hash": "sha256:...",
-  "published_at": "2026-06-17T18:30:00+08:00",
-  "available_at": "2026-06-18T09:30:00+08:00",
-  "retrieved_at": "2026-06-18T20:10:00+08:00",
-  "page": 86,
-  "section": "经营现金流",
-  "paragraph_index": 12,
-  "table_id": "cash_flow_table",
-  "row_id": "net_operating_cash_flow",
-  "quote_span": [120, 188]
-}
-```
-
-要求：
-
-- PDF 优先记录页码、章节和字符范围；
-- HTML 优先记录 URL、标题、段落序号和正文哈希；
-- 表格优先记录表格 ID、行列定位和原始文件哈希；
-- WebSearch 结果必须落到可访问原文或快照，不能只引用搜索摘要；
-- 所有引用必须满足 `available_at <= decision_at`。
-
----
-
-## 10. 提醒与通知
-
-### 10.1 提醒类型
-
-- 数据异常；
-- 新公告；
-- 重大负面事件；
-- 价格触及失效阈值；
-- 模型排名明显变化；
-- 行业暴露超限；
-- 估值达到目标区间；
-- 策略运行失败；
-- 关键事件即将发生。
-
-### 10.2 提醒优先级
-
-```mermaid
-flowchart TD
-    A[新事件] --> B{级别}
-    B -->|P0| C[立即通知并置顶]
-    B -->|P1| D[交易时段通知]
-    B -->|P2| E[面板展示+晚间汇总]
-    B -->|P3| F[仅进入研究日志]
-```
-
----
-
-## 11. 开源与插件生态
-
-### 11.1 用户可扩展内容
-
-- 数据连接器；
-- 新闻连接器；
-- Embedding 模型；
-- 向量数据库；
-- LLM Provider；
-- 内部工具适配器（代码级、类型化扩展）；
-- Agent 工作流；
-- 量化模型；
-- 估值模板；
-- 研究信号策略；
-- 通知渠道；
-- 券商文件解析器。
-
-### 11.2 插件市场的长期方向
-
-```mermaid
-mindmap
-  root((Margin 插件))
-    Data
-      AKShare
-      Tushare
-      OpenBB
-      CSV
-    AI
-      OpenAI
-      DeepSeek
-      Qwen
-      Local Model
-    Tools
-      Filings
-      Retrieval
-      Portfolio
-      Valuation
-    Strategy
-      Value
-      Dividend
-      Growth
-      Cycle
-    UI
-      Dashboard Widget
-      Report Template
-```
-
----
-
-## 12. 产品指标
-
-### 12.1 系统指标
-
-- 每日晚间任务成功率；
-- 数据完整度；
-- 新闻去重率；
-- 文档解析成功率；
-- RAG 引用正确率；
-- 无证据关键结论率；
-- 研究信号生成时长；
-- 提醒延迟。
-
-### 12.2 研究质量指标
-
-- 研究信号生成后 20/60/120 日表现；
-- 相对基准收益；
-- 最大回撤；
-- 交易成本后收益；
-- 价值陷阱风险评分有效性；
-- 事件窗口命中校准误差；
-- AI 过滤前后样本质量差异；
-- 不同策略版本表现。
-
-### 12.3 用户行为指标
-
-- 无计划交易占比；
-- 用户查看证据比例；
-- 自定义策略使用率；
-- 研究信号与实际执行差异；
-- 触发失效条件后处理时长。
-
----
-
-## 13. MVP 范围与模块化实施路径
-
-### 13.1 MVP 必须打通的完整闭环
-
-Margin v0.1 的 MVP 不是功能很少的 Demo，而是最小可用投资研究闭环。必须包含：
-
-- 沪深 300 / 用户自选股；
-- AKShare 与 Tushare 两个 A 股数据 Provider；
-- 行情、基础财务、指数成分与公司行动；
-- 公告获取与本地快照；
-- 可配置 WebSearch Provider，用于新闻和网页信息发现；
-- PostgreSQL + 本地文件存储；
-- pgvector 或 Qdrant；
-- 一个 OpenAI-compatible LLM Provider；
-- RAG 证据引用与引用定位；
-- 一个默认策略模板；
-- 自定义 Prompt；
-- 研究候选面板；
-- 当前持仓面板；
-- 手工/CSV 交易导入；
-- 晚间自动 Agent 抓取与研究流程；
-- 基础盘中提醒；
-- Docker Compose 一键启动。
-
-### 13.2 按功能模块打通
-
-MVP 可以按模块逐步交付，每个模块独立验收：
-
-1. **数据 Provider 模块**：AKShare/Tushare 接入、字段标准化、时点字段、数据质量检查；
-2. **持仓模块**：手工/CSV 导入、成本计算、仓位与组合暴露；
-3. **公告与 WebSearch 模块**：公告快照、网页发现、来源合规、去重和原文定位；
-4. **文本索引模块**：解析、分块、Embedding、关键词索引、混合召回；
-5. **RAG 证据模块**：证据等级、引用定位、Claim 校验、冲突识别；
-6. **多 Agent 研究流程模块**：WebSearch Agent、文本汇总 Agent、估值工具 Agent、Reflect/反方审查 Agent、Citation Validator；
-7. **策略配置模块**：策略模板、自定义 Prompt、状态阈值、版本管理；
-8. **研究候选面板模块**：候选卡片、证据展开、风险复核、拒绝原因；
-9. **持仓监控模块**：投资逻辑状态、提醒、复盘记录；
-10. **部署与审计模块**：Docker Compose、日志、审计快照、错误降级。
-
-### 13.3 后置功能
-
-- RD-Agent 挑战者；
-- 多模型协同优化；
-- 全 A 股；
-- 自动券商同步；
-- 生存分析或严格概率模型；
-- 多用户 SaaS；
-- 复杂知识图谱；
-- 自动下单；
-- 港美股。
-
----
-
-## 14. 版本路线图
-
-```mermaid
-gantt
-    title Margin v0.1 模块化实施路径
-    dateFormat YYYY-MM-DD
-    section v0.1 数据与持仓
-    AKShare/Tushare Provider       :a1, 2026-07-01, 14d
-    PostgreSQL与本地快照            :a2, after a1, 14d
-    持仓导入与基础面板              :a3, after a1, 14d
-    section v0.2 公告与WebSearch
-    公告抓取与合规快照              :b1, after a2, 14d
-    WebSearch Provider与去重        :b2, after b1, 14d
-    section v0.3 索引与证据
-    文本解析与向量索引              :c1, after b2, 21d
-    RAG引用定位与Claim校验          :c2, after c1, 21d
-    section v0.4 多Agent研究流程
-    Provider层与工具调用            :d1, after c2, 14d
-    WebSearch/汇总/Reflect Agents   :d2, after d1, 21d
-    section v0.5 面板与策略
-    策略配置中心                    :e1, after d2, 21d
-    研究候选面板                    :e2, after e1, 21d
-    当前持仓监控                    :e3, after e1, 21d
-    section v0.6 验证与扩展
-    回测与影子组合                  :f1, after e2, 30d
-    Provider与内置工具扩展           :f2, after f1, 30d
-```
-
----
-
-## 15. 产品验收标准
-
-系统通过 MVP 验收，必须满足：
-
-1. 用户可在本地完成一键部署；
-2. 可配置至少一个 AKShare/Tushare 数据源、一个 WebSearch/新闻源和一个 LLM；
-3. 可运行完整晚间工作流；
-4. 研究结论包含证据引用；
-5. 用户可创建和版本化自定义策略；
-6. 用户可在研究候选面板查看候选与拒绝判断；
-7. 用户可在持仓面板查看盈亏、风险和投资逻辑状态；
-8. 数据异常时停止高置信研究信号输出；
-9. 所有研究信号保留不可变审计记录；
-10. 系统默认不执行真实交易。
-
----
-
-## 16. 总结
-
-Margin v0.1 的产品核心不是“大模型替用户炒股”，而是：
-
-> **以结构化数据为基础，以新闻和文档为证据，以 AI 编排为研究工具，以用户策略为决策约束，以研究候选面板和持仓面板承载完整投资工作流。**
-
-八层结构分别解决：
-
-1. 数据层：获得可计算事实；
-2. 数据存储层：保证时点正确与可追溯；
-3. 新闻获取层：持续获取非结构化信息；
-4. 文本向量数据库：支持高质量检索；
-5. AI 层：完成证据研究、工具调用和 Agent 编排；
-6. 策略配置层：让用户决定“什么是适合自己的投资逻辑”；
-7. 研究候选面板：输出候选、证据、风险和条件；
-8. 当前持仓面板：持续验证投资逻辑并管理风险。
-
-最终产品定位：
-
-> **Local-first, evidence-driven, strategy-configurable open-source investment research OS.**
+- 策略版本和免责声明。
+
+### 6.5 研究项详情页
+
+研究项详情展示：
+
+- 研究结论；
+- 估值视图；
+- 证据展开；
+- claim 与 evidence；
+- 来源定位；
+- 审计元数据；
+- 研究报告；
+- JSON/Markdown 导出。
+
+## 7. 策略配置产品设计
+
+策略配置不只是 Prompt 文本，而是一个版本化对象。
+
+| 能力 | 产品含义 | 当前实现 |
+| --- | --- | --- |
+| 策略模板 | 给新用户提供默认策略起点 | `GET /strategies/templates` |
+| 自定义策略 | 高级用户配置策略 JSON | `POST /strategies/custom` |
+| 版本管理 | 每次修改生成新版本 | `strategy_versions` |
+| 生命周期 | validate → backtest → paper-trade → activate | strategy route + service |
+| Prompt 合成 | 把策略和任务生成实际 LLM prompt | `GET /strategies/{id}/versions/{vid}/prompt` |
+
+v0.1 的策略页面尚未完全产品化为前端配置中心，但后端能力已可供后续 UI 接入。
+
+## 8. 证据与研究输出设计
+
+### 8.1 Candidate Card 字段
+
+| 字段 | 用户意义 |
+| --- | --- |
+| `symbol` | 研究对象 |
+| `research_status` | 是否发布、拒绝、失效或降级 |
+| `statement` | 简明研究结论 |
+| `confidence` | 结论置信度，不等于收益概率 |
+| `valuation_range` | 估值区间 |
+| `value_trap_score` | 价值陷阱风险 |
+| `counter_arguments` | 最强反方理由 |
+| `evidence_summary` | 证据数量与来源等级 |
+| `disclaimer` | 合规提示 |
+
+### 8.2 证据不足时的产品表达
+
+当行情 Provider、WebSearch、Embedding、LLM 或 Citation Validator 不满足要求：
+
+- 不隐藏失败；
+- 不补造结论；
+- 在候选卡中显示 `ABSTAINED`；
+- 在持仓监控中显示 `DATA_MISSING` 或相应 alert；
+- 在审计记录中保留失败原因和 trace。
+
+## 9. 通知与告警设计
+
+v0.1 的通知是本地结构化 alert，不接短信、邮件或 IM。
+
+| 优先级 | 语义 | 示例 |
+| --- | --- | --- |
+| P0 | 必须立即复核 | 核心投资逻辑失效、重大负面事件 |
+| P1 | 高优先级 | 价格/证据/风险多条件触发 |
+| P2 | 中优先级 | 事件窗口接近、风险暴露上升 |
+| P3 | 低优先级 | 信息更新、观察条件变化 |
+
+告警进入 `alert_events`，复盘进入 `position_reviews`，页面统一展示为操作历史。
+
+## 10. 开源版本体验
+
+开源用户应该能在没有商业数据授权的情况下体验主流程：
+
+1. clone 仓库；
+2. 配置 `.env`；
+3. `docker compose up -d --build`；
+4. 打开前端；
+5. 查看 demo 组合；
+6. 发起或查看研究 run；
+7. 查看持仓监控和研究详情；
+8. 通过测试确认本地环境没有破坏核心逻辑。
+
+如果没有 Tavily/Tushare/Rerank，系统应保守降级，不影响 demo 主流程。
+
+## 11. 产品验收标准
+
+| 编号 | 验收项 | 当前验证方式 |
+| --- | --- | --- |
+| P-01 | 前端可打开组合页、持仓详情、研究页、研究详情 | Browser E2E |
+| P-02 | 组合页能展示 demo 组合和 4 个持仓 | `/api/v1/portfolios/demo` + 前端 |
+| P-03 | 持仓行可进入详情页 | 前端测试 + Browser click |
+| P-04 | 能创建 research run 并返回 candidate card | `POST /api/v1/research-runs` |
+| P-05 | 数据不足时 research status 为 `abstained` | 真实 run 降级路径 |
+| P-06 | DeepSeek LLM 可接入 | Provider smoke + research run |
+| P-07 | 智谱 Embedding 可接入 | Provider smoke 2048 dims |
+| P-08 | Worker 可周期执行监控和索引任务 | Docker logs |
+| P-09 | 健康检查、指标、Grafana 可用 | `/health`, `/metrics`, Grafana |
+| P-10 | 文档、spec、plan 与实现状态一致 | `status: active` + 本设计文档 |
+
+## 12. 当前限制与后续版本
+
+### 12.1 当前限制
+
+- WebSearch 需要用户自行提供 Tavily key；
+- Tushare 需要用户自行提供 token；
+- 真实行情源可能因网络、上游接口或频控不可达；
+- 策略配置已有 API，但前端配置中心仍属于后续增强；
+- Rerank 是可选 Provider；
+- 大规模历史回测和 Parquet/DuckDB 分析层仍未作为 v0.1 生产主链路。
+
+### 12.2 v0.2 候选方向
+
+- 多 LLM Provider 配置 UI；
+- 模型路由和自动模型选择；
+- 策略配置前端；
+- 更完整的 WebSearch/source 管理；
+- 更强的文档导入和重索引控制；
+- 更细的 Provider 成本、延迟、质量观测。
+
+v0.2 应新建 `docs/design/v0.2`、`docs/spec/v0.2` 和 `docs/plan/v0.2`，不得回写 v0.1 的已审计边界。
+
+## 13. 总结
+
+Margin v0.1 已经从“研究系统蓝图”进入“可运行的本地研究闭环”。当前产品核心价值不是给出强预测，而是在数据、证据、AI、策略、持仓和复盘之间建立可追溯关系。
+
+产品默认保守：宁可拒绝高置信输出，也不在证据不足时编造确定性。这是 Margin 与普通聊天式投研工具的核心差异。

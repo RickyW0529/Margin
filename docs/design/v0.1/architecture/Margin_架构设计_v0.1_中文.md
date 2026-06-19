@@ -1,1206 +1,801 @@
 # Margin（安全边际）开源投资研究系统｜架构设计文档 v0.1
 
-> 文档类型：系统架构设计文档  
-> 版本：v0.1  
-> 架构模式：模块化单体优先，异步任务分离，插件化扩展  
-> 部署目标：单用户本地部署优先，可扩展至多用户服务  
-> 推荐技术栈：FastAPI + PostgreSQL + Parquet/DuckDB + pgvector/Qdrant + Provider Registry + LangGraph/自研编排 + Next.js App Router + TypeScript + Tailwind CSS + shadcn/ui + TanStack Table/Query + Apache ECharts + lucide-react + Docker Compose
+> 文档类型：系统架构设计文档
+> 产品版本：v0.1
+> 文档版本：v0.1
+> 状态：active
+> 架构模式：模块化单体 + 本地 Docker Compose + 持久化 Worker + Provider/Tool 插拔边界
+> 当前实现：FastAPI、Next.js、PostgreSQL/pgvector、APScheduler、Prometheus、Grafana、OpenAI-compatible LLM/Embedding
+> 重要边界：v0.1 不实现 MCP Server、MCP Gateway、自定义 HTTP 工具运行时或自动下单。
 
 ---
 
 ## 1. 架构目标
 
-Margin v0.1 需要满足以下目标：
+Margin v0.1 的架构目标是把个人投资研究链路做成可运行、可审计、可降级的本地系统，而不是只做一个前端演示。
 
-- 按八个核心层明确划分职责；
-- 结构化数据与非结构化文本分开处理；
-- 所有金融数据满足 Point-in-Time 时点要求；
-- AI 只能基于可追溯证据生成关键结论；
-- 用户可以自定义策略、提示词、模型、数据源和风险门槛；
-- Provider 与内部工具接口允许受控扩展；
-- 研究候选面板和持仓面板共享同一研究信号、状态与证据模型；
-- 模型、Prompt、策略、工具和数据均可版本化；
-- 晚间批处理和盘中监控相互隔离；
-- MVP 可在 4C8G 主机运行，不依赖 GPU。
+核心目标：
 
----
+- 本地一键启动：`docker compose up -d --build` 后启动数据库、迁移、seed、API、Worker、Web、Prometheus、Grafana；
+- 数据安全：`.env` 本地注入密钥，Git 不提交真实 token；
+- 研究可追溯：每个 run、item、snapshot、evidence、alert、audit 都能回到表记录；
+- Provider 可替换：LLM、Embedding、Rerank、WebSearch、AKShare/Tushare 都通过适配器边界接入；
+- 工具受控：AI 只能调用内部注册工具，工具有权限等级和审计记录；
+- 降级保守：外部数据或模型异常时返回 `ABSTAINED`、`DATA_MISSING` 或 Provider degraded，不输出高置信结论；
+- 代码可维护：按数据、公告、向量、证据、研究、策略、面板、监控、部署审计拆模块。
 
-## 2. 八层总体架构
+## 2. 整体架构图
 
 ```mermaid
 flowchart TB
-    subgraph L1[1. 数据层]
-        D1[行情数据]
-        D2[财务数据]
-        D3[指数/行业/宏观]
-        D4[公司行动]
-        D5[用户交易与持仓]
+    subgraph Client[Client]
+        Browser[Browser]
     end
 
-    subgraph L2[2. 数据存储层]
-        S1[(PostgreSQL)]
-        S2[(Parquet/DuckDB)]
-        S3[(原始对象存储)]
-        S4[Point-in-Time 数据集]
-        S5[审计与版本]
+    subgraph Web[Web Layer]
+        Next[Next.js App Router<br/>portfolio/research/position pages]
     end
 
-    subgraph L3[3. 新闻获取层]
-        N1[交易所公告]
-        N2[财报/IR]
-        N3[行业数据]
-        N4[财经媒体/RSS]
-        N5[去重与质量评估]
+    subgraph API[API Layer]
+        FastAPI[FastAPI app]
+        Middleware[TraceId + Metrics Middleware]
+        Routes[portfolio / dashboard / monitoring / strategy / research / health]
     end
 
-    subgraph L4[4. 文本向量数据库]
-        V1[文档解析]
-        V2[切分与元数据]
-        V3[Embedding]
-        V4[(Vector DB)]
-        V5[混合检索与Rerank]
+    subgraph Domain[Domain Services]
+        Portfolio[Portfolio Service]
+        News[News + WebSearch Service]
+        Vector[Vector + Retrieval Pipeline]
+        Evidence[RAG Evidence Service]
+        Research[Research Workflow + Agents]
+        Strategy[Strategy Service]
+        Dashboard[Dashboard Service]
+        Monitoring[Holdings Monitoring]
+        Audit[Audit Repository]
     end
 
-    subgraph L5[5. AI层]
-        A1[模型路由层]
-        A2[Provider接入层]
-        A3[RAG证据系统]
-        A4[工具系统]
-        A5[多Agent编排层]
-        A7[模型网关]
-        A8[结构化输出与Guardrail]
+    subgraph Runtime[Async Runtime]
+        Worker[APScheduler Worker]
+        Indexing[Indexing Runner]
+        Monitor[Monitoring Sweep]
     end
 
-    subgraph L6[6. 研究信号策略配置层]
-        C1[策略模板]
-        C2[自定义Prompt]
-        C3[因子/估值/风险配置]
-        C4[策略版本与回测]
+    subgraph Storage[Storage]
+        PG[(PostgreSQL + pgvector)]
+        AuditVolume[(audit volume)]
+        SnapshotVolume[(snapshot volume)]
     end
 
-    subgraph L7[7. 研究候选面板]
-        R1[候选列表]
-        R2[证据与估值]
-        R3[催化剂与风险]
-        R4[条件式计划]
+    subgraph Providers[External Providers]
+        AKShare[AKShare]
+        Tushare[Tushare optional]
+        Tavily[Tavily WebSearch optional]
+        LLM[OpenAI-compatible LLM]
+        Embedding[OpenAI-compatible Embedding]
+        Rerank[Rerank optional]
     end
 
-    subgraph L8[8. 当前持仓面板]
-        P1[持仓与交易]
-        P2[组合风险]
-        P3[投资逻辑状态]
-        P4[盘中提醒]
+    subgraph Observability[Observability]
+        Prom[Prometheus]
+        Grafana[Grafana]
     end
 
-    L1 --> L2
-    L3 --> L2
-    L3 --> L4
-    L2 --> L5
-    L4 --> L5
-    L6 --> L5
-    L5 --> L7
-    L2 --> L8
-    L7 --> L8
+    Browser --> Next
+    Next --> FastAPI
+    FastAPI --> Middleware --> Routes
+    Routes --> Portfolio
+    Routes --> Dashboard
+    Routes --> Monitoring
+    Routes --> Strategy
+    Routes --> Research
+    Research --> Evidence
+    Research --> Vector
+    Research --> News
+    Research --> Strategy
+    Dashboard --> Research
+    Dashboard --> Audit
+    Monitoring --> Portfolio
+    Worker --> Indexing
+    Worker --> Monitor
+    Indexing --> Vector
+    Monitor --> Monitoring
+    Portfolio --> PG
+    News --> PG
+    Vector --> PG
+    Evidence --> PG
+    Research --> PG
+    Strategy --> PG
+    Dashboard --> PG
+    Monitoring --> PG
+    Audit --> PG
+    Audit --> AuditVolume
+    News --> SnapshotVolume
+    Vector --> Embedding
+    Research --> LLM
+    Research --> AKShare
+    Research --> Tavily
+    Vector --> Rerank
+    Monitor --> AKShare
+    Portfolio --> Tushare
+    FastAPI --> Prom
+    Prom --> Grafana
 ```
 
----
+## 3. 分层架构
 
-## 3. 横切能力
+v0.1 采用“产品模块 + 横切能力”的分层方式。每层都有明确代码目录和数据边界。
 
-八层之外，系统还需要以下横切能力：
+```mermaid
+flowchart TB
+    UI[表现层<br/>web/app + web/components]
+    API[API 层<br/>src/margin/api]
+    APP[应用服务层<br/>portfolio/dashboard/monitoring/strategy/research service]
+    DOMAIN[领域模型层<br/>models + validators + workflow]
+    INFRA[基础设施层<br/>repository + providers + db_models]
+    DATA[数据存储层<br/>PostgreSQL/pgvector + volumes]
+    EXT[外部 Provider<br/>AKShare/Tushare/Tavily/LLM/Embedding/Rerank]
+    OBS[横切能力<br/>settings/logging/metrics/audit/degradation]
+
+    UI --> API
+    API --> APP
+    APP --> DOMAIN
+    APP --> INFRA
+    INFRA --> DATA
+    INFRA --> EXT
+    OBS --- API
+    OBS --- APP
+    OBS --- INFRA
+```
+
+| 层 | 主要职责 | 当前代码 |
+| --- | --- | --- |
+| 表现层 | 页面、组件、用户导航、可视化 | `web/app`, `web/components`, `web/lib/api.ts` |
+| API 层 | REST 路由、依赖注入、中间件、健康检查 | `src/margin/api` |
+| 应用服务层 | 组合、研究、策略、Dashboard、监控业务编排 | `service.py` in each module |
+| 领域模型层 | Pydantic 模型、状态枚举、规则、workflow | `models.py`, `workflow.py`, validators |
+| 基础设施层 | SQLAlchemy repository、Provider adapter、工具注册 | `repository.py`, `db_models.py`, providers |
+| 数据存储层 | 业务表、向量表、审计表、Docker volumes | PostgreSQL + pgvector |
+| 外部 Provider | 行情、WebSearch、LLM、Embedding、Rerank | adapter + settings |
+| 横切能力 | Secret、日志、trace、metrics、degradation、audit | `src/margin/core`, `src/margin/settings.py` |
+
+## 4. 代码模块地图
+
+| 模块 | 目录 | 关键职责 |
+| --- | --- | --- |
+| core | `src/margin/core` | ProviderRegistry、Secret、Audit、Metrics、Degradation、Logging |
+| settings | `src/margin/settings.py` | `MARGIN_*` 配置集中入口 |
+| api | `src/margin/api` | FastAPI app、路由、中间件、依赖工厂 |
+| data | `src/margin/data` | AKShare/Tushare、字段标准化、质量检查 |
+| portfolio | `src/margin/portfolio` | portfolio/trade/thesis、成本与持仓、风险报告 |
+| news | `src/margin/news` | source cursor、raw snapshot、document event、outbox、WebSearch、dedup |
+| vector | `src/margin/vector` | chunk、embedding、pgvector repository、persistent pipeline、retrieval、indexing runner |
+| evidence | `src/margin/evidence` | evidence record、claim、locator、citation validation |
+| research | `src/margin/research` | ToolRegistry、LLM provider、agents、workflow、snapshot、production tools |
+| strategy | `src/margin/strategy` | strategy profile、version、template、prompt、lifecycle |
+| dashboard | `src/margin/dashboard` | research run/item/card、evidence/valuation/audit/report/export、feedback、provider status |
+| holdings_monitoring | `src/margin/holdings_monitoring` | alert、review、operation history、behavior metrics、AKShare price polling |
+| worker | `src/margin/worker.py` | APScheduler，周期执行 monitoring 和 indexing |
+
+## 5. Docker Compose 部署拓扑
+
+```mermaid
+flowchart TB
+    Postgres[(postgres<br/>pgvector/pgvector:pg16)]
+    Migrate[migrate<br/>python scripts/migrate.py]
+    Seed[seed<br/>python scripts/seed_demo.py]
+    API[api<br/>uvicorn margin.api.main:app]
+    Worker[worker<br/>python -m margin.worker]
+    Web[web<br/>next start]
+    Prometheus[prometheus<br/>prom/prometheus:v3.12.0]
+    Grafana[grafana<br/>grafana/grafana:13.0.2]
+
+    Postgres -->|healthy| Migrate
+    Migrate -->|completed| Seed
+    Seed -->|completed| API
+    Seed -->|completed| Worker
+    API -->|healthy| Web
+    API -->|metrics scrape| Prometheus
+    Prometheus --> Grafana
+```
+
+| 服务 | 端口 | 状态要求 | 持久化 |
+| --- | --- | --- | --- |
+| postgres | 5432 | `pg_isready` healthy | `margin-postgres` |
+| migrate | 无 | Alembic upgrade 成功后退出 0 | 无 |
+| seed | 无 | demo 数据写入后退出 0 | PostgreSQL |
+| api | 8000 | `/health/ready` healthy | audit/snapshot volume |
+| worker | 无 | 常驻执行监控和索引任务 | audit/snapshot volume |
+| web | 3000 | Next.js start | 无 |
+| prometheus | 9090 | scrape API `/metrics` | 配置文件 |
+| grafana | 3002 | dashboard provisioning | `margin-grafana` |
+
+## 6. API 设计
+
+### 6.1 路由总览
+
+| API 域 | Prefix | 代表端点 |
+| --- | --- | --- |
+| 健康/指标 | `/health`, `/metrics` | `/health`, `/health/ready`, `/health/degraded`, `/metrics` |
+| 组合持仓 | `/api/v1` | `/portfolios/{id}`, `/positions`, `/trades`, `/imports`, `/risk`, `/thesis` |
+| Dashboard | `/api/v1` | `/research-runs`, `/research-items/{id}`, `/provider-status`, `/jobs/nightly-runs` |
+| 持仓监控 | `/api/v1` | `/positions/{id}/monitoring/evaluate`, `/alerts`, `/reviews`, `/history` |
+| 策略 | `/strategies` | `/templates`, `/custom`, `/{strategy_id}/versions/{version_id}/activate` |
+| 研究工具 | `/research` | `/run`, `/tools` |
+
+### 6.2 API 设计原则
+
+- v0.1 REST API 优先，不引入 GraphQL；
+- Dashboard 端点直接为前端 BFF 服务，减少前端拼装复杂度；
+- 研究 run 在 v0.1 以同步 MVP 方式触发，但保留 job run 表达；
+- 失败用 404/400/422/503 表达，不把内部异常暴露给前端；
+- `TraceIdMiddleware` 为请求写入 trace header，`MetricsMiddleware` 记录 Prometheus 指标。
+
+## 7. Provider 与工具系统
+
+### 7.1 ProviderRegistry
+
+ProviderRegistry 负责：
+
+- 注册 Provider 描述符；
+- Secret 注入；
+- 健康检查；
+- fallback 调用；
+- 记录调用审计；
+- Prometheus provider metrics。
+
+当前 Provider 类型：
+
+| Provider | 代码 | 配置 |
+| --- | --- | --- |
+| AKShare | `data/providers/akshare_provider.py` | 无 key |
+| Tushare | `data/providers/tushare_provider.py` | `MARGIN_SECRET_TUSHARE_TOKEN` |
+| Tavily | `news/providers/tavily.py` | `MARGIN_WEBSEARCH_API_KEY` |
+| LLM | `research/llm.py` | `MARGIN_LLM_BASE_URL`, `MARGIN_LLM_API_KEY`, `MARGIN_LLM_MODEL` |
+| Embedding | `vector/providers/openai_embedding.py` | `MARGIN_EMBEDDING_*` |
+| Rerank | `vector/providers/rerank.py` | `MARGIN_RERANK_*` |
+
+### 7.2 ToolRegistry
+
+ToolRegistry 是 v0.1 的 AI 工具边界。它替代 MCP Server/Gateway，避免把单产品场景过度设计成多产品工具平台。
 
 ```mermaid
 flowchart LR
-    A[认证与权限] --- X[全部业务层]
-    B[任务调度] --- X
-    C[审计与追踪] --- X
-    D[日志与可观测性] --- X
-    E[配置与Secret] --- X
-    F[插件注册中心] --- X
-    G[数据质量与异常隔离] --- X
+    Agent[Agent Node] --> Registry[ToolRegistry]
+    Registry --> Permission{Tool Permission}
+    Permission -->|allow| Tool[Typed Tool]
+    Permission -->|deny| Reject[Reject + Audit]
+    Tool --> Result[ToolResult]
+    Tool --> Audit[ToolCallRecord]
 ```
 
----
+工具类型：
 
-# 第一层：数据层
+- MarketDataTool；
+- FactorTool；
+- FinancialTool；
+- PortfolioTool；
+- RetrievalTool；
+- WebSearchTool；
+- PythonTool（受限表达式）；
+- CitationValidator 相关工具。
 
-## 4. 数据层职责
-
-数据层负责定义数据源接入、字段标准、数据时点和连接器协议，不直接承担长期存储。
-
-### 4.1 数据类型
-
-| 数据域 | 内容 |
-|---|---|
-| 行情 | 日线、分钟线可选、成交量、成交额、复权因子 |
-| 财务 | 三大报表、财务指标、分红、预测数据 |
-| 股票元数据 | 股票代码、行业、上市状态、指数成分 |
-| 公司行动 | 分红、送转、拆并股、停复牌、退市 |
-| 行业与宏观 | 商品价格、库存、利率、PMI、行业销量 |
-| 用户数据 | 持仓、成交、现金、策略偏好 |
-| 衍生特征 | 因子、模型输入、市场状态 |
-
-### 4.2 数据连接器接口
-
-```python
-from typing import Protocol, Iterable
-from datetime import datetime
-
-class MarketDataProvider(Protocol):
-    def get_securities(self, as_of: datetime): ...
-    def get_bars(self, symbols, start, end, frequency="1d"): ...
-    def get_adjustment_factors(self, symbols, start, end): ...
-    def get_financials(self, symbols, start, end): ...
-    def get_index_members(self, index_code, as_of): ...
-```
-
-### 4.2.1 MVP 数据 Provider 与授权边界
-
-MVP 阶段只内置两个 A 股结构化数据 Provider：
-
-- `AKShareProvider`：用于行情、基础财务、指数和部分公告元数据；
-- `TushareProvider`：用于行情、财务、指数成分等补充数据，用户自行配置 token。
-
-Provider 层必须记录：
-
-- 数据来源；
-- API Key / token 的本地 Secret 引用；
-- 调用频率限制；
-- 数据字段授权说明；
-- `fetched_at`、`available_at` 和原始响应哈希。
-
-开源仓库只提供连接器代码和示例字段映射，不内置商业数据库、付费研报全文或受版权限制的样例数据；研报类资料仅允许用户导入其自有或已授权文件。
-
-### 4.3 数据标准化流程
+## 8. 研究工作流架构
 
 ```mermaid
-flowchart LR
-    A[外部数据] --> B[字段映射]
-    B --> C[代码映射]
-    C --> D[单位和币种统一]
-    D --> E[时间标准化]
-    E --> F[质量校验]
-    F --> G[标准数据事件]
+sequenceDiagram
+    participant UI as Web / API
+    participant Dash as DashboardResearchService
+    participant Research as ResearchService
+    participant WF as ResearchWorkflow
+    participant Tools as ToolRegistry
+    participant LLM as LLM Provider
+    participant DB as PostgreSQL
+    participant Audit as AuditRepository
+
+    UI->>Dash: POST /api/v1/research-runs
+    Dash->>Research: run_batch(strategy, version, symbols)
+    Research->>WF: execute(decision_at, universe)
+    WF->>Tools: market/portfolio/retrieval/websearch
+    Tools-->>WF: ToolResult + audit records
+    WF->>LLM: summary/reflection/counter arguments
+    LLM-->>WF: structured output
+    WF->>WF: citation validation + abstain rules
+    WF-->>Research: ResearchSnapshot
+    Research->>DB: persist research_snapshots
+    Research->>Audit: append terminal snapshot audit
+    Dash->>DB: persist dashboard_runs/items
+    Dash-->>UI: ResearchRun + CandidateCard
 ```
 
-### 4.4 时点字段
+### 8.1 状态设计
 
-每条关键记录至少包含：
+| 状态 | 触发条件 |
+| --- | --- |
+| `published` | 证据、数据、引用和策略约束通过 |
+| `abstained` | 数据缺失、证据不足、引用失败、冲突或 Provider 降级 |
+| `invalidated` | 后续监控或用户复盘标记研究逻辑失效 |
+| `data_missing` | 行情或关键输入不可用 |
 
-```text
-event_at       事件发生时间
-published_at   对外公开时间
-available_at   系统允许用于决策的时间
-fetched_at     系统获取时间
-revised_at     后续修订时间
-```
-
-### 4.5 防未来数据泄漏
+## 9. 文本索引与 RAG 数据流
 
 ```mermaid
 flowchart TD
-    A[特征请求 decision_at] --> B[查询数据]
-    B --> C{available_at <= decision_at?}
-    C -->|是| D[允许进入特征]
-    C -->|否| E[拒绝并记录泄漏风险]
+    Source[交易所公告/WebSearch/用户授权文档] --> Snapshot[raw_snapshots]
+    Snapshot --> Event[document_events]
+    Event --> Outbox[document_outbox]
+    Outbox --> Worker[worker indexing_job]
+    Worker --> Parser[Parser]
+    Parser --> Chunker[Chunker]
+    Chunker --> Chunks[(chunks)]
+    Chunks --> Embedding[Embedding Provider]
+    Embedding --> ChunkEmbeddings[(chunk_embeddings)]
+    Chunks --> Keyword[Keyword index / lexical fields]
+    ChunkEmbeddings --> Retrieval[Hybrid Retrieval]
+    Keyword --> Retrieval
+    Retrieval --> Evidence[Evidence/Claim/Citation]
+    Evidence --> Research[Research Workflow]
 ```
 
----
+v0.1 支持：
 
-# 第二层：数据存储层
+- HTML/PDF/CSV/JSON/Text parser；
+- chunk metadata；
+- OpenAI-compatible Embedding；
+- pgvector 存储；
+- 检索审计；
+- 可选 Rerank；
+- 引用 locator。
 
-## 5. 存储架构
-
-### 5.1 建议存储组合
-
-| 存储 | 用途 |
-|---|---|
-| PostgreSQL | 主业务数据、策略、持仓、研究信号、证据元数据 |
-| Parquet | 大规模行情、特征、回测数据 |
-| DuckDB | 本地分析和批处理查询 |
-| 本地文件/S3兼容对象存储 | 原始 PDF、HTML、JSON、CSV 快照 |
-| pgvector/Qdrant | 文本向量 |
-| Redis（可选） | 缓存、分布式锁、短任务状态 |
-
-### 5.2 数据分层
+## 10. 持仓监控架构
 
 ```mermaid
 flowchart LR
-    ODS[ODS 原始层] --> DWD[DWD 标准明细层]
-    DWD --> PIT[PIT 时点层]
-    PIT --> DWS[DWS 特征与主题层]
-    DWS --> ADS[ADS 研究信号与面板层]
+    Worker[worker monitoring_job] --> Portfolio[PortfolioService]
+    Portfolio --> Positions[Current Positions]
+    Positions --> Price[AKShareLatestPriceProvider]
+    Price --> Rules[Monitoring Rules]
+    Rules --> Snapshot[PositionMonitoringSnapshot]
+    Snapshot --> Alerts[(alert_events)]
+    Alerts --> UI[Position Detail Page]
+    UI --> Review[(position_reviews)]
+    Alerts --> History[Operation History]
+    Review --> History
 ```
 
-### 5.3 核心数据库实体
+降级要求：
+
+- AKShare 失败时不抛出未处理异常；
+- 写入 `DATA_MISSING` 语义告警；
+- 保留 `latest_price_provider_degraded` 日志；
+- 不阻塞 indexing job；
+- 不误触发高置信交易建议。
+
+## 11. 数据设计总图
+
+```mermaid
+flowchart TB
+    subgraph Input[输入数据]
+        Trades[用户交易/CSV]
+        Filings[公告/新闻/WebSearch]
+        Providers[行情/财务/Embedding/LLM]
+        StrategyInput[策略模板/Prompt/阈值]
+    end
+
+    subgraph Operational[业务操作层]
+        PortfolioTables[portfolios/trades/position_theses]
+        NewsTables[raw_snapshots/document_events/document_outbox/search_*]
+        VectorTables[chunks/chunk_embeddings/index_audit/retrieval_audit]
+        StrategyTables[strategy_profiles/strategy_versions]
+    end
+
+    subgraph ResearchData[研究产物层]
+        ResearchSnapshots[research_snapshots]
+        DashboardData[dashboard_runs/dashboard_items/dashboard_feedback]
+        EvidenceData[evidence_records/evidence_claims/research_evidence]
+    end
+
+    subgraph MonitoringData[监控复盘层]
+        Alerts[alert_events]
+        Reviews[position_reviews]
+        Audit[audit_records]
+    end
+
+    Trades --> PortfolioTables
+    Filings --> NewsTables
+    Providers --> VectorTables
+    StrategyInput --> StrategyTables
+    NewsTables --> VectorTables
+    VectorTables --> EvidenceData
+    PortfolioTables --> ResearchSnapshots
+    StrategyTables --> ResearchSnapshots
+    EvidenceData --> ResearchSnapshots
+    ResearchSnapshots --> DashboardData
+    DashboardData --> Alerts
+    PortfolioTables --> Alerts
+    Alerts --> Reviews
+    ResearchSnapshots --> Audit
+    DashboardData --> Audit
+    Alerts --> Audit
+```
+
+## 12. PostgreSQL / pgvector ER 图
+
+当前 v0.1 迁移生成 29 张 public tables。持仓是由 `trades` 聚合计算出的当前视图，不单独落 `positions` 表。
 
 ```mermaid
 erDiagram
-    USER ||--o{ STRATEGY_PROFILE : owns
-    USER ||--o{ PORTFOLIO : owns
-    PORTFOLIO ||--o{ POSITION : contains
-    PORTFOLIO ||--o{ TRADE : records
+    portfolios {
+        string portfolio_id PK
+        string user_id
+        string name
+        numeric cash
+        datetime created_at
+    }
 
-    SECURITY ||--o{ MARKET_BAR : has
-    SECURITY ||--o{ FINANCIAL_FACT : has
-    SECURITY ||--o{ NEWS_DOCUMENT : related
-    NEWS_DOCUMENT ||--o{ DOCUMENT_CHUNK : split
-    DOCUMENT_CHUNK ||--o{ EVIDENCE_CLAIM : supports
+    trades {
+        string trade_id PK
+        string portfolio_id FK
+        string symbol
+        string side
+        numeric quantity
+        numeric price
+        datetime traded_at
+    }
 
-    STRATEGY_PROFILE ||--o{ STRATEGY_VERSION : versions
-    STRATEGY_VERSION ||--o{ RESEARCH_RUN : drives
-    RESEARCH_RUN ||--o{ RESEARCH_ITEM : outputs
-    RESEARCH_ITEM }o--|| SECURITY : targets
-    RESEARCH_ITEM ||--o{ RESEARCH_EVIDENCE : cites
+    position_theses {
+        string thesis_id PK
+        string portfolio_id FK
+        string symbol
+        string thesis
+        string status
+        datetime updated_at
+    }
 
-    POSITION ||--o{ POSITION_THESIS : tracks
-    POSITION_THESIS ||--o{ ALERT_EVENT : triggers
+    source_cursors {
+        string source_id PK
+        datetime last_seen_at
+    }
+
+    raw_snapshots {
+        string snapshot_id PK
+        string source_url
+        string content_hash
+        datetime fetched_at
+    }
+
+    document_events {
+        string event_id PK
+        string snapshot_id FK
+        string symbol
+        string title
+        datetime published_at
+        string status
+    }
+
+    document_outbox {
+        string outbox_id PK
+        string event_id FK
+        string status
+        int attempts
+    }
+
+    search_queries {
+        string query_id PK
+        string query
+        datetime searched_at
+    }
+
+    search_results {
+        string result_id PK
+        string query_id FK
+        string url
+        string content_hash
+    }
+
+    dedup_records {
+        string dedup_id PK
+        string event_id FK
+        string canonical_event_id FK
+    }
+
+    repost_edges {
+        string edge_id PK
+        string source_event_id FK
+        string target_event_id FK
+    }
+
+    chunks {
+        string chunk_id PK
+        string document_id
+        string source_type
+        text content
+    }
+
+    chunk_embeddings {
+        string embedding_id PK
+        string chunk_id FK
+        int dimension
+        vector embedding
+    }
+
+    index_audit_records {
+        string record_id PK
+        string document_id
+        string status
+    }
+
+    retrieval_audit_records {
+        string record_id PK
+        string query
+        string trace_id
+    }
+
+    evidence_records {
+        string evidence_id PK
+        string source_level
+        string source_url
+        string locator_json
+    }
+
+    evidence_claims {
+        string claim_id PK
+        string statement
+        string fact_or_inference
+        float confidence
+    }
+
+    evidence_validation_audits {
+        string audit_id PK
+        string claim_id FK
+        string status
+        string reason
+    }
+
+    research_evidence {
+        string link_id PK
+        string claim_id FK
+        string evidence_id FK
+    }
+
+    research_snapshots {
+        string snapshot_id PK
+        string run_id
+        string symbol
+        string status
+        string trace_id
+    }
+
+    strategy_profiles {
+        string strategy_id PK
+        string owner_id
+        string name
+        string active_version_id
+    }
+
+    strategy_versions {
+        string version_id PK
+        string strategy_id FK
+        string lifecycle_status
+        string config_json
+    }
+
+    dashboard_runs {
+        string run_id PK
+        string strategy_id
+        string version_id
+        string portfolio_id
+        string status
+    }
+
+    dashboard_items {
+        string item_id PK
+        string run_id FK
+        string symbol
+        string research_status
+        float confidence
+    }
+
+    dashboard_feedback {
+        string feedback_id PK
+        string item_id FK
+        string feedback_type
+        string comment
+    }
+
+    alert_events {
+        string alert_id PK
+        string portfolio_id FK
+        string position_id
+        string priority
+        string alert_type
+    }
+
+    position_reviews {
+        string review_id PK
+        string portfolio_id FK
+        string position_id
+        string alert_id FK
+        string decision
+    }
+
+    audit_records {
+        string record_id PK
+        string record_type
+        string object_id
+        string trace_id
+        datetime recorded_at
+    }
+
+    portfolios ||--o{ trades : records
+    portfolios ||--o{ position_theses : tracks
+    portfolios ||--o{ alert_events : monitors
+    portfolios ||--o{ position_reviews : reviews
+    raw_snapshots ||--o{ document_events : snapshots
+    document_events ||--o{ document_outbox : queues
+    search_queries ||--o{ search_results : returns
+    document_events ||--o{ dedup_records : deduplicates
+    document_events ||--o{ repost_edges : source
+    chunks ||--o{ chunk_embeddings : embeds
+    evidence_claims ||--o{ evidence_validation_audits : validates
+    evidence_claims ||--o{ research_evidence : links
+    evidence_records ||--o{ research_evidence : supports
+    strategy_profiles ||--o{ strategy_versions : versions
+    dashboard_runs ||--o{ dashboard_items : outputs
+    dashboard_items ||--o{ dashboard_feedback : receives
+    alert_events ||--o{ position_reviews : handled_by
 ```
 
-### 5.4 不可变研究信号快照
-
-每次研究运行冻结：
-
-- 股票池版本；
-- 数据快照；
-- 策略版本；
-- Prompt 版本；
-- 工具版本；
-- 模型版本；
-- 检索结果；
-- 证据 ID；
-- 结构化输出；
-- 生成时间；
-- 输入哈希和输出哈希。
-
----
-
-# 第三层：新闻获取层
-
-## 6. 新闻获取层定义
-
-该层不仅抓取媒体新闻，还统一获取所有非结构化投资信息。
-
-### 6.1 来源优先级
-
-```mermaid
-flowchart TD
-    L1[一级: 交易所/监管/公司定期报告]
-    L2[二级: IR/业绩说明会/公司正式新闻]
-    L3[三级: 行业硬数据/招投标/价格库存]
-    L4[四级: 权威财经媒体/专业研究]
-    L5[五级: RSS/社交媒体/自媒体]
-
-    L1 --> Q[证据质量评分]
-    L2 --> Q
-    L3 --> Q
-    L4 --> Q
-    L5 --> Q
-```
-
-### 6.2 获取组件
-
-- Source Registry：来源注册；
-- Connector：API、RSS、网页、文件；
-- Scheduler：频率和交易日调度；
-- Downloader：增量获取；
-- Snapshot：原始内容保存；
-- Deduplicator：URL、标题、正文哈希和语义去重；
-- Classifier：公告、财报、新闻、行业数据分类；
-- Quality Scorer：来源、完整性、时间、重复度评分；
-- Event Publisher：发布标准化文档事件。
-
-### 6.2.1 WebSearch Provider 与新闻合规
-
-新闻和网页信息的 MVP 方案不是无边界爬虫，而是可配置 WebSearch Provider：
-
-- 用户自行填写 WebSearch API Key；
-- 系统保存搜索 query、返回 URL、标题、摘要、抓取时间、原文快照哈希；
-- 只有当 WebSearch 结果能落到可访问原文或合规快照时，才能进入 RAG 证据库；
-- 不绕过 robots、登录墙、付费墙或反爬机制；
-- 不把版权受限全文提交到开源样例数据；
-- 对来源进行 L1-L5 分级，L4/L5 只能触发调查或辅助解释，不能单独改变研究/持仓状态。
-
-### 6.3 文档处理流程
-
-```mermaid
-flowchart LR
-    A[发现URL/API记录] --> B[下载原文]
-    B --> C[保存原始快照]
-    C --> D[格式识别]
-    D --> E[正文/表格解析]
-    E --> F[去重]
-    F --> G[证券实体映射]
-    G --> H[时间与来源等级]
-    H --> I[进入向量化队列]
-```
-
-### 6.4 去重规则
-
-1. URL 唯一性；
-2. 内容哈希；
-3. 标题和发布时间；
-4. 正文 SimHash；
-5. 向量相似度；
-6. 转载链识别；
-7. 保留最早可靠来源。
-
----
-
-# 第四层：文本向量数据库
-
-## 7. 文本向量化架构
-
-### 7.1 数据流
-
-```mermaid
-flowchart TD
-    A[原始文档] --> B[Parser]
-    B --> C[结构识别]
-    C --> D[Chunker]
-    D --> E[Embedding]
-    E --> F[(Vector DB)]
-    D --> G[(关键词索引)]
-    F --> H[Hybrid Retrieval]
-    G --> H
-    H --> I[Reranker]
-    I --> J[证据片段]
-```
-
-### 7.2 Chunk 策略
-
-不同文档使用不同切分策略：
-
-| 文档 | 切分方式 |
-|---|---|
-| 年报/季报 | 按章节、表格、页码 |
-| 公告 | 按事项和条款 |
-| 新闻 | 标题、导语、正文段落 |
-| IR 记录 | 按问答对 |
-| 行业报告 | 按主题和图表说明 |
-| 用户笔记 | 按标题与段落 |
-
-每个 Chunk 元数据：
-
-```json
-{
-  "chunk_id": "chunk_xxx",
-  "document_id": "doc_xxx",
-  "symbol": "000001.SZ",
-  "source_level": 1,
-  "published_at": "2026-06-17T18:30:00+08:00",
-  "available_at": "2026-06-18T09:30:00+08:00",
-  "source_url": "https://...",
-  "page": 86,
-  "section": "经营现金流",
-  "paragraph_index": 12,
-  "table_id": "cash_flow_table",
-  "row_id": "net_operating_cash_flow",
-  "quote_span": [120, 188],
-  "content_hash": "..."
-}
-```
-
-### 7.3 混合检索
-
-最终检索分数：
-
-\[
-Score =
-w_v \cdot VectorScore +
-w_k \cdot BM25 +
-w_t \cdot TimeDecay +
-w_s \cdot SourceQuality +
-w_e \cdot EntityMatch
-\]
-
-### 7.4 检索约束
-
-- 必须按股票代码过滤；
-- 必须满足 `available_at <= decision_at`；
-- 可按文档类型过滤；
-- 优先官方证据；
-- 相同事实去重；
-- 输出必须包含页码或原文定位。
-
----
-
-# 第五层：AI 层
-
-## 8. AI 层总体结构
-
-```mermaid
-flowchart TB
-    Q[用户请求/定时任务] --> R[路由层]
-    R --> PR[Provider接入层]
-    PR --> O[多Agent/Workflow编排层]
-    O --> T[工具系统]
-    O --> G[RAG证据系统]
-    PR --> W[WebSearch Provider]
-    PR --> DP[Data Providers: AKShare/Tushare]
-    PR --> EP[Embedding/Rerank Providers]
-    T --> X[内部工具/外部API]
-    G --> V[向量数据库]
-    O --> L[模型网关]
-    L --> P[LLM Providers: OpenAI兼容/本地模型]
-    O --> S[结构化输出与Guardrail]
-    S --> D[研究信号决策引擎]
-```
-
-### 8.1 Provider 接入层
-
-Provider 接入层统一管理外部能力和模型能力，避免业务流程直接耦合某个供应商：
-
-| Provider 类型 | MVP 实现 | 说明 |
-|---|---|---|
-| MarketDataProvider | AKShare / Tushare | A 股行情、财务、指数和公司行动 |
-| WebSearchProvider | 用户配置 API Key | 新闻、网页和公开信息发现 |
-| LLMProvider | OpenAI-compatible | 研究、抽取、总结、反方审查 |
-| EmbeddingProvider | OpenAI-compatible / 本地 | 文本向量化 |
-| RerankProvider | 可选 | 混合检索结果重排 |
-| VectorStoreProvider | pgvector / Qdrant | 向量存储可插拔 |
-| NotificationProvider | 本地通知/邮件/Webhook | 提醒输出 |
-
-Provider 必须具备健康检查、限流、重试、成本统计、Secret 引用、版本号和审计日志。
-
----
-
-## 9. 模型路由层
-
-### 9.1 路由职责
-
-根据任务选择：
-
-- 模型；
-- Agent 工作流；
-- 工具集合；
-- 检索范围；
-- 成本预算；
-- 超时和重试；
-- 输出 Schema。
-
-### 9.2 路由示例
-
-```mermaid
-flowchart TD
-    A[任务] --> B{任务类型}
-    B -->|公告抽取| C[低成本结构化模型]
-    B -->|复杂财报分析| D[高能力长上下文模型]
-    B -->|Embedding| E[Embedding模型]
-    B -->|重排序| F[Reranker]
-    B -->|数值计算| G[Python/估值工具]
-    B -->|实时提醒| H[规则优先+轻量模型]
-```
-
----
-
-## 10. RAG 证据系统
-
-### 10.1 目标
-
-让关键结论满足：
-
-- 有来源；
-- 有时间；
-- 有原文定位；
-- 能区分事实与推断；
-- 能发现冲突；
-- 能拒绝回答。
-
-### 10.2 RAG 工作流
-
-```mermaid
-sequenceDiagram
-    participant A as Agent
-    participant R as Retriever
-    participant V as Vector DB
-    participant C as Citation Validator
-    participant L as LLM
-
-    A->>R: 查询公司与研究问题
-    R->>V: 混合检索
-    V-->>R: 候选片段
-    R-->>A: 重排后的证据
-    A->>L: 证据+结构化任务
-    L-->>A: Claims/Unknowns/Risks
-    A->>C: 校验引用和时间
-    C-->>A: 通过/失败
-```
-
-### 10.3 证据 Claim 结构
-
-```json
-{
-  "claim_id": "claim_001",
-  "claim_type": "cash_flow_improvement",
-  "statement": "经营现金流质量改善",
-  "fact_or_inference": "FACT",
-  "evidence_ids": ["ev_101", "ev_102"],
-  "confidence": 0.87,
-  "conflicts": [],
-  "effective_at": "2026-06-18",
-  "locator": {
-    "source_url": "https://...",
-    "page": 86,
-    "section": "经营现金流",
-    "paragraph_index": 12,
-    "table_id": "cash_flow_table",
-    "row_id": "net_operating_cash_flow",
-    "content_hash": "sha256:..."
-  }
-}
-```
-
----
-
-## 11. 工具系统
-
-### 11.1 内置工具
-
-| 工具 | 用途 |
-|---|---|
-| MarketDataTool | 获取行情和指标 |
-| FinancialTool | 查询财务报表 |
-| FilingTool | 获取公告原文 |
-| RetrievalTool | 向量/关键词检索 |
-| ValuationTool | DCF、相对估值、敏感性分析 |
-| FactorTool | 因子和模型分数 |
-| PortfolioTool | 持仓、权重、风险 |
-| BacktestTool | 策略回测 |
-| CalendarTool | 交易日与催化剂 |
-| AlertTool | 创建提醒 |
-| PythonTool | 可控数值计算 |
-
-### 11.2 工具调用原则
-
-- LLM 不直接伪造工具结果；
-- 数值必须由工具计算；
-- 每次调用记录参数与结果；
-- 工具有权限范围；
-- 生产环境禁止任意 Shell；
-- 外部写操作必须用户确认。
-
----
-
-## 12. Agent 编排层
-
-### 12.1 多 Agent 职能分工
-
-这里的“多 Agent”指职责隔离和工具调用分工，不是通过多个 Agent 辩论来制造确定性。每个 Agent 都必须有明确输入、工具权限、输出 Schema 和失败降级策略。
-
-第一版建议使用以下职能节点：
-
-1. Universe Filter Agent：根据股票池和基础规则缩小范围；
-2. Quant Research Agent：计算因子、估值输入和基础排名；
-3. WebSearch Agent：通过 WebSearch Provider 发现相关新闻、公告入口和网页来源；
-4. Document Collector Agent：下载或快照合规原文，并记录来源、时间和哈希；
-5. Text Summary Agent：对公告、网页和财报片段做结构化摘要；
-6. Evidence Research Agent：检索和组织证据 Claim；
-7. Valuation Tool Agent：调用估值工具完成数值计算；
-8. Risk and Value-Trap Review Agent：输出风险评分而非未经校准的概率；
-9. Reflect / Counter-Argument Agent：审查反方证据、冲突和未知项；
-10. Portfolio Constraint Agent：检查组合暴露与持仓逻辑；
-11. Research Signal Composer：生成研究信号和面板卡片；
-12. Citation Validator：校验证据引用、来源等级和时点。
-
-```mermaid
-flowchart LR
-    A[Universe Filter] --> B[Quant Research]
-    B --> C[WebSearch Agent]
-    C --> D[Document Collector]
-    D --> E[Text Summary]
-    E --> F[Evidence Research]
-    F --> G[Valuation Tool]
-    G --> H[Risk/Value-Trap Review]
-    H --> I[Reflect/Counter Argument]
-    I --> J[Portfolio Constraint]
-    J --> K[Research Signal Composer]
-    K --> L[Citation Validator]
-```
-
-### 12.2 工作流状态
-
-```mermaid
-stateDiagram-v2
-    [*] --> Initialized
-    Initialized --> DataReady
-    DataReady --> EvidenceReady
-    EvidenceReady --> AnalysisReady
-    AnalysisReady --> ReviewReady
-    ReviewReady --> Published
-    DataReady --> Aborted: 数据错误
-    EvidenceReady --> Abstained: 证据不足
-    ReviewReady --> Abstained: 风险或冲突过高
-```
-
----
-
-## 13. 内部工具接入与权限边界
-
-### 13.1 接入原则
-
-v0.1 仅服务 Margin 自身的 Agent 工作流，不建设 MCP Server 或 MCP Gateway。Agent 通过内部 `ToolRegistry` 与类型化 Provider Adapter 调用：
-
-- 数据工具；
-- 公告检索；
-- RAG 检索；
-- 组合查询；
-- 估值与因子计算；
-- 日历与提醒。
-
-所有工具必须具有固定输入/输出 Schema、明确权限范围、超时与审计记录。v0.1 不支持自定义 HTTP 工具、任意文件系统访问、任意 Shell 或第三方运行时工具注册。
-
-### 13.2 工具安全边界
-
-```mermaid
-flowchart TD
-    A[Agent] --> B[Tool Registry]
-    B --> C{权限策略}
-    C -->|只读| D[数据/证据工具]
-    C -->|需确认| E[修改策略/创建提醒]
-    C -->|禁止| F[自动下单/任意执行]
-```
-
----
-
-## 14. 模型网关与 Guardrail
-
-模型网关统一处理：
-
-- Provider 适配；
-- Key 管理；
-- 模型能力注册；
-- 成本统计；
-- 限流；
-- 重试；
-- Fallback；
-- Prompt 版本；
-- 内容安全；
-- 结构化输出验证。
-
-所有关键输出必须通过 JSON Schema，不接受仅自然语言结果。
-
----
-
-# 第六层：研究信号策略配置层
-
-## 15. 策略配置架构
-
-```mermaid
-flowchart TD
-    A[策略编辑器] --> B[Schema校验]
-    B --> C[安全规则合并]
-    C --> D[生成策略版本]
-    D --> E[离线回测]
-    E --> F[模拟运行]
-    F --> G{用户启用?}
-    G -->|是| H[Active策略]
-    G -->|否| I[Draft/Archived]
-```
-
-### 15.1 策略组成
-
-- Universe；
-- Quant factors；
-- Valuation；
-- Quality；
-- Catalyst；
-- News source；
-- AI Prompt；
-- Evidence requirements；
-- Horizon；
-- Risk limits；
-- Portfolio constraints；
-- Decision thresholds；
-- Output template。
-
-### 15.2 Prompt 分层
-
-```text
-System Guardrail Prompt
-    + Platform Research Prompt
-    + Strategy Template Prompt
-    + User Custom Prompt
-    + Current Task Context
-    + Retrieved Evidence
-```
-
-### 15.3 策略沙箱
-
-用户自定义策略必须先经过：
-
-- 配置校验；
-- 样例运行；
-- 历史回测；
-- 数据泄漏检查；
-- 交易成本测试；
-- 报告预览；
-- 用户手工启用。
-
----
-
-# 第七层：研究候选面板
-
-## 16. 研究候选面板架构
-
-### 16.1 后端组件
-
-- Research Run Query Service；
-- Dashboard BFF；
-- Evidence View Service；
-- Valuation View Service；
-- Strategy Status Service；
-- Report Renderer；
-- Export Service。
-
-### 16.2 前端页面
-
-前端统一使用 Next.js App Router + TypeScript。样式层采用 Tailwind CSS；
-通用 UI 组件采用 shadcn/ui；表格采用 TanStack Table + shadcn Table；
-图表采用 Apache ECharts；图标采用 lucide-react；服务端状态与 API 请求采用
-TanStack Query。所有研究候选、持仓、证据展开和运行状态页面必须基于同一套
-组件与请求规范，避免每个页面各自维护表格、图表和加载/错误状态。
-
-```mermaid
-flowchart TD
-    A[研究候选首页] --> B[今日候选]
-    A --> C[持仓复核]
-    A --> D[高优先级风险]
-    A --> E[拒绝判断]
-    A --> F[任务运行状态]
-    B --> G[单股研究详情]
-    G --> H[证据]
-    G --> I[估值]
-    G --> J[催化剂]
-    G --> K[反方理由]
-```
-
-### 16.3 API
-
-API 以可审计的 run/item 模型组织，避免只按“今日候选”查询导致无法回放。
-
-```text
-GET  /api/v1/research-runs?date=&strategy_id=&portfolio_id=&universe_id=&status=
-POST /api/v1/research-runs
-GET  /api/v1/research-runs/{run_id}
-GET  /api/v1/research-runs/{run_id}/items
-GET  /api/v1/research-items/{item_id}
-GET  /api/v1/research-items/{item_id}/evidence
-GET  /api/v1/research-items/{item_id}/valuation
-GET  /api/v1/research-items/{item_id}/audit
-POST /api/v1/research-items/{item_id}/feedback
-GET  /api/v1/provider-status
-POST /api/v1/jobs/nightly-runs
-GET  /api/v1/jobs/{job_run_id}
-```
-
-关键查询参数：
-
-- `date`：研究运行日期；
-- `strategy_id` / `strategy_version_id`：策略过滤；
-- `portfolio_id`：持仓上下文；
-- `universe_id`：股票池版本；
-- `run_id`：不可变研究运行快照；
-- `decision_at`：时点一致性校验。
-
----
-
-# 第八层：当前持仓面板
-
-## 17. 持仓服务架构
+## 13. 数据不可变与审计策略
+
+v0.1 使用“业务可追加 + 研究快照不可变”的设计：
+
+- `trades` 记录成交事实；
+- `research_snapshots` 保存一次研究运行的终态；
+- `dashboard_items` 保存面板可见候选；
+- `audit_records` 保存通用审计；
+- `alert_events` 保存告警；
+- `position_reviews` 保存人工复盘。
+
+不可变要求：
+
+| 数据 | 策略 |
+| --- | --- |
+| 研究快照 | 创建后不覆盖，使用新 run 产生新记录 |
+| 审计记录 | append-only，重复 `record_id` 拒绝 |
+| Provider 调用 | 记录 trace、provider、method、status、cost/latency 可扩展字段 |
+| 证据定位 | 保留 source_url、hash、locator、page/section/span |
+| 告警复盘 | alert 与 review 分开，review 不修改 alert 原文 |
+
+## 14. 配置与 Secret
+
+`MarginSettings` 是唯一配置入口，读取 `.env` 和环境变量，前缀为 `MARGIN_`。
+
+| 配置 | 用途 |
+| --- | --- |
+| `MARGIN_DATABASE_URL` | PostgreSQL 连接 |
+| `MARGIN_LLM_BASE_URL` / `MARGIN_LLM_API_KEY` / `MARGIN_LLM_MODEL` | OpenAI-compatible LLM |
+| `MARGIN_EMBEDDING_BASE_URL` / `MARGIN_EMBEDDING_API_KEY` / `MARGIN_EMBEDDING_MODEL` / `MARGIN_EMBEDDING_DIMENSION` | Embedding |
+| `MARGIN_WEBSEARCH_API_KEY` | Tavily WebSearch |
+| `MARGIN_RERANK_*` | 可选 Rerank |
+| `MARGIN_SECRET_TUSHARE_TOKEN` | 可选 Tushare |
+| `MARGIN_LOG_FORMAT` | `json` 或 `console` |
+| `MARGIN_METRICS_ENABLED` | 是否暴露指标 |
+| `MARGIN_MONITORING_INTERVAL_SECONDS` | Worker 监控周期 |
+
+安全要求：
+
+- `.env` 必须被 Git 忽略；
+- `.env.example` 只保留空 token；
+- 日志不得打印 token；
+- Docker image 不 bake 真实密钥；
+- Provider smoke 只输出状态和维度，不输出 key。
+
+## 15. 可观测性
+
+v0.1 可观测能力：
+
+- `/health`：进程存活；
+- `/health/ready`：数据库可用；
+- `/health/degraded`：Provider/数据库降级状态；
+- `/metrics`：Prometheus 格式；
+- TraceIdMiddleware：请求 trace header；
+- MetricsMiddleware：HTTP request counter / duration；
+- Provider metrics：provider call success/degraded；
+- Grafana dashboard provisioning；
+- Worker 日志记录 monitoring/indexing job。
+
+## 16. 降级策略
+
+| 场景 | 行为 |
+| --- | --- |
+| 数据库不可达 | `/health/ready` 返回 503 |
+| LLM 缺失 | 研究服务使用保守 fallback 或拒绝高置信输出 |
+| Embedding 缺失 | 索引 worker 使用默认本地 embedding fallback 或跳过真实索引 |
+| WebSearch key 缺失 | WebSearch 工具不注册或返回降级 |
+| AKShare 不可达 | 持仓监控记录 `DATA_MISSING`，worker 不崩溃 |
+| 引用校验失败 | research item `abstained` |
+| Evidence 冲突 | 降低置信度或拒绝发布 |
+| Rerank 缺失 | 使用基础混合召回排序 |
+
+## 17. 测试与验证
+
+当前验证层级：
+
+| 层级 | 命令/证据 |
+| --- | --- |
+| Python lint | `ruff check src tests` |
+| 后端测试 | `pytest -q` |
+| 前端 lint | `npm run lint` in `web/` |
+| 前端测试 | `npm test` in `web/` |
+| 前端 build | `npm run build` in `web/` |
+| Compose 配置 | `docker compose config --quiet` |
+| 运行态 | `/health`, `/health/ready`, `/metrics`, browser E2E |
+| 数据库 | Alembic `20260619_0009_audit`，29 张 public tables |
+| Provider | DeepSeek chat HTTP 200；智谱 embedding 2048 dims |
+
+测试数据库隔离要求：
+
+- pytest 强制使用 `margin_test`；
+- 不允许误删开发库；
+- 测试会创建/升级测试库并清理隔离数据；
+- Provider key 在测试中默认清空，避免真实调用混入单元测试。
+
+## 18. 前端架构
 
 ```mermaid
 flowchart TB
-    T[手工/CSV交易] --> P[Portfolio Service]
-    P --> C[成本与数量计算]
-    P --> R[组合风险引擎]
-    P --> H[投资逻辑跟踪]
-    M[市场数据] --> C
-    N[公告与新闻] --> H
-    C --> UI[持仓面板]
-    R --> UI
-    H --> UI
-    R --> A[提醒引擎]
-    H --> A
+    App[Next.js App Router]
+    Home[/ /]
+    Portfolio[/portfolios/:portfolioId]
+    Position[/positions/:positionId]
+    Research[/research]
+    Item[/research/items/:itemId]
+    Run[/research/runs/:runId]
+    ApiClient[web/lib/api.ts]
+    Components[portfolio/candidate/evidence/report components]
+
+    App --> Home
+    App --> Portfolio
+    App --> Position
+    App --> Research
+    App --> Item
+    App --> Run
+    Portfolio --> Components
+    Position --> Components
+    Research --> Components
+    Item --> Components
+    Components --> ApiClient
+    ApiClient --> FastAPI[FastAPI API]
 ```
 
-### 17.1 投资逻辑对象
+前端当前重点是可用性和可追溯：
 
-每个持仓维护：
+- 组合持仓表中的 symbol 可点击进入持仓详情；
+- 候选卡 symbol 可点击进入研究项详情；
+- 研究项详情展示证据、估值、审计、报告；
+- CSS 采用全局样式，后续可逐步提取设计 token 和组件库。
 
-```json
-{
-  "position_id": "pos_001",
-  "entry_recommendation_id": "rec_001",
-  "thesis": "现金流改善与估值修复",
-  "entry_conditions": [],
-  "hold_conditions": [],
-  "invalidation_conditions": [],
-  "target_horizon": [60, 120],
-  "next_review_at": "2026-08-25"
-}
-```
+## 19. v0.1 与后续版本边界
 
-### 17.2 组合风险
+v0.1 是单用户本地研究产品。v0.2 可扩展：
 
-- 单票仓位；
-- 行业集中度；
-- 风格暴露；
-- 相关性；
-- 流动性；
-- 波动率；
-- 回撤；
-- 事件集中风险。
+- 多 AI Provider UI；
+- 模型路由和自动模型选择；
+- 策略配置前端；
+- 更完整的文档导入；
+- 更强的 WebSearch/source 管理；
+- 成本与质量观测；
+- 更细粒度的 Provider 权限。
 
-### 17.3 持仓 API
+任何新增范围应进入 `docs/design/v0.2`、`docs/spec/v0.2`、`docs/plan/v0.2`，不修改 v0.1 的审计边界。
 
-```text
-GET  /api/v1/portfolios/{id}
-GET  /api/v1/portfolios/{id}/positions
-POST /api/v1/portfolios/{id}/trades
-POST /api/v1/portfolios/{id}/imports
-GET  /api/v1/portfolios/{id}/risk
-GET  /api/v1/positions/{id}/thesis
-PUT  /api/v1/positions/{id}/thesis
-GET  /api/v1/positions/{id}/alerts
-```
+## 20. 总结
 
----
+Margin v0.1 的架构不是“AI 调几个工具生成股票观点”，而是一套本地优先的研究操作系统：
 
-## 18. 完整晚间时序
-
-```mermaid
-sequenceDiagram
-    participant S as Scheduler
-    participant D as Data Layer
-    participant N as News Layer
-    participant V as Vector DB
-    participant C as Strategy Config
-    participant A as AI Orchestrator
-    participant R as Recommendation Service
-    participant P as Portfolio Service
-
-    S->>D: 更新结构化数据
-    S->>N: 获取公告与新闻
-    N->>V: 解析、向量化、索引
-    S->>C: 加载启用策略
-    C-->>A: 策略、Prompt、约束
-    D-->>A: 因子与候选
-    A->>V: 检索证据
-    V-->>A: 证据片段
-    A->>A: 工具调用/估值/反方审查
-    A->>P: 查询持仓和组合约束
-    P-->>A: 风险状态
-    A->>R: 结构化研究信号
-    R->>P: 更新持仓研究状态
-```
-
----
-
-## 19. 盘中监控架构
-
-```mermaid
-flowchart TD
-    A[Price Poller] --> B[规则引擎]
-    C[News Poller] --> B
-    B --> D{触发事件?}
-    D -->|否| E[等待下一轮]
-    D -->|是| F[证据检索]
-    F --> G[轻量AI解释]
-    G --> H{逻辑改变?}
-    H -->|否| I[P2/P3提醒]
-    H -->|是| J[P0/P1提醒]
-```
-
-盘中不执行：
-
-- 重新训练模型；
-- 全市场重新研究；
-- 任意 Agent 长链；
-- 自动下单；
-- 无规则限制的自由研究结论。
-
----
-
-## 20. 开源插件架构
-
-### 20.1 插件协议
-
-```python
-class MarginPlugin:
-    name: str
-    version: str
-    capabilities: list[str]
-
-    def healthcheck(self) -> dict: ...
-    def register(self, registry) -> None: ...
-```
-
-### 20.2 插件类型
-
-- DataProvider；
-- NewsProvider；
-- VectorStore；
-- EmbeddingProvider；
-- LLMProvider；
-- MCPServer；
-- ToolPlugin；
-- StrategyPlugin；
-- ValuationPlugin；
-- NotificationPlugin；
-- BrokerImportPlugin。
-
-### 20.3 仓库结构
-
-```text
-margin/
-├── apps/
-│   ├── api/
-│   └── web/
-├── packages/
-│   ├── core/
-│   ├── data/
-│   ├── storage/
-│   ├── news/
-│   ├── vector/
-│   ├── ai/
-│   ├── strategy/
-│   ├── recommendation/
-│   └── portfolio/
-├── connectors/
-├── mcp_servers/
-├── plugins/
-├── workflows/
-├── configs/
-├── examples/
-├── docs/
-├── tests/
-├── docker-compose.yml
-├── pyproject.toml
-└── LICENSE
-```
-
----
-
-## 21. 部署架构
-
-### 21.1 MVP 单机部署
-
-```mermaid
-flowchart TB
-    subgraph Host[本地主机/云主机]
-        WEB[Next.js App Router + TypeScript]
-        API[FastAPI]
-        WORKER[Worker/Scheduler]
-        PG[(PostgreSQL + pgvector)]
-        FILES[(Raw/Parquet)]
-        REDIS[(Redis 可选)]
-    end
-
-    API --> PG
-    WORKER --> PG
-    WORKER --> FILES
-    WORKER --> LLM[LLM API/本地模型]
-    WORKER --> DATA[外部数据源]
-    WEB --> API
-```
-
-### 21.2 Docker Compose 服务
-
-```text
-web
-api
-worker
-postgres
-optional-redis
-optional-qdrant
-prometheus
-grafana
-```
-
----
-
-## 22. 安全设计
-
-- API Key 使用 Secret；
-- 数据库最小权限；
-- 内部工具权限分级；
-- Prompt Injection 防护；
-- 外部文本只能作为数据；
-- 用户 Prompt 不能覆盖系统 Guardrail；
-- 原始文件类型和大小限制；
-- 任意代码执行默认关闭；
-- RD-Agent 在隔离沙箱；
-- 持仓数据默认不上传；
-- 审计日志不可修改；
-- 数据源授权、WebSearch API Key、新闻版权和用户上传材料责任边界在设置页明确展示。
-
----
-
-## 23. 可观测性
-
-### 指标
-
-- 数据源可用率；
-- 数据缺失率；
-- 新闻获取延迟；
-- 文档解析成功率；
-- 向量索引延迟；
-- RAG 命中率；
-- 引用校验失败率；
-- Agent 节点耗时；
-- 模型成本；
-- 研究信号拒绝率；
-- 提醒延迟；
-- 策略运行成功率。
-
-### Trace 字段
-
-```text
-trace_id
-job_run_id
-strategy_version_id
-research_run_id
-symbol
-agent_node
-model_version
-```
-
----
-
-## 24. 测试策略
-
-### 24.1 单元测试
-
-- 连接器；
-- 时间字段；
-- 因子；
-- 估值公式；
-- 检索过滤；
-- Prompt 合并；
-- 决策规则；
-- 持仓成本；
-- 风险计算。
-
-### 24.2 集成测试
-
-```mermaid
-flowchart LR
-    A[数据源] --> B[标准化]
-    B --> C[存储]
-    C --> D[文本索引]
-    D --> E[RAG]
-    E --> F[Agent]
-    F --> G[研究信号]
-    G --> H[面板]
-```
-
-### 24.3 金融特有测试
-
-- Point-in-Time；
-- 幸存者偏差；
-- 复权；
-- 停牌和涨跌停；
-- 交易成本；
-- 数据修订；
-- 风险评分和事件窗口校准；
-- 因子暴露；
-- 模型漂移。
-
----
-
-## 25. 故障降级
-
-```mermaid
-flowchart TD
-    A[异常] --> B{类型}
-    B -->|数据源失败| C[备用源/使用旧数据并降级]
-    B -->|文本解析失败| D[保留原文并停止相关AI结论]
-    B -->|向量库失败| E[关键词检索降级]
-    B -->|LLM失败| F[规则型报告]
-    B -->|策略错误| G[回滚上一版本]
-    B -->|核心数据冲突| H[停止发布高置信研究信号]
-```
-
-原则：宁可 `ABSTAINED`，也不输出虚假的高置信结论。
-
----
-
-## 26. 实施顺序
-
-```mermaid
-gantt
-    title Margin v0.1 技术实施路径
-    dateFormat YYYY-MM-DD
-    section Phase 1 Provider与存储
-    Provider Registry          :a1, 2026-07-01, 10d
-    AKShare/Tushare接入        :a2, after a1, 14d
-    PostgreSQL/Parquet与快照    :a3, after a1, 14d
-    section Phase 2 持仓与数据质量
-    持仓基础服务               :b1, after a2, 14d
-    时点与数据质量校验          :b2, after a3, 14d
-    section Phase 3 公告与WebSearch
-    公告获取与原文快照          :c1, after b2, 14d
-    WebSearch Provider与合规去重 :c2, after c1, 14d
-    section Phase 4 RAG与多Agent
-    文本索引与引用定位          :d1, after c2, 21d
-    RAG证据系统                :d2, after d1, 21d
-    多Agent工具调用             :d3, after d2, 21d
-    section Phase 5 面板与策略
-    策略配置中心               :e1, after d3, 21d
-    研究候选面板               :e2, after e1, 21d
-    持仓面板增强               :e3, after e1, 21d
-    section Phase 6 验证与生态
-    回测与模型治理             :f1, after e2, 30d
-    Provider与内置工具扩展      :f2, after f1, 30d
-```
-
----
-
-## 27. MVP 推荐技术选型
-
-```text
-Backend: FastAPI
-Frontend: Next.js App Router + TypeScript
-Styling: Tailwind CSS
-Components: shadcn/ui
-Tables: TanStack Table + shadcn Table
-Charts: Apache ECharts
-Icons: lucide-react
-Client Requests/Server State: TanStack Query
-Primary DB: PostgreSQL
-Vector: pgvector（MVP）/ Qdrant（可插拔）
-Analytics: Parquet + DuckDB
-Provider Registry: 自研轻量注册表
-Market Data Providers: AKShare + Tushare
-WebSearch Provider: 用户配置 API Key
-Scheduler: APScheduler
-Queue: 初期本地任务；后续 Celery/RQ
-Quant: 规则/因子引擎优先；Qlib + LightGBM 作为后续可插拔模块
-Agent: LangGraph 或自研状态机
-Tool Integration: 内部 ToolRegistry + 类型化 Provider Adapter
-Deployment: Docker Compose
-```
-
----
-
-## 28. 总结
-
-Margin v0.1 的架构核心是：
-
-- 数据层提供标准、时点正确的金融数据；
-- 数据存储层保存原始数据、业务数据和不可变研究信号快照；
-- 新闻获取层持续获取高价值公开信息；
-- 文本向量数据库为 RAG 提供可过滤、可引用的检索；
-- AI 层通过 Provider、路由、内部工具、多 Agent 和 RAG 形成可控研究工作流；
-- 策略配置层让用户定义自己的投资逻辑，而不是接受统一算法；
-- 研究候选面板负责呈现候选、证据、估值、风险和条件；
-- 当前持仓面板负责持续验证投资逻辑和组合风险。
-
-架构优先级应始终保持：
-
-> **时点正确 > 证据可追溯 > 策略可配置 > Agent 复杂度。**
-
-第一版可以按模块逐步交付，但每个阶段都应服务于最终八层闭环：
-
-> 数据进入 → 新闻进入 → 文本检索 → AI 研究 → 用户策略约束 → 研究候选展示 → 持仓跟踪 → 结果复盘。
+- 数据进入系统后有快照和时点；
+- 文档进入系统后有 outbox、chunk、embedding 和检索审计；
+- AI 输出必须经过工具审计和证据校验；
+- 候选面板与持仓监控共享同一审计链；
+- 外部 Provider 失败时系统保守降级；
+- 所有核心能力都能通过 Docker Compose、测试和浏览器 E2E 验证。

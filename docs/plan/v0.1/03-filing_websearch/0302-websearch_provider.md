@@ -4,7 +4,7 @@ parent_module: 03-filing_websearch
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §26-Phase3: WebSearch Provider 与合规去重; §6.2.1]
-status: draft
+status: active
 estimate_days: 7
 depends_on: [0301]
 ---

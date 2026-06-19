@@ -4,7 +4,7 @@ parent_module: 09-holdings_monitoring
 product_version: v0.1
 doc_version: v0.1
 source_refs: [产品设计 §8.2 操作历史; 架构设计 §17.3 持仓 API]
-status: draft
+status: active
 estimate_days: 7
 depends_on: [0902]
 ---

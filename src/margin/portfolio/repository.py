@@ -50,6 +50,10 @@ class PortfolioRepository(Protocol):
         """
         ...
 
+    def list_portfolios(self) -> list[Portfolio]:
+        """Return all portfolios ordered by creation time."""
+        ...
+
     def update_portfolio(self, portfolio: Portfolio) -> None:
         """Persist changes to an existing portfolio.
 
@@ -152,6 +156,13 @@ class MemoryPortfolioRepository:
             The matching ``Portfolio`` instance, or ``None`` if not found.
         """
         return self._portfolios.get(portfolio_id)
+
+    def list_portfolios(self) -> list[Portfolio]:
+        """Return all in-memory portfolios ordered deterministically."""
+        return sorted(
+            self._portfolios.values(),
+            key=lambda portfolio: (portfolio.created_at, portfolio.portfolio_id),
+        )
 
     def update_portfolio(self, portfolio: Portfolio) -> None:
         """Update an existing portfolio in memory.
@@ -262,6 +273,17 @@ class SQLAlchemyPortfolioRepository:
         with self._session_factory() as session:
             row = session.get(PortfolioRow, portfolio_id)
             return _portfolio_from_row(row) if row is not None else None
+
+    def list_portfolios(self) -> list[Portfolio]:
+        """Return all persisted portfolios ordered by creation time."""
+        with self._session_factory() as session:
+            rows = session.scalars(
+                select(PortfolioRow).order_by(
+                    PortfolioRow.created_at,
+                    PortfolioRow.portfolio_id,
+                )
+            ).all()
+            return [_portfolio_from_row(row) for row in rows]
 
     def update_portfolio(self, portfolio: Portfolio) -> None:
         """Update an existing portfolio in PostgreSQL.

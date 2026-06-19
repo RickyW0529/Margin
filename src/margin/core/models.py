@@ -1,4 +1,8 @@
-"""Shared core domain models."""
+"""Shared core domain models.
+
+Lightweight Pydantic models that cross layer boundaries, e.g. audit records
+emitted by services and persisted by repositories.
+"""
 
 from __future__ import annotations
 
@@ -25,8 +29,11 @@ class AuditLogRecord(BaseModel):
     service_version: str = "0.1.0"
 
     model_config = {"frozen": True}
+    # Frozen prevents accidental mutation after the record is emitted,
+    # preserving the audit trail's integrity.
 
     @field_validator("recorded_at")
     @classmethod
     def normalize_recorded_at(cls, value: datetime) -> datetime:
+        """Coerce the timestamp to UTC to keep audit ordering deterministic."""
         return ensure_utc(value)

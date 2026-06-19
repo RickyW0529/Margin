@@ -1,16 +1,19 @@
 import {
   Activity,
   AlertCircle,
+  Bell,
   ClipboardList,
   History,
   LineChart,
 } from "lucide-react";
 
-import type { PositionDetail } from "@/lib/api";
+import type { AlertEvent, OperationHistoryEntry, PositionDetail } from "@/lib/api";
 
 type PositionDetailViewProps = {
   portfolioId: string;
   detail: PositionDetail | null;
+  alerts?: AlertEvent[];
+  history?: OperationHistoryEntry[];
   error: string | null;
 };
 
@@ -36,6 +39,8 @@ function ratio(value: number | null | undefined): string {
 export function PositionDetailView({
   portfolioId,
   detail,
+  alerts = [],
+  history = [],
   error,
 }: PositionDetailViewProps) {
   if (error) {
@@ -58,6 +63,8 @@ export function PositionDetailView({
       </main>
     );
   }
+
+  const timeline = history.length > 0 ? history : tradesToHistory(detail);
 
   return (
     <main className="workspace-shell detail-shell">
@@ -98,6 +105,33 @@ export function PositionDetailView({
           )}
         </div>
 
+        <div className="panel monitoring-panel">
+          <div className="panel-heading">
+            <h2>持仓监控</h2>
+            <Bell aria-hidden="true" size={17} />
+          </div>
+          {alerts.length === 0 ? (
+            <div className="empty-state compact">暂无提醒</div>
+          ) : (
+            <ul className="alert-list">
+              {alerts.map((alert) => (
+                <li key={alert.alert_id}>
+                  <span className={`badge priority-${alert.severity.toLowerCase()}`}>
+                    {alert.severity}
+                  </span>
+                  <div>
+                    <strong>{alert.message}</strong>
+                    <span>{alert.rule_name}</span>
+                    {alert.evidence_refs.length > 0 ? (
+                      <span>证据 {alert.evidence_refs.length}</span>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         <aside className="side-rail">
           <div className="panel">
             <div className="panel-heading">
@@ -118,17 +152,15 @@ export function PositionDetailView({
               <h2>操作历史</h2>
               <History aria-hidden="true" size={17} />
             </div>
-            {detail.trade_history.length === 0 ? (
+            {timeline.length === 0 ? (
               <div className="empty-state compact">暂无记录</div>
             ) : (
               <ul className="trade-list">
-                {detail.trade_history.map((trade) => (
-                  <li key={trade.trade_id}>
+                {timeline.map((entry) => (
+                  <li key={entry.event_id}>
                     <Activity aria-hidden="true" size={15} />
-                    <span>{trade.side}</span>
-                    <strong>
-                      {trade.quantity.toLocaleString("zh-CN")} @ {money(trade.price)}
-                    </strong>
+                    <span>{entry.event_type}</span>
+                    <strong>{historySummary(entry)}</strong>
                   </li>
                 ))}
               </ul>
@@ -164,4 +196,22 @@ function ConditionList({ title, items }: { title: string; items: string[] }) {
       </ul>
     </div>
   );
+}
+
+function tradesToHistory(detail: PositionDetail): OperationHistoryEntry[] {
+  return detail.trade_history.map((trade) => ({
+    event_id: trade.trade_id,
+    position_id: detail.position_id,
+    event_type: "trade",
+    occurred_at: trade.traded_at,
+    summary: `${trade.side} ${trade.quantity.toLocaleString("zh-CN")} @ ${money(trade.price)}`,
+    metadata: {},
+  }));
+}
+
+function historySummary(entry: OperationHistoryEntry): string {
+  if (entry.event_type === "alert") {
+    return "触发提醒";
+  }
+  return entry.summary;
 }

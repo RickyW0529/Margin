@@ -130,7 +130,8 @@ gantt
 
 ## 状态
 
-- 所有 plan `status: draft`，待进入实现阶段后转为 `review` → `active`。
+- plan `status` 以各子任务 frontmatter 为准；未实现子任务保持 `draft`，完成实现与验证后转为 `active`。
 - 修改已 `active` 的 plan 应新建版本目录（见 `AGENTS.md` §8）。
 - 每个子任务的 `source_refs` 指向架构 §26 对应 Phase 任务，`审计追溯` 章节指向关联 spec 模块。
 - 2026-06-19 范围修订：删除 MCP 相关工作项；现有任务只实现内部工具权限、类型化 Provider Adapter 与可审计调用，不开发 MCP Server、MCP Gateway 或自定义 HTTP 工具。
+- 2026-06-19 实现状态：35 个 v0.1 子任务均已完成实现与本地验收，plan 已转为 `active`。

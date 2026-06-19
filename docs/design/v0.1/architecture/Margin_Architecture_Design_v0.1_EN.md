@@ -1,895 +1,423 @@
-# Margin（安全边际）Open-Source Investment Research System — Architecture Design v0.1
+# Margin Open Investment Research System | Architecture Design v0.1
 
-> Type: System Architecture Document  
-> Version: v0.1  
-> Architecture style: Modular monolith first, asynchronous workers, provider-based integration, plugin-based extension  
-> Deployment target: Local single-user first, extensible to hosted multi-user deployments  
-> Recommended stack: FastAPI + PostgreSQL + Parquet/DuckDB + pgvector/Qdrant + Provider Registry + LangGraph/custom orchestration + Next.js App Router + TypeScript + Tailwind CSS + shadcn/ui + TanStack Table/Query + Apache ECharts + lucide-react + Docker Compose
+> Document type: System Architecture Design
+> Product version: v0.1
+> Document version: v0.1
+> Status: active
+> Architecture style: modular monolith, local Docker Compose, persistent worker, typed provider/tool boundaries
+> Current stack: FastAPI, Next.js, PostgreSQL/pgvector, APScheduler, Prometheus, Grafana, OpenAI-compatible LLM/Embedding
+> Boundary: v0.1 does not implement MCP Server, MCP Gateway, arbitrary custom HTTP tools, or broker order execution.
 
 ---
 
 ## 1. Architecture Goals
 
-- Implement the eight product layers with explicit boundaries;
-- Separate structured financial data from unstructured text;
-- Enforce point-in-time correctness;
-- Require evidence lineage for material AI conclusions;
-- Allow users to configure strategies, prompts, models, sources, and thresholds;
-- Support controlled extension through Providers and internal tool interfaces;
-- Use one research signal, state, and evidence model across candidate and holdings dashboards;
-- Version models, prompts, tools, strategies, providers, and data snapshots;
-- Separate nightly batch research from intraday monitoring;
-- Run the MVP on a 4C8G host without a GPU.
+Margin v0.1 is designed as a working local research system, not a thin demo.
 
----
+Goals:
 
-## 2. Eight-Layer Architecture
+- start the full stack locally with Docker Compose;
+- keep user secrets outside Git and outside images;
+- persist research runs, dashboard items, evidence, alerts, reviews, and audit records;
+- expose provider boundaries for market data, WebSearch, LLM, embedding, and optional rerank;
+- allow agents to call only audited internal tools;
+- degrade conservatively when external providers fail;
+- keep code organized by product modules and cross-cutting infrastructure.
 
-```mermaid
-flowchart TB
-    subgraph L1[1. Data Layer]
-        D1[Market]
-        D2[Fundamentals]
-        D3[Index/Industry/Macro]
-        D4[Corporate Actions]
-        D5[User Trades and Positions]
-    end
-
-    subgraph L2[2. Data Storage Layer]
-        S1[(PostgreSQL)]
-        S2[(Parquet/DuckDB)]
-        S3[(Raw Object Storage)]
-        S4[Point-in-Time Dataset]
-        S5[Audit and Versioning]
-    end
-
-    subgraph L3[3. News and WebSearch Acquisition Layer]
-        N1[Exchange Filings]
-        N2[Reports and IR]
-        N3[Industry Data]
-        N4[WebSearch/News/RSS]
-        N5[Deduplication and Quality]
-    end
-
-    subgraph L4[4. Text Vector Database]
-        V1[Parsing]
-        V2[Chunking and Metadata]
-        V3[Embeddings]
-        V4[(Vector Store)]
-        V5[Hybrid Retrieval and Rerank]
-    end
-
-    subgraph L5[5. AI Layer]
-        A1[Routing]
-        A2[Provider Layer]
-        A3[RAG Evidence]
-        A4[Tools]
-        A5[Multi-Agent Orchestration]
-        A7[Model Gateway]
-        A8[Structured Output and Guardrails]
-    end
-
-    subgraph L6[6. Research Signal Strategy Configuration]
-        C1[Templates]
-        C2[Custom Prompts]
-        C3[Factors/Valuation/Risk]
-        C4[Versions and Backtests]
-    end
-
-    subgraph L7[7. Research Candidate Dashboard]
-        R1[Candidates]
-        R2[Evidence and Valuation]
-        R3[Catalysts and Risks]
-        R4[Conditional Research Plans]
-    end
-
-    subgraph L8[8. Current Holdings Dashboard]
-        P1[Positions and Trades]
-        P2[Portfolio Risk]
-        P3[Thesis State]
-        P4[Intraday Alerts]
-    end
-
-    L1 --> L2
-    L3 --> L2
-    L3 --> L4
-    L2 --> L5
-    L4 --> L5
-    L6 --> L5
-    L5 --> L7
-    L2 --> L8
-    L7 --> L8
-```
-
-Cross-cutting concerns:
-
-- Authentication and authorization;
-- Scheduling;
-- Audit and tracing;
-- Observability;
-- Secret management;
-- Provider and plugin registries;
-- Data quality and quarantine.
-
----
-
-# Layer 1 — Data
-
-## 3. Data Domains and Provider Protocols
-
-| Domain | Content |
-|---|---|
-| Market | OHLCV, turnover, adjustments |
-| Fundamental | Statements, ratios, dividends, estimates |
-| Metadata | Symbols, industries, listing status, index membership |
-| Corporate actions | Suspensions, distributions, splits, delisting |
-| Industry and macro | Prices, inventory, rates, PMI, sales |
-| User | Portfolio, trades, cash, preferences |
-| Derived | Factors, model inputs, regimes |
-
-Provider protocol:
-
-```python
-class MarketDataProvider:
-    def get_securities(self, as_of): ...
-    def get_bars(self, symbols, start, end, frequency="1d"): ...
-    def get_adjustment_factors(self, symbols, start, end): ...
-    def get_financials(self, symbols, start, end): ...
-    def get_index_members(self, index_code, as_of): ...
-```
-
-### 3.1 MVP Data Providers and Licensing Boundary
-
-MVP includes only two structured A-share data providers:
-
-- `AKShareProvider` for market, basic financial, index, and some filing metadata;
-- `TushareProvider` for supplemental market, financial, and index membership data, with user-provided token.
-
-Each provider records source, local Secret reference, rate limits, field authorization note, `fetched_at`, `available_at`, and raw response hash. The open-source repository provides connector code and sample mappings, not commercial datasets, paid research reports, or copyrighted sample corpora.
-
-### 3.2 Point-in-Time Fields
-
-```text
-event_at
-published_at
-available_at
-fetched_at
-revised_at
-```
-
-```mermaid
-flowchart TD
-    A[Feature Request at decision_at] --> B[Read Data]
-    B --> C{available_at <= decision_at?}
-    C -->|Yes| D[Allow]
-    C -->|No| E[Reject and Log Leakage Risk]
-```
-
----
-
-# Layer 2 — Data Storage
-
-## 4. Storage Components
-
-| Storage | Purpose |
-|---|---|
-| PostgreSQL | Business entities, strategies, research signals, portfolios |
-| Parquet | Market, features, and backtest datasets |
-| DuckDB | Local analytical queries |
-| Object storage | Raw PDF, HTML, JSON, CSV snapshots |
-| pgvector/Qdrant | Text vectors |
-| Redis optional | Cache, locks, task state |
-
-```mermaid
-flowchart LR
-    ODS[Raw ODS] --> DWD[Normalized Detail]
-    DWD --> PIT[Point-in-Time]
-    PIT --> DWS[Features and Subjects]
-    DWS --> ADS[Research Signals and Dashboards]
-```
-
-```mermaid
-erDiagram
-    USER ||--o{ STRATEGY_PROFILE : owns
-    USER ||--o{ PORTFOLIO : owns
-    PORTFOLIO ||--o{ POSITION : contains
-    PORTFOLIO ||--o{ TRADE : records
-    SECURITY ||--o{ MARKET_BAR : has
-    SECURITY ||--o{ FINANCIAL_FACT : has
-    SECURITY ||--o{ NEWS_DOCUMENT : related
-    NEWS_DOCUMENT ||--o{ DOCUMENT_CHUNK : split
-    DOCUMENT_CHUNK ||--o{ EVIDENCE_CLAIM : supports
-    STRATEGY_PROFILE ||--o{ STRATEGY_VERSION : versions
-    STRATEGY_VERSION ||--o{ RESEARCH_RUN : drives
-    RESEARCH_RUN ||--o{ RESEARCH_ITEM : outputs
-    RESEARCH_ITEM }o--|| SECURITY : targets
-    RESEARCH_ITEM ||--o{ RESEARCH_EVIDENCE : cites
-    POSITION ||--o{ POSITION_THESIS : tracks
-```
-
-Each research run freezes universe, data snapshot, strategy, prompt, model, tool, provider, retrieval results, evidence, structured output, timestamps, and hashes.
-
----
-
-# Layer 3 — News and WebSearch Acquisition
-
-## 5. Source Hierarchy and Compliance
-
-```mermaid
-flowchart TD
-    L1[Level 1: Exchange/Regulator/Statutory Filing]
-    L2[Level 2: IR/Earnings Call/Formal Company News]
-    L3[Level 3: Industry Data/Tenders/Prices/Inventory]
-    L4[Level 4: Reputable Media/Professional Research]
-    L5[Level 5: Social and Unverified Sources]
-    L1 --> Q[Evidence Quality]
-    L2 --> Q
-    L3 --> Q
-    L4 --> Q
-    L5 --> Q
-```
-
-Components:
-
-- Source Registry;
-- API/RSS/Web/File Connectors;
-- WebSearch Provider;
-- Scheduler;
-- Downloader;
-- Raw Snapshot;
-- Deduplicator;
-- Document Classifier;
-- Quality Scorer;
-- Document Event Publisher.
-
-MVP news discovery uses configurable WebSearch Providers, not unrestricted crawling:
-
-- Users provide their own API keys;
-- The system stores query, result URL, title, snippet, retrieval time, and content hash;
-- A WebSearch result must resolve to an accessible original page or compliant snapshot before entering RAG;
-- The system must not bypass robots, login walls, paywalls, or anti-bot controls;
-- Copyrighted full text is not redistributed as open-source sample data;
-- L4/L5 evidence can trigger investigation but cannot alone change research or position states.
-
-```mermaid
-flowchart LR
-    A[Discover URL/API/Search Result] --> B[Download or Snapshot]
-    B --> C[Save Raw Snapshot]
-    C --> D[Format Detection]
-    D --> E[Parse Text/Tables]
-    E --> F[Deduplicate]
-    F --> G[Map Securities]
-    G --> H[Time and Source Level]
-    H --> I[Index Queue]
-```
-
----
-
-# Layer 4 — Text Vector Database
-
-## 6. Vector Pipeline
-
-```mermaid
-flowchart TD
-    A[Raw Document] --> B[Parser]
-    B --> C[Structure Recognition]
-    C --> D[Chunker]
-    D --> E[Embedding]
-    E --> F[(Vector Store)]
-    D --> G[(Keyword Index)]
-    F --> H[Hybrid Retrieval]
-    G --> H
-    H --> I[Reranker]
-    I --> J[Evidence Chunks]
-```
-
-Chunk metadata includes:
-
-```json
-{
-  "chunk_id": "chunk_xxx",
-  "document_id": "doc_xxx",
-  "symbol": "000001.SZ",
-  "source_url": "https://...",
-  "source_level": 1,
-  "published_at": "2026-06-17T18:30:00+08:00",
-  "available_at": "2026-06-18T09:30:00+08:00",
-  "page": 86,
-  "section": "Cash Flow",
-  "paragraph_index": 12,
-  "table_id": "cash_flow_table",
-  "row_id": "net_operating_cash_flow",
-  "quote_span": [120, 188],
-  "content_hash": "sha256:..."
-}
-```
-
-Retrieval score:
-
-\[
-Score =
-w_v Vector +
-w_k BM25 +
-w_t TimeDecay +
-w_s SourceQuality +
-w_e EntityMatch
-\]
-
-Hard filters:
-
-- Security;
-- `available_at <= decision_at`;
-- Document type;
-- Evidence level;
-- Duplicate claims;
-- Original page, paragraph, table, or URL location.
-
----
-
-# Layer 5 — AI
-
-## 7. AI Architecture
+## 2. Overall Architecture
 
 ```mermaid
 flowchart TB
-    Q[Request or Job] --> R[Routing Layer]
-    R --> PR[Provider Layer]
-    PR --> O[Multi-Agent/Workflow Orchestration]
-    O --> T[Tool System]
-    O --> G[RAG Evidence]
-    PR --> W[WebSearch Provider]
-    PR --> DP[Data Providers: AKShare/Tushare]
-    PR --> EP[Embedding/Rerank Providers]
-    T --> X[Internal Tools and APIs]
-    G --> V[Vector Store]
-    O --> L[Model Gateway]
-    L --> P[LLM Providers]
-    O --> S[Schema and Guardrails]
-    S --> D[Research Signal Decision Engine]
+    Browser[Browser] --> Next[Next.js App Router]
+    Next --> API[FastAPI API]
+    API --> Routes[portfolio / dashboard / monitoring / strategy / health]
+
+    Routes --> Portfolio[Portfolio Service]
+    Routes --> Dashboard[Dashboard Services]
+    Routes --> Monitoring[Holdings Monitoring]
+    Routes --> Strategy[Strategy Service]
+    Dashboard --> Research[Research Workflow]
+    Research --> Tools[ToolRegistry]
+    Tools --> Retrieval[Vector/Retrieval Pipeline]
+    Tools --> WebSearch[WebSearch Tool]
+    Tools --> Market[Market Data Tool]
+    Research --> LLM[OpenAI-compatible LLM]
+    Retrieval --> Embedding[OpenAI-compatible Embedding]
+    Monitoring --> AKShare[AKShare Latest Price]
+
+    Portfolio --> PG[(PostgreSQL + pgvector)]
+    Dashboard --> PG
+    Monitoring --> PG
+    Strategy --> PG
+    Retrieval --> PG
+    Research --> PG
+    API --> Metrics[/metrics]
+    Metrics --> Prometheus[Prometheus]
+    Prometheus --> Grafana[Grafana]
+    Worker[APScheduler Worker] --> Monitoring
+    Worker --> Indexing[Indexing Runner]
+    Indexing --> Retrieval
 ```
 
-### 7.1 Provider Layer
-
-| Provider Type | MVP Implementation | Purpose |
-|---|---|---|
-| MarketDataProvider | AKShare / Tushare | A-share market, fundamentals, index, actions |
-| WebSearchProvider | User-configured API key | News and public web discovery |
-| LLMProvider | OpenAI-compatible | Research, extraction, summary, reflection |
-| EmbeddingProvider | OpenAI-compatible / local | Text embedding |
-| RerankProvider | Optional | Hybrid retrieval reranking |
-| VectorStoreProvider | pgvector / Qdrant | Pluggable vector storage |
-| NotificationProvider | Local/email/webhook | Alert delivery |
-
-Providers must support health checks, rate limits, retries, cost tracking, Secret references, versioning, and audit logs.
-
-### 7.2 Routing Layer
-
-The router selects model, workflow, tool set, retrieval scope, budget, timeout, and output schema.
+## 3. Layered Architecture
 
 ```mermaid
-flowchart TD
-    A[Task] --> B{Type}
-    B -->|Extraction| C[Low-Cost Structured Model]
-    B -->|Complex Analysis| D[High-Capability Long-Context Model]
-    B -->|Embedding| E[Embedding Model]
-    B -->|Rerank| F[Reranker]
-    B -->|Calculation| G[Python/Valuation Tool]
-    B -->|Intraday| H[Rules First + Lightweight Model]
+flowchart TB
+    UI[Presentation<br/>web/app + components]
+    API[API<br/>FastAPI routes + middleware]
+    APP[Application Services<br/>portfolio/dashboard/research/monitoring/strategy]
+    DOMAIN[Domain Models<br/>Pydantic models, rules, workflow]
+    INFRA[Infrastructure<br/>repositories, db models, providers]
+    DATA[Data<br/>PostgreSQL/pgvector + volumes]
+    EXT[External Providers<br/>AKShare/Tushare/Tavily/LLM/Embedding/Rerank]
+    CROSS[Cross-cutting<br/>settings, logging, metrics, audit, degradation]
+
+    UI --> API
+    API --> APP
+    APP --> DOMAIN
+    APP --> INFRA
+    INFRA --> DATA
+    INFRA --> EXT
+    CROSS --- API
+    CROSS --- APP
+    CROSS --- INFRA
 ```
 
-### 7.3 RAG Evidence System
+| Layer | Responsibility | Code |
+| --- | --- | --- |
+| Presentation | pages, navigation, UI components | `web/app`, `web/components` |
+| API | routes, dependency injection, middleware, health | `src/margin/api` |
+| Application | business orchestration | module `service.py` files |
+| Domain | rules, workflow, state models | `models.py`, `workflow.py`, validators |
+| Infrastructure | SQLAlchemy, repositories, providers, tools | `repository.py`, `db_models.py`, provider adapters |
+| Data | PostgreSQL, pgvector, Docker volumes | `docker-compose.yml`, Alembic |
+| Cross-cutting | config, metrics, logging, audit, fallback | `src/margin/core`, `src/margin/settings.py` |
+
+## 4. Module Map
+
+| Module | Directory | Responsibility |
+| --- | --- | --- |
+| core | `src/margin/core` | provider registry, secrets, audit, metrics, degradation |
+| api | `src/margin/api` | FastAPI app, routes, middleware, dependencies |
+| data | `src/margin/data` | AKShare/Tushare, standardization, data quality |
+| portfolio | `src/margin/portfolio` | portfolios, trades, cost, positions, risk, theses |
+| news | `src/margin/news` | snapshots, document events, outbox, WebSearch, dedup |
+| vector | `src/margin/vector` | parsing, chunking, embeddings, pgvector, retrieval |
+| evidence | `src/margin/evidence` | evidence records, claims, locators, validation |
+| research | `src/margin/research` | tools, LLM, agents, workflow, snapshots |
+| strategy | `src/margin/strategy` | templates, configs, prompt, lifecycle |
+| dashboard | `src/margin/dashboard` | runs, cards, evidence views, reports, feedback |
+| holdings_monitoring | `src/margin/holdings_monitoring` | alerts, reviews, history, behavior metrics |
+| worker | `src/margin/worker.py` | monitoring and indexing scheduler |
+
+## 5. Deployment Topology
 
 ```mermaid
-sequenceDiagram
-    participant A as Agent
-    participant R as Retriever
-    participant V as Vector Store
-    participant C as Citation Validator
-    participant L as LLM
-    A->>R: Research query
-    R->>V: Hybrid retrieval
-    V-->>R: Chunks
-    R-->>A: Reranked evidence
-    A->>L: Evidence + structured task
-    L-->>A: Claims/Risks/Unknowns
-    A->>C: Validate citations and time
-    C-->>A: Pass or fail
+flowchart TB
+    Postgres[(postgres<br/>pgvector/pgvector:pg16)]
+    Migrate[migrate<br/>Alembic upgrade]
+    Seed[seed<br/>demo data]
+    API[api<br/>FastAPI]
+    Worker[worker<br/>APScheduler]
+    Web[web<br/>Next.js]
+    Prometheus[prometheus]
+    Grafana[grafana]
+
+    Postgres -->|healthy| Migrate
+    Migrate -->|completed| Seed
+    Seed -->|completed| API
+    Seed -->|completed| Worker
+    API -->|healthy| Web
+    API -->|scrape /metrics| Prometheus
+    Prometheus --> Grafana
 ```
-
-Evidence claim shape:
-
-```json
-{
-  "claim_id": "claim_001",
-  "claim_type": "cash_flow_improvement",
-  "statement": "Operating cash flow quality improved",
-  "fact_or_inference": "FACT",
-  "evidence_ids": ["ev_101", "ev_102"],
-  "confidence": 0.87,
-  "conflicts": [],
-  "effective_at": "2026-06-18",
-  "locator": {
-    "source_url": "https://...",
-    "page": 86,
-    "section": "Cash Flow",
-    "paragraph_index": 12,
-    "table_id": "cash_flow_table",
-    "row_id": "net_operating_cash_flow",
-    "content_hash": "sha256:..."
-  }
-}
-```
-
-### 7.4 Tool System
-
-- MarketDataTool;
-- FinancialTool;
-- FilingTool;
-- WebSearchTool;
-- RetrievalTool;
-- ValuationTool;
-- FactorTool;
-- PortfolioTool;
-- BacktestTool;
-- CalendarTool;
-- AlertTool;
-- Controlled PythonTool.
-
-LLMs may not fabricate tool output. Numerical results must come from deterministic tools. External writes require user confirmation.
-
-### 7.5 Multi-Agent Orchestration
-
-“Multi-agent” means role-based tool orchestration, not debate that creates false certainty. Each agent has explicit input, permissions, output schema, and failure policy.
-
-```mermaid
-flowchart LR
-    A[Universe Filter] --> B[Quant Research]
-    B --> C[WebSearch Agent]
-    C --> D[Document Collector]
-    D --> E[Text Summary]
-    E --> F[Evidence Research]
-    F --> G[Valuation Tool]
-    G --> H[Risk/Value-Trap Review]
-    H --> I[Reflect/Counterargument]
-    I --> J[Portfolio Constraint]
-    J --> K[Research Signal Composer]
-    K --> L[Citation Validator]
-```
-
-### 7.6 Internal Tool Integration and Permission Boundaries
-
-v0.1 serves only Margin's own Agent workflows and does not provide an MCP Server or MCP Gateway. Agents invoke market data, filings, retrieval, portfolio, valuation, factor, calendar, and alert capabilities through the internal `ToolRegistry` and typed Provider adapters.
-
-Every tool must define a fixed input/output schema, explicit permission scope, timeout behavior, and audit record. v0.1 does not support custom HTTP tools, arbitrary filesystem access, arbitrary shell execution, or third-party runtime tool registration.
-
-```mermaid
-flowchart TD
-    A[Agent] --> B[Tool Registry]
-    B --> C{Permission}
-    C -->|Read Only| D[Data and Evidence]
-    C -->|Confirmation| E[Modify Strategy/Create Alert]
-    C -->|Forbidden| F[Automatic Trading/Arbitrary Execution]
-```
-
----
-
-# Layer 6 — Research Signal Strategy Configuration
-
-## 8. Strategy Lifecycle
-
-```mermaid
-flowchart TD
-    A[Strategy Editor] --> B[Schema Validation]
-    B --> C[Merge Guardrails]
-    C --> D[Create Version]
-    D --> E[Backtest]
-    E --> F[Paper Run]
-    F --> G{Enable?}
-    G -->|Yes| H[Active]
-    G -->|No| I[Draft/Archived]
-```
-
-Strategy fields:
-
-- Universe;
-- Factors;
-- Valuation;
-- Quality;
-- Catalysts;
-- News and WebSearch sources;
-- AI prompts;
-- Evidence requirements;
-- Horizon;
-- Risk limits;
-- Portfolio constraints;
-- Decision thresholds;
-- Output templates.
-
-Prompt stack:
-
-```text
-System Guardrails
-+ Platform Research Prompt
-+ Strategy Template Prompt
-+ User Custom Prompt
-+ Task Context
-+ Retrieved Evidence
-```
-
----
-
-# Layer 7 — Research Candidate Dashboard
-
-## 9. Dashboard Services and API
 
 Services:
 
-- Research Run Query Service;
-- Dashboard BFF;
-- Evidence View Service;
-- Valuation View Service;
-- Strategy Status Service;
-- Report Renderer;
-- Export Service.
+- `postgres`: PostgreSQL with pgvector;
+- `migrate`: one-shot migration job;
+- `seed`: one-shot demo seed job;
+- `api`: FastAPI on port 8000;
+- `worker`: persistent indexing and monitoring worker;
+- `web`: Next.js on port 3000;
+- `prometheus`: metrics on port 9090;
+- `grafana`: dashboards on port 3002.
 
-The frontend uses Next.js App Router + TypeScript. Styling is built with
-Tailwind CSS; reusable UI components come from shadcn/ui; tables use TanStack
-Table with shadcn Table; charts use Apache ECharts; icons use lucide-react; and
-server state plus API requests use TanStack Query. Research candidates,
-holdings, evidence expansion, and job-status pages must share the same
-component and request conventions so each page does not reimplement table,
-chart, loading, and error-state behavior independently.
+## 6. API Architecture
 
-```mermaid
-flowchart TD
-    A[Research Candidate Dashboard] --> B[Candidates]
-    A --> C[Position Reviews]
-    A --> D[Critical Risks]
-    A --> E[Abstentions]
-    A --> F[Job Status]
-    B --> G[Research Detail]
-    G --> H[Evidence]
-    G --> I[Valuation]
-    G --> J[Catalysts]
-    G --> K[Counterarguments]
-```
+| Domain | Prefix | Examples |
+| --- | --- | --- |
+| health/metrics | `/health`, `/metrics` | `/health`, `/health/ready`, `/health/degraded`, `/metrics` |
+| portfolio | `/api/v1` | `/portfolios/{id}`, `/positions`, `/trades`, `/imports`, `/risk` |
+| dashboard | `/api/v1` | `/research-runs`, `/research-items/{id}`, `/provider-status` |
+| monitoring | `/api/v1` | `/positions/{id}/alerts`, `/reviews`, `/history` |
+| strategy | `/strategies` | `/templates`, `/custom`, `/activate` |
+| research tools | `/research` | `/run`, `/tools` |
 
-API:
+`TraceIdMiddleware` propagates a trace header. `MetricsMiddleware` records request counters and durations in Prometheus format.
 
-```text
-GET  /api/v1/research-runs?date=&strategy_id=&portfolio_id=&universe_id=&status=
-POST /api/v1/research-runs
-GET  /api/v1/research-runs/{run_id}
-GET  /api/v1/research-runs/{run_id}/items
-GET  /api/v1/research-items/{item_id}
-GET  /api/v1/research-items/{item_id}/evidence
-GET  /api/v1/research-items/{item_id}/valuation
-GET  /api/v1/research-items/{item_id}/audit
-POST /api/v1/research-items/{item_id}/feedback
-GET  /api/v1/provider-status
-POST /api/v1/jobs/nightly-runs
-GET  /api/v1/jobs/{job_run_id}
-```
+## 7. Provider and Tool Boundaries
 
-Key query dimensions: `date`, `strategy_id`, `strategy_version_id`, `portfolio_id`, `universe_id`, `run_id`, and `decision_at`.
-
----
-
-# Layer 8 — Holdings Dashboard
-
-## 10. Portfolio Architecture
+v0.1 uses typed adapters and an internal tool registry instead of MCP.
 
 ```mermaid
-flowchart TB
-    T[Manual/CSV Trades] --> P[Portfolio Service]
-    P --> C[Cost and Quantity]
-    P --> R[Portfolio Risk]
-    P --> H[Thesis Tracking]
-    M[Market Data] --> C
-    N[Filings and News] --> H
-    C --> UI[Holdings Dashboard]
-    R --> UI
-    H --> UI
-    R --> A[Alert Engine]
-    H --> A
+flowchart LR
+    Agent[Agent] --> ToolRegistry[ToolRegistry]
+    ToolRegistry --> Permission{permission check}
+    Permission -->|allow| Tool[Typed Tool]
+    Permission -->|deny| Reject[Reject + audit]
+    Tool --> Result[ToolResult]
+    Tool --> Audit[ToolCallRecord]
 ```
 
-Portfolio risk:
+Provider adapters:
 
-- Single-name concentration;
-- Industry and factor exposure;
-- Correlation;
-- Liquidity;
-- Volatility;
-- Drawdown;
-- Event concentration.
+- AKShare market data;
+- optional Tushare market data;
+- optional Tavily WebSearch;
+- OpenAI-compatible chat completions;
+- OpenAI-compatible embeddings;
+- optional rerank provider.
 
-Position APIs:
-
-```text
-GET  /api/v1/portfolios/{id}
-GET  /api/v1/portfolios/{id}/positions
-POST /api/v1/portfolios/{id}/trades
-POST /api/v1/portfolios/{id}/imports
-GET  /api/v1/portfolios/{id}/risk
-GET  /api/v1/positions/{id}/thesis
-PUT  /api/v1/positions/{id}/thesis
-GET  /api/v1/positions/{id}/alerts
-```
-
----
-
-## 11. End-to-End Nightly Sequence
+## 8. Research Workflow
 
 ```mermaid
 sequenceDiagram
-    participant S as Scheduler
-    participant D as Data Provider
-    participant N as News/WebSearch
-    participant V as Vector DB
-    participant C as Strategy
-    participant A as AI Orchestrator
-    participant R as Research Signal Service
-    participant P as Portfolio
+    participant UI as Web/API
+    participant Dash as DashboardResearchService
+    participant Research as ResearchService
+    participant WF as ResearchWorkflow
+    participant Tools as ToolRegistry
+    participant LLM as LLM Provider
+    participant DB as PostgreSQL
+    participant Audit as AuditRepository
 
-    S->>D: Update structured data
-    S->>N: Fetch filings and WebSearch results
-    N->>V: Parse, embed, index
-    S->>C: Load active strategy
-    C-->>A: Prompts and constraints
-    D-->>A: Factors and candidates
-    A->>V: Retrieve evidence
-    V-->>A: Evidence chunks
-    A->>A: Tools, valuation, reflection
-    A->>P: Read positions and limits
-    P-->>A: Portfolio risk
-    A->>R: Structured research signals
-    R->>P: Update thesis state
+    UI->>Dash: create research run
+    Dash->>Research: run batch
+    Research->>WF: execute
+    WF->>Tools: market / portfolio / retrieval / websearch
+    Tools-->>WF: tool results + audit
+    WF->>LLM: structured reasoning tasks
+    LLM-->>WF: output
+    WF->>WF: citation validation + abstain rules
+    WF-->>Research: research snapshot
+    Research->>DB: persist snapshot
+    Research->>Audit: append audit record
+    Dash->>DB: persist dashboard run and items
+    Dash-->>UI: candidate cards
 ```
 
----
-
-## 12. Intraday Monitoring
+## 9. Document Indexing and RAG Flow
 
 ```mermaid
 flowchart TD
-    A[Price Poller] --> B[Rule Engine]
-    C[News Poller] --> B
-    B --> D{Trigger?}
-    D -->|No| E[Wait]
-    D -->|Yes| F[Evidence Retrieval]
-    F --> G[Lightweight AI Explanation]
-    G --> H{Thesis Changed?}
-    H -->|No| I[P2/P3 Alert]
-    H -->|Yes| J[P0/P1 Alert]
+    Source[Filings / WebSearch / authorized documents] --> Snapshot[raw_snapshots]
+    Snapshot --> Event[document_events]
+    Event --> Outbox[document_outbox]
+    Outbox --> Worker[indexing job]
+    Worker --> Parser[parser]
+    Parser --> Chunker[chunker]
+    Chunker --> Chunks[(chunks)]
+    Chunks --> Embedding[embedding provider]
+    Embedding --> Vectors[(chunk_embeddings)]
+    Chunks --> Keyword[lexical fields]
+    Vectors --> Retrieval[hybrid retrieval]
+    Keyword --> Retrieval
+    Retrieval --> Evidence[evidence / claims / citation]
+    Evidence --> Research[research workflow]
 ```
 
-Intraday does not run retraining, full-universe research, unrestricted agent chains, automatic execution, or unconstrained advice.
-
----
-
-## 13. Plugin Architecture
-
-Plugin types:
-
-- DataProvider;
-- NewsProvider;
-- WebSearchProvider;
-- VectorStore;
-- EmbeddingProvider;
-- LLMProvider;
-- MCPServer;
-- ToolPlugin;
-- StrategyPlugin;
-- ValuationPlugin;
-- NotificationPlugin;
-- BrokerImportPlugin.
-
-Repository:
-
-```text
-margin/
-├── apps/api
-├── apps/web
-├── packages/core
-├── packages/data
-├── packages/storage
-├── packages/news
-├── packages/vector
-├── packages/ai
-├── packages/strategy
-├── packages/research
-├── packages/portfolio
-├── connectors
-├── mcp_servers
-├── plugins
-├── workflows
-├── configs
-├── examples
-├── docs
-└── tests
-```
-
----
-
-## 14. Deployment
+## 10. Data Design
 
 ```mermaid
 flowchart TB
-    subgraph Host[Local or Cloud Host]
-        WEB[Next.js App Router + TypeScript]
-        API[FastAPI]
-        WORKER[Worker/Scheduler]
-        PG[(PostgreSQL + pgvector)]
-        FILES[(Raw/Parquet)]
-        REDIS[(Optional Redis)]
-    end
-    API --> PG
-    WORKER --> PG
-    WORKER --> FILES
-    WORKER --> LLM[Cloud or Local Model]
-    WORKER --> DATA[AKShare/Tushare]
-    WORKER --> SEARCH[WebSearch API]
-    WEB --> API
+    Trades[Trades / CSV] --> Portfolio[portfolios, trades, position_theses]
+    Sources[Filings / web results] --> News[raw_snapshots, document_events, search_*]
+    News --> Vector[chunks, chunk_embeddings, retrieval audit]
+    StrategyInput[Strategy config] --> Strategy[strategy_profiles, strategy_versions]
+    Vector --> Evidence[evidence_records, evidence_claims, research_evidence]
+    Portfolio --> Research[research_snapshots]
+    Strategy --> Research
+    Evidence --> Research
+    Research --> Dashboard[dashboard_runs, dashboard_items, feedback]
+    Dashboard --> Monitoring[alert_events, position_reviews]
+    Research --> Audit[audit_records]
+    Monitoring --> Audit
 ```
 
-Docker Compose:
+## 11. ER Diagram
 
-```text
-web
-api
-worker
-postgres
-optional-redis
-optional-qdrant
-prometheus
-grafana
-```
-
----
-
-## 15. Security and Observability
-
-Security:
-
-- Secret management;
-- Least privilege;
-- Provider and internal-tool permission policies;
-- Prompt-injection defenses;
-- User prompts cannot override guardrails;
-- File validation;
-- No arbitrary code execution by default;
-- Sandboxed research agents;
-- Local portfolio storage;
-- Immutable audit logs;
-- Data-source licensing, WebSearch API key, news copyright, and user-upload responsibility boundaries shown in settings.
-
-Metrics:
-
-- Provider availability;
-- Missing-data rate;
-- News delay;
-- Parse success;
-- Vector-index delay;
-- Citation-validation failure;
-- Agent-node latency;
-- Model cost;
-- Research signal abstention rate;
-- Alert latency;
-- Strategy success rate.
-
-Trace fields:
-
-```text
-trace_id
-job_run_id
-strategy_version_id
-research_run_id
-symbol
-agent_node
-model_version
-provider_version
-```
-
----
-
-## 16. Testing and Failure Modes
-
-Tests:
-
-- Connector and schema;
-- Provider limits and licensing metadata;
-- Point-in-time;
-- Valuation formulas;
-- Retrieval filters;
-- Prompt merge;
-- Decision rules;
-- Portfolio cost and risk;
-- End-to-end data-to-dashboard;
-- Look-ahead and survivorship bias;
-- Adjustment factors and trading costs;
-- Risk score and event-window calibration;
-- Model drift.
+The v0.1 database has 29 public tables. Current positions are calculated from trades and are not stored in a separate `positions` table.
 
 ```mermaid
-flowchart TD
-    A[Failure] --> B{Type}
-    B -->|Data Source| C[Fallback or Stale-Data Degradation]
-    B -->|Parser| D[Keep Raw and Suppress AI Claim]
-    B -->|Vector Store| E[Keyword Retrieval]
-    B -->|LLM| F[Rule-Only Report]
-    B -->|Strategy| G[Rollback]
-    B -->|Critical Conflict| H[Suppress High-Confidence Research Signal]
+erDiagram
+    portfolios ||--o{ trades : records
+    portfolios ||--o{ position_theses : tracks
+    portfolios ||--o{ alert_events : monitors
+    portfolios ||--o{ position_reviews : reviews
+    raw_snapshots ||--o{ document_events : snapshots
+    document_events ||--o{ document_outbox : queues
+    document_events ||--o{ dedup_records : deduplicates
+    document_events ||--o{ repost_edges : links
+    search_queries ||--o{ search_results : returns
+    chunks ||--o{ chunk_embeddings : embeds
+    evidence_claims ||--o{ evidence_validation_audits : validates
+    evidence_claims ||--o{ research_evidence : links
+    evidence_records ||--o{ research_evidence : supports
+    strategy_profiles ||--o{ strategy_versions : versions
+    dashboard_runs ||--o{ dashboard_items : outputs
+    dashboard_items ||--o{ dashboard_feedback : receives
+    alert_events ||--o{ position_reviews : handled_by
+
+    portfolios {
+        string portfolio_id PK
+        string user_id
+        string name
+        numeric cash
+    }
+    trades {
+        string trade_id PK
+        string portfolio_id FK
+        string symbol
+        string side
+        numeric quantity
+        numeric price
+    }
+    raw_snapshots {
+        string snapshot_id PK
+        string source_url
+        string content_hash
+    }
+    document_events {
+        string event_id PK
+        string snapshot_id FK
+        string symbol
+        string status
+    }
+    chunks {
+        string chunk_id PK
+        string document_id
+        text content
+    }
+    chunk_embeddings {
+        string embedding_id PK
+        string chunk_id FK
+        int dimension
+    }
+    evidence_records {
+        string evidence_id PK
+        string source_level
+        string locator_json
+    }
+    evidence_claims {
+        string claim_id PK
+        string statement
+        float confidence
+    }
+    research_snapshots {
+        string snapshot_id PK
+        string run_id
+        string symbol
+        string status
+    }
+    strategy_profiles {
+        string strategy_id PK
+        string owner_id
+        string active_version_id
+    }
+    strategy_versions {
+        string version_id PK
+        string strategy_id FK
+        string lifecycle_status
+    }
+    dashboard_runs {
+        string run_id PK
+        string strategy_id
+        string status
+    }
+    dashboard_items {
+        string item_id PK
+        string run_id FK
+        string symbol
+        string research_status
+    }
+    alert_events {
+        string alert_id PK
+        string portfolio_id FK
+        string position_id
+        string priority
+    }
+    position_reviews {
+        string review_id PK
+        string portfolio_id FK
+        string alert_id FK
+        string decision
+    }
+    audit_records {
+        string record_id PK
+        string record_type
+        string object_id
+        string trace_id
+    }
 ```
 
-Principle: prefer `ABSTAINED` to a false high-confidence conclusion.
+## 12. Configuration and Secrets
 
----
+`MarginSettings` is the single configuration entry point. It reads `.env` and `MARGIN_*` environment variables.
 
-## 17. Implementation Order
+Important variables:
 
-```mermaid
-gantt
-    title Margin v0.1 Technical Implementation Path
-    dateFormat YYYY-MM-DD
-    section Phase 1 Providers and Storage
-    Provider Registry              :a1, 2026-07-01, 10d
-    AKShare/Tushare Access         :a2, after a1, 14d
-    PostgreSQL/Parquet and Snapshots :a3, after a1, 14d
-    section Phase 2 Holdings and Data Quality
-    Holdings Core Service          :b1, after a2, 14d
-    Point-in-Time and Quality Checks :b2, after a3, 14d
-    section Phase 3 Filings and WebSearch
-    Filing Acquisition and Raw Snapshots :c1, after b2, 14d
-    WebSearch Provider and Compliance Dedup :c2, after c1, 14d
-    section Phase 4 RAG and Multi-Agent
-    Text Indexing and Citation Locator :d1, after c2, 21d
-    RAG Evidence System            :d2, after d1, 21d
-    Multi-Agent Tool Calls         :d3, after d2, 21d
-    section Phase 5 Dashboards and Strategy
-    Strategy Configuration         :e1, after d3, 21d
-    Research Candidate Dashboard   :e2, after e1, 21d
-    Holdings Dashboard Enhancements :e3, after e1, 21d
-    section Phase 6 Validation and Ecosystem
-    Backtest and Model Governance  :f1, after e2, 30d
-    Provider and Built-in Tool Extensions :f2, after f1, 30d
-```
+- `MARGIN_DATABASE_URL`;
+- `MARGIN_LLM_BASE_URL`, `MARGIN_LLM_API_KEY`, `MARGIN_LLM_MODEL`;
+- `MARGIN_EMBEDDING_BASE_URL`, `MARGIN_EMBEDDING_API_KEY`, `MARGIN_EMBEDDING_MODEL`, `MARGIN_EMBEDDING_DIMENSION`;
+- `MARGIN_WEBSEARCH_API_KEY`;
+- `MARGIN_RERANK_*`;
+- `MARGIN_SECRET_TUSHARE_TOKEN`;
+- `MARGIN_LOG_FORMAT`;
+- `MARGIN_MONITORING_INTERVAL_SECONDS`.
 
----
+Secrets must live in local `.env` or runtime environment variables and must never be committed.
 
-## 18. Recommended MVP Stack
+## 13. Observability
 
-```text
-Backend: FastAPI
-Frontend: Next.js App Router + TypeScript
-Styling: Tailwind CSS
-Components: shadcn/ui
-Tables: TanStack Table + shadcn Table
-Charts: Apache ECharts
-Icons: lucide-react
-Client Requests/Server State: TanStack Query
-Primary DB: PostgreSQL
-Vector: pgvector first, Qdrant optional
-Analytics: Parquet + DuckDB
-Provider Registry: lightweight custom registry
-Market Data Providers: AKShare + Tushare
-WebSearch Provider: user-configured API key
-Scheduler: APScheduler
-Queue: local worker first; Celery/RQ later
-Quant: rule/factor engine first; Qlib + LightGBM as later pluggable modules
-Agent: LangGraph or explicit state machine
-Tool Integration: internal ToolRegistry + typed Provider adapters
-Deployment: Docker Compose
-```
+v0.1 exposes:
 
----
+- `/health`;
+- `/health/ready`;
+- `/health/degraded`;
+- `/metrics`;
+- HTTP counters and duration histograms;
+- provider call counters and degradation counters;
+- structured logs;
+- Grafana dashboard provisioning;
+- worker job logs.
 
-## 19. Summary
+## 14. Degradation Strategy
 
-Margin v0.1 prioritizes:
+| Failure | Behavior |
+| --- | --- |
+| database unavailable | `/health/ready` returns 503 |
+| LLM missing or failed | research abstains or uses conservative fallback |
+| embedding missing | indexing uses fallback or skips real remote embedding |
+| WebSearch key missing | WebSearch tool is unavailable/degraded |
+| AKShare unavailable | monitoring emits `DATA_MISSING` semantics and continues |
+| citation validation failed | candidate becomes `abstained` |
+| evidence conflict | confidence is reduced or publication is blocked |
+| rerank missing | hybrid retrieval falls back to base ranking |
 
-> Point-in-time correctness > evidence lineage > strategy configurability > agent complexity.
+## 15. Verification
 
-The minimum complete loop is:
+Current verification gates:
 
-> Data Providers → News/WebSearch → Vector retrieval → Controlled multi-agent research → User strategy constraints → Research Candidate Dashboard → Holdings Dashboard → Review and attribution.
+- `ruff check src tests`;
+- `pytest -q`;
+- `npm run lint` in `web/`;
+- `npm test` in `web/`;
+- `npm run build` in `web/`;
+- `docker compose config --quiet`;
+- live `/health`, `/health/ready`, `/metrics`;
+- browser E2E for portfolio, position detail, research dashboard, and research item detail.
+
+## 16. Summary
+
+Margin v0.1 connects portfolio data, evidence retrieval, AI research, dashboard publication, holdings monitoring, audit, and local deployment. Its core architectural property is conservative auditability: when evidence or providers are weak, the system abstains rather than creating false certainty.

@@ -4,7 +4,7 @@ parent_module: 05-rag_evidence
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §26-Phase4: RAG 证据系统; §10.3, 产品设计 §9.2]
-status: draft
+status: active
 estimate_days: 10
 depends_on: [0403]
 ---

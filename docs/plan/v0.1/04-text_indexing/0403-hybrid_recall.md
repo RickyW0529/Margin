@@ -4,7 +4,7 @@ parent_module: 04-text_indexing
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §7.3 混合检索; §7.4 检索约束]
-status: draft
+status: active
 estimate_days: 7
 depends_on: [0402]
 ---

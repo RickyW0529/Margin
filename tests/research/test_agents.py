@@ -182,6 +182,26 @@ def test_signal_composer_abstains_on_portfolio_violation():
     assert output.data["signal_type"] == "abstained"
 
 
+def test_signal_composer_abstains_when_market_data_is_degraded():
+    agent = ResearchSignalComposer()
+    context = _make_context(
+        prior_outputs={
+            "universe_filter": {
+                "filtered": ["000001.SZ"],
+                "degraded": ["000001.SZ"],
+            },
+            "portfolio_constraint": {"passed": True, "violations": []},
+            "evidence_research": {"evidence_ids": ["ev_1"]},
+        }
+    )
+
+    output = agent.run(context)
+
+    assert output.success is True
+    assert output.data["signal_type"] == "abstained"
+    assert "market data" in output.data["statement"].lower()
+
+
 def test_citation_validator_fails_without_evidence_refs():
     agent = CitationValidatorAgent()
     context = _make_context(

@@ -1,4 +1,8 @@
-"""Tests for provider degradation wrapper."""
+"""Tests for provider degradation wrapper.
+
+Validates the three failure modes: successful fallback, no fallback needed, and
+cascading failure when both primary and fallback raise exceptions.
+"""
 
 from __future__ import annotations
 
@@ -38,6 +42,8 @@ def test_degradation_returns_failure_when_fallback_also_fails():
         raise RuntimeError("fallback down")
 
     result = call_with_fallback(failing, fallback, trace_id="t1", metrics_label="x")
+    # Even though both providers failed, the caller receives a single structured
+    # failure with context from both the primary and fallback attempts.
     assert result.success is False
     assert result.from_fallback is True
     assert "fallback down" in result.error

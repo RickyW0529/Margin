@@ -191,11 +191,13 @@ class UniverseFilterAgent(RuleAgent):
 
     def _run_rule(self, context: AgentContext) -> dict[str, Any]:
         symbols = context.strategy_config.get("universe", [context.symbol])
-        result = {"symbols": symbols, "filtered": []}
+        result = {"symbols": symbols, "filtered": [], "degraded": []}
         for symbol in symbols:
             md = self._call_tool(context, "market_data", {"symbol": symbol})
             if md.success:
                 result["filtered"].append(symbol)
+                if isinstance(md.data, dict) and md.data.get("degraded"):
+                    result["degraded"].append(symbol)
             else:
                 raise RuntimeError(md.error or "market data lookup failed")
         if not result["filtered"]:
@@ -566,6 +568,22 @@ class ResearchSignalComposer(Agent):
         evidence_ids = context.prior_outputs.get("evidence_research", {}).get(
             "evidence_ids", []
         )
+        degraded_market = context.prior_outputs.get("universe_filter", {}).get(
+            "degraded",
+            [],
+        )
+
+        if degraded_market:
+            return self._make_output(
+                context,
+                True,
+                {
+                    "signal_type": "abstained",
+                    "confidence": 0.0,
+                    "statement": "Market data degraded; high-confidence signal withheld",
+                    "evidence_refs": evidence_ids,
+                },
+            )
 
         if not constraints.get("passed", True):
             return self._make_output(

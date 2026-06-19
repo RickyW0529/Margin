@@ -4,7 +4,7 @@ parent_module: 09-holdings_monitoring
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §19 盘中监控架构; 产品设计 §10, §5.3]
-status: draft
+status: active
 estimate_days: 7
 depends_on: [0901]
 ---
@@ -13,13 +13,13 @@ depends_on: [0901]
 
 ## 1. 任务目标
 
-实现盘中监控（Price Poller + News Poller → 规则引擎 → 触发事件 → 证据检索 → 轻量 AI 解释 → 逻辑改变? → P0/P1 或 P2/P3 提醒）与提醒分级（P0 立即置顶/P1 交易时段/P2 面板+晚间汇总/P3 仅研究日志）。盘中不执行重新训练、全市场研究、任意 Agent 长链、自动下单或无规则限制的自由研究结论。
+实现盘中监控（Price Poller + DocumentEvent Poller → 规则引擎 → 快照证据关联 → 逻辑改变? → P0/P1 或 P2/P3 提醒）与提醒分级。v0.1 使用确定性解释与结构化证据引用，LLM 解释为可选增强；盘中不执行重新训练、全市场研究、任意 Agent 长链或自动下单。
 
 ## 2. 工作项拆解
 
 - 0902.1 Price/News Poller — 盘中价格与新闻轮询。
 - 0902.2 规则引擎 — 确定性规则检测（价格触及失效阈值、行业暴露超限等）。
-- 0902.3 证据检索与轻量 AI 解释 — 触发后 RAG 验证是否有新证据。
+- 0902.3 证据关联与轻量解释 — 触发后关联模块 03 已快照、已分级的 DocumentEvent；Provider 不可用时保持规则型解释。
 - 0902.4 提醒分级与通知 — P0–P3 分级，NotificationProvider 输出。
 
 ## 3. 依赖关系

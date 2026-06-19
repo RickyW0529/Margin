@@ -3,7 +3,7 @@ module_id: 01-data_provider
 product_version: v0.1
 doc_version: v0.1
 source_refs: [产品设计 §4.1, §4.3.1, §13.2-1; 架构设计 §4, §8.1, §26-Phase1, §26-Phase2]
-status: draft
+status: active
 ---
 
 # 01 数据 Provider 模块 — 功能规格

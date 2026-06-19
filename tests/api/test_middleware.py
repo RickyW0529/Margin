@@ -1,4 +1,8 @@
-"""Tests for trace-id and logging middleware."""
+"""Tests for trace-id and logging middleware.
+
+Ensures trace ids from the configured header propagate through the request
+lifecycle and are echoed back in the response header.
+"""
 
 from __future__ import annotations
 
@@ -17,5 +21,6 @@ def test_trace_id_header_propagates():
         return {"trace_id": _get_trace_id(request)}
 
     client = TestClient(app)
+    # Use the lowercase header name that Starlette normalizes internally.
     response = client.get("/echo-trace", headers={"x-margin-trace-id": "t-123"})
     assert response.json()["trace_id"] == "t-123"

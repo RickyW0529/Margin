@@ -4,7 +4,7 @@ parent_module: 03-filing_websearch
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §6.4 去重规则; §6.1 来源优先级]
-status: draft
+status: active
 estimate_days: 7
 depends_on: [0302]
 ---

@@ -7,6 +7,7 @@ import {
   ShieldAlert,
   Wallet,
 } from "lucide-react";
+import Link from "next/link";
 
 import type { PortfolioDashboard, Position } from "@/lib/api";
 
@@ -140,7 +141,17 @@ export function PortfolioWorkspace({
                 <tbody>
                   {positions.map((position) => (
                     <tr key={position.position_id}>
-                      <td className="symbol-cell">{position.symbol}</td>
+                      <td className="symbol-cell">
+                        <Link
+                          className="table-link"
+                          href={{
+                            pathname: `/positions/${position.position_id}`,
+                            query: { portfolioId: position.portfolio_id },
+                          }}
+                        >
+                          {position.symbol}
+                        </Link>
+                      </td>
                       <td>{position.quantity.toLocaleString("zh-CN")}</td>
                       <td>{money(position.cost_amount)}</td>
                       <td>{money(position.market_value)}</td>

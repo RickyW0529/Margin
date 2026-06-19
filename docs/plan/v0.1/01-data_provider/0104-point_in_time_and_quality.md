@@ -4,7 +4,7 @@ parent_module: 01-data_provider
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §26-Phase2: 时点与数据质量校验; §4.4, §4.5]
-status: draft
+status: active
 estimate_days: 14
 depends_on: [0103, 1002]
 ---

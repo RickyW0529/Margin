@@ -4,7 +4,7 @@ parent_module: 06-multi_agent_research
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §12.1 Agent #11,#12; §12.2 工作流状态; §5.4 不可变快照]
-status: draft
+status: active
 estimate_days: 4
 depends_on: [0604, 0703, 1002]
 ---

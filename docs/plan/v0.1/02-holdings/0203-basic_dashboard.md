@@ -4,7 +4,7 @@ parent_module: 02-holdings
 product_version: v0.1
 doc_version: v0.1
 source_refs: [产品设计 §8.1, §8.2; 架构设计 §17]
-status: draft
+status: active
 estimate_days: 10
 depends_on: [0202]
 ---

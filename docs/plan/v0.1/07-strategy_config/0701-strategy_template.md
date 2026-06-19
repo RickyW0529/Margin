@@ -4,7 +4,7 @@ parent_module: 07-strategy_config
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §26-Phase5: 策略配置中心; §15.1, 产品设计 §6.1, §6.2]
-status: draft
+status: active
 estimate_days: 7
 depends_on: [0601]
 ---

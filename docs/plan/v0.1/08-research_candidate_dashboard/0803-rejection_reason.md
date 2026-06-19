@@ -4,7 +4,7 @@ parent_module: 08-research_candidate_dashboard
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §16.3 API; 产品设计 §7.1 拒绝判断]
-status: draft
+status: active
 estimate_days: 5
 depends_on: [0802]
 ---

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""CLI to write/read snapshots for storage audit."""
+"""CLI to write/read snapshots for storage audit.
+
+Operates on the same ``FileSnapshotStore`` used by the application so that
+snapshot files produced by scripts remain compatible with the core library.
+"""
 
 from __future__ import annotations
 

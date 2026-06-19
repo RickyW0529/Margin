@@ -1,4 +1,8 @@
-"""SQLAlchemy ORM model for immutable audit records."""
+"""SQLAlchemy ORM model for immutable audit records.
+
+Audit records are append-only and indexed by the dimensions most commonly used
+for forensics: record type, object id, trace id, and timestamp.
+"""
 
 from __future__ import annotations
 
@@ -17,6 +21,8 @@ class AuditLogRecordRow(Base):
 
     __tablename__ = "audit_records"
     __table_args__ = (
+        # Separate B-tree indexes on common query dimensions; record_type + object_id
+        # are the primary forensics filters, while trace_id supports request-level lookup.
         Index("ix_audit_records_record_type", "record_type"),
         Index("ix_audit_records_object_id", "object_id"),
         Index("ix_audit_records_trace_id", "trace_id"),

@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Any, TypeVar
 
 from margin.core.audit import AuditLogger, compute_hash
+from margin.core.metrics import PROVIDER_CALLS, PROVIDER_DEGRADED
 from margin.core.provider import (
     BaseProvider,
     CallResult,
@@ -341,6 +342,13 @@ class ProviderRegistry:
             result=result,
             trace_id=trace_id,
         )
+        PROVIDER_CALLS.labels(
+            provider=name,
+            method=method,
+            status="success" if result.success else "error",
+        ).inc()
+        if is_fallback:
+            PROVIDER_DEGRADED.labels(provider=name, method=method).inc()
         if should_raise:
             raise ProviderError(raise_message)
         return data, result

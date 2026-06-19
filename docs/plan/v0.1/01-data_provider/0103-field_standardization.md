@@ -4,7 +4,7 @@ parent_module: 01-data_provider
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §4.3 数据标准化流程]
-status: draft
+status: active
 estimate_days: 7
 depends_on: [0102]
 ---

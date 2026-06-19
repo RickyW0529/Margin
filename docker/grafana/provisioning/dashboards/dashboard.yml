@@ -1,3 +1,4 @@
+# Provisions dashboards from JSON files placed in this directory.
 apiVersion: 1
 providers:
   - name: "default"

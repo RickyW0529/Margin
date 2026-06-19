@@ -202,7 +202,7 @@ ruff check --fix src tests
 
 - `ruff check` 必须 0 error。
 - `pytest` 必须全绿。
-- 当前已实现子任务：`0101-provider_registry`、`0102-akshare_tushare_access`、`0103-field_standardization`、`0104-point_in_time_and_quality`、`0201-manual_csv_import`、`0202-cost_and_position`、`0203-basic_dashboard`、`0301-filing_acquisition`、`0302-websearch_provider`、`0303-dedup_and_compliance`、`0401-parse_and_chunk`、`0402-embedding_pipeline`、`0403-hybrid_recall`、`0501-evidence_tiering`、`0502-citation_locator`、`0503-claim_validation`。
+- 当前已实现子任务：`0101-provider_registry`、`0102-akshare_tushare_access`、`0103-field_standardization`、`0104-point_in_time_and_quality`、`0201-manual_csv_import`、`0202-cost_and_position`、`0203-basic_dashboard`、`0301-filing_acquisition`、`0302-websearch_provider`、`0303-dedup_and_compliance`、`0401-parse_and_chunk`、`0402-embedding_pipeline`、`0403-hybrid_recall`、`0501-evidence_tiering`、`0502-citation_locator`、`0503-claim_validation`、`0601-provider_and_tools`、`0602-websearch_agent`、`0603-summary_agent`、`0604-reflect_agent`、`0605-citation_validator`、`0606-universe_quant_agent`、`0701-strategy_template`、`0702-custom_prompt`、`0703-version_management`、`0801-candidate_card`、`0802-evidence_expansion`、`0803-rejection_reason`、`0901-thesis_state`、`0902-alerts`、`0903-review_record`、`1001-docker_compose`、`1002-storage_snapshot`、`1003-logging_observability`、`1004-failure_degradation`。
 - `0203-basic_dashboard` 已补齐 PostgreSQL repository、FastAPI 端点、Next.js App Router 面板、前端测试与 build 验证。
 - `0301-filing_acquisition` 已补齐 PostgreSQL 游标/快照/事件/outbox、SSE/SZSE discovery adapter、增量 runner 与 DocumentEventPublisher；真实交易所实网 smoke 需要网络与目标站点可访问。
 - `0302-websearch_provider` 已补齐 Tavily adapter、robots 执行、查询/结果持久化与原文校验前审计；实网 smoke 需要 `MARGIN_WEBSEARCH_API_KEY`。
@@ -213,3 +213,8 @@ ruff check --fix src tests
 - `0501-evidence_tiering` 已补齐 Evidence/Claim 结构、source level 质量评分、locator 快照字段、跨 Claim 冲突检测、L4/L5 限制与 PostgreSQL append-only Claim/Evidence 持久化。
 - `0502-citation_locator` 已补齐 PDF/HTML/表格 locator、PIT 校验、WebSearch 原文/快照校验与 snapshot resolver，可接 `NewsRepository.get_snapshot` 校验快照 URL/hash/status。
 - `0503-claim_validation` 已补齐 CitationValidator 批量冲突校验、引用失败具体 FAIL reason、ABSTAINED 判定、反方审查标记、校验审计持久化与 `research_evidence` 关联表。
+- `0601`-`0606` 已补齐多 Agent 研究工作流、工具调用、摘要/反思/校验链路、研究快照与持久化审计。
+- `0701`-`0703` 已补齐策略模板、自定义 Prompt、版本生命周期、校验/沙箱执行与 API 持久化。
+- `0801`-`0803` 已补齐研究候选面板 Candidate Card、证据展开、估值/反方/反馈视图、调度入口、Provider 状态、API 与 Next.js 页面。
+- `0901`-`0903` 已补齐持仓健康状态判定、确定性盘中规则引擎、P0-P3 提醒、alert_event 持久化、复盘记录、操作历史与处理时长度量。
+- `1001`-`1004` 已补齐 migrate/seed/web/api/worker/postgres/prometheus/grafana 一键部署、测试库隔离、不可变审计、结构化日志、Trace/指标、Grafana dashboard、Provider 降级与 CI 验证。

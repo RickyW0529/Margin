@@ -4,7 +4,7 @@ parent_module: 04-text_indexing
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §26-Phase4: 文本索引与引用定位; §7.1, §7.2]
-status: draft
+status: active
 estimate_days: 10
 depends_on: [0303]
 ---

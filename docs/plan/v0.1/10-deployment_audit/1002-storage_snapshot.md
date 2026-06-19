@@ -4,7 +4,7 @@ parent_module: 10-deployment_audit
 product_version: v0.1
 doc_version: v0.1
 source_refs: [架构设计 §5 存储架构; §5.4 不可变研究信号快照]
-status: draft
+status: active
 estimate_days: 7
 depends_on: [1001]
 ---
@@ -13,11 +13,11 @@ depends_on: [1001]
 
 ## 1. 任务目标
 
-实现存储组合（PostgreSQL 主业务/Parquet 大规模行情/DuckDB 本地分析/本地文件对象存储原始快照/pgvector 向量/Redis 可选）与数据分层（ODS→DWD→PIT→DWS→ADS），以及不可变研究信号快照（每次研究运行冻结股票池/数据/策略/Prompt/工具/模型/检索/证据/输出/生成时间/输入输出哈希）。审计日志不可修改。
+实现 v0.1 存储组合（PostgreSQL 主业务、本地原始快照、pgvector 向量）与逻辑数据分层（ODS→DWD→PIT→DWS→ADS），以及不可变研究信号快照。Parquet/DuckDB/Redis 作为后续适配器，不是 v0.1 默认部署依赖。
 
 ## 2. 工作项拆解
 
-- 1002.1 存储组合落地 — PostgreSQL/Parquet/DuckDB/文件存储/pgvector/Redis 配置。
+- 1002.1 存储组合落地 — PostgreSQL、文件快照与 pgvector 配置；保留 Parquet/DuckDB 扩展边界。
 - 1002.2 数据分层 — ODS/DWD/PIT/DWS/ADS 建模与流转。
 - 1002.3 不可变研究信号快照 — 研究运行冻结全量快照，落库不可篡改。
 - 1002.4 审计日志 — 不可修改审计日志机制。

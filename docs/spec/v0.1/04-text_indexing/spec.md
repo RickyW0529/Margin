@@ -3,7 +3,7 @@ module_id: 04-text_indexing
 product_version: v0.1
 doc_version: v0.1
 source_refs: [产品设计 §4.4, §13.2-4; 架构设计 §7, §26-Phase4]
-status: draft
+status: active
 ---
 
 # 04 文本索引模块 — 功能规格

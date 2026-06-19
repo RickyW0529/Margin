@@ -37,6 +37,7 @@ def test_memory_repository_round_trip():
     repository.add_thesis(portfolio.portfolio_id, thesis)
 
     assert repository.get_portfolio(portfolio.portfolio_id) == portfolio
+    assert repository.list_portfolios() == [portfolio]
     assert repository.list_trades(portfolio.portfolio_id) == [trade]
     assert repository.list_theses(portfolio.portfolio_id, "pos_1") == [thesis]
 
