@@ -43,6 +43,19 @@ export function EvidencePanel({ evidence }: EvidencePanelProps) {
                   <strong>{locator.evidence_id}</strong>
                   {locator.section ? ` · ${locator.section}` : ""}
                   {locator.page ? ` · 第 ${locator.page} 页` : ""}
+                  {locator.source_url ? (
+                    <>
+                      {" · "}
+                      <a
+                        className="table-link"
+                        href={locator.source_url}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        原文
+                      </a>
+                    </>
+                  ) : null}
                 </span>
                 <strong>{locator.source_level}</strong>
               </li>

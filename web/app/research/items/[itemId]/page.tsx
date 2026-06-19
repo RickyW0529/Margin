@@ -1,5 +1,6 @@
 import { EvidencePanel } from "@/components/evidence-panel";
 import { ReportPanel } from "@/components/report-panel";
+import { ResearchFeedbackForm } from "@/components/research-feedback-form";
 import { ResearchStatusBadge } from "@/components/research-status-badge";
 import { ValuationPanel } from "@/components/valuation-panel";
 import {
@@ -16,6 +17,8 @@ import {
   type ResearchItem,
   type ValuationView,
 } from "@/lib/api";
+
+import { createResearchFeedbackAction } from "./actions";
 
 type ResearchItemPageProps = {
   params: Promise<{ itemId: string }>;
@@ -73,6 +76,9 @@ export default async function ResearchItemPage({ params }: ResearchItemPageProps
           <ValuationPanel valuation={valuation} />
           <EvidencePanel evidence={evidence} />
           <ReportPanel report={report} exported={exported} />
+          <ResearchFeedbackForm
+            action={createResearchFeedbackAction.bind(null, itemId)}
+          />
         </div>
       )}
     </main>

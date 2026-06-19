@@ -22,6 +22,17 @@ export function ReportPanel({ report, exported }: ReportPanelProps) {
         <strong>{report.title}</strong>
         <span>{exported?.filename ?? "暂未生成导出文件"}</span>
         <span>{exported?.mime_type ?? "--"}</span>
+        {exported ? (
+          <a
+            className="secondary-link"
+            download={exported.filename}
+            href={`data:${exported.mime_type};charset=utf-8,${encodeURIComponent(
+              exported.content,
+            )}`}
+          >
+            下载导出文件
+          </a>
+        ) : null}
       </div>
       <pre>{preview}</pre>
     </section>

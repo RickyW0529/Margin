@@ -88,8 +88,13 @@ export function CandidateCard({ card }: CandidateCardProps) {
       ) : null}
 
       <div className="candidate-footer">
-        <span>策略版本 {card.strategy_version || "--"}</span>
-        <span>{card.disclaimer}</span>
+        <div>
+          <span>策略版本 {card.strategy_version || "--"}</span>
+          <span>{card.disclaimer}</span>
+        </div>
+        <Link className="secondary-link" href={`/research/items/${card.item_id}`}>
+          查看证据
+        </Link>
       </div>
     </article>
   );

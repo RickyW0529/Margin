@@ -8,6 +8,8 @@ describe("PositionDetailView", () => {
     render(
       <PositionDetailView
         portfolioId="pf_demo"
+        evaluateAction={async () => {}}
+        reviewAction={async () => {}}
         detail={{
           position_id: "pos_1",
           symbol: "000001.SZ",
@@ -98,8 +100,13 @@ describe("PositionDetailView", () => {
     expect(screen.getByText("经营现金流转负")).toBeInTheDocument();
     expect(screen.getByText("操作历史")).toBeInTheDocument();
     expect(screen.getByText("持仓监控")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "重新评估持仓监控" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("当前价格")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "记录复盘" })).toBeInTheDocument();
     expect(screen.getByText("P0")).toBeInTheDocument();
     expect(screen.getByText("价格触及失效条件，投资逻辑需要立即复核")).toBeInTheDocument();
-    expect(screen.getByText("降低仓位")).toBeInTheDocument();
+    expect(screen.getAllByText("降低仓位").length).toBeGreaterThanOrEqual(1);
   });
 });

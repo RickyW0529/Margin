@@ -121,7 +121,7 @@ export function PortfolioWorkspace({
         <div className="panel positions-panel">
           <div className="panel-heading">
             <h2>持仓</h2>
-            <span>{positions.length} rows</span>
+            <span>{positions.length} 条持仓</span>
           </div>
           {positions.length === 0 ? (
             <div className="empty-state">暂无持仓</div>
@@ -192,10 +192,12 @@ export function PortfolioWorkspace({
               </ul>
             )}
           </div>
-          <div className="risk-line">
-            <ShieldAlert aria-hidden="true" size={17} />
-            <span>波动率 {ratio(overview.portfolio_volatility)}</span>
-            <span>回撤 {ratio(overview.max_drawdown)}</span>
+          <div className="panel risk-panel">
+            <div className="risk-line">
+              <ShieldAlert aria-hidden="true" size={17} />
+              <span>波动率 {ratio(overview.portfolio_volatility)}</span>
+              <span>回撤 {ratio(overview.max_drawdown)}</span>
+            </div>
           </div>
         </aside>
       </section>

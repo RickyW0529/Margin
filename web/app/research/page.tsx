@@ -1,13 +1,19 @@
 import { CandidateList } from "@/components/candidate-list";
 import { HomeSummary } from "@/components/home-summary";
+import { ProviderStatusPanel } from "@/components/provider-status-panel";
+import { ResearchRunForm } from "@/components/research-run-form";
 import {
+  fetchProviderStatus,
   fetchResearchHome,
   fetchResearchRunCards,
   fetchResearchRuns,
+  type ProviderStatus,
   type ResearchCandidateCard,
   type ResearchHomeSummary,
   type ResearchRun,
 } from "@/lib/api";
+
+import { createResearchRunAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -15,12 +21,14 @@ export default async function ResearchDashboardPage() {
   let summary: ResearchHomeSummary | null = null;
   let runs: ResearchRun[] = [];
   let cards: ResearchCandidateCard[] = [];
+  let providers: ProviderStatus[] = [];
   let error: string | null = null;
 
   try {
-    [summary, runs] = await Promise.all([
+    [summary, runs, providers] = await Promise.all([
       fetchResearchHome(),
       fetchResearchRuns(),
+      fetchProviderStatus(),
     ]);
     if (runs[0]) {
       cards = await fetchResearchRunCards(runs[0].run_id);
@@ -48,6 +56,10 @@ export default async function ResearchDashboardPage() {
         </div>
       ) : (
         <>
+          <section className="workspace-grid">
+            <ResearchRunForm action={createResearchRunAction} />
+            <ProviderStatusPanel providers={providers} title="研究 Provider 状态" />
+          </section>
           <HomeSummary summary={summary} />
           <section className="panel">
             <div className="panel-heading">

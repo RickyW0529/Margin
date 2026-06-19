@@ -9,8 +9,12 @@ import {
 
 import type { AlertEvent, OperationHistoryEntry, PositionDetail } from "@/lib/api";
 
+type FormAction = (formData: FormData) => void | Promise<void>;
+
 type PositionDetailViewProps = {
   portfolioId: string;
+  evaluateAction: FormAction;
+  reviewAction: FormAction;
   detail: PositionDetail | null;
   alerts?: AlertEvent[];
   history?: OperationHistoryEntry[];
@@ -38,6 +42,8 @@ function ratio(value: number | null | undefined): string {
 
 export function PositionDetailView({
   portfolioId,
+  evaluateAction,
+  reviewAction,
   detail,
   alerts = [],
   history = [],
@@ -130,6 +136,11 @@ export function PositionDetailView({
               ))}
             </ul>
           )}
+          <MonitoringEvaluateForm
+            action={evaluateAction}
+            portfolioId={portfolioId}
+            detail={detail}
+          />
         </div>
 
         <aside className="side-rail">
@@ -147,6 +158,11 @@ export function PositionDetailView({
               <strong>{detail.industry ?? "--"}</strong>
             </div>
           </div>
+          <ReviewForm
+            action={reviewAction}
+            portfolioId={portfolioId}
+            alerts={alerts}
+          />
           <div className="panel">
             <div className="panel-heading">
               <h2>操作历史</h2>
@@ -169,6 +185,116 @@ export function PositionDetailView({
         </aside>
       </section>
     </main>
+  );
+}
+
+function MonitoringEvaluateForm({
+  action,
+  portfolioId,
+  detail,
+}: {
+  action: FormAction;
+  portfolioId: string;
+  detail: PositionDetail;
+}) {
+  return (
+    <form action={action} className="action-form inline-form">
+      <input name="portfolio_id" type="hidden" value={portfolioId} />
+      <div className="form-grid">
+        <label className="form-field">
+          <span>当前价格</span>
+          <input
+            name="current_price"
+            type="number"
+            step="0.0001"
+            defaultValue={detail.current_price ?? ""}
+            placeholder="留空则使用后端价格"
+          />
+        </label>
+        <label className="form-field">
+          <span>模型排名变化</span>
+          <input
+            name="model_rank_delta"
+            type="number"
+            step="0.01"
+            placeholder="-0.3"
+          />
+        </label>
+        <label className="form-field">
+          <span>行业暴露</span>
+          <input
+            name="industry_exposure"
+            type="number"
+            step="0.01"
+            placeholder="0.4"
+          />
+        </label>
+      </div>
+      <label className="form-field">
+        <span>证据 ID</span>
+        <input
+          name="evidence_refs"
+          placeholder="ev_1, ev_2；提交后写入 alert evidence_refs"
+        />
+      </label>
+      <label className="checkbox-field">
+        <input name="strategy_failure" type="checkbox" />
+        <span>标记策略失效</span>
+      </label>
+      <button className="primary-button" type="submit">
+        重新评估持仓监控
+      </button>
+    </form>
+  );
+}
+
+function ReviewForm({
+  action,
+  portfolioId,
+  alerts,
+}: {
+  action: FormAction;
+  portfolioId: string;
+  alerts: AlertEvent[];
+}) {
+  return (
+    <section className="panel" aria-labelledby="review-form-title">
+      <div className="panel-heading">
+        <h2 id="review-form-title">复盘记录</h2>
+        <span>POST /reviews</span>
+      </div>
+      <form action={action} className="action-form">
+        <input name="portfolio_id" type="hidden" value={portfolioId} />
+        <label className="form-field">
+          <span>关联提醒</span>
+          <select name="alert_id" defaultValue={alerts[0]?.alert_id ?? ""}>
+            <option value="">不绑定提醒</option>
+            {alerts.map((alert) => (
+              <option key={alert.alert_id} value={alert.alert_id}>
+                {alert.severity} · {alert.rule_name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="form-field">
+          <span>复盘决策</span>
+          <select name="decision" defaultValue="watch">
+            <option value="hold">继续持有</option>
+            <option value="reduce">降低仓位</option>
+            <option value="exit">退出</option>
+            <option value="watch">继续观察</option>
+            <option value="ignore">忽略</option>
+          </select>
+        </label>
+        <label className="form-field">
+          <span>复盘理由</span>
+          <textarea name="rationale" required rows={3} />
+        </label>
+        <button className="primary-button" type="submit">
+          记录复盘
+        </button>
+      </form>
+    </section>
   );
 }
 

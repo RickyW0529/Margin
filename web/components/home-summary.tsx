@@ -24,7 +24,7 @@ export function HomeSummary({ summary }: HomeSummaryProps) {
       <SummaryTile
         title="现有持仓复核"
         value={`${summary?.position_reviews.length ?? 0} 个提醒`}
-        helper="未绑定组合时为空"
+        helper={summary?.run_id ? `run ${summary.run_id}` : "等待组合绑定"}
       />
       <SummaryTile
         title="高优先级风险"
@@ -34,7 +34,7 @@ export function HomeSummary({ summary }: HomeSummaryProps) {
       <SummaryTile
         title="拒绝判断"
         value={`${summary?.rejections.length ?? 0} 条`}
-        helper="Abstained / Aborted"
+        helper="已记录拒绝原因"
       />
       <SummaryTile
         title="策略运行状态"

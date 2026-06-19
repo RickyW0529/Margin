@@ -229,6 +229,8 @@ export type FeedbackRecord = {
   created_at: string;
 };
 
+export type FeedbackType = "accept" | "reject" | "watch" | "comment";
+
 export type ProviderStatus = {
   provider: string;
   status: string;
@@ -255,19 +257,98 @@ export type ReportExport = {
   generated_at: string;
 };
 
+export type ResearchRunCreate = {
+  strategy_id: string;
+  version_id?: string;
+  decision_at?: string | null;
+  portfolio_id?: string | null;
+  symbols?: string[] | null;
+};
+
+export type PositionMonitoringSnapshot = {
+  position_id: string;
+  portfolio_id: string;
+  symbol: string;
+  health_status: string;
+  thesis_status: string;
+  evaluated_at: string;
+  reasons: string[];
+  alerts: AlertEvent[];
+  data_missing: boolean;
+};
+
+export type PositionMonitoringEvaluate = {
+  portfolio_id: string;
+  current_price?: number | null;
+  evidence_refs?: string[];
+  model_rank_delta?: number | null;
+  industry_exposure?: number | null;
+  strategy_failure?: boolean;
+  upcoming_event_at?: string | null;
+  decision_at?: string | null;
+};
+
+export type ReviewDecision = "hold" | "reduce" | "exit" | "watch" | "ignore";
+
+export type PositionReviewRecord = {
+  review_id: string;
+  portfolio_id: string;
+  position_id: string;
+  alert_id: string | null;
+  decision: ReviewDecision;
+  rationale: string;
+  action_taken_at: string | null;
+  created_at: string;
+};
+
+export type PositionReviewCreate = {
+  portfolio_id: string;
+  alert_id?: string | null;
+  decision: ReviewDecision;
+  rationale: string;
+  action_taken_at?: string | null;
+};
+
+export type ResearchFeedbackCreate = {
+  feedback_type: FeedbackType;
+  comment?: string;
+};
+
 const API_BASE_URL = process.env.MARGIN_API_BASE_URL ?? "http://localhost:8000";
 
-async function request<T>(path: string): Promise<T> {
+type JsonRequestInit = Omit<RequestInit, "headers"> & {
+  headers?: Record<string, string>;
+};
+
+async function request<T>(path: string, init: JsonRequestInit = {}): Promise<T> {
+  const method = init.method?.toUpperCase() ?? "GET";
+  const cacheOptions =
+    method === "GET" ? { next: { revalidate: 30 } } : { cache: "no-store" as const };
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { accept: "application/json" },
-    next: { revalidate: 30 },
+    ...cacheOptions,
+    ...init,
+    headers: {
+      accept: "application/json",
+      ...init.headers,
+    },
   });
 
   if (!response.ok) {
-    throw new Error(`Margin API ${response.status}: ${path}`);
+    const detail = await response.text().catch(() => "");
+    const suffix = detail ? ` - ${detail}` : "";
+    throw new Error(`Margin API ${response.status}: ${path}${suffix}`);
   }
 
   return response.json() as Promise<T>;
+}
+
+function post<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "POST",
+    cache: "no-store",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }
 
 export function fetchPortfolioDashboard(
@@ -370,4 +451,40 @@ export function fetchResearchItemExport(
 
 export function fetchProviderStatus(): Promise<ProviderStatus[]> {
   return request<ProviderStatus[]>("/api/v1/provider-status");
+}
+
+export function createResearchRun(
+  request: ResearchRunCreate,
+): Promise<ResearchRun> {
+  return post<ResearchRun>("/api/v1/research-runs", request);
+}
+
+export function evaluatePositionMonitoring(
+  positionId: string,
+  request: PositionMonitoringEvaluate,
+): Promise<PositionMonitoringSnapshot> {
+  return post<PositionMonitoringSnapshot>(
+    `/api/v1/positions/${positionId}/monitoring/evaluate`,
+    request,
+  );
+}
+
+export function createPositionReview(
+  positionId: string,
+  request: PositionReviewCreate,
+): Promise<PositionReviewRecord> {
+  return post<PositionReviewRecord>(
+    `/api/v1/positions/${positionId}/reviews`,
+    request,
+  );
+}
+
+export function createResearchItemFeedback(
+  itemId: string,
+  request: ResearchFeedbackCreate,
+): Promise<FeedbackRecord> {
+  return post<FeedbackRecord>(
+    `/api/v1/research-items/${itemId}/feedback`,
+    request,
+  );
 }

@@ -8,6 +8,8 @@ import {
   type PositionDetail,
 } from "@/lib/api";
 
+import { createPositionReviewAction, evaluatePositionAction } from "./actions";
+
 type PositionPageProps = {
   params: Promise<{ positionId: string }>;
   searchParams: Promise<{ portfolioId?: string }>;
@@ -37,6 +39,8 @@ export default async function PositionPage({
   return (
     <PositionDetailView
       portfolioId={portfolioId}
+      evaluateAction={evaluatePositionAction.bind(null, positionId)}
+      reviewAction={createPositionReviewAction.bind(null, positionId)}
       detail={detail}
       alerts={alerts}
       history={history}
