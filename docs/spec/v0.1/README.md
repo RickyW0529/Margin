@@ -42,3 +42,4 @@
 
 - 所有 spec `status: draft`，待进入实现阶段后转为 `review` → `active`。
 - 修改已 `active` 的 spec 应新建版本目录（见 `AGENTS.md` §8 版本迭代流程）。
+- 2026-06-19 范围修订：模块 06 与 10 删除 MCP 实施含义；v0.1 仅使用内部 `ToolRegistry`、类型化 Provider Adapter 与工具权限分级，不开发 MCP 或自定义 HTTP 工具。

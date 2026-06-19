@@ -17,7 +17,7 @@ Margin v0.1 需要满足以下目标：
 - 所有金融数据满足 Point-in-Time 时点要求；
 - AI 只能基于可追溯证据生成关键结论；
 - 用户可以自定义策略、提示词、模型、数据源和风险门槛；
-- MCP 和工具协议允许第三方扩展；
+- Provider 与内部工具接口允许受控扩展；
 - 研究候选面板和持仓面板共享同一研究信号、状态与证据模型；
 - 模型、Prompt、策略、工具和数据均可版本化；
 - 晚间批处理和盘中监控相互隔离；
@@ -67,7 +67,6 @@ flowchart TB
         A3[RAG证据系统]
         A4[工具系统]
         A5[多Agent编排层]
-        A6[MCP协议层]
         A7[模型网关]
         A8[结构化输出与Guardrail]
     end
@@ -437,12 +436,10 @@ flowchart TB
     PR --> O[多Agent/Workflow编排层]
     O --> T[工具系统]
     O --> G[RAG证据系统]
-    O --> M[MCP协议层]
     PR --> W[WebSearch Provider]
     PR --> DP[Data Providers: AKShare/Tushare]
     PR --> EP[Embedding/Rerank Providers]
     T --> X[内部工具/外部API]
-    M --> Y[MCP Servers]
     G --> V[向量数据库]
     O --> L[模型网关]
     L --> P[LLM Providers: OpenAI兼容/本地模型]
@@ -638,36 +635,26 @@ stateDiagram-v2
 
 ---
 
-## 13. MCP 协议层
+## 13. 内部工具接入与权限边界
 
-### 13.1 MCP 作用
+### 13.1 接入原则
 
-MCP 用于标准化连接：
+v0.1 仅服务 Margin 自身的 Agent 工作流，不建设 MCP Server 或 MCP Gateway。Agent 通过内部 `ToolRegistry` 与类型化 Provider Adapter 调用：
 
 - 数据工具；
-- 文件系统；
 - 公告检索；
+- RAG 检索；
 - 组合查询；
-- 回测服务；
-- 用户自定义研究工具；
-- 第三方插件。
+- 估值与因子计算；
+- 日历与提醒。
 
-### 13.2 建议 MCP Server
+所有工具必须具有固定输入/输出 Schema、明确权限范围、超时与审计记录。v0.1 不支持自定义 HTTP 工具、任意文件系统访问、任意 Shell 或第三方运行时工具注册。
 
-```text
-margin-market-mcp
-margin-filings-mcp
-margin-portfolio-mcp
-margin-backtest-mcp
-margin-evidence-mcp
-margin-macro-mcp
-```
-
-### 13.3 MCP 安全边界
+### 13.2 工具安全边界
 
 ```mermaid
 flowchart TD
-    A[Agent] --> B[MCP Gateway]
+    A[Agent] --> B[Tool Registry]
     B --> C{权限策略}
     C -->|只读| D[数据/证据工具]
     C -->|需确认| E[修改策略/创建提醒]
@@ -1037,7 +1024,7 @@ grafana
 
 - API Key 使用 Secret；
 - 数据库最小权限；
-- MCP 工具权限分级；
+- 内部工具权限分级；
 - Prompt Injection 防护；
 - 外部文本只能作为数据；
 - 用户 Prompt 不能覆盖系统 Guardrail；
@@ -1165,7 +1152,7 @@ gantt
     持仓面板增强               :e3, after e1, 21d
     section Phase 6 验证与生态
     回测与模型治理             :f1, after e2, 30d
-    MCP与插件生态              :f2, after f1, 30d
+    Provider与内置工具扩展      :f2, after f1, 30d
 ```
 
 ---
@@ -1191,7 +1178,7 @@ Scheduler: APScheduler
 Queue: 初期本地任务；后续 Celery/RQ
 Quant: 规则/因子引擎优先；Qlib + LightGBM 作为后续可插拔模块
 Agent: LangGraph 或自研状态机
-MCP: Python MCP SDK（MVP 后半段接入）
+Tool Integration: 内部 ToolRegistry + 类型化 Provider Adapter
 Deployment: Docker Compose
 ```
 
@@ -1205,7 +1192,7 @@ Margin v0.1 的架构核心是：
 - 数据存储层保存原始数据、业务数据和不可变研究信号快照；
 - 新闻获取层持续获取高价值公开信息；
 - 文本向量数据库为 RAG 提供可过滤、可引用的检索；
-- AI 层通过 Provider、路由、工具、多 Agent、RAG 和 MCP 形成可控研究工作流；
+- AI 层通过 Provider、路由、内部工具、多 Agent 和 RAG 形成可控研究工作流；
 - 策略配置层让用户定义自己的投资逻辑，而不是接受统一算法；
 - 研究候选面板负责呈现候选、证据、估值、风险和条件；
 - 当前持仓面板负责持续验证投资逻辑和组合风险。

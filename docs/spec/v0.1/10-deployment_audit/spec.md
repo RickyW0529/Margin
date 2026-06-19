@@ -68,4 +68,4 @@ Trace 字段（架构 §23）：`trace_id`、`job_run_id`、`strategy_version_id
 
 - `source_refs` 指向产品设计 §13.1 / §13.2-10、架构设计 §5 / §21 / §22 / §23 / §24 / §25 / §26 Phase1-Phase6；
 - 审计日志不可修改（架构 §22）；研究信号快照落库不可篡改（架构 §5.4）；
-- 安全设计（架构 §22）：API Key 使用 Secret、数据库最小权限、MCP 工具权限分级、Prompt Injection 防护、用户 Prompt 不能覆盖系统 Guardrail、原始文件类型与大小限制、任意代码执行默认关闭、持仓数据默认不上传、数据源授权与版权责任边界在设置页明确展示。
+- 安全设计（架构 §22）：API Key 使用 Secret、数据库最小权限、内部工具权限分级、Prompt Injection 防护、用户 Prompt 不能覆盖系统 Guardrail、原始文件类型与大小限制、任意代码执行默认关闭、持仓数据默认不上传、数据源授权与版权责任边界在设置页明确展示。

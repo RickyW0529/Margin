@@ -13,11 +13,11 @@ depends_on: [1001]
 
 ## 1. 任务目标
 
-实现安全设计（API Key Secret、数据库最小权限、MCP 工具权限分级、Prompt Injection 防护、用户 Prompt 不能覆盖 Guardrail、文件类型与大小限制、任意代码执行默认关闭、持仓数据默认不上传、审计日志不可修改、数据源授权与版权责任边界在设置页展示）与可观测性（指标：数据源可用率/缺失率/新闻延迟/解析成功率/向量索引延迟/RAG 命中率/引用校验失败率/Agent 节点耗时/模型成本/研究信号拒绝率/提醒延迟/策略成功率；Trace 字段：trace_id/job_run_id/strategy_version_id/research_run_id/symbol/agent_node/model_version/provider_version）。
+实现安全设计（API Key Secret、数据库最小权限、内部工具权限分级、Prompt Injection 防护、用户 Prompt 不能覆盖 Guardrail、文件类型与大小限制、任意代码执行默认关闭、持仓数据默认不上传、审计日志不可修改、数据源授权与版权责任边界在设置页展示）与可观测性（指标：数据源可用率/缺失率/新闻延迟/解析成功率/向量索引延迟/RAG 命中率/引用校验失败率/Agent 节点耗时/模型成本/研究信号拒绝率/提醒延迟/策略成功率；Trace 字段：trace_id/job_run_id/strategy_version_id/research_run_id/symbol/agent_node/model_version/provider_version）。
 
 ## 2. 工作项拆解
 
-- 1003.1 安全设计落地 — Secret/最小权限/MCP 分级/Injection 防护/文件限制/代码执行关闭。
+- 1003.1 安全设计落地 — Secret/最小权限/内部工具分级/Injection 防护/文件限制/代码执行关闭。
 - 1003.2 指标采集 — 12 类指标接入 Prometheus。
 - 1003.3 Trace 字段 — 全链路 trace 注入与 Grafana 展示。
 - 1003.4 责任边界展示 — 设置页展示数据源授权/WebSearch Key/新闻版权/用户上传责任。

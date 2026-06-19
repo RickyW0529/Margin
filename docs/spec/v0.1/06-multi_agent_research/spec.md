@@ -21,7 +21,7 @@ status: draft
 
 ## 3. 接口契约
 
-AI 层总体结构（架构 §8）：用户请求/定时任务 → 路由层 → Provider 接入层 → 多 Agent/Workflow 编排层 → 工具系统 / RAG 证据 / MCP → 模型网关 → 结构化输出与 Guardrail → 研究信号决策引擎。
+AI 层总体结构（架构 §8）：用户请求/定时任务 → 路由层 → Provider 接入层 → 多 Agent/Workflow 编排层 → 内部工具系统 / RAG 证据 → 模型网关 → 结构化输出与 Guardrail → 研究信号决策引擎。v0.1 不建设 MCP Server、MCP Gateway 或自定义 HTTP 工具。
 
 模型路由层（架构 §9）：按任务类型选择模型/工作流/工具集/检索范围/成本预算/超时重试/输出 Schema。公告抽取用低成本结构化模型，复杂财报分析用高能力长上下文模型，数值计算用 Python/估值工具，实时提醒用规则优先+轻量模型。
 

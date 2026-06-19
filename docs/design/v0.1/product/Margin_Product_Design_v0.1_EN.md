@@ -53,7 +53,7 @@ flowchart LR
 | Strategy-configurable | Users control universe, valuation, prompts, horizons, and risk thresholds |
 | Human-in-the-loop | AI researches; users retain final execution authority |
 | Verifiable | Backtests, paper trading, shadow portfolios, and attribution |
-| Extensible | Data providers, tools, MCP servers, and plugins |
+| Extensible | Typed providers and internal tool adapters |
 
 ### 2.3 Non-Goals
 
@@ -65,7 +65,8 @@ Margin v0.1 does not target:
 - Default automatic execution;
 - Multi-agent debate that creates false certainty;
 - One valuation model for every industry;
-- LLM-only numerical calculations.
+- LLM-only numerical calculations;
+- No MCP servers, custom HTTP tools, or arbitrary third-party runtime tools.
 
 ### 2.4 Compliance and Wording Boundaries
 
@@ -104,11 +105,11 @@ mindmap
     Advanced User
       Custom prompts
       Factor weights
-      Custom tools and data
+      Configured providers and data
     Developer
       Providers
-      MCP servers
-      Agents and valuation plugins
+      Internal tool adapters
+      Agents and valuation modules
     Researcher
       Backtests
       Shadow portfolios
@@ -171,7 +172,6 @@ Parsing, chunking, embeddings, metadata filtering, vector retrieval, keyword ret
 - RAG evidence system;
 - Tool system;
 - Multi-agent orchestration;
-- MCP protocol layer;
 - Model gateway;
 - Prompt templates;
 - Structured output;
@@ -526,7 +526,7 @@ Users and contributors can extend:
 - Embedding providers;
 - Vector stores;
 - LLM providers;
-- MCP servers;
+- Internal tool adapters implemented as typed code extensions;
 - Agent workflows;
 - Quant models;
 - Valuation templates;
@@ -551,11 +551,11 @@ mindmap
       SearchAPI
       SerpAPI
       Custom API
-    MCP
+    Tools
       Filings
-      Macro
+      Retrieval
       Portfolio
-      Backtest
+      Valuation
     Strategy
       Value
       Dividend
@@ -675,7 +675,7 @@ gantt
     Holdings Monitoring             :e3, after e1, 21d
     section v0.6 Validation and Ecosystem
     Backtest and Shadow Portfolio   :f1, after e2, 30d
-    MCP and Plugin Ecosystem        :f2, after f1, 30d
+    Provider and Built-in Tool Extensions :f2, after f1, 30d
 ```
 
 ---

@@ -54,7 +54,6 @@ docs/
    - 工具系统
    - 多 Agent 编排
    - 模型路由
-   - MCP
    - 模型网关与 Guardrail
 6. 研究信号策略配置（Research Signal Strategy Configuration）
 7. 研究候选面板（Research Candidate Dashboard）

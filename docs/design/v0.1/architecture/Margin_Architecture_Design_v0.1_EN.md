@@ -15,7 +15,7 @@
 - Enforce point-in-time correctness;
 - Require evidence lineage for material AI conclusions;
 - Allow users to configure strategies, prompts, models, sources, and thresholds;
-- Support Provider, MCP, and tool plugins;
+- Support controlled extension through Providers and internal tool interfaces;
 - Use one research signal, state, and evidence model across candidate and holdings dashboards;
 - Version models, prompts, tools, strategies, providers, and data snapshots;
 - Separate nightly batch research from intraday monitoring;
@@ -65,7 +65,6 @@ flowchart TB
         A3[RAG Evidence]
         A4[Tools]
         A5[Multi-Agent Orchestration]
-        A6[MCP]
         A7[Model Gateway]
         A8[Structured Output and Guardrails]
     end
@@ -338,12 +337,10 @@ flowchart TB
     PR --> O[Multi-Agent/Workflow Orchestration]
     O --> T[Tool System]
     O --> G[RAG Evidence]
-    O --> M[MCP Layer]
     PR --> W[WebSearch Provider]
     PR --> DP[Data Providers: AKShare/Tushare]
     PR --> EP[Embedding/Rerank Providers]
     T --> X[Internal Tools and APIs]
-    M --> Y[MCP Servers]
     G --> V[Vector Store]
     O --> L[Model Gateway]
     L --> P[LLM Providers]
@@ -459,22 +456,15 @@ flowchart LR
     K --> L[Citation Validator]
 ```
 
-### 7.6 MCP
+### 7.6 Internal Tool Integration and Permission Boundaries
 
-Suggested servers:
+v0.1 serves only Margin's own Agent workflows and does not provide an MCP Server or MCP Gateway. Agents invoke market data, filings, retrieval, portfolio, valuation, factor, calendar, and alert capabilities through the internal `ToolRegistry` and typed Provider adapters.
 
-```text
-margin-market-mcp
-margin-filings-mcp
-margin-portfolio-mcp
-margin-backtest-mcp
-margin-evidence-mcp
-margin-macro-mcp
-```
+Every tool must define a fixed input/output schema, explicit permission scope, timeout behavior, and audit record. v0.1 does not support custom HTTP tools, arbitrary filesystem access, arbitrary shell execution, or third-party runtime tool registration.
 
 ```mermaid
 flowchart TD
-    A[Agent] --> B[MCP Gateway]
+    A[Agent] --> B[Tool Registry]
     B --> C{Permission}
     C -->|Read Only| D[Data and Evidence]
     C -->|Confirmation| E[Modify Strategy/Create Alert]
@@ -764,7 +754,7 @@ Security:
 
 - Secret management;
 - Least privilege;
-- Provider and MCP permission policies;
+- Provider and internal-tool permission policies;
 - Prompt-injection defenses;
 - User prompts cannot override guardrails;
 - File validation;
@@ -862,7 +852,7 @@ gantt
     Holdings Dashboard Enhancements :e3, after e1, 21d
     section Phase 6 Validation and Ecosystem
     Backtest and Model Governance  :f1, after e2, 30d
-    MCP and Plugin Ecosystem       :f2, after f1, 30d
+    Provider and Built-in Tool Extensions :f2, after f1, 30d
 ```
 
 ---
@@ -888,7 +878,7 @@ Scheduler: APScheduler
 Queue: local worker first; Celery/RQ later
 Quant: rule/factor engine first; Qlib + LightGBM as later pluggable modules
 Agent: LangGraph or explicit state machine
-MCP: Python MCP SDK in later MVP phases
+Tool Integration: internal ToolRegistry + typed Provider adapters
 Deployment: Docker Compose
 ```
 

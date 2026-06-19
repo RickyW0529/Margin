@@ -53,7 +53,7 @@ flowchart LR
 | 策略可配置 | 用户可以配置股票池、估值偏好、风险阈值、提示词和模型 |
 | 人机协同  | AI 负责信息处理与研究，用户保留最终交易决策    |
 | 可验证   | 通过回测、模拟盘、影子组合和归因验证模块贡献     |
-| 可扩展   | 通过数据连接器、工具插件和 MCP 服务扩展能力   |
+| 可扩展   | 通过类型化 Provider 和内部工具适配器扩展能力   |
 
 ### 2.3 非目标
 
@@ -65,7 +65,8 @@ Margin 首期不追求：
 - 自动替用户操作券商账户；
 - 通过堆叠多个 Agent 制造虚假的确定性；
 - 对所有公司使用同一套估值模型；
-- 让大模型直接完成不可复现的数值计算。
+- 让大模型直接完成不可复现的数值计算；
+- 不支持 MCP Server、自定义 HTTP 工具或任意第三方运行时工具接入。
 
 ### 2.4 合规与表达边界
 
@@ -213,7 +214,6 @@ MVP 阶段结构化 A 股数据只支持：
 - RAG 证据系统；
 - 工具系统；
 - Agent 编排层；
-- MCP 协议层；
 - 模型网关；
 - Prompt 模板；
 - 结构化输出；
@@ -663,7 +663,7 @@ flowchart TD
 - Embedding 模型；
 - 向量数据库；
 - LLM Provider；
-- MCP Server；
+- 内部工具适配器（代码级、类型化扩展）；
 - Agent 工作流；
 - 量化模型；
 - 估值模板；
@@ -686,11 +686,11 @@ mindmap
       DeepSeek
       Qwen
       Local Model
-    MCP
+    Tools
       Filings
-      Macro
+      Retrieval
       Portfolio
-      Backtest
+      Valuation
     Strategy
       Value
       Dividend
@@ -815,7 +815,7 @@ gantt
     当前持仓监控                    :e3, after e1, 21d
     section v0.6 验证与扩展
     回测与影子组合                  :f1, after e2, 30d
-    MCP与插件生态                   :f2, after f1, 30d
+    Provider与内置工具扩展           :f2, after f1, 30d
 ```
 
 ---

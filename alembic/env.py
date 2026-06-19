@@ -12,6 +12,7 @@ from margin.news import db_models as news_db_models  # noqa: F401
 from margin.portfolio import db_models as portfolio_db_models  # noqa: F401
 from margin.storage.base import Base
 from margin.storage.database import DatabaseSettings
+from margin.strategy import db_models as strategy_db_models  # noqa: F401
 from margin.vector import db_models as vector_db_models  # noqa: F401
 
 config = context.config
