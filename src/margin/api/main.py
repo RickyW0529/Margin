@@ -16,7 +16,8 @@ from margin.api.dependencies import (
     get_research_service,
     get_strategy_service,
 )
-from margin.api.middleware import TraceIdMiddleware
+from margin.api.metrics import router as metrics_router
+from margin.api.middleware import MetricsMiddleware, TraceIdMiddleware
 from margin.api.routes.dashboard import router as dashboard_router
 from margin.api.routes.monitoring import router as monitoring_router
 from margin.api.routes.portfolios import router as portfolio_router
@@ -64,6 +65,8 @@ def create_app(
     configure_logging(log_level=settings.log_level, log_format=settings.log_format)
     application = FastAPI(title="Margin API", version=settings.service_version)
     application.add_middleware(TraceIdMiddleware)
+    application.add_middleware(MetricsMiddleware)
+    application.include_router(metrics_router)
     application.include_router(portfolio_router)
     application.include_router(research_router)
     application.include_router(strategy_router)

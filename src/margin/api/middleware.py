@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 from collections.abc import Callable
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from margin.api.metrics import HTTP_REQUEST_DURATION, HTTP_REQUESTS
 from margin.settings import get_settings
 
 _TRACE_KEY = "margin_trace_id"
@@ -26,4 +28,22 @@ class TraceIdMiddleware(BaseHTTPMiddleware):
         request.scope[_TRACE_KEY] = trace_id
         response = await call_next(request)
         response.headers[settings.trace_id_header] = trace_id
+        return response
+
+
+class MetricsMiddleware(BaseHTTPMiddleware):
+    """Record HTTP request counts and durations."""
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        start = time.perf_counter()
+        response = await call_next(request)
+        duration = time.perf_counter() - start
+        route = request.scope.get("route")
+        path = getattr(route, "path", request.url.path) if route else request.url.path
+        HTTP_REQUEST_DURATION.labels(method=request.method, path=path).observe(duration)
+        HTTP_REQUESTS.labels(
+            method=request.method,
+            path=path,
+            status_code=response.status_code,
+        ).inc()
         return response
