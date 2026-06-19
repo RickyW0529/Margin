@@ -7,13 +7,80 @@ services:
       POSTGRES_PASSWORD: margin
     ports:
       - "5432:5432"
+    volumes:
+      - margin-postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U margin -d margin"]
       interval: 2s
       timeout: 5s
       retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      MARGIN_DATABASE_URL: postgresql+psycopg://margin:margin@postgres:5432/margin
+      MARGIN_LOG_LEVEL: INFO
+      MARGIN_LOG_FORMAT: json
+      MARGIN_METRICS_ENABLED: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
-      - margin-postgres:/var/lib/postgresql/data
+      - margin-audit:/root/.margin/audit
+      - margin-snapshots:/root/.margin/snapshots
+    command: ["uvicorn", "margin.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      MARGIN_DATABASE_URL: postgresql+psycopg://margin:margin@postgres:5432/margin
+      MARGIN_LOG_LEVEL: INFO
+      MARGIN_LOG_FORMAT: json
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "-m", "scripts.seed_demo"]
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: margin
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - margin-grafana:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
 
 volumes:
   margin-postgres:
+  margin-audit:
+  margin-snapshots:
+  margin-grafana:
