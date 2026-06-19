@@ -7,7 +7,10 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
+from margin.core import db_audit as core_db_audit  # noqa: F401
+from margin.dashboard import db_models as dashboard_db_models  # noqa: F401
 from margin.evidence import db_models as evidence_db_models  # noqa: F401
+from margin.holdings_monitoring import db_models as monitoring_db_models  # noqa: F401
 from margin.news import db_models as news_db_models  # noqa: F401
 from margin.portfolio import db_models as portfolio_db_models  # noqa: F401
 from margin.storage.base import Base
