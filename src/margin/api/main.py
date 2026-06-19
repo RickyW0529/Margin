@@ -10,15 +10,24 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from margin.api.dependencies import (
+    get_dashboard_services,
+    get_monitoring_services,
     get_portfolio_service,
     get_research_service,
     get_strategy_service,
 )
+from margin.api.middleware import TraceIdMiddleware
+from margin.api.routes.dashboard import router as dashboard_router
+from margin.api.routes.monitoring import router as monitoring_router
 from margin.api.routes.portfolios import router as portfolio_router
 from margin.api.routes.research import router as research_router
 from margin.api.routes.strategy import router as strategy_router
+from margin.core.logging_config import configure_logging
+from margin.dashboard.service import DashboardServiceBundle
+from margin.holdings_monitoring.service import MonitoringServiceBundle
 from margin.portfolio.service import PortfolioService
 from margin.research.service import ResearchService
+from margin.settings import get_settings
 from margin.strategy.service import StrategyService
 
 
@@ -26,6 +35,8 @@ def create_app(
     portfolio_service: PortfolioService | None = None,
     research_service: ResearchService | None = None,
     strategy_service: StrategyService | None = None,
+    dashboard_services: DashboardServiceBundle | None = None,
+    monitoring_services: MonitoringServiceBundle | None = None,
 ) -> FastAPI:
     """Create and configure the Margin API application.
 
@@ -41,14 +52,23 @@ def create_app(
             default service.
         strategy_service: Optional strategy service to inject in place of the
             default service.
+        dashboard_services: Optional dashboard service bundle to inject in
+            place of the default PostgreSQL-backed services.
+        monitoring_services: Optional holdings monitoring service bundle to
+            inject in place of the default PostgreSQL-backed services.
 
     Returns:
         FastAPI: The configured API application.
     """
-    application = FastAPI(title="Margin API", version="0.1.0")
+    settings = get_settings()
+    configure_logging(log_level=settings.log_level, log_format=settings.log_format)
+    application = FastAPI(title="Margin API", version=settings.service_version)
+    application.add_middleware(TraceIdMiddleware)
     application.include_router(portfolio_router)
     application.include_router(research_router)
     application.include_router(strategy_router)
+    application.include_router(dashboard_router)
+    application.include_router(monitoring_router)
 
     if portfolio_service is not None:
         application.dependency_overrides[get_portfolio_service] = (
@@ -61,6 +81,14 @@ def create_app(
     if strategy_service is not None:
         application.dependency_overrides[get_strategy_service] = (
             lambda: strategy_service
+        )
+    if dashboard_services is not None:
+        application.dependency_overrides[get_dashboard_services] = (
+            lambda: dashboard_services
+        )
+    if monitoring_services is not None:
+        application.dependency_overrides[get_monitoring_services] = (
+            lambda: monitoring_services
         )
 
     @application.get("/health")
