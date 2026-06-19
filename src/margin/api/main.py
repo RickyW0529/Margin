@@ -19,6 +19,7 @@ from margin.api.dependencies import (
 from margin.api.metrics import router as metrics_router
 from margin.api.middleware import MetricsMiddleware, TraceIdMiddleware
 from margin.api.routes.dashboard import router as dashboard_router
+from margin.api.routes.health import router as health_router
 from margin.api.routes.monitoring import router as monitoring_router
 from margin.api.routes.portfolios import router as portfolio_router
 from margin.api.routes.research import router as research_router
@@ -67,6 +68,7 @@ def create_app(
     application.add_middleware(TraceIdMiddleware)
     application.add_middleware(MetricsMiddleware)
     application.include_router(metrics_router)
+    application.include_router(health_router)
     application.include_router(portfolio_router)
     application.include_router(research_router)
     application.include_router(strategy_router)
@@ -93,11 +95,6 @@ def create_app(
         application.dependency_overrides[get_monitoring_services] = (
             lambda: monitoring_services
         )
-
-    @application.get("/health")
-    def health() -> dict[str, str]:
-        """Return a basic health status response."""
-        return {"status": "ok"}
 
     return application
 
