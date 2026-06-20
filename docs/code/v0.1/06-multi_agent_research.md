@@ -56,24 +56,24 @@ ResearchService.run(symbol)
 
 | 文件路径 | 说明 |
 |----------|------|
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/__init__.py` | 模块公共导出，聚合各子模块的核心类 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/models.py` | 领域模型：信号、快照、工作流状态、Agent 轨迹 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/workflow.py` | 工作流状态机 `ResearchWorkflow` 与结果 `WorkflowResult` |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/llm.py` | LLM 适配器、模型路由、结构化输出护栏 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/agents.py` | Agent 抽象基类与 12 个研究 Agent 实现 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/tools.py` | 工具抽象、权限控制、工具注册表 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/production_tools.py` | 生产环境工具注册表构造，接入 AKShare、Tavily、向量库 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/snapshot.py` | 不可变研究快照构建器 `ResearchSnapshotBuilder` |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/repository.py` | 快照仓库协议及内存/PostgreSQL 实现 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/service.py` | 高层服务入口 `ResearchService` |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/research.py` | FastAPI 路由：运行研究与列出工具 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/db_models.py` | SQLAlchemy 实体 `ResearchSnapshotRow` |
+| `src/margin/research/__init__.py` | 模块公共导出，聚合各子模块的核心类 |
+| `src/margin/research/models.py` | 领域模型：信号、快照、工作流状态、Agent 轨迹 |
+| `src/margin/research/workflow.py` | 工作流状态机 `ResearchWorkflow` 与结果 `WorkflowResult` |
+| `src/margin/research/llm.py` | LLM 适配器、模型路由、结构化输出护栏 |
+| `src/margin/research/agents.py` | Agent 抽象基类与 12 个研究 Agent 实现 |
+| `src/margin/research/tools.py` | 工具抽象、权限控制、工具注册表 |
+| `src/margin/research/production_tools.py` | 生产环境工具注册表构造，接入 AKShare、Tavily、向量库 |
+| `src/margin/research/snapshot.py` | 不可变研究快照构建器 `ResearchSnapshotBuilder` |
+| `src/margin/research/repository.py` | 快照仓库协议及内存/PostgreSQL 实现 |
+| `src/margin/research/service.py` | 高层服务入口 `ResearchService` |
+| `src/margin/api/routes/research.py` | FastAPI 路由：运行研究与列出工具 |
+| `src/margin/research/db_models.py` | SQLAlchemy 实体 `ResearchSnapshotRow` |
 
 ---
 
 ## 3. 领域模型
 
-定义位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/models.py`
+定义位置：`src/margin/research/models.py`
 
 ### 3.1 枚举
 
@@ -176,7 +176,7 @@ ResearchService.run(symbol)
 
 ## 4. 工作流
 
-定义位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/workflow.py`
+定义位置：`src/margin/research/workflow.py`
 
 ### 4.1 `WorkflowResult`
 
@@ -255,7 +255,7 @@ ResearchService.run(symbol)
 
 ## 5. LLM 层
 
-定义位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/llm.py`
+定义位置：`src/margin/research/llm.py`
 
 ### 5.1 `TaskType`
 
@@ -300,7 +300,7 @@ OpenAI 兼容的 LLM 提供者，支持结构化 JSON 输出。
 | `name` | `str` | `"openai_llm"` | 提供者名称 |
 | `api_key` | `str \| None` | `MARGIN_LLM_API_KEY` | API 密钥 |
 | `base_url` | `str \| None` | `MARGIN_LLM_BASE_URL` | 基础 URL |
-| `model` | `str \| None` | `MARGIN_LLM_MODEL` / `gpt-4o-mini` | 模型名 |
+| `model` | `str \| None` | `MARGIN_LLM_MODEL` / `deepseek-v4-pro` | 模型名 |
 | `client` | `httpx.Client \| None` | 新建 | HTTP 客户端 |
 | `timeout` | `float` | `60.0` | 超时（秒） |
 
@@ -396,7 +396,7 @@ OpenAI 兼容的 LLM 提供者，支持结构化 JSON 输出。
 
 ## 6. Agent
 
-定义位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/agents.py`
+定义位置：`src/margin/research/agents.py`
 
 ### 6.1 `AgentContext`
 
@@ -562,7 +562,7 @@ Agent 输出数据类。
 
 ## 7. 工具系统
 
-定义位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/tools.py`
+定义位置：`src/margin/research/tools.py`
 
 ### 7.1 `ToolResult`
 
@@ -719,7 +719,7 @@ Agent 输出数据类。
 
 ## 8. 生产工具注册表
 
-定义位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/production_tools.py`
+定义位置：`src/margin/research/production_tools.py`
 
 ### `build_production_tool_registry`
 
@@ -751,7 +751,7 @@ Agent 输出数据类。
 
 ### 9.1 `ResearchSnapshotBuilder`
 
-定义位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/snapshot.py`
+定义位置：`src/margin/research/snapshot.py`
 
 不可变审计快照的构建器，采用链式 API。
 
@@ -780,7 +780,7 @@ Agent 输出数据类。
 
 ### 9.2 `ResearchRepository`
 
-定义位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/repository.py`
+定义位置：`src/margin/research/repository.py`
 
 快照持久化协议。
 
@@ -821,7 +821,7 @@ PostgreSQL 持久化仓库。
 
 ### 9.5 `ResearchSnapshotRow`
 
-定义位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/db_models.py`
+定义位置：`src/margin/research/db_models.py`
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -841,7 +841,7 @@ PostgreSQL 持久化仓库。
 
 ### 10.1 `ResearchService`
 
-定义位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/service.py`
+定义位置：`src/margin/research/service.py`
 
 高层研究服务入口。
 
@@ -865,7 +865,7 @@ PostgreSQL 持久化仓库。
 
 ### 10.2 FastAPI 路由
 
-定义位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/research.py`
+定义位置：`src/margin/api/routes/research.py`
 
 #### `ResearchRunRequest`
 

@@ -13,8 +13,8 @@ from margin.evidence import db_models as evidence_db_models  # noqa: F401
 from margin.holdings_monitoring import db_models as monitoring_db_models  # noqa: F401
 from margin.news import db_models as news_db_models  # noqa: F401
 from margin.portfolio import db_models as portfolio_db_models  # noqa: F401
+from margin.settings import get_settings
 from margin.storage.base import Base
-from margin.storage.database import DatabaseSettings
 from margin.strategy import db_models as strategy_db_models  # noqa: F401
 from margin.vector import db_models as vector_db_models  # noqa: F401
 
@@ -22,7 +22,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", DatabaseSettings.from_env().url)
+config.set_main_option("sqlalchemy.url", str(get_settings().database_url))
 target_metadata = Base.metadata
 
 

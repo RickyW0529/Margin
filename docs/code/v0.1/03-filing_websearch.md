@@ -39,21 +39,21 @@
 
 | 文件路径 | 说明 |
 | --- | --- |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/__init__.py` | 包入口，导出公共 API（采集、搜索、去重、模型等）。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/models.py` | 领域模型：`SourceLevel`、`DocumentStatus`、`RawSnapshot`、`DocumentEvent`、`SourceDescriptor` 及工厂函数。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/discovery.py` | 增量发现模型：`DiscoveredDocument`、`DiscoveryConnector` 协议。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/connectors.py` | 交易所公告适配器：`SSEAnnouncementConnector`、`SZSEAnnouncementConnector`。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/acquirer.py` | 采集核心：`SourceRegistry`、`SnapshotStore`、`Downloader`、`DocumentParser`、`SecurityMapper`、`FilingAcquirer` 及异常。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/websearch.py` | WebSearch：`WebSearchProvider`、`WebSearchService`、`ComplianceChecker`、`OriginalContentVerifier`、搜索结果模型。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/providers/__init__.py` | 第三方 provider 包入口（当前为空）。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/providers/tavily.py` | Tavily 搜索适配器：`TavilySearchAdapter`。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/dedup.py` | 去重与评分：`Deduplicator`、`NewsProcessor`、`PersistentNewsProcessor`、`QualityScorer`、SimHash 工具。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/repository.py` | PostgreSQL 仓库：`NewsRepository`、`OutboxMessage`、`DedupRecord`、`RepostEdge` 及行映射函数。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/db_models.py` | SQLAlchemy 行模型：快照、事件、Outbox、搜索记录、去重记录、转载边、游标。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/outbox.py` | Outbox 发布者/消费者：`DocumentEventPublisher`、`OutboxConsumer`。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/parsed.py` | 结构化解析：`ParsedBlock`、`ParsedDocument`、`StructuredDocumentParser`。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/robots.py` | robots.txt 合规：`RobotsRules`、`RobotsChecker`、`RobotsFetcher` 协议。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/scheduler.py` | 增量调度：`AcquisitionRunResult`、`IncrementalAcquisitionRunner`。 |
+| `src/margin/news/__init__.py` | 包入口，导出公共 API（采集、搜索、去重、模型等）。 |
+| `src/margin/news/models.py` | 领域模型：`SourceLevel`、`DocumentStatus`、`RawSnapshot`、`DocumentEvent`、`SourceDescriptor` 及工厂函数。 |
+| `src/margin/news/discovery.py` | 增量发现模型：`DiscoveredDocument`、`DiscoveryConnector` 协议。 |
+| `src/margin/news/connectors.py` | 交易所公告适配器：`SSEAnnouncementConnector`、`SZSEAnnouncementConnector`。 |
+| `src/margin/news/acquirer.py` | 采集核心：`SourceRegistry`、`SnapshotStore`、`Downloader`、`DocumentParser`、`SecurityMapper`、`FilingAcquirer` 及异常。 |
+| `src/margin/news/websearch.py` | WebSearch：`WebSearchProvider`、`WebSearchService`、`ComplianceChecker`、`OriginalContentVerifier`、搜索结果模型。 |
+| `src/margin/news/providers/__init__.py` | 第三方 provider 包入口（当前为空）。 |
+| `src/margin/news/providers/tavily.py` | Tavily 搜索适配器：`TavilySearchAdapter`。 |
+| `src/margin/news/dedup.py` | 去重与评分：`Deduplicator`、`NewsProcessor`、`PersistentNewsProcessor`、`QualityScorer`、SimHash 工具。 |
+| `src/margin/news/repository.py` | PostgreSQL 仓库：`NewsRepository`、`OutboxMessage`、`DedupRecord`、`RepostEdge` 及行映射函数。 |
+| `src/margin/news/db_models.py` | SQLAlchemy 行模型：快照、事件、Outbox、搜索记录、去重记录、转载边、游标。 |
+| `src/margin/news/outbox.py` | Outbox 发布者/消费者：`DocumentEventPublisher`、`OutboxConsumer`。 |
+| `src/margin/news/parsed.py` | 结构化解析：`ParsedBlock`、`ParsedDocument`、`StructuredDocumentParser`。 |
+| `src/margin/news/robots.py` | robots.txt 合规：`RobotsRules`、`RobotsChecker`、`RobotsFetcher` 协议。 |
+| `src/margin/news/scheduler.py` | 增量调度：`AcquisitionRunResult`、`IncrementalAcquisitionRunner`。 |
 
 ---
 
@@ -318,7 +318,7 @@
 
 | 方法 | 签名 | 说明 |
 | --- | --- | --- |
-| `__init__` | `(base_dir: Path \| None = None)` | 默认目录为 `~/.margin/snapshots`，不存在则创建。 |
+| `__init__` | `(base_dir: Path \| None = None)` | 默认目录为 `.margin/snapshots`，不存在则创建。 |
 | `save` | `(source_url: str, content: bytes, content_type: str, http_status: int \| None = None) -> RawSnapshot` | 保存内容并返回快照元数据。 |
 | `read` | `(snapshot_id: str, content_type: str) -> bytes \| None` | 按 ID 与扩展名读取原始字节。 |
 | `read_snapshot` | `(snapshot: RawSnapshot) -> bytes \| None` | 通过快照对象读取。 |
@@ -809,7 +809,7 @@ record, events = service.search_and_acquire("平安银行 公告", max_results=5
 
 ### 10.6 注意事项
 
-- `SnapshotStore` 默认写入用户主目录 `~/.margin/snapshots`，生产环境应替换为对象存储实现。
+- `SnapshotStore` 默认写入项目相对目录 `.margin/snapshots`，生产环境应替换为对象存储实现。
 - `DocumentParser` 对 PDF 的解析依赖 `pymupdf`；缺失时仅保留快照，状态为 `PARSE_FAILED`。
 - `ComplianceChecker` 与 `RobotsChecker` 共同防止绕过 robots.txt、登录墙、付费墙；遇到 401/403 直接拒绝。
 - `NewsRepository` 每个方法内部独立开启事务，批量写入时应在外层控制会话以避免多次提交（当前实现每次方法调用提交）。

@@ -26,7 +26,12 @@ from margin.portfolio.models import (
 
 
 class PortfolioRepository(Protocol):
-    """Persistence contract consumed by ``PortfolioService``."""
+    """Persistence contract consumed by ``PortfolioService``.
+
+    Implementations are responsible for storing and retrieving portfolios, trades,
+    and versioned investment theses. The protocol intentionally mirrors the public
+    persistence surface so that in-memory and SQLAlchemy backends are interchangeable.
+    """
 
     def add_portfolio(self, portfolio: Portfolio) -> None:
         """Persist a new portfolio.

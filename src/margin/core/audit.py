@@ -18,7 +18,24 @@ from margin.core.provider import CallResult
 
 
 class AuditRecord(BaseModel):
-    """A single immutable audit record describing a Provider call."""
+    """A single immutable audit record describing a Provider call.
+
+    Attributes:
+        provider_name: Name of the Provider that was called.
+        provider_version: Version of the Provider.
+        method: Method name that was invoked.
+        params_summary: Sanitized summary of call parameters.
+        success: Whether the call succeeded.
+        error: Error message when the call failed.
+        fetched_at: Timestamp when the call was attempted.
+        available_at: Timestamp when the data becomes available, if known.
+        response_hash: SHA-256 hash of the response payload.
+        cost: Estimated monetary or quota cost of the call.
+        latency_ms: Round-trip latency in milliseconds.
+        attempt_count: Number of attempts made before the final result.
+        from_fallback: Whether the result came from a fallback Provider.
+        trace_id: Optional trace identifier.
+    """
 
     provider_name: str
     provider_version: str
@@ -68,9 +85,9 @@ class AuditLogger:
 
         Args:
             log_path: Path to the JSONL log file. Defaults to
-                ``~/.margin/audit/provider_calls.jsonl``.
+                ``.margin/audit/provider_calls.jsonl``.
         """
-        self._log_path = log_path or Path.home() / ".margin" / "audit" / "provider_calls.jsonl"
+        self._log_path = log_path or Path(".margin") / "audit" / "provider_calls.jsonl"
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
 
     def log_call(

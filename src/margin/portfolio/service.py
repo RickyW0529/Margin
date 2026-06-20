@@ -588,7 +588,11 @@ class PortfolioService:
 
     @property
     def importer(self) -> TradeImporter:
-        """Expose the internal trade importer (used for broker plugin registration)."""
+        """Expose the internal trade importer (used for broker plugin registration).
+
+        Returns:
+            The ``TradeImporter`` instance used by this service.
+        """
         return self._importer
 
     def _ensure_portfolio(self, portfolio_id: str) -> None:

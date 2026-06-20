@@ -41,17 +41,17 @@ The shared / core layer of Margin v0.1 provides the foundation on which all busi
 
 | File | Purpose |
 | --- | --- |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/settings.py` | Centralized Pydantic-based application settings. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/worker.py` | APScheduler-based persistent worker for monitoring and indexing sweeps. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/storage/base.py` | Shared SQLAlchemy `DeclarativeBase` used by all ORM models. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/storage/database.py` | Database settings, engine creation, and session factory helpers. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/main.py` | FastAPI application factory and router registration. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/dependencies.py` | Cached dependency factories for FastAPI injection. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/schemas.py` | Shared Pydantic request and response models. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/provider.py` | Provider type definitions, descriptors, base class, and business protocols. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/registry.py` | Central provider registry with retry, fallback, audit, and cost tracking. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/resilience.py` | Rate limiter, retry configuration, and retry wrapper. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/secret.py` | Reference-based secret manager. |
+| `src/margin/settings.py` | Centralized Pydantic-based application settings. |
+| `src/margin/worker.py` | APScheduler-based persistent worker for monitoring and indexing sweeps. |
+| `src/margin/storage/base.py` | Shared SQLAlchemy `DeclarativeBase` used by all ORM models. |
+| `src/margin/storage/database.py` | Database settings, engine creation, and session factory helpers. |
+| `src/margin/api/main.py` | FastAPI application factory and router registration. |
+| `src/margin/api/dependencies.py` | Cached dependency factories for FastAPI injection. |
+| `src/margin/api/schemas.py` | Shared Pydantic request and response models. |
+| `src/margin/core/provider.py` | Provider type definitions, descriptors, base class, and business protocols. |
+| `src/margin/core/registry.py` | Central provider registry with retry, fallback, audit, and cost tracking. |
+| `src/margin/core/resilience.py` | Rate limiter, retry configuration, and retry wrapper. |
+| `src/margin/core/secret.py` | Reference-based secret manager. |
 
 ---
 
@@ -74,7 +74,7 @@ Single source of truth for all Margin environment configuration.
 | `database_pool_pre_ping` | `bool` | `True` | Verify connections before checkout from the pool. |
 | `llm_api_key` | `SecretStr \| None` | `None` | API key for the OpenAI-compatible LLM provider. |
 | `llm_base_url` | `HttpUrl \| None` | `None` | Base URL for the OpenAI-compatible LLM provider. |
-| `llm_model` | `str` | `gpt-4o-mini` | Default LLM model name. |
+| `llm_model` | `str` | `deepseek-v4-pro` | Default LLM model name. |
 | `embedding_base_url` | `HttpUrl \| None` | `None` | Base URL for the OpenAI-compatible embedding provider. |
 | `embedding_api_key` | `SecretStr \| None` | `None` | API key for the embedding provider. |
 | `embedding_model` | `str` | `text-embedding-3-small` | Default embedding model name. |
@@ -88,7 +88,7 @@ Single source of truth for all Margin environment configuration.
 | `metrics_enabled` | `bool` | `True` | Whether Prometheus metrics are enabled. |
 | `trace_id_header` | `str` | `x-margin-trace-id` | HTTP header used to carry trace identifiers. |
 | `monitoring_interval_seconds` | `int` | `300` | Interval between background monitoring/indexing sweeps. |
-| `audit_log_path` | `Path` | `~/.margin/audit/provider_calls.jsonl` | Path to the provider audit log file. |
+| `audit_log_path` | `Path` | `.margin/audit/provider_calls.jsonl` | Path to the provider audit log file. |
 | `environment` | `Literal["development", "test", "production"]` | `development` | Deployment environment. |
 | `service_name` | `str` | `margin-api` | Service name used for observability. |
 | `service_version` | `str` | `0.1.0` | Service version string. |
@@ -865,7 +865,7 @@ Reference-based secret manager.
 | --- | --- |
 | Signature | `(secrets_dir: Path \| None = None, env_prefix: str = "MARGIN_SECRET_") -> None` |
 | Purpose | Initializes the secret manager. |
-| Parameters | `secrets_dir` — directory containing local secret files (defaults to `~/.margin/secrets`). <br> `env_prefix` — prefix for environment variables (defaults to `MARGIN_SECRET_`). |
+| Parameters | `secrets_dir` — directory containing local secret files (defaults to `.margin/secrets`). <br> `env_prefix` — prefix for environment variables (defaults to `MARGIN_SECRET_`). |
 | Returns | None. |
 
 ### Method: `SecretManager.resolve`
@@ -916,7 +916,7 @@ Secret reference metadata for display; does not contain the secret value.
 - **Dependency caching**: All service factories in `dependencies.py` are decorated with `@lru_cache`, ensuring the same engine and repository instances are reused across requests within a process.
 - **Test wiring**: `create_app()` accepts optional service overrides and maps them through `application.dependency_overrides`, allowing tests to inject fakes without changing route code.
 - **Provider pluggability**: New external integrations should implement `BaseProvider`, expose a `ProviderDescriptor`, and can then be registered in `ProviderRegistry` with retry, rate limiting, fallback, and audit.
-- **Secret discipline**: `ProviderDescriptor` stores only secret reference names, never values. The registry and `SecretManager` resolve values at runtime from `MARGIN_SECRET_<REF>` environment variables or `~/.margin/secrets/<ref>` files.
+- **Secret discipline**: `ProviderDescriptor` stores only secret reference names, never values. The registry and `SecretManager` resolve values at runtime from `MARGIN_SECRET_<REF>` environment variables or `.margin/secrets/<ref>` files.
 - **Resilience defaults**: `RateLimiter` and `RetryConfig` use sensible defaults (`60 calls / 60 s`, `3` retries with exponential backoff). They are intentionally not thread-safe, matching the MVP single-threaded worker model.
 - **Worker scheduling**: The worker schedules two interval jobs (`holdings-monitoring` and `document-indexing`) with coalescing and single-instance constraints to prevent overlapping sweeps.
 - **Dashboard transparency**: `build_provider_status_providers` deliberately returns degraded placeholders for missing integrations so the dashboard can display explicit configuration gaps instead of omitting providers silently.

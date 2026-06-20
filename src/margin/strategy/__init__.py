@@ -1,4 +1,9 @@
-"""Strategy configuration module."""
+"""Strategy configuration package.
+
+This package provides domain models, templates, validation, lifecycle
+management, prompt construction, sandbox checks, persistence repositories, and
+a high-level service for creating and managing investment research strategies.
+"""
 
 from margin.strategy.lifecycle import StrategyLifecycle
 from margin.strategy.models import (

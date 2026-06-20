@@ -10,10 +10,25 @@ class StrategySandbox:
     """Run lightweight checks before a strategy version is promoted."""
 
     def __init__(self, validator: StrategyValidator | None = None) -> None:
+        """Initialize the sandbox with an optional validator.
+
+        Args:
+            validator: The validator used for guardrail checks. A default
+                :class:`StrategyValidator` is created when omitted.
+        """
         self._validator = validator or StrategyValidator()
 
     def evaluate(self, config: StrategyConfig) -> StrategySandboxResult:
-        """Run all sandbox checks and return a structured result."""
+        """Run all sandbox checks and return a structured result.
+
+        Args:
+            config: The strategy configuration to evaluate.
+
+        Returns:
+            A :class:`StrategySandboxResult` summarizing validation, sample
+            run, backtest, data-leak, cost, and preview checks together with
+            any diagnostic messages.
+        """
         messages: list[str] = []
 
         ok, errors = self._validator.validate(config)
@@ -47,7 +62,15 @@ class StrategySandbox:
         )
 
     def _check_data_leak(self, config: StrategyConfig) -> bool:
-        """Placeholder: ensure no future-dated constraints are present."""
+        """Placeholder: ensure no future-dated constraints are present.
+
+        Args:
+            config: The strategy configuration to inspect.
+
+        Returns:
+            ``True`` when the horizon is non-negative and at least one evidence
+            item is required.
+        """
         if config.horizon < 0:
             return False
         return config.evidence.min_evidence_count >= 1

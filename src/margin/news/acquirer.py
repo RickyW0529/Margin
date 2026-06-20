@@ -61,7 +61,11 @@ class BaseConnector(ABC):
     @property
     @abstractmethod
     def source_name(self) -> str:
-        """Return the human-readable name of the data source."""
+        """Return the human-readable name of the data source.
+
+        Returns:
+            Source name string.
+        """
 
     @abstractmethod
     def fetch(self, url: str, **kwargs: Any) -> tuple[bytes, str, int]:
@@ -85,11 +89,20 @@ class HTTPConnector(BaseConnector):
     """
 
     def __init__(self, name: str = "http") -> None:
+        """Initialize the HTTP connector.
+
+        Args:
+            name: Source name used by the connector.
+        """
         self._name = name
 
     @property
     def source_name(self) -> str:
-        """Return the connector's source name."""
+        """Return the connector's source name.
+
+        Returns:
+            Source name string.
+        """
         return self._name
 
     def fetch(self, url: str, **kwargs: Any) -> tuple[bytes, str, int]:
@@ -143,6 +156,7 @@ class SourceRegistry:
     """
 
     def __init__(self) -> None:
+        """Initialize an empty source registry."""
         self._sources: dict[str, SourceDescriptor] = {}
         self._connectors: dict[str, BaseConnector] = {}
 
@@ -224,7 +238,13 @@ class SnapshotStore:
     """
 
     def __init__(self, base_dir: Path | None = None) -> None:
-        self._base_dir = base_dir or Path.home() / ".margin" / "snapshots"
+        """Initialize the snapshot store.
+
+        Args:
+            base_dir: Directory where snapshot files are written. Defaults to
+                ``.margin/snapshots``.
+        """
+        self._base_dir = base_dir or Path(".margin") / "snapshots"
         self._base_dir.mkdir(parents=True, exist_ok=True)
 
     def save(
@@ -281,11 +301,22 @@ class SnapshotStore:
         return None
 
     def read_snapshot(self, snapshot: RawSnapshot) -> bytes | None:
-        """Read a snapshot using its immutable metadata."""
+        """Read a snapshot using its immutable metadata.
+
+        Args:
+            snapshot: Snapshot metadata including identifier and content type.
+
+        Returns:
+            The snapshot bytes, or None if the snapshot file does not exist.
+        """
         return self.read(snapshot.snapshot_id, snapshot.content_type)
 
     def delete(self, snapshot: RawSnapshot) -> None:
-        """Delete a snapshot rejected by compliance checks."""
+        """Delete a snapshot rejected by compliance checks.
+
+        Args:
+            snapshot: Snapshot metadata whose storage path should be removed.
+        """
         if snapshot.storage_path is None:
             return
         path = Path(snapshot.storage_path)
@@ -329,6 +360,12 @@ class Downloader:
         registry: SourceRegistry,
         snapshot_store: SnapshotStore,
     ) -> None:
+        """Initialize the downloader.
+
+        Args:
+            registry: Source registry containing source descriptors and connectors.
+            snapshot_store: Snapshot store used to persist downloaded content.
+        """
         self._registry = registry
         self._snapshot_store = snapshot_store
 
@@ -668,6 +705,14 @@ class FilingAcquirer:
         parser: DocumentParser | None = None,
         security_mapper: SecurityMapper | None = None,
     ) -> None:
+        """Initialize the filing acquirer.
+
+        Args:
+            registry: Source registry containing source descriptors and connectors.
+            snapshot_store: Snapshot store used to persist downloaded content.
+            parser: Document parser. Defaults to a new ``DocumentParser``.
+            security_mapper: Security symbol mapper. Defaults to a new ``SecurityMapper``.
+        """
         self._registry = registry
         self._downloader = Downloader(registry, snapshot_store)
         self._parser = parser or DocumentParser()

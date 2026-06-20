@@ -26,6 +26,7 @@ from margin.data.standardize import StandardDataEvent
 
 
 PIT_FIELDS = ("event_at", "published_at", "available_at", "fetched_at", "revised_at")
+"""Canonical point-in-time field names used across the data layer."""
 
 
 class PITFieldError(ValueError):

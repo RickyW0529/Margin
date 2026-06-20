@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Research run detail page.
+ * Displays the status and candidate cards produced by a single research run.
+ */
+
 import { CandidateList } from "@/components/candidate-list";
 import {
   fetchResearchRun,
@@ -6,10 +11,18 @@ import {
   type ResearchRun,
 } from "@/lib/api";
 
+/**
+ * Props for the research run detail page.
+ */
 type ResearchRunPageProps = {
   params: Promise<{ runId: string }>;
 };
 
+/**
+ * Research run detail page that loads run metadata and candidate cards.
+ * @param params - Route params containing the research run identifier.
+ * @returns The rendered research run detail page.
+ */
 export default async function ResearchRunPage({ params }: ResearchRunPageProps) {
   const { runId } = await params;
   let run: ResearchRun | null = null;

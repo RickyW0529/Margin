@@ -9,12 +9,25 @@ from margin.news.discovery import DiscoveredDocument
 
 
 def _default_client():
+    """Return a default ``httpx`` client for exchange discovery requests.
+
+    Returns:
+        An ``httpx.Client`` instance with a 30-second timeout.
+    """
     import httpx
 
     return httpx.Client(timeout=30.0)
 
 
 def _parse_datetime(value: str) -> datetime:
+    """Parse a date/time string into a timezone-aware UTC datetime.
+
+    Args:
+        value: Date/time string in one of several common formats.
+
+    Returns:
+        Timezone-aware UTC datetime.
+    """
     value = value.strip()
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%Y/%m/%d %H:%M:%S"):
         try:
@@ -25,14 +38,33 @@ def _parse_datetime(value: str) -> datetime:
 
 
 class SSEAnnouncementConnector:
-    """Fixture-testable SSE announcement discovery adapter."""
+    """Fixture-testable SSE announcement discovery adapter.
+
+    Attributes:
+        _endpoint: URL of the SSE announcement listing endpoint.
+        _client: HTTP client used to fetch announcements.
+    """
 
     def __init__(self, *, endpoint: str, client: Any | None = None) -> None:
+        """Initialize the SSE connector.
+
+        Args:
+            endpoint: URL of the SSE announcement listing endpoint.
+            client: Optional pre-configured HTTP client.
+        """
         self._endpoint = endpoint
         self._client = client or _default_client()
 
     def discover(self, cursor: str | None, limit: int) -> list[DiscoveredDocument]:
-        """Fetch and map an SSE announcement page."""
+        """Fetch and map an SSE announcement page.
+
+        Args:
+            cursor: Opaque cursor from a previous page, or None for the first page.
+            limit: Maximum number of announcements to return.
+
+        Returns:
+            List of discovered SSE announcements.
+        """
         response = self._client.get(
             self._endpoint,
             params={"cursor": cursor, "limit": limit},
@@ -57,7 +89,13 @@ class SSEAnnouncementConnector:
 
 
 class SZSEAnnouncementConnector:
-    """Fixture-testable SZSE announcement discovery adapter."""
+    """Fixture-testable SZSE announcement discovery adapter.
+
+    Attributes:
+        _endpoint: URL of the SZSE announcement listing endpoint.
+        _base_url: Base URL used to resolve relative attachment paths.
+        _client: HTTP client used to fetch announcements.
+    """
 
     def __init__(
         self,
@@ -66,12 +104,27 @@ class SZSEAnnouncementConnector:
         base_url: str = "https://disc.szse.cn",
         client: Any | None = None,
     ) -> None:
+        """Initialize the SZSE connector.
+
+        Args:
+            endpoint: URL of the SZSE announcement listing endpoint.
+            base_url: Base URL used to resolve relative attachment paths.
+            client: Optional pre-configured HTTP client.
+        """
         self._endpoint = endpoint
         self._base_url = base_url.rstrip("/")
         self._client = client or _default_client()
 
     def discover(self, cursor: str | None, limit: int) -> list[DiscoveredDocument]:
-        """Fetch and map an SZSE announcement page."""
+        """Fetch and map an SZSE announcement page.
+
+        Args:
+            cursor: Opaque cursor from a previous page, or None for the first page.
+            limit: Maximum number of announcements to return.
+
+        Returns:
+            List of discovered SZSE announcements.
+        """
         response = self._client.get(
             self._endpoint,
             params={"cursor": cursor, "limit": limit},

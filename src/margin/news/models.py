@@ -49,7 +49,12 @@ class SourceLevel(IntEnum):
 
 
 class DocumentStatus(StrEnum):
-    """Processing status controlling whether a document may be used as evidence."""
+    """Processing status controlling whether a document may be used as evidence.
+
+    Attributes:
+        READY: Document was parsed successfully and may be used as evidence.
+        PARSE_FAILED: Document could not be parsed; only the raw snapshot is available.
+    """
 
     READY = "ready"
     PARSE_FAILED = "parse_failed"
@@ -103,7 +108,14 @@ class RawSnapshot(BaseModel):
     @field_validator("downloaded_at")
     @classmethod
     def normalize_downloaded_at(cls, value: datetime) -> datetime:
-        """Normalize snapshot timestamps to UTC."""
+        """Normalize snapshot timestamps to UTC.
+
+        Args:
+            value: Datetime value provided during model construction.
+
+        Returns:
+            Timezone-aware UTC datetime.
+        """
         return ensure_utc(value)
 
 
@@ -164,7 +176,14 @@ class DocumentEvent(BaseModel):
     @field_validator("published_at", "available_at", "retrieved_at")
     @classmethod
     def normalize_event_timestamp(cls, value: datetime) -> datetime:
-        """Normalize event timestamps to UTC for point-in-time comparisons."""
+        """Normalize event timestamps to UTC for point-in-time comparisons.
+
+        Args:
+            value: Datetime value provided during model construction.
+
+        Returns:
+            Timezone-aware UTC datetime.
+        """
         return ensure_utc(value)
 
     @property

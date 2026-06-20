@@ -25,6 +25,7 @@ class StrategyTemplate:
 
 
 def _value_quality() -> StrategyTemplate:
+    """Return the "value quality" built-in strategy template."""
     return StrategyTemplate(
         meta=StrategyTemplateMeta(
             template_id="value_quality",
@@ -53,6 +54,7 @@ def _value_quality() -> StrategyTemplate:
 
 
 def _undervalued_recovery() -> StrategyTemplate:
+    """Return the "undervalued recovery" built-in strategy template."""
     return StrategyTemplate(
         meta=StrategyTemplateMeta(
             template_id="undervalued_recovery",
@@ -81,6 +83,7 @@ def _undervalued_recovery() -> StrategyTemplate:
 
 
 def _high_dividend() -> StrategyTemplate:
+    """Return the "high dividend" built-in strategy template."""
     return StrategyTemplate(
         meta=StrategyTemplateMeta(
             template_id="high_dividend",
@@ -109,6 +112,7 @@ def _high_dividend() -> StrategyTemplate:
 
 
 def _growth_at_reasonable_price() -> StrategyTemplate:
+    """Return the "growth at reasonable price" built-in strategy template."""
     return StrategyTemplate(
         meta=StrategyTemplateMeta(
             template_id="growth_at_reasonable_price",
@@ -137,6 +141,7 @@ def _growth_at_reasonable_price() -> StrategyTemplate:
 
 
 def _cyclical_reversal() -> StrategyTemplate:
+    """Return the "cyclical reversal" built-in strategy template."""
     return StrategyTemplate(
         meta=StrategyTemplateMeta(
             template_id="cyclical_reversal",
@@ -165,6 +170,7 @@ def _cyclical_reversal() -> StrategyTemplate:
 
 
 def _custom() -> StrategyTemplate:
+    """Return the blank "custom" built-in strategy template."""
     return StrategyTemplate(
         meta=StrategyTemplateMeta(
             template_id="custom",
@@ -187,5 +193,10 @@ BUILTIN_TEMPLATES: dict[str, StrategyTemplate] = {
 
 
 def list_templates() -> list[StrategyTemplateMeta]:
-    """Return metadata for all built-in strategy templates."""
+    """Return metadata for all built-in strategy templates.
+
+    Returns:
+        A list of :class:`StrategyTemplateMeta` objects, one per built-in
+        template.
+    """
     return [template.meta for template in BUILTIN_TEMPLATES.values()]

@@ -12,7 +12,13 @@ from margin.news.repository import NewsRepository
 
 @dataclass(frozen=True)
 class AcquisitionRunResult:
-    """Summary of one incremental acquisition run."""
+    """Summary of one incremental acquisition run.
+
+    Attributes:
+        discovered: Number of documents discovered by the connector.
+        published: Number of documents successfully acquired and published.
+        failed: Number of documents that failed acquisition or publishing.
+    """
 
     discovered: int
     published: int
@@ -30,6 +36,14 @@ class IncrementalAcquisitionRunner:
         publisher: DocumentEventPublisher,
         cursor_key: str = "announcements",
     ) -> None:
+        """Initialize the incremental acquisition runner.
+
+        Args:
+            repository: Repository used to read and update source cursors and publish events.
+            acquirer: Acquirer object with an ``acquire`` method that returns a DocumentEvent.
+            publisher: Publisher used to persist acquired events atomically.
+            cursor_key: Cursor key used to resume incremental discovery.
+        """
         self._repository = repository
         self._acquirer = acquirer
         self._publisher = publisher

@@ -180,16 +180,22 @@ class Deduplicator:
         2. Content hash.
         3. Title and publication date.
         4. Body SimHash against previously seen events (within threshold).
-        5. Repost-chain detection, keeping the earliest reliable source.
+        5. Optional vector similarity against previously seen events.
+        6. Repost-chain detection, keeping the earliest reliable source.
 
     Attributes:
         _simhash_threshold: Maximum Hamming distance allowed before two events are considered
             similar.
         _title_threshold: Minimum title similarity threshold (reserved for future use).
-        _seen_urls: Set of URLs already encountered.
-        _seen_hashes: Set of content hashes already encountered.
-        _seen_title_dates: Set of normalized "title|date" keys already encountered.
+        _vector_similarity_func: Optional callable that returns a similarity score between two
+            events.
+        _vector_similarity_threshold: Minimum vector similarity score that triggers a duplicate
+            decision.
+        _seen_urls: Mapping from seen URLs to their canonical events.
+        _seen_hashes: Mapping from seen content hashes to their canonical events.
+        _seen_title_dates: Mapping from normalized "title|date" keys to canonical events.
         _seen_simhashes: List of (SimHash fingerprint, DocumentEvent) pairs already encountered.
+        _seen_events: List of events encountered, used for optional vector similarity checks.
     """
 
     def __init__(
@@ -204,6 +210,10 @@ class Deduplicator:
         Args:
             simhash_threshold: Hamming distance threshold for SimHash deduplication.
             title_similarity_threshold: Reserved threshold for future title similarity logic.
+            vector_similarity_func: Optional callable ``(event, existing) -> float`` used for
+                vector-similarity deduplication.
+            vector_similarity_threshold: Minimum similarity score for the vector similarity
+                check to flag a duplicate.
         """
         self._simhash_threshold = simhash_threshold
         self._title_threshold = title_similarity_threshold
@@ -216,7 +226,11 @@ class Deduplicator:
         self._seen_events: list[DocumentEvent] = []
 
     def seed(self, events: list[DocumentEvent]) -> None:
-        """Seed the deduplicator with already-known canonical events."""
+        """Seed the deduplicator with already-known canonical events.
+
+        Args:
+            events: List of canonical events to treat as already seen.
+        """
         for event in events:
             self._record_seen(event)
 
@@ -224,11 +238,22 @@ class Deduplicator:
         self,
         event: DocumentEvent,
     ) -> tuple[str, DocumentEvent] | None:
-        """Public duplicate probe used by persistent processors."""
+        """Public duplicate probe used by persistent processors.
+
+        Args:
+            event: Document event to evaluate.
+
+        Returns:
+            Tuple of (reason, canonical_event) if a duplicate is found, otherwise None.
+        """
         return self._check_duplicate(event)
 
     def record_event(self, event: DocumentEvent) -> None:
-        """Record a canonical event after it is persisted."""
+        """Record a canonical event after it is persisted.
+
+        Args:
+            event: Document event that has been classified as unique.
+        """
         self._record_seen(event)
 
     def deduplicate(
@@ -568,6 +593,18 @@ class PersistentNewsProcessor:
         vector_similarity_threshold: float = 0.92,
         quality_scorer: QualityScorer | None = None,
     ) -> None:
+        """Initialize the persistent news processor.
+
+        Args:
+            repository: Repository used to persist events, duplicate decisions, and repost
+                edges.
+            simhash_threshold: Hamming distance threshold for SimHash deduplication.
+            vector_similarity_func: Optional callable for vector-similarity deduplication.
+            vector_similarity_threshold: Minimum similarity score for vector duplicate
+                detection.
+            quality_scorer: Scorer used to compute event quality. Defaults to a new
+                ``QualityScorer``.
+        """
         self._repository = repository
         self._simhash_threshold = simhash_threshold
         self._vector_similarity_func = vector_similarity_func
@@ -575,7 +612,14 @@ class PersistentNewsProcessor:
         self._quality_scorer = quality_scorer or QualityScorer()
 
     def process(self, events: list[DocumentEvent]) -> DedupResult:
-        """Deduplicate against persisted canonical events and record every decision."""
+        """Deduplicate against persisted canonical events and record every decision.
+
+        Args:
+            events: Batch of incoming document events.
+
+        Returns:
+            DedupResult containing unique events and duplicate metadata.
+        """
         deduplicator = Deduplicator(
             simhash_threshold=self._simhash_threshold,
             vector_similarity_func=self._vector_similarity_func,
@@ -622,5 +666,12 @@ class PersistentNewsProcessor:
         )
 
     def score(self, event: DocumentEvent) -> QualityScore:
-        """Compute quality score for a persisted or incoming event."""
+        """Compute quality score for a persisted or incoming event.
+
+        Args:
+            event: Document event to score.
+
+        Returns:
+            QualityScore for the event.
+        """
         return self._quality_scorer.score(event)

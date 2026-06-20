@@ -17,7 +17,19 @@ from margin.storage.base import Base
 
 
 class AuditLogRecordRow(Base):
-    """Append-only audit record persisted in PostgreSQL."""
+    """Append-only audit record persisted in PostgreSQL.
+
+    Attributes:
+        record_id: Primary key for the audit row.
+        record_type: Category of the audited event.
+        object_id: Identifier of the audited business object.
+        trace_id: Request trace identifier.
+        input_hash: Hash of the input that produced the event.
+        output_hash: Hash of the output produced by the event.
+        payload_json: Structured JSONB payload.
+        recorded_at: UTC timestamp when the record was created.
+        service_version: Version of the service that created the record.
+    """
 
     __tablename__ = "audit_records"
     __table_args__ = (

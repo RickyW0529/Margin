@@ -1,9 +1,14 @@
+/**
+ * @fileoverview Unit tests for the EvidencePanel component.
+ */
+
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { EvidencePanel } from "./evidence-panel";
 import type { EvidenceView } from "@/lib/api";
 
+/** Mock evidence view used in EvidencePanel tests. */
 const evidence: EvidenceView = {
   item_id: "di_1",
   claims: [
@@ -33,6 +38,7 @@ const evidence: EvidenceView = {
   locators_available: true,
 };
 
+/** Tests for EvidencePanel rendering behavior. */
 describe("EvidencePanel", () => {
   it("renders claims and source locators", () => {
     render(<EvidencePanel evidence={evidence} />);

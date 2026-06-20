@@ -21,6 +21,7 @@ class ResearchSnapshotBuilder:
     """Build an immutable research audit snapshot."""
 
     def __init__(self) -> None:
+        """Initialize the builder with default empty values."""
         self._run_id: str = ""
         self._state: WorkflowState = WorkflowState.INITIALIZED
         self._decision_at: datetime = utc_now()
@@ -39,58 +40,170 @@ class ResearchSnapshotBuilder:
         self._error: str | None = None
 
     def for_run(self, run_id: str) -> ResearchSnapshotBuilder:
+        """Set the workflow run identifier.
+
+        Args:
+            run_id: Unique run identifier.
+
+        Returns:
+            The builder for chaining.
+        """
         self._run_id = run_id
         return self
 
     def with_state(self, state: WorkflowState) -> ResearchSnapshotBuilder:
+        """Set the terminal workflow state.
+
+        Args:
+            state: Terminal workflow state.
+
+        Returns:
+            The builder for chaining.
+        """
         self._state = state
         return self
 
     def with_decision_at(self, decision_at: datetime) -> ResearchSnapshotBuilder:
+        """Set the research decision timestamp.
+
+        Args:
+            decision_at: Decision timestamp.
+
+        Returns:
+            The builder for chaining.
+        """
         self._decision_at = decision_at
         return self
 
     def with_symbols(self, symbols: list[str]) -> ResearchSnapshotBuilder:
+        """Set the symbols covered by the snapshot.
+
+        Args:
+            symbols: List of symbols.
+
+        Returns:
+            The builder for chaining.
+        """
         self._symbols = symbols
         return self
 
     def with_strategy_version(self, version: str) -> ResearchSnapshotBuilder:
+        """Set the strategy version.
+
+        Args:
+            version: Strategy version string.
+
+        Returns:
+            The builder for chaining.
+        """
         self._strategy_version = version
         return self
 
     def with_prompt_version(self, version: str) -> ResearchSnapshotBuilder:
+        """Set the prompt version.
+
+        Args:
+            version: Prompt version string.
+
+        Returns:
+            The builder for chaining.
+        """
         self._prompt_version = version
         return self
 
     def with_tool_versions(self, versions: dict[str, str]) -> ResearchSnapshotBuilder:
+        """Set the tool version map.
+
+        Args:
+            versions: Mapping from tool name to version string.
+
+        Returns:
+            The builder for chaining.
+        """
         self._tool_versions = versions
         return self
 
     def with_model_versions(self, versions: dict[str, str]) -> ResearchSnapshotBuilder:
+        """Set the model version map.
+
+        Args:
+            versions: Mapping from model identifier to version string.
+
+        Returns:
+            The builder for chaining.
+        """
         self._model_versions = versions
         return self
 
     def with_evidence_ids(self, ids: list[str]) -> ResearchSnapshotBuilder:
+        """Set the evidence identifiers.
+
+        Args:
+            ids: List of evidence identifiers.
+
+        Returns:
+            The builder for chaining.
+        """
         self._evidence_ids = ids
         return self
 
     def with_claim_ids(self, ids: list[str]) -> ResearchSnapshotBuilder:
+        """Set the claim identifiers.
+
+        Args:
+            ids: List of claim identifiers.
+
+        Returns:
+            The builder for chaining.
+        """
         self._claim_ids = ids
         return self
 
     def with_signals(self, signals: list[ResearchSignal]) -> ResearchSnapshotBuilder:
+        """Set the research signals.
+
+        Args:
+            signals: List of ``ResearchSignal`` instances.
+
+        Returns:
+            The builder for chaining.
+        """
         self._signals = signals
         return self
 
     def with_traces(self, traces: list[AgentTrace]) -> ResearchSnapshotBuilder:
+        """Set the agent traces.
+
+        Args:
+            traces: List of ``AgentTrace`` instances.
+
+        Returns:
+            The builder for chaining.
+        """
         self._traces = traces
         return self
 
     def with_prior_outputs(self, outputs: dict[str, Any]) -> ResearchSnapshotBuilder:
+        """Set the prior agent outputs.
+
+        Args:
+            outputs: Mapping from agent node name to raw output data.
+
+        Returns:
+            The builder for chaining.
+        """
         self._prior_outputs = outputs
         return self
 
     def with_tool_call_ids(self, call_ids: list[str]) -> ResearchSnapshotBuilder:
+        """Set the tool call identifiers.
+
+        Args:
+            call_ids: List of tool call identifiers.
+
+        Returns:
+            The builder for chaining.
+        """
         self._tool_call_ids = call_ids
         return self
 
@@ -98,18 +211,40 @@ class ResearchSnapshotBuilder:
         self,
         tool_calls: list[dict[str, Any]],
     ) -> ResearchSnapshotBuilder:
+        """Set the serialized tool call records.
+
+        Args:
+            tool_calls: List of serialized tool call records.
+
+        Returns:
+            The builder for chaining.
+        """
         self._tool_calls = tool_calls
         return self
 
     def with_error(self, error: str | None) -> ResearchSnapshotBuilder:
+        """Set the error or abstention reason.
+
+        Args:
+            error: Error message, or ``None`` on success.
+
+        Returns:
+            The builder for chaining.
+        """
         self._error = error
         return self
 
     @staticmethod
     def _hash(data: Any) -> str:
+        """Return a deterministic SHA-256 hash for the supplied data."""
         return hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()
 
     def build(self) -> ResearchSnapshot:
+        """Build and return the immutable ``ResearchSnapshot``.
+
+        Returns:
+            A fully populated ``ResearchSnapshot`` with hashes.
+        """
         input_payload = {
             "run_id": self._run_id,
             "symbols": self._symbols,

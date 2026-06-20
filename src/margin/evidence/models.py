@@ -79,6 +79,7 @@ class Evidence(BaseModel):
         content_hash: Hash of the evidence content.
         content: Text content of the evidence.
         symbol: Optional ticker symbol associated with the evidence.
+        quality_score: Optional explicit quality score in [0, 1].
         published_at: Publication timestamp (UTC).
         available_at: Availability timestamp (UTC).
         retrieved_at: Retrieval timestamp (UTC).
@@ -307,6 +308,7 @@ class Claim(BaseModel):
         confidence: Confidence score in [0, 1].
         conflicts: List of conflict records associated with the claim.
         effective_at: Timestamp when the claim becomes effective (UTC).
+        locator: Optional primary citation locator snapshot.
         symbol: Optional ticker symbol associated with the claim.
     """
 

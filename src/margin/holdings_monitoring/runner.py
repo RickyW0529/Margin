@@ -56,6 +56,11 @@ class RepositoryNewsEventProvider:
     """Read the module 03 document-event stream for holdings monitoring."""
 
     def __init__(self, repository: NewsRepository) -> None:
+        """Initialize the provider with a news repository.
+
+        Args:
+            repository: Repository that stores document events.
+        """
         self._repository = repository
 
     def get_recent_events(
@@ -65,6 +70,17 @@ class RepositoryNewsEventProvider:
         since: datetime,
         as_of: datetime,
     ) -> list[DocumentEvent]:
+        """Return events available in the requested time window.
+
+        Args:
+            symbols: Symbols of held positions to watch.
+            since: Start of the time window (exclusive).
+            as_of: End of the time window (inclusive).
+
+        Returns:
+            Document events that mention at least one watched symbol and fall
+            within the requested window.
+        """
         symbol_set = set(symbols)
         return [
             event
@@ -78,6 +94,11 @@ class LoggingNotificationSink:
     """Local-first notification sink backed by structured application logs."""
 
     def notify(self, alert: AlertEvent) -> None:
+        """Deliver one alert via structured logging.
+
+        Args:
+            alert: The alert to log.
+        """
         logger.warning(
             "holdings_monitoring_alert",
             extra={
@@ -95,6 +116,11 @@ class AKShareLatestPriceProvider:
     """Latest-price adapter using adjusted daily bars from AKShare."""
 
     def __init__(self, provider: AKShareProvider | None = None) -> None:
+        """Initialize the provider, creating a default AKShare provider if needed.
+
+        Args:
+            provider: Optional existing AKShare provider instance to reuse.
+        """
         self._provider = provider or AKShareProvider()
 
     def get_latest_prices(
@@ -103,6 +129,18 @@ class AKShareLatestPriceProvider:
         *,
         as_of: datetime,
     ) -> dict[str, float]:
+        """Return latest available prices keyed by symbol.
+
+        Prices are resolved from adjusted daily bars within a lookback window.
+        If the underlying provider fails, an empty mapping is returned.
+
+        Args:
+            symbols: Symbols to look up.
+            as_of: Latest timestamp to consider when resolving prices.
+
+        Returns:
+            Mapping from symbol to its latest closing price.
+        """
         if not symbols:
             return {}
         try:
@@ -145,6 +183,16 @@ class HoldingsMonitoringRunner:
         news_provider: NewsEventProvider | None = None,
         notifier: NotificationSink | None = None,
     ) -> None:
+        """Initialize the runner with required services and providers.
+
+        Args:
+            portfolio_service: Service used to list portfolios and positions.
+            monitoring_service: Service used to evaluate individual positions.
+            price_provider: Provider used to resolve latest market prices.
+            news_provider: Optional provider of recent document events.
+            notifier: Optional notification sink for high-priority alerts.
+                Defaults to LoggingNotificationSink.
+        """
         self._portfolios = portfolio_service
         self._monitoring = monitoring_service
         self._prices = price_provider
@@ -157,7 +205,18 @@ class HoldingsMonitoringRunner:
         *,
         decision_at: datetime | None = None,
     ) -> list[PositionMonitoringSnapshot]:
-        """Run one monitoring sweep for all local portfolios."""
+        """Run one monitoring sweep for all local portfolios.
+
+        Loads every portfolio, resolves latest prices and recent news, evaluates
+        each held position, persists alerts, and notifies high-priority alerts.
+
+        Args:
+            decision_at: Optional timestamp to use as the evaluation time.
+                Defaults to the current UTC time.
+
+        Returns:
+            Snapshots produced for every evaluated position.
+        """
         evaluated_at = decision_at or datetime.now(UTC)
         news_since = self._last_news_check or evaluated_at - timedelta(days=1)
         snapshots: list[PositionMonitoringSnapshot] = []

@@ -1,7 +1,19 @@
+/**
+ * @fileoverview Form component for submitting feedback on a research item.
+ */
+
+/** Props for the ResearchFeedbackForm component. */
 type ResearchFeedbackFormProps = {
+  /** Form submission handler. */
   action: (formData: FormData) => void | Promise<void>;
 };
 
+/**
+ * Renders a research feedback form with type and comment fields.
+ *
+ * @param action Form submission handler.
+ * @returns The feedback form element.
+ */
 export function ResearchFeedbackForm({ action }: ResearchFeedbackFormProps) {
   return (
     <section className="panel" aria-labelledby="feedback-title">

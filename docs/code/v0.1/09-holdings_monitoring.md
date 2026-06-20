@@ -33,25 +33,25 @@
 
 | 文件路径 | 职责 |
 | --- | --- |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/holdings_monitoring/__init__.py` | 模块公共导出，聚合模型、仓库、服务。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/holdings_monitoring/db_models.py` | SQLAlchemy ORM 映射：`AlertEventRow`、`PositionReviewRow`。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/holdings_monitoring/models.py` | Pydantic 领域模型与枚举：`AlertEvent`、`PositionMonitoringSnapshot`、`PositionReviewRecord`、`BehaviorMetric` 等。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/holdings_monitoring/repository.py` | 持久化协议 `MonitoringRepository`、内存实现、SQLAlchemy 实现及行模型转换函数。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/holdings_monitoring/runner.py` | 自动全量扫描 `HoldingsMonitoringRunner`，以及价格/新闻/通知适配器。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/holdings_monitoring/service.py` | 核心服务 `HoldingsMonitoringService` 与依赖注入容器 `MonitoringServiceBundle`。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/monitoring.py` | FastAPI 路由：评估、查询 Alert、创建复盘、操作历史、行为指标。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/app/positions/[positionId]/page.tsx` | Next.js Server Component，拉取持仓详情/Alert/历史并渲染 `PositionDetailView`。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/app/positions/[positionId]/loading.tsx` | 该路由的加载占位。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/app/positions/[positionId]/actions.ts` | Server Actions：`evaluatePositionAction`、`createPositionReviewAction`。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/position-detail.tsx` | 持仓详情主组件，展示指标、买入逻辑、Alert、复盘表单、操作历史。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/position-detail.test.tsx` | `PositionDetailView` 的 Vitest 单元测试。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/position-review-badge.tsx` | 持仓/候选复盘状态徽标组件。 |
+| `src/margin/holdings_monitoring/__init__.py` | 模块公共导出，聚合模型、仓库、服务。 |
+| `src/margin/holdings_monitoring/db_models.py` | SQLAlchemy ORM 映射：`AlertEventRow`、`PositionReviewRow`。 |
+| `src/margin/holdings_monitoring/models.py` | Pydantic 领域模型与枚举：`AlertEvent`、`PositionMonitoringSnapshot`、`PositionReviewRecord`、`BehaviorMetric` 等。 |
+| `src/margin/holdings_monitoring/repository.py` | 持久化协议 `MonitoringRepository`、内存实现、SQLAlchemy 实现及行模型转换函数。 |
+| `src/margin/holdings_monitoring/runner.py` | 自动全量扫描 `HoldingsMonitoringRunner`，以及价格/新闻/通知适配器。 |
+| `src/margin/holdings_monitoring/service.py` | 核心服务 `HoldingsMonitoringService` 与依赖注入容器 `MonitoringServiceBundle`。 |
+| `src/margin/api/routes/monitoring.py` | FastAPI 路由：评估、查询 Alert、创建复盘、操作历史、行为指标。 |
+| `web/app/positions/[positionId]/page.tsx` | Next.js Server Component，拉取持仓详情/Alert/历史并渲染 `PositionDetailView`。 |
+| `web/app/positions/[positionId]/loading.tsx` | 该路由的加载占位。 |
+| `web/app/positions/[positionId]/actions.ts` | Server Actions：`evaluatePositionAction`、`createPositionReviewAction`。 |
+| `web/components/position-detail.tsx` | 持仓详情主组件，展示指标、买入逻辑、Alert、复盘表单、操作历史。 |
+| `web/components/position-detail.test.tsx` | `PositionDetailView` 的 Vitest 单元测试。 |
+| `web/components/position-review-badge.tsx` | 持仓/候选复盘状态徽标组件。 |
 
 ---
 
 ## 领域模型
 
-源文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/holdings_monitoring/models.py`
+源文件：`src/margin/holdings_monitoring/models.py`
 
 ### 枚举
 
@@ -145,7 +145,7 @@
 
 ## 服务层
 
-源文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/holdings_monitoring/service.py`
+源文件：`src/margin/holdings_monitoring/service.py`
 
 ### 关键常量
 
@@ -206,7 +206,7 @@ FastAPI 依赖注入容器。
 
 ## Runner 与 Provider
 
-源文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/holdings_monitoring/runner.py`
+源文件：`src/margin/holdings_monitoring/runner.py`
 
 ### 协议
 
@@ -262,7 +262,7 @@ FastAPI 依赖注入容器。
 
 ## 仓库层
 
-源文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/holdings_monitoring/repository.py`
+源文件：`src/margin/holdings_monitoring/repository.py`
 
 ### `MonitoringRepository`（Protocol）
 
@@ -316,7 +316,7 @@ PostgreSQL 实现，基于短 SQLAlchemy 会话。
 
 ## FastAPI 接口
 
-源文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/monitoring.py`
+源文件：`src/margin/api/routes/monitoring.py`
 
 路由前缀：`/api/v1`，标签：`monitoring`。
 
@@ -364,7 +364,7 @@ PostgreSQL 实现，基于短 SQLAlchemy 会话。
 
 ### `PositionPage`
 
-源文件：`/Users/wangruiqi/PycharmProjects/Margin/web/app/positions/[positionId]/page.tsx`
+源文件：`web/app/positions/[positionId]/page.tsx`
 
 | 项目 | 说明 |
 | --- | --- |
@@ -377,7 +377,7 @@ PostgreSQL 实现，基于短 SQLAlchemy 会话。
 
 ### `Loading`
 
-源文件：`/Users/wangruiqi/PycharmProjects/Margin/web/app/positions/[positionId]/loading.tsx`
+源文件：`web/app/positions/[positionId]/loading.tsx`
 
 | 项目 | 说明 |
 | --- | --- |
@@ -386,7 +386,7 @@ PostgreSQL 实现，基于短 SQLAlchemy 会话。
 
 ### Server Actions
 
-源文件：`/Users/wangruiqi/PycharmProjects/Margin/web/app/positions/[positionId]/actions.ts`
+源文件：`web/app/positions/[positionId]/actions.ts`
 
 | 函数 | 签名 | 说明 |
 | --- | --- | --- |
@@ -420,7 +420,7 @@ PostgreSQL 实现，基于短 SQLAlchemy 会话。
 
 ### `PositionDetailView`
 
-源文件：`/Users/wangruiqi/PycharmProjects/Margin/web/components/position-detail.tsx`
+源文件：`web/components/position-detail.tsx`
 
 | Props | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -456,7 +456,7 @@ PostgreSQL 实现，基于短 SQLAlchemy 会话。
 
 ### `PositionReviewBadge`
 
-源文件：`/Users/wangruiqi/PycharmProjects/Margin/web/components/position-review-badge.tsx`
+源文件：`web/components/position-review-badge.tsx`
 
 | Props | 类型 | 说明 |
 | --- | --- | --- |

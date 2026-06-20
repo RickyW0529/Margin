@@ -120,7 +120,7 @@ Common variables:
 MARGIN_DATABASE_URL=postgresql+psycopg://margin:margin@localhost:5432/margin
 MARGIN_LLM_BASE_URL=https://api.deepseek.com
 MARGIN_LLM_API_KEY=
-MARGIN_LLM_MODEL=deepseek-v4-flash
+MARGIN_LLM_MODEL=deepseek-v4-pro
 MARGIN_EMBEDDING_BASE_URL=https://open.bigmodel.cn/api/paas/v4
 MARGIN_EMBEDDING_API_KEY=
 MARGIN_EMBEDDING_MODEL=embedding-3

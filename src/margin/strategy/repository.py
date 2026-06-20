@@ -22,33 +22,86 @@ class StrategyRepository(Protocol):
     """Persistence contract consumed by :class:`StrategyService`."""
 
     def add_profile(self, profile: StrategyProfile) -> None:
-        """Persist a new strategy profile."""
+        """Persist a new strategy profile.
+
+        Args:
+            profile: The strategy profile to persist.
+
+        Raises:
+            ValueError: If a profile with the same ``strategy_id`` already exists.
+        """
 
     def get_profile(self, strategy_id: str) -> StrategyProfile | None:
-        """Return a profile by identifier."""
+        """Return a profile by identifier.
+
+        Args:
+            strategy_id: The unique strategy identifier.
+
+        Returns:
+            The matching :class:`StrategyProfile` or ``None`` if not found.
+        """
 
     def list_profiles(self, owner_id: str) -> list[StrategyProfile]:
-        """Return all profiles owned by the given user."""
+        """Return all profiles owned by the given user.
+
+        Args:
+            owner_id: The identifier of the profile owner.
+
+        Returns:
+            A list of :class:`StrategyProfile` objects belonging to ``owner_id``.
+        """
 
     def update_profile(self, profile: StrategyProfile) -> None:
-        """Persist an updated profile, replacing the existing one."""
+        """Persist an updated profile, replacing the existing one.
+
+        Args:
+            profile: The strategy profile with updated data.
+
+        Raises:
+            KeyError: If no profile with ``profile.strategy_id`` exists.
+        """
 
 
 class MemoryStrategyRepository:
     """In-memory strategy repository for tests and local usage."""
 
     def __init__(self) -> None:
+        """Initialize an empty in-memory profile store."""
         self._profiles: dict[str, StrategyProfile] = {}
 
     def add_profile(self, profile: StrategyProfile) -> None:
+        """Persist a new strategy profile in memory.
+
+        Args:
+            profile: The strategy profile to persist.
+
+        Raises:
+            ValueError: If a profile with the same ``strategy_id`` already exists.
+        """
         if profile.strategy_id in self._profiles:
             raise ValueError(f"strategy '{profile.strategy_id}' already exists")
         self._profiles[profile.strategy_id] = profile
 
     def get_profile(self, strategy_id: str) -> StrategyProfile | None:
+        """Return a profile by identifier.
+
+        Args:
+            strategy_id: The unique strategy identifier.
+
+        Returns:
+            The matching :class:`StrategyProfile` or ``None`` if not found.
+        """
         return self._profiles.get(strategy_id)
 
     def list_profiles(self, owner_id: str) -> list[StrategyProfile]:
+        """Return all profiles owned by the given user.
+
+        Args:
+            owner_id: The identifier of the profile owner.
+
+        Returns:
+            A list of :class:`StrategyProfile` objects belonging to ``owner_id``.
+        """
         return [
             profile
             for profile in self._profiles.values()
@@ -56,6 +109,14 @@ class MemoryStrategyRepository:
         ]
 
     def update_profile(self, profile: StrategyProfile) -> None:
+        """Persist an updated profile, replacing the existing one.
+
+        Args:
+            profile: The strategy profile with updated data.
+
+        Raises:
+            KeyError: If no profile with ``profile.strategy_id`` exists.
+        """
         if profile.strategy_id not in self._profiles:
             raise KeyError(f"strategy '{profile.strategy_id}' not found")
         self._profiles[profile.strategy_id] = profile
@@ -65,9 +126,22 @@ class SQLAlchemyStrategyRepository:
     """PostgreSQL-backed strategy repository."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
+        """Initialize the repository with a SQLAlchemy session factory.
+
+        Args:
+            session_factory: A callable that returns a new SQLAlchemy session.
+        """
         self._session_factory = session_factory
 
     def add_profile(self, profile: StrategyProfile) -> None:
+        """Persist a new strategy profile and all its versions to PostgreSQL.
+
+        Args:
+            profile: The strategy profile to persist.
+
+        Raises:
+            ValueError: If a profile with the same ``strategy_id`` already exists.
+        """
         with self._session_factory.begin() as session:
             if session.get(StrategyProfileRow, profile.strategy_id) is not None:
                 raise ValueError(f"strategy '{profile.strategy_id}' already exists")
@@ -105,6 +179,14 @@ class SQLAlchemyStrategyRepository:
                 )
 
     def get_profile(self, strategy_id: str) -> StrategyProfile | None:
+        """Return a profile by identifier, reconstructing domain models from rows.
+
+        Args:
+            strategy_id: The unique strategy identifier.
+
+        Returns:
+            The matching :class:`StrategyProfile` or ``None`` if not found.
+        """
         with self._session_factory() as session:
             row = session.get(StrategyProfileRow, strategy_id)
             if row is None:
@@ -142,12 +224,28 @@ class SQLAlchemyStrategyRepository:
             )
 
     def list_profiles(self, owner_id: str) -> list[StrategyProfile]:
+        """Return all profiles owned by the given user.
+
+        Args:
+            owner_id: The identifier of the profile owner.
+
+        Returns:
+            A list of :class:`StrategyProfile` objects belonging to ``owner_id``.
+        """
         with self._session_factory() as session:
             rows = session.query(StrategyProfileRow).filter_by(owner_id=owner_id).all()
             profiles = [self.get_profile(row.strategy_id) for row in rows]
             return [profile for profile in profiles if profile is not None]
 
     def update_profile(self, profile: StrategyProfile) -> None:
+        """Persist an updated profile and any new versions to PostgreSQL.
+
+        Args:
+            profile: The strategy profile with updated data.
+
+        Raises:
+            KeyError: If no profile with ``profile.strategy_id`` exists.
+        """
         with self._session_factory.begin() as session:
             row = session.get(StrategyProfileRow, profile.strategy_id)
             if row is None:

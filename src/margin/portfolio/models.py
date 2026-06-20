@@ -161,7 +161,14 @@ class Trade(BaseModel):
     @field_validator("traded_at", "imported_at")
     @classmethod
     def normalize_trade_timestamp(cls, value: datetime) -> datetime:
-        """Normalize trade timestamps to UTC."""
+        """Normalize trade timestamps to UTC.
+
+        Args:
+            value: A datetime instance, which may be naive or aware.
+
+        Returns:
+            The input datetime normalized to UTC.
+        """
         return _ensure_utc(value)
 
     def model_post_init(self, __context: Any) -> None:
@@ -169,6 +176,9 @@ class Trade(BaseModel):
 
         Args:
             __context: Pydantic initialization context.
+
+        Returns:
+            None.
         """
         if self.amount == 0.0:
             total = self.quantity * self.price + self.fee + self.tax
@@ -218,7 +228,14 @@ class PositionThesis(BaseModel):
     @field_validator("next_review_at", "created_at")
     @classmethod
     def normalize_thesis_timestamp(cls, value: datetime | None) -> datetime | None:
-        """Normalize thesis timestamps to UTC."""
+        """Normalize thesis timestamps to UTC.
+
+        Args:
+            value: A datetime instance, which may be naive or aware, or None.
+
+        Returns:
+            The input datetime normalized to UTC, or None if the input was None.
+        """
         return _ensure_utc(value) if value is not None else None
 
 
@@ -270,7 +287,14 @@ class Position(BaseModel):
     @field_validator("updated_at")
     @classmethod
     def normalize_position_timestamp(cls, value: datetime) -> datetime:
-        """Normalize position timestamps to UTC."""
+        """Normalize position timestamps to UTC.
+
+        Args:
+            value: A datetime instance, which may be naive or aware.
+
+        Returns:
+            The input datetime normalized to UTC.
+        """
         return _ensure_utc(value)
 
 
@@ -303,7 +327,14 @@ class Portfolio(BaseModel):
     @field_validator("created_at")
     @classmethod
     def normalize_portfolio_timestamp(cls, value: datetime) -> datetime:
-        """Normalize portfolio timestamps to UTC."""
+        """Normalize portfolio timestamps to UTC.
+
+        Args:
+            value: A datetime instance, which may be naive or aware.
+
+        Returns:
+            The input datetime normalized to UTC.
+        """
         return _ensure_utc(value)
 
 
@@ -341,7 +372,14 @@ class AlertEvent(BaseModel):
     @field_validator("triggered_at")
     @classmethod
     def normalize_alert_timestamp(cls, value: datetime) -> datetime:
-        """Normalize alert timestamps to UTC."""
+        """Normalize alert timestamps to UTC.
+
+        Args:
+            value: A datetime instance, which may be naive or aware.
+
+        Returns:
+            The input datetime normalized to UTC.
+        """
         return _ensure_utc(value)
 
 
@@ -383,7 +421,14 @@ class ImportRecord(BaseModel):
     @field_validator("imported_at")
     @classmethod
     def normalize_import_timestamp(cls, value: datetime) -> datetime:
-        """Normalize import timestamps to UTC."""
+        """Normalize import timestamps to UTC.
+
+        Args:
+            value: A datetime instance, which may be naive or aware.
+
+        Returns:
+            The input datetime normalized to UTC.
+        """
         return _ensure_utc(value)
 
 

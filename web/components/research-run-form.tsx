@@ -1,7 +1,20 @@
+/**
+ * @fileoverview Form component for launching a new research run.
+ */
+
+/** Props for the ResearchRunForm component. */
 type ResearchRunFormProps = {
+  /** Form submission handler. */
   action: (formData: FormData) => void | Promise<void>;
 };
 
+/**
+ * Renders a form to start a research run with strategy, portfolio, and symbol
+ * inputs.
+ *
+ * @param action Form submission handler.
+ * @returns The research run form element.
+ */
 export function ResearchRunForm({ action }: ResearchRunFormProps) {
   return (
     <section className="panel" aria-labelledby="research-run-form-title">

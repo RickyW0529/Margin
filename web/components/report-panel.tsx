@@ -1,10 +1,25 @@
+/**
+ * @fileoverview Panel component that displays a generated research report and
+ * an optional downloadable export.
+ */
+
 import type { ReportExport, ResearchReport } from "@/lib/api";
 
+/** Props for the ReportPanel component. */
 type ReportPanelProps = {
+  /** Research report data, or null when unavailable. */
   report: ResearchReport | null;
+  /** Exported report file metadata, or null when not generated. */
   exported: ReportExport | null;
 };
 
+/**
+ * Renders a research report preview with title, format, and export download.
+ *
+ * @param report Research report to display.
+ * @param exported Export metadata for the report.
+ * @returns The report panel or an empty state.
+ */
 export function ReportPanel({ report, exported }: ReportPanelProps) {
   if (!report) {
     return <div className="empty-state compact">报告暂不可用</div>;

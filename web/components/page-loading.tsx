@@ -1,8 +1,22 @@
+/**
+ * @fileoverview Skeleton loading placeholder for workspace pages.
+ */
+
+/** Props for the PageLoading component. */
 type PageLoadingProps = {
+  /** Main page heading. */
   title: string;
+  /** Eyebrow text shown above the heading. */
   eyebrow: string;
 };
 
+/**
+ * Renders a skeleton workspace layout while page data is loading.
+ *
+ * @param title Main page heading.
+ * @param eyebrow Eyebrow text.
+ * @returns The skeleton loading element.
+ */
 export function PageLoading({ title, eyebrow }: PageLoadingProps) {
   return (
     <main className="workspace-shell">

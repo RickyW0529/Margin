@@ -114,7 +114,7 @@ class MarginSettings(BaseSettings):
     # LLM
     llm_api_key: SecretStr | None = None
     llm_base_url: HttpUrl | None = None
-    llm_model: str = "gpt-4o-mini"
+    llm_model: str = "deepseek-v4-pro"
 
     # Embedding
     embedding_base_url: HttpUrl | None = None
@@ -137,7 +137,7 @@ class MarginSettings(BaseSettings):
     trace_id_header: str = "x-margin-trace-id"
 
     # Audit
-    audit_log_path: Path = Path.home() / ".margin" / "audit" / "provider_calls.jsonl"
+    audit_log_path: Path = Path(".margin") / "audit" / "provider_calls.jsonl"
 
     # Deployment
     environment: Literal["development", "test", "production"] = "development"
@@ -476,7 +476,7 @@ from margin.core.snapshot_store import FileSnapshotStore
 
 
 def test_snapshot_store_writes_and_reads():
-    store = FileSnapshotStore(base_path="/tmp/margin_snapshots")
+    store = FileSnapshotStore(base_path=".margin/snapshots")
     entry = store.write(
         object_type="research_report",
         object_id="rep_1",
@@ -610,7 +610,7 @@ from margin.core.snapshot_store import FileSnapshotStore
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Margin snapshot store CLI")
-    parser.add_argument("--base-path", default=str(Path.home() / ".margin" / "snapshots"))
+    parser.add_argument("--base-path", default=str(Path(".margin") / "snapshots"))
     sub = parser.add_subparsers(dest="command")
 
     write_parser = sub.add_parser("write")
@@ -1299,8 +1299,8 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - margin-audit:/root/.margin/audit
-      - margin-snapshots:/root/.margin/snapshots
+      - margin-audit:/app/.margin/audit
+      - margin-snapshots:/app/.margin/snapshots
     command: ["uvicorn", "margin.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
   worker:

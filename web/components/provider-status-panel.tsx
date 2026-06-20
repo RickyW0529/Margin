@@ -1,10 +1,25 @@
+/**
+ * @fileoverview Panel component that displays the operational status of data
+ * providers.
+ */
+
 import type { ProviderStatus } from "@/lib/api";
 
+/** Props for the ProviderStatusPanel component. */
 type ProviderStatusPanelProps = {
+  /** Array of provider status entries. */
   providers: ProviderStatus[];
+  /** Optional panel heading. */
   title?: string;
 };
 
+/**
+ * Renders a list of provider statuses with localized status badges.
+ *
+ * @param providers Provider status entries.
+ * @param title Panel heading.
+ * @returns The provider status panel.
+ */
 export function ProviderStatusPanel({
   providers,
   title = "Provider 状态",

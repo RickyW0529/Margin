@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Root layout for the Margin research workspace.
+ * Provides the application shell, global navigation, and metadata shared by every route.
+ */
+
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -8,6 +13,11 @@ export const metadata: Metadata = {
   description: "Evidence-driven portfolio research workspace",
 };
 
+/**
+ * Root layout that wraps the entire application.
+ * @param children - The current page content.
+ * @returns The wrapped HTML document with navigation and page content.
+ */
 export default function RootLayout({
   children,
 }: Readonly<{

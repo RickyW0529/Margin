@@ -12,7 +12,22 @@ from margin.storage.base import Base
 
 
 class AlertEventRow(Base):
-    """Append-only persisted alert event."""
+    """Append-only persisted alert event.
+
+    Attributes:
+        alert_id: Primary key identifier of the alert.
+        portfolio_id: Foreign key to the portfolio that owns the position.
+        position_id: Identifier of the monitored position.
+        symbol: Traded symbol or ticker.
+        alert_type: Categorized alert type.
+        severity: Alert priority / severity string.
+        message: Human-readable alert message.
+        rule_name: Name of the monitoring rule that triggered the alert.
+        triggered_at: UTC timestamp when the alert was triggered.
+        evidence_refs: List of evidence references associated with the alert.
+        changed_thesis: Whether the alert indicates a thesis change.
+        acknowledged_at: UTC timestamp when the alert was acknowledged, if any.
+    """
 
     __tablename__ = "alert_events"
     __table_args__ = (
@@ -39,7 +54,18 @@ class AlertEventRow(Base):
 
 
 class PositionReviewRow(Base):
-    """Append-only persisted manual review record."""
+    """Append-only persisted manual review record.
+
+    Attributes:
+        review_id: Primary key identifier of the review.
+        portfolio_id: Foreign key to the portfolio that owns the position.
+        position_id: Identifier of the reviewed position.
+        alert_id: Optional foreign key to the alert that prompted the review.
+        decision: Recorded review decision string.
+        rationale: Human-readable explanation of the review decision.
+        action_taken_at: UTC timestamp when action was taken, if any.
+        created_at: UTC timestamp when the review record was created.
+    """
 
     __tablename__ = "position_reviews"
     __table_args__ = (

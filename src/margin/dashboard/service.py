@@ -42,6 +42,12 @@ class DashboardResearchService:
         research_service: Any,
         repository: DashboardRepository,
     ) -> None:
+        """Initialize the service.
+
+        Args:
+            research_service: Service capable of running symbol research workflows.
+            repository: Dashboard repository used to persist runs and items.
+        """
         self._research = research_service
         self._repository = repository
 
@@ -54,6 +60,18 @@ class DashboardResearchService:
         portfolio_id: str | None = None,
         symbols: list[str] | None = None,
     ) -> ResearchRun:
+        """Run research workflows for a batch of symbols and persist the run.
+
+        Args:
+            decision_at: Optional decision timestamp; defaults to now.
+            strategy_id: Identifier of the strategy driving the run.
+            version_id: Version of the strategy.
+            portfolio_id: Optional portfolio context.
+            symbols: Optional list of symbols to research; defaults to a demo symbol.
+
+        Returns:
+            The persisted aggregate research run.
+        """
         resolved_decision_at = decision_at or datetime.now(UTC)
         universe = symbols or ["000001.SZ"]
         temporary_run = ResearchRun(
@@ -141,6 +159,12 @@ class DashboardQueryService:
         repository: DashboardRepository,
         research_repository: ResearchRepository,
     ) -> None:
+        """Initialize the query service.
+
+        Args:
+            repository: Dashboard repository for runs, items, and feedback.
+            research_repository: Repository for module 06 research snapshots.
+        """
         self._repository = repository
         self._research_repository = research_repository
 
@@ -152,6 +176,17 @@ class DashboardQueryService:
         status: str | None = None,
         limit: int = 100,
     ) -> list[ResearchRun]:
+        """List research runs.
+
+        Args:
+            strategy_id: Optional strategy filter.
+            portfolio_id: Optional portfolio filter.
+            status: Optional status filter.
+            limit: Maximum number of runs to return.
+
+        Returns:
+            A list of matching research runs.
+        """
         return self._repository.list_runs(
             strategy_id=strategy_id,
             portfolio_id=portfolio_id,
@@ -160,22 +195,66 @@ class DashboardQueryService:
         )
 
     def get_run(self, run_id: str) -> ResearchRun:
+        """Fetch a research run by identifier.
+
+        Args:
+            run_id: Unique identifier of the run.
+
+        Returns:
+            The requested research run.
+
+        Raises:
+            KeyError: If the run does not exist.
+        """
         run = self._repository.get_run(run_id)
         if run is None:
             raise KeyError(f"research run '{run_id}' not found")
         return run
 
     def get_run_items(self, run_id: str) -> list[ResearchItem]:
+        """Fetch all items for a research run.
+
+        Args:
+            run_id: Unique identifier of the run.
+
+        Returns:
+            A list of research items belonging to the run.
+
+        Raises:
+            KeyError: If the run does not exist.
+        """
         self.get_run(run_id)
         return self._repository.list_items(run_id)
 
     def get_item(self, item_id: str) -> ResearchItem:
+        """Fetch a research item by identifier.
+
+        Args:
+            item_id: Unique identifier of the item.
+
+        Returns:
+            The requested research item.
+
+        Raises:
+            KeyError: If the item does not exist.
+        """
         item = self._repository.get_item(item_id)
         if item is None:
             raise KeyError(f"research item '{item_id}' not found")
         return item
 
     def get_candidate_cards(self, run_id: str) -> list[CandidateCard]:
+        """Build candidate cards for a run.
+
+        Args:
+            run_id: Unique identifier of the run.
+
+        Returns:
+            A list of candidate cards for the run.
+
+        Raises:
+            KeyError: If the run does not exist.
+        """
         run = self.get_run(run_id)
         return [self._card_from_item(run, item) for item in self.get_run_items(run_id)]
 
@@ -185,6 +264,15 @@ class DashboardQueryService:
         portfolio_id: str | None = None,
         strategy_id: str | None = None,
     ) -> HomeSummary:
+        """Build the six-block home summary for the dashboard.
+
+        Args:
+            portfolio_id: Optional portfolio filter.
+            strategy_id: Optional strategy filter.
+
+        Returns:
+            A populated home summary, or an empty summary if no runs exist.
+        """
         runs = self.list_runs(
             portfolio_id=portfolio_id,
             strategy_id=strategy_id,
@@ -259,10 +347,27 @@ class EvidenceViewService:
         repository: DashboardRepository,
         research_repository: ResearchRepository,
     ) -> None:
+        """Initialize the evidence view service.
+
+        Args:
+            repository: Dashboard repository for items.
+            research_repository: Repository for module 06 research snapshots.
+        """
         self._repository = repository
         self._research_repository = research_repository
 
     def get_evidence_view(self, item_id: str) -> EvidenceView:
+        """Build the evidence view for a research item.
+
+        Args:
+            item_id: Unique identifier of the research item.
+
+        Returns:
+            An evidence view populated from the item and its snapshot.
+
+        Raises:
+            KeyError: If the item does not exist.
+        """
         item = _must_get_item(self._repository, item_id)
         snapshot = (
             self._research_repository.get_snapshot(item.snapshot_id)
@@ -308,10 +413,27 @@ class ValuationViewService:
         repository: DashboardRepository,
         research_repository: ResearchRepository,
     ) -> None:
+        """Initialize the valuation view service.
+
+        Args:
+            repository: Dashboard repository for items.
+            research_repository: Repository for module 06 research snapshots.
+        """
         self._repository = repository
         self._research_repository = research_repository
 
     def get_valuation_view(self, item_id: str) -> ValuationView:
+        """Build the valuation view for a research item.
+
+        Args:
+            item_id: Unique identifier of the research item.
+
+        Returns:
+            A valuation view with ranges derived from snapshot outputs when available.
+
+        Raises:
+            KeyError: If the item does not exist.
+        """
         item = _must_get_item(self._repository, item_id)
         snapshot = (
             self._research_repository.get_snapshot(item.snapshot_id)
@@ -348,6 +470,11 @@ class FeedbackService:
     """Append feedback without mutating immutable research items."""
 
     def __init__(self, repository: DashboardRepository) -> None:
+        """Initialize the feedback service.
+
+        Args:
+            repository: Dashboard repository used to store feedback records.
+        """
         self._repository = repository
 
     def record_feedback(
@@ -356,6 +483,19 @@ class FeedbackService:
         feedback_type: FeedbackType,
         comment: str = "",
     ) -> FeedbackRecord:
+        """Record feedback for a research item.
+
+        Args:
+            item_id: Identifier of the research item.
+            feedback_type: Type of feedback action.
+            comment: Optional textual comment.
+
+        Returns:
+            The persisted feedback record.
+
+        Raises:
+            KeyError: If the item does not exist.
+        """
         _must_get_item(self._repository, item_id)
         feedback = FeedbackRecord(
             item_id=item_id,
@@ -374,10 +514,27 @@ class AuditService:
         repository: DashboardRepository,
         research_repository: ResearchRepository,
     ) -> None:
+        """Initialize the audit service.
+
+        Args:
+            repository: Dashboard repository for items.
+            research_repository: Repository for module 06 research snapshots.
+        """
         self._repository = repository
         self._research_repository = research_repository
 
     def get_audit_view(self, item_id: str) -> AuditView:
+        """Build an audit view for a research item.
+
+        Args:
+            item_id: Unique identifier of the research item.
+
+        Returns:
+            An audit view populated from the item's snapshot when available.
+
+        Raises:
+            KeyError: If the item does not exist.
+        """
         item = _must_get_item(self._repository, item_id)
         snapshot = (
             self._research_repository.get_snapshot(item.snapshot_id)
@@ -412,10 +569,27 @@ class ReportRenderer:
         repository: DashboardRepository,
         research_repository: ResearchRepository,
     ) -> None:
+        """Initialize the report renderer.
+
+        Args:
+            repository: Dashboard repository for runs and items.
+            research_repository: Repository for module 06 research snapshots.
+        """
         self._repository = repository
         self._research_repository = research_repository
 
     def render_report(self, item_id: str) -> ResearchReport:
+        """Render a full research report for an item.
+
+        Args:
+            item_id: Unique identifier of the research item.
+
+        Returns:
+            A rendered research report including valuation, evidence, and audit.
+
+        Raises:
+            KeyError: If the item does not exist.
+        """
         item = _must_get_item(self._repository, item_id)
         run = self._repository.get_run(item.run_id)
         evidence = EvidenceViewService(
@@ -467,6 +641,11 @@ class ExportService:
     """Export rendered dashboard reports in lightweight MVP formats."""
 
     def __init__(self, renderer: ReportRenderer) -> None:
+        """Initialize the export service.
+
+        Args:
+            renderer: Report renderer used to produce report content.
+        """
         self._renderer = renderer
 
     def export_report(
@@ -474,6 +653,18 @@ class ExportService:
         item_id: str,
         report_format: str | ReportFormat = ReportFormat.MARKDOWN,
     ) -> ReportExport:
+        """Export a research report in the requested format.
+
+        Args:
+            item_id: Unique identifier of the research item.
+            report_format: Desired export format; defaults to Markdown.
+
+        Returns:
+            An export payload containing content, filename, and MIME type.
+
+        Raises:
+            ValueError: If the requested report format is not supported.
+        """
         resolved_format = _coerce_report_format(report_format)
         report = self._renderer.render_report(item_id)
         if resolved_format == ReportFormat.JSON:
@@ -501,9 +692,20 @@ class ProviderStatusService:
     """Provider health service for the dashboard BFF."""
 
     def __init__(self, providers: list[Any] | None = None) -> None:
+        """Initialize the provider status service.
+
+        Args:
+            providers: Optional list of providers exposing a healthcheck method.
+        """
         self._providers = list(providers or [])
 
     def list_status(self) -> list[ProviderStatus]:
+        """List the health status of configured providers.
+
+        Returns:
+            A list of provider statuses. Falls back to a healthy dashboard status
+            when no providers are configured.
+        """
         if self._providers:
             statuses: list[ProviderStatus] = []
             for provider in self._providers:
@@ -539,14 +741,34 @@ class JobService:
     """Synchronous job registry for v0.1 nightly run endpoints."""
 
     def __init__(self) -> None:
+        """Initialize an empty job registry."""
         self._jobs: dict[str, JobRun] = {}
 
     def record_completed_job(self, run_id: str) -> JobRun:
+        """Record a completed nightly job for a research run.
+
+        Args:
+            run_id: Identifier of the research run associated with the job.
+
+        Returns:
+            The recorded job run.
+        """
         job = JobRun(run_id=run_id, payload_json=json.dumps({"run_id": run_id}))
         self._jobs[job.job_run_id] = job
         return job
 
     def get_job(self, job_run_id: str) -> JobRun:
+        """Fetch a job run by identifier.
+
+        Args:
+            job_run_id: Unique identifier of the job run.
+
+        Returns:
+            The requested job run.
+
+        Raises:
+            KeyError: If the job run does not exist.
+        """
         job = self._jobs.get(job_run_id)
         if job is None:
             raise KeyError(f"job run '{job_run_id}' not found")
@@ -576,6 +798,16 @@ class DashboardServiceBundle:
         research_repository: MemoryResearchRepository | None = None,
         research_service: Any | None = None,
     ) -> DashboardServiceBundle:
+        """Create a service bundle backed by in-memory repositories.
+
+        Args:
+            dashboard_repository: Optional dashboard repository instance.
+            research_repository: Optional research repository instance.
+            research_service: Optional research service instance.
+
+        Returns:
+            A fully wired in-memory service bundle.
+        """
         dashboard_repository = dashboard_repository or MemoryDashboardRepository()
         research_repository = research_repository or MemoryResearchRepository()
         research_service = research_service or ResearchService(
@@ -596,6 +828,17 @@ class DashboardServiceBundle:
         research_service: Any,
         providers: list[Any] | None = None,
     ) -> DashboardServiceBundle:
+        """Create a service bundle from existing repositories.
+
+        Args:
+            dashboard_repository: Dashboard repository implementation.
+            research_repository: Research repository implementation.
+            research_service: Service capable of running symbol research workflows.
+            providers: Optional list of providers to health-check.
+
+        Returns:
+            A fully wired service bundle.
+        """
         reports = ReportRenderer(dashboard_repository, research_repository)
         return cls(
             research=DashboardResearchService(research_service, dashboard_repository),

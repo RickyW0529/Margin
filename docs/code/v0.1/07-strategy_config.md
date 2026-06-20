@@ -35,17 +35,17 @@
 
 | 文件路径 | 职责 |
 | --- | --- |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/strategy/__init__.py` | 模块公开 API，聚合导出主要类、函数与常量。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/strategy/models.py` | 定义全部 Pydantic 领域模型与状态枚举。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/strategy/db_models.py` | SQLAlchemy 持久化表：`strategy_profiles`、`strategy_versions`。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/strategy/templates.py` | 内置策略模板定义与模板元数据列表。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/strategy/validator.py` | 配置校验与系统护栏合并。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/strategy/lifecycle.py` | 策略版本状态机与合法状态转移。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/strategy/sandbox.py` | 沙盒评估：校验、样例运行、回测、数据泄漏、成本、预览可用性。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/strategy/prompt.py` | 分层 Prompt 构建器。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/strategy/repository.py` | 仓库协议及内存、SQLAlchemy 两种实现。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/strategy/service.py` | 业务入口 `StrategyService`，编排创建、更新、校验、生命周期与 Prompt。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/strategy.py` | FastAPI 路由，前缀 `/strategies`。 |
+| `src/margin/strategy/__init__.py` | 模块公开 API，聚合导出主要类、函数与常量。 |
+| `src/margin/strategy/models.py` | 定义全部 Pydantic 领域模型与状态枚举。 |
+| `src/margin/strategy/db_models.py` | SQLAlchemy 持久化表：`strategy_profiles`、`strategy_versions`。 |
+| `src/margin/strategy/templates.py` | 内置策略模板定义与模板元数据列表。 |
+| `src/margin/strategy/validator.py` | 配置校验与系统护栏合并。 |
+| `src/margin/strategy/lifecycle.py` | 策略版本状态机与合法状态转移。 |
+| `src/margin/strategy/sandbox.py` | 沙盒评估：校验、样例运行、回测、数据泄漏、成本、预览可用性。 |
+| `src/margin/strategy/prompt.py` | 分层 Prompt 构建器。 |
+| `src/margin/strategy/repository.py` | 仓库协议及内存、SQLAlchemy 两种实现。 |
+| `src/margin/strategy/service.py` | 业务入口 `StrategyService`，编排创建、更新、校验、生命周期与 Prompt。 |
+| `src/margin/api/routes/strategy.py` | FastAPI 路由，前缀 `/strategies`。 |
 
 ---
 
@@ -55,7 +55,7 @@
 
 #### `StrategyState`
 
-位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/strategy/models.py`
+位置：`src/margin/strategy/models.py`
 
 策略版本生命周期状态。
 
@@ -86,7 +86,7 @@ AI 提供商与 Prompt 设置。
 | 字段 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
 | `provider` | `str` | `"openai"` | AI 服务提供商 |
-| `model` | `str` | `"gpt-4o-mini"` | 模型名称 |
+| `model` | `str` | `"deepseek-v4-pro"` | 模型名称 |
 | `websearch_provider` | `str` | `"tavily"` | 联网搜索提供商 |
 | `system_prompt_template` | `str` | `"default"` | 系统提示模板标识 |
 | `custom_instructions` | `str` | `""` | 用户自定义指令 |
@@ -246,7 +246,7 @@ AI 提供商与 Prompt 设置。
 
 ### 4.1 `StrategyTemplate`
 
-位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/strategy/templates.py`
+位置：`src/margin/strategy/templates.py`
 
 内置策略模板，包含元数据与默认配置。
 
@@ -280,7 +280,7 @@ AI 提供商与 Prompt 设置。
 
 ### 5.1 `StrategyLifecycle`
 
-位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/strategy/lifecycle.py`
+位置：`src/margin/strategy/lifecycle.py`
 
 策略版本状态机。
 
@@ -301,7 +301,7 @@ AI 提供商与 Prompt 设置。
 
 ### 5.2 `StrategyValidator`
 
-位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/strategy/validator.py`
+位置：`src/margin/strategy/validator.py`
 
 | 方法 | 参数 | 返回值 | 说明 |
 | --- | --- | --- | --- |
@@ -323,7 +323,7 @@ AI 提供商与 Prompt 设置。
 
 ### 5.3 `StrategySandbox`
 
-位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/strategy/sandbox.py`
+位置：`src/margin/strategy/sandbox.py`
 
 | 方法 | 参数 | 返回值 | 说明 |
 | --- | --- | --- | --- |
@@ -340,7 +340,7 @@ AI 提供商与 Prompt 设置。
 
 ### 5.4 `StrategyService`
 
-位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/strategy/service.py`
+位置：`src/margin/strategy/service.py`
 
 业务入口，编排仓库、校验、生命周期、沙盒与 Prompt。
 
@@ -387,7 +387,7 @@ AI 提供商与 Prompt 设置。
 
 ### 6.1 `PromptLayerBuilder`
 
-位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/strategy/prompt.py`
+位置：`src/margin/strategy/prompt.py`
 
 按架构第 15.2 节定义的分层顺序（由外到内）组装投研 Prompt：
 
@@ -413,7 +413,7 @@ AI 提供商与 Prompt 设置。
 
 ### 7.1 `StrategyRepository`（Protocol）
 
-位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/strategy/repository.py`
+位置：`src/margin/strategy/repository.py`
 
 `StrategyService` 消费的持久化契约。
 
@@ -450,7 +450,7 @@ PostgreSQL 实现。
 
 ## 8. FastAPI 接口
 
-位置：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/strategy.py`
+位置：`src/margin/api/routes/strategy.py`
 
 路由前缀：`/strategies`
 
@@ -487,9 +487,9 @@ PostgreSQL 实现。
 
 ## 9. 跨模块使用说明
 
-- `models.py` 中的 `utc_now` 与 `ensure_utc` 来自 `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/models.py`，保证时间戳统一 UTC。
-- `db_models.py` 依赖 `/Users/wangruiqi/PycharmProjects/Margin/src/margin/storage/base.py` 提供的 SQLAlchemy `Base`。
-- API 层通过 `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/dependencies.py` 中的 `get_strategy_service` 解析 `StrategyService` 实例。
+- `models.py` 中的 `utc_now` 与 `ensure_utc` 来自 `src/margin/news/models.py`，保证时间戳统一 UTC。
+- `db_models.py` 依赖 `src/margin/storage/base.py` 提供的 SQLAlchemy `Base`。
+- API 层通过 `src/margin/api/dependencies.py` 中的 `get_strategy_service` 解析 `StrategyService` 实例。
 - 投研执行模块（如 `09-holdings_monitoring`、`10-research_execution`）应使用 `StrategyService.get_prompt` 获取最终 Prompt，并使用 `StrategyProfile.active_version_id` 确定当前生效版本。
 - 决策输出必须遵守 `DecisionConfig.prohibited_outputs`，其中 `GUARANTEED_RETURN` 与 `DIRECT_BUY_SELL_ORDER` 由 `StrategyValidator.merge_with_guardrails` 强制注入，无法被用户覆盖。
 - `PromptLayer` 的 `editable` 标记用于前端区分可编辑层（`user_custom`、`task_context`）与系统只读层。

@@ -62,7 +62,12 @@ class ImportValidationError(ValueError):
 
 
 class TradeValidationError(ValueError):
-    """Raised when a single trade record fails data validation."""
+    """Raised when a single trade record fails data validation.
+
+    This exception is typically raised by ``validate_trade_fields`` or during row
+    conversion when a required field is missing, malformed, or violates a business
+    rule (for example a future trade timestamp).
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -81,12 +86,20 @@ class BrokerImportPlugin(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        """Return the plugin name (e.g. ``htsc`` / ``dongfang``)."""
+        """Return the plugin name (e.g. ``htsc`` / ``dongfang``).
+
+        Returns:
+            The unique name of the broker plugin.
+        """
 
     @property
     @abstractmethod
     def supported_extensions(self) -> list[str]:
-        """Return supported file extensions (e.g. ``[".csv", ".xls"]``)."""
+        """Return supported file extensions (e.g. ``[".csv", ".xls"]``).
+
+        Returns:
+            A list of file extensions the plugin can parse.
+        """
 
     @abstractmethod
     def parse(self, file_path: Path) -> list[dict[str, Any]]:

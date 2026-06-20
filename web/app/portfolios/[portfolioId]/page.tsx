@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Portfolio detail page.
+ * Loads a single portfolio's dashboard and positions for the portfolio workspace.
+ */
+
 import { PortfolioWorkspace } from "@/components/portfolio-workspace";
 import {
   fetchPortfolioDashboard,
@@ -6,10 +11,18 @@ import {
   type Position,
 } from "@/lib/api";
 
+/**
+ * Props for the portfolio detail page.
+ */
 type PortfolioPageProps = {
   params: Promise<{ portfolioId: string }>;
 };
 
+/**
+ * Portfolio detail page that resolves route params and fetches portfolio data.
+ * @param params - Route params containing the portfolio identifier.
+ * @returns The portfolio workspace with dashboard and positions.
+ */
 export default async function PortfolioPage({ params }: PortfolioPageProps) {
   const { portfolioId } = await params;
   let dashboard: PortfolioDashboard | null = null;

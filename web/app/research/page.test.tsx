@@ -1,3 +1,7 @@
+/**
+ * @fileoverview Tests for the research dashboard page.
+ */
+
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

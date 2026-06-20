@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Position detail page.
+ * Loads position details, alerts, and operation history for monitoring and review.
+ */
+
 import { PositionDetailView } from "@/components/position-detail";
 import {
   fetchPositionAlerts,
@@ -10,11 +15,20 @@ import {
 
 import { createPositionReviewAction, evaluatePositionAction } from "./actions";
 
+/**
+ * Props for the position detail page.
+ */
 type PositionPageProps = {
   params: Promise<{ positionId: string }>;
   searchParams: Promise<{ portfolioId?: string }>;
 };
 
+/**
+ * Position detail page that fetches position data and binds server actions.
+ * @param params - Route params containing the position identifier.
+ * @param searchParams - Optional query params, including the portfolio identifier.
+ * @returns The position detail view with monitoring actions.
+ */
 export default async function PositionPage({
   params,
   searchParams,

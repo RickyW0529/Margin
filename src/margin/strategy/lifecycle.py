@@ -23,7 +23,16 @@ class StrategyLifecycle:
     }
 
     def can_transition(self, from_state: StrategyState, to_state: StrategyState) -> bool:
-        """Return whether the transition is allowed."""
+        """Return whether a state transition is allowed.
+
+        Args:
+            from_state: The current lifecycle state.
+            to_state: The desired lifecycle state.
+
+        Returns:
+            ``True`` if the transition from ``from_state`` to ``to_state`` is
+            permitted by the lifecycle graph.
+        """
         return to_state in self._ALLOWED.get(from_state, set())
 
     def transition(
@@ -33,6 +42,16 @@ class StrategyLifecycle:
         reason: str = "",
     ) -> StrategyVersion:
         """Return a new version with the updated state.
+
+        Args:
+            version: The strategy version to transition.
+            to_state: The target lifecycle state.
+            reason: Optional human-readable reason for the transition.
+
+        Returns:
+            A new :class:`StrategyVersion` with ``state`` set to ``to_state``
+            and, when ``reason`` is provided, the transition reason appended to
+            the description.
 
         Raises:
             ValueError: If the transition is not allowed.

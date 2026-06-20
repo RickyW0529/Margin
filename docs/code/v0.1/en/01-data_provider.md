@@ -58,20 +58,20 @@ Key responsibilities:
 
 | File | Purpose |
 |------|---------|
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/data/__init__.py` | Public package exports for the data layer. Re-exports quality, standardization, and provider symbols. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/data/providers/__init__.py` | Public exports for concrete provider implementations. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/data/providers/akshare_provider.py` | `AKShareProvider` implementation for A-share quotes, fundamentals, indices, and announcement metadata. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/data/providers/tushare_provider.py` | `TushareProvider` implementation backed by the Tushare Pro API. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/data/standardize.py` | Symbol normalization, field mapping, unit/currency conversion, time standardization, and `StandardDataEvent` creation. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/data/quality.py` | Point-in-time field validation, anti-lookahead checks, data quality inspection, and quality event emission. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/provider.py` | Core provider abstractions: enums, descriptors, health results, call results, and business protocols. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/registry.py` | `ProviderRegistry` for registration, discovery, secret injection, health checks, and resilient call dispatch. |
+| `src/margin/data/__init__.py` | Public package exports for the data layer. Re-exports quality, standardization, and provider symbols. |
+| `src/margin/data/providers/__init__.py` | Public exports for concrete provider implementations. |
+| `src/margin/data/providers/akshare_provider.py` | `AKShareProvider` implementation for A-share quotes, fundamentals, indices, and announcement metadata. |
+| `src/margin/data/providers/tushare_provider.py` | `TushareProvider` implementation backed by the Tushare Pro API. |
+| `src/margin/data/standardize.py` | Symbol normalization, field mapping, unit/currency conversion, time standardization, and `StandardDataEvent` creation. |
+| `src/margin/data/quality.py` | Point-in-time field validation, anti-lookahead checks, data quality inspection, and quality event emission. |
+| `src/margin/core/provider.py` | Core provider abstractions: enums, descriptors, health results, call results, and business protocols. |
+| `src/margin/core/registry.py` | `ProviderRegistry` for registration, discovery, secret injection, health checks, and resilient call dispatch. |
 
 ---
 
 ## 3. Provider Protocols and Base Classes
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/provider.py`.
+Defined in `src/margin/core/provider.py`.
 
 ### 3.1 ProviderType
 
@@ -192,7 +192,7 @@ class MyProvider(BaseProvider):
 
 ### 4.1 AKShareProvider
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/data/providers/akshare_provider.py`.
+Defined in `src/margin/data/providers/akshare_provider.py`.
 
 A-share market data provider backed by AKShare. AKShare does not require an API token, but callers must respect its rate limits. Every public method returns a list of standard-format dictionaries that include timing fields such as `fetched_at` and `available_at`.
 
@@ -237,7 +237,7 @@ Return dictionaries include the following timing/source fields:
 
 ### 4.2 TushareProvider
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/data/providers/tushare_provider.py`.
+Defined in `src/margin/data/providers/tushare_provider.py`.
 
 A-share market data provider backed by the Tushare Pro API. The Tushare token is resolved externally via `SecretManager` and injected through `configure_secrets` or `set_token`.
 
@@ -286,7 +286,7 @@ Volume and amount unit conversions in `get_bars`:
 
 ## 5. Registry
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/registry.py`.
+Defined in `src/margin/core/registry.py`.
 
 ### 5.1 ProviderRegistry
 
@@ -341,7 +341,7 @@ Central registry for provider instances. Combines registration, health checks, r
 
 ## 6. Standardization
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/data/standardize.py`.
+Defined in `src/margin/data/standardize.py`.
 
 ### 6.1 Symbol Utilities
 
@@ -565,7 +565,7 @@ Converts raw provider output into `StandardDataEvent` instances.
 
 ## 7. Quality
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/data/quality.py`.
+Defined in `src/margin/data/quality.py`.
 
 ### 7.1 Point-in-Time Fields
 

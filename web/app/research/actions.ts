@@ -1,3 +1,7 @@
+/**
+ * @fileoverview Server action for launching a new research run.
+ */
+
 "use server";
 
 import { revalidatePath } from "next/cache";
@@ -5,6 +9,10 @@ import { redirect } from "next/navigation";
 
 import { createResearchRun } from "@/lib/api";
 
+/**
+ * Creates a research run from form input and redirects to the run detail page.
+ * @param formData - Form values containing strategy_id, version_id, portfolio_id, and symbols.
+ */
 export async function createResearchRunAction(formData: FormData) {
   const strategyId = requiredText(formData, "strategy_id");
   const versionId = requiredText(formData, "version_id");

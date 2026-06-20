@@ -16,23 +16,53 @@ class ResearchRepository(Protocol):
     """Persistence contract required by :class:`ResearchWorkflow`."""
 
     def add_snapshot(self, snapshot: ResearchSnapshot) -> None:
-        """Persist a snapshot idempotently without allowing mutation."""
+        """Persist a snapshot idempotently without allowing mutation.
+
+        Args:
+            snapshot: Research snapshot to persist.
+
+        Raises:
+            ValueError: If an existing snapshot with the same ID differs.
+        """
 
     def get_snapshot(self, snapshot_id: str) -> ResearchSnapshot | None:
-        """Return a snapshot by identifier."""
+        """Return a snapshot by identifier.
+
+        Args:
+            snapshot_id: Snapshot identifier.
+
+        Returns:
+            The matching ``ResearchSnapshot`` or ``None``.
+        """
 
     def get_snapshot_for_run(self, run_id: str) -> ResearchSnapshot | None:
-        """Return the most recent snapshot for a workflow run."""
+        """Return the most recent snapshot for a workflow run.
+
+        Args:
+            run_id: Workflow run identifier.
+
+        Returns:
+            The most recent ``ResearchSnapshot`` for the run, or ``None``.
+        """
 
 
 class MemoryResearchRepository:
     """Process-local append-only repository used by tests and local callers."""
 
     def __init__(self) -> None:
+        """Initialize empty snapshot stores."""
         self._snapshots: dict[str, ResearchSnapshot] = {}
         self._run_snapshots: dict[str, str] = {}
 
     def add_snapshot(self, snapshot: ResearchSnapshot) -> None:
+        """Persist a snapshot idempotently in memory.
+
+        Args:
+            snapshot: Research snapshot to persist.
+
+        Raises:
+            ValueError: If the snapshot ID already exists with different data.
+        """
         current = self._snapshots.get(snapshot.snapshot_id)
         if current is not None and current != snapshot:
             raise ValueError(f"research snapshot '{snapshot.snapshot_id}' is immutable")
@@ -40,9 +70,25 @@ class MemoryResearchRepository:
         self._run_snapshots[snapshot.run_id] = snapshot.snapshot_id
 
     def get_snapshot(self, snapshot_id: str) -> ResearchSnapshot | None:
+        """Return a snapshot by identifier.
+
+        Args:
+            snapshot_id: Snapshot identifier.
+
+        Returns:
+            The matching ``ResearchSnapshot`` or ``None``.
+        """
         return self._snapshots.get(snapshot_id)
 
     def get_snapshot_for_run(self, run_id: str) -> ResearchSnapshot | None:
+        """Return the most recent snapshot for a workflow run.
+
+        Args:
+            run_id: Workflow run identifier.
+
+        Returns:
+            The most recent ``ResearchSnapshot`` for the run, or ``None``.
+        """
         snapshot_id = self._run_snapshots.get(run_id)
         return self.get_snapshot(snapshot_id) if snapshot_id else None
 
@@ -51,9 +97,22 @@ class SQLAlchemyResearchRepository:
     """PostgreSQL-backed append-only research snapshot repository."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
+        """Initialize the repository.
+
+        Args:
+            session_factory: Callable that returns a new SQLAlchemy ``Session``.
+        """
         self._session_factory = session_factory
 
     def add_snapshot(self, snapshot: ResearchSnapshot) -> None:
+        """Persist a snapshot idempotently in PostgreSQL.
+
+        Args:
+            snapshot: Research snapshot to persist.
+
+        Raises:
+            ValueError: If the snapshot ID already exists with different data.
+        """
         payload = snapshot.model_dump(mode="json")
         with self._session_factory.begin() as session:
             current = session.get(ResearchSnapshotRow, snapshot.snapshot_id)
@@ -76,11 +135,27 @@ class SQLAlchemyResearchRepository:
                 )
 
     def get_snapshot(self, snapshot_id: str) -> ResearchSnapshot | None:
+        """Return a snapshot by identifier.
+
+        Args:
+            snapshot_id: Snapshot identifier.
+
+        Returns:
+            The matching ``ResearchSnapshot`` or ``None``.
+        """
         with self._session_factory() as session:
             row = session.get(ResearchSnapshotRow, snapshot_id)
             return ResearchSnapshot.model_validate(row.payload) if row else None
 
     def get_snapshot_for_run(self, run_id: str) -> ResearchSnapshot | None:
+        """Return the most recent snapshot for a workflow run.
+
+        Args:
+            run_id: Workflow run identifier.
+
+        Returns:
+            The most recent ``ResearchSnapshot`` for the run, or ``None``.
+        """
         with self._session_factory() as session:
             row = session.scalars(
                 select(ResearchSnapshotRow)

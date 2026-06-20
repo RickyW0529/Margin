@@ -62,6 +62,14 @@ class ToolCallRecord(BaseModel):
     @field_validator("params_json", mode="before")
     @classmethod
     def serialize_params(cls, value: Any) -> str:
+        """Serialize incoming parameters to a deterministic JSON string.
+
+        Args:
+            value: Raw parameters, either a dict or an already-serialized string.
+
+        Returns:
+            A sorted JSON string representation of the parameters.
+        """
         if isinstance(value, str):
             return value
         return json.dumps(value or {}, sort_keys=True, default=str)
@@ -87,6 +95,7 @@ class BaseTool(ABC):
 
     @property
     def permission(self) -> ToolPermission:
+        """Return the default permission level for this tool."""
         return ToolPermission.READ
 
     @abstractmethod
@@ -105,6 +114,14 @@ class PythonTool(BaseTool):
         return "python"
 
     def run(self, params: dict[str, Any]) -> ToolResult:
+        """Evaluate a whitelisted numeric expression.
+
+        Args:
+            params: Tool parameters containing the ``expression`` to evaluate.
+
+        Returns:
+            Tool result with the computed value or an error message.
+        """
         start = datetime.now().timestamp()
         expression = params.get("expression", "")
         allowed_names = {
@@ -146,6 +163,11 @@ class RetrievalTool(BaseTool):
     """Wrap ``margin.vector.retrieval.RetrievalTool`` when a pipeline is available."""
 
     def __init__(self, pipeline: Any | None = None) -> None:
+        """Initialize the retrieval tool.
+
+        Args:
+            pipeline: Vector retrieval pipeline.
+        """
         self._pipeline = pipeline
 
     @property
@@ -153,6 +175,14 @@ class RetrievalTool(BaseTool):
         return "retrieval"
 
     def run(self, params: dict[str, Any]) -> ToolResult:
+        """Search the vector store for evidence chunks.
+
+        Args:
+            params: Must include ``symbol`` and ``decision_at``; ``query`` is optional.
+
+        Returns:
+            Tool result with matching chunk records or an error.
+        """
         start = datetime.now().timestamp()
         symbol = params.get("symbol")
         query = params.get("query", "")
@@ -211,6 +241,11 @@ class _AdapterTool(BaseTool):
     tool_name = ""
 
     def __init__(self, handler: Callable[[dict[str, Any]], Any] | None = None) -> None:
+        """Initialize the adapter.
+
+        Args:
+            handler: Callable that implements the tool behavior.
+        """
         self._handler = handler
 
     @property
@@ -218,6 +253,14 @@ class _AdapterTool(BaseTool):
         return self.tool_name
 
     def run(self, params: dict[str, Any]) -> ToolResult:
+        """Invoke the configured handler.
+
+        Args:
+            params: Parameters forwarded to the handler.
+
+        Returns:
+            Tool result with handler output or an adapter error.
+        """
         start = datetime.now().timestamp()
         if self._handler is None:
             return ToolResult(
@@ -268,6 +311,7 @@ class ValuationTool(BaseTool):
     """Simple DCF/relative valuation stub using PythonTool for calculations."""
 
     def __init__(self) -> None:
+        """Initialize the valuation tool with an internal Python tool."""
         self._python = PythonTool()
 
     @property
@@ -275,6 +319,14 @@ class ValuationTool(BaseTool):
         return "valuation"
 
     def run(self, params: dict[str, Any]) -> ToolResult:
+        """Compute a simple valuation estimate.
+
+        Args:
+            params: Must include ``eps`` and ``pe``; ``method`` defaults to ``"pe"``.
+
+        Returns:
+            Tool result with the estimated value or an error.
+        """
         method = params.get("method", "pe")
         eps = params.get("eps", 1.0)
         pe = params.get("pe", 10.0)
@@ -339,13 +391,24 @@ class ToolRegistry:
     """Registry of tools available to agents."""
 
     def __init__(self) -> None:
+        """Initialize an empty tool registry and audit log."""
         self._tools: dict[str, BaseTool] = {}
         self._audit_records: list[ToolCallRecord] = []
 
     def register(self, tool: BaseTool) -> None:
+        """Register a tool instance.
+
+        Args:
+            tool: Tool instance to make available by ``tool.name``.
+        """
         self._tools[tool.name] = tool
 
     def register_defaults(self, pipeline: Any | None = None) -> None:
+        """Register the default set of research tools.
+
+        Args:
+            pipeline: Optional vector retrieval pipeline for the ``retrieval`` tool.
+        """
         self.register(PythonTool())
         self.register(RetrievalTool(pipeline))
         self.register(MarketDataTool())
@@ -361,9 +424,18 @@ class ToolRegistry:
         self.register(DocumentCollectorTool())
 
     def get(self, name: str) -> BaseTool | None:
+        """Return a registered tool by name.
+
+        Args:
+            name: Tool identifier.
+
+        Returns:
+            The registered ``BaseTool`` or ``None``.
+        """
         return self._tools.get(name)
 
     def list_tools(self) -> list[str]:
+        """Return the names of all registered tools."""
         return list(self._tools.keys())
 
     def describe_tools(self) -> list[dict[str, str]]:
@@ -389,6 +461,17 @@ class ToolRegistry:
         trace_id: str = "",
         confirmed: bool = False,
     ) -> ToolResult:
+        """Invoke a registered tool and record the call.
+
+        Args:
+            name: Tool identifier.
+            params: Parameters passed to the tool.
+            trace_id: Optional trace identifier.
+            confirmed: Whether a write-with-confirm tool was explicitly confirmed.
+
+        Returns:
+            Tool result from execution or an access error.
+        """
         tool = self.get(name)
         if tool is None:
             return self._record(
@@ -479,6 +562,7 @@ class ToolRegistry:
 
 
 def _redact(value: Any, key: str = "") -> Any:
+    """Redact sensitive keys from a JSON-compatible value."""
     sensitive = {"api_key", "token", "password", "secret", "authorization"}
     if any(part in key.lower() for part in sensitive):
         return "***"

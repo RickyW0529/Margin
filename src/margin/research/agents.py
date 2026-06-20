@@ -68,6 +68,11 @@ class Agent(ABC):
     """Base class for a research agent role."""
 
     def __init__(self, llm_provider: LLMProvider | None = None) -> None:
+        """Initialize the agent with an optional LLM provider.
+
+        Args:
+            llm_provider: LLM provider used when no model router is available.
+        """
         self._llm = llm_provider
 
     @property
@@ -77,6 +82,12 @@ class Agent(ABC):
 
     @property
     def output_schema(self) -> dict[str, Any]:
+        """Return the JSON schema used to validate LLM output.
+
+        Returns:
+            A JSON Schema dictionary. Subclasses override this to enforce
+            structured output.
+        """
         return {"type": "object", "properties": {}, "required": []}
 
     def _hash(self, data: Any) -> str:
@@ -171,6 +182,14 @@ class RuleAgent(Agent):
     """Agent that uses only rules/tools without LLM."""
 
     def run(self, context: AgentContext) -> AgentOutput:
+        """Execute the rule-based logic and wrap the result.
+
+        Args:
+            context: Shared agent context.
+
+        Returns:
+            Agent output containing the rule result or an error payload.
+        """
         try:
             data = self._run_rule(context)
             return self._make_output(context, True, data)
@@ -249,6 +268,14 @@ class WebSearchAgent(Agent):
         }
 
     def run(self, context: AgentContext) -> AgentOutput:
+        """Generate search queries, run web searches, and collect results.
+
+        Args:
+            context: Shared agent context.
+
+        Returns:
+            Agent output with generated queries and merged search results.
+        """
         symbol = context.symbol
         prompt = (
             f"Generate 1-3 web search queries in Chinese for recent news and announcements "
@@ -334,6 +361,14 @@ class TextSummaryAgent(Agent):
         }
 
     def run(self, context: AgentContext) -> AgentOutput:
+        """Summarize collected source documents.
+
+        Args:
+            context: Shared agent context.
+
+        Returns:
+            Agent output containing structured summaries.
+        """
         collected = context.prior_outputs.get("document_collector", {}).get("collected", [])
         if not collected:
             return self._make_output(context, True, {"summaries": []})
@@ -357,6 +392,14 @@ class EvidenceResearchAgent(Agent):
         return "evidence_research"
 
     def run(self, context: AgentContext) -> AgentOutput:
+        """Retrieve vector evidence and convert chunks into Claims and Evidence.
+
+        Args:
+            context: Shared agent context.
+
+        Returns:
+            Agent output with evidence/claim identifiers and retrieval metadata.
+        """
         tr = self._call_tool(
             context,
             "retrieval",
@@ -461,6 +504,14 @@ class RiskReviewAgent(Agent):
         }
 
     def run(self, context: AgentContext) -> AgentOutput:
+        """Review risk factors for the target symbol.
+
+        Args:
+            context: Shared agent context.
+
+        Returns:
+            Agent output with a risk score and list of risk factors.
+        """
         prompt = (
             f"Review risks for {context.symbol} based on current evidence. "
             f"Output JSON with 'risk_score' (0-1) and 'risk_factors' (list of strings). "
@@ -497,6 +548,14 @@ class ReflectCounterArgumentAgent(Agent):
         }
 
     def run(self, context: AgentContext) -> AgentOutput:
+        """Generate counter-arguments, unknowns, and conflict flags.
+
+        Args:
+            context: Shared agent context.
+
+        Returns:
+            Agent output with counter-arguments and identified unknowns.
+        """
         prompt = (
             f"Provide counter-arguments and unknowns for {context.symbol}. "
             f"Output JSON with 'counter_arguments', 'unknowns', and optional 'conflict_flags'."

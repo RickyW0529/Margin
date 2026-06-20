@@ -1,9 +1,18 @@
+/**
+ * @fileoverview Server action for submitting feedback on a research item.
+ */
+
 "use server";
 
 import { revalidatePath } from "next/cache";
 
 import { createResearchItemFeedback, type FeedbackType } from "@/lib/api";
 
+/**
+ * Records feedback for a research item and refreshes the item page.
+ * @param itemId - The research item identifier.
+ * @param formData - Form values containing feedback_type and an optional comment.
+ */
 export async function createResearchFeedbackAction(
   itemId: string,
   formData: FormData,

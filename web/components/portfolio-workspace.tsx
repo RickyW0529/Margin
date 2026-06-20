@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Workspace component that renders a portfolio dashboard,
+ * positions table, exposures, and upcoming events.
+ */
+
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -11,9 +16,13 @@ import Link from "next/link";
 
 import type { PortfolioDashboard, Position } from "@/lib/api";
 
+/** Props for the PortfolioWorkspace component. */
 type PortfolioWorkspaceProps = {
+  /** Portfolio dashboard data, or null while loading. */
   dashboard: PortfolioDashboard | null;
+  /** Array of positions to render in the positions table. */
   positions: Position[];
+  /** Error message to display, or null when no error. */
   error: string | null;
 };
 
@@ -28,14 +37,32 @@ const percent = new Intl.NumberFormat("zh-CN", {
   maximumFractionDigits: 1,
 });
 
+/**
+ * Formats a monetary value as a localized CNY string.
+ *
+ * @param value Monetary value, or null/undefined if unavailable.
+ * @returns Formatted currency or "--".
+ */
 function money(value: number | null | undefined): string {
   return value == null ? "--" : currency.format(value);
 }
 
+/**
+ * Formats a fractional ratio as a localized percentage string.
+ *
+ * @param value Ratio value, or null/undefined if unavailable.
+ * @returns Formatted percentage or "--".
+ */
 function ratio(value: number | null | undefined): string {
   return value == null ? "--" : percent.format(value);
 }
 
+/**
+ * Formats a signed monetary value with an explicit plus or minus prefix.
+ *
+ * @param value Monetary value, or null/undefined if unavailable.
+ * @returns Signed formatted currency or "--".
+ */
 function signedMoney(value: number | null | undefined): string {
   if (value == null) {
     return "--";
@@ -43,6 +70,12 @@ function signedMoney(value: number | null | undefined): string {
   return `${value >= 0 ? "+" : ""}${currency.format(value)}`;
 }
 
+/**
+ * Determines the visual tone for a signed metric value.
+ *
+ * @param value Signed metric value.
+ * @returns Visual tone identifier.
+ */
 function metricTone(
   value: number | null | undefined,
 ): "neutral" | "positive" | "negative" {
@@ -52,6 +85,14 @@ function metricTone(
   return value > 0 ? "positive" : "negative";
 }
 
+/**
+ * Renders the portfolio workspace with metrics, positions, and risk panels.
+ *
+ * @param dashboard Portfolio dashboard data.
+ * @param positions Portfolio positions.
+ * @param error Error message.
+ * @returns The portfolio workspace or a loading/error state.
+ */
 export function PortfolioWorkspace({
   dashboard,
   positions,
@@ -205,6 +246,15 @@ export function PortfolioWorkspace({
   );
 }
 
+/**
+ * Renders a single metric tile with an icon, label, value, and optional tone.
+ *
+ * @param icon Icon element.
+ * @param label Metric label.
+ * @param value Formatted metric value.
+ * @param tone Visual tone applied to the value.
+ * @returns The metric tile element.
+ */
 function MetricTile({
   icon,
   label,
@@ -225,6 +275,13 @@ function MetricTile({
   );
 }
 
+/**
+ * Renders an exposure breakdown panel with progress meters.
+ *
+ * @param title Panel heading.
+ * @param values Map of exposure names to fractional values.
+ * @returns The exposure panel element.
+ */
 function ExposurePanel({
   title,
   values,

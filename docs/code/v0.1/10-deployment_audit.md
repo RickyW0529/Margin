@@ -1,6 +1,6 @@
 # 10-deployment_audit 模块文档
 
-本文档覆盖 Margin v0.1 部署与审计模块（deployment & audit）全部公共接口与核心实现，文件位于 `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/`、`/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/`、`/Users/wangruiqi/PycharmProjects/Margin/scripts/` 以及项目根目录部署配置。
+本文档覆盖 Margin v0.1 部署与审计模块（deployment & audit）全部公共接口与核心实现，文件位于 `src/margin/core/`、`src/margin/api/`、`scripts/` 以及项目根目录部署配置。
 
 ---
 
@@ -39,26 +39,26 @@
 
 | 文件路径 | 作用 |
 |---|---|
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/audit.py` | Provider 调用审计：不可变 `AuditRecord`、SHA-256 哈希、JSON Lines 本地日志写入与读取。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/audit_repository.py` | 业务审计记录持久化契约 `AuditRepository`，含内存实现与 SQLAlchemy/PostgreSQL 实现。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/db_audit.py` | 审计记录的 SQLAlchemy ORM 模型 `AuditLogRecordRow` 与索引定义。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/models.py` | 共享领域模型，包括业务审计记录 `AuditLogRecord`。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/snapshot_store.py` | 本地 append-only 快照存储 `FileSnapshotStore` 与 `SnapshotEntry`。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/degradation.py` | Provider 故障降级包装器 `call_with_fallback`。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/logging_config.py` | 基于 structlog 的结构化日志配置 `configure_logging`。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/metrics.py` | Prometheus 指标注册表 `REGISTRY` 与 HTTP/Provider 计数器/直方图。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/metrics.py` | FastAPI `/metrics` 端点，暴露 Prometheus 文本格式指标。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/middleware.py` | `TraceIdMiddleware`（trace_id 传播）与 `MetricsMiddleware`（HTTP 指标采集）。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/health.py` | `/health`、`/health/ready`、`/health/degraded` 端点实现。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/Dockerfile` | 后端 API 容器镜像构建定义。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/Dockerfile` | Next.js 前端容器镜像构建定义。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/docker-compose.yml` | 本地全栈服务编排。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/.github/workflows/ci.yml` | GitHub Actions 持续集成工作流。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/docker/prometheus.yml` | Prometheus 抓取配置。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/scripts/migrate.py` | 容器内执行 Alembic 迁移的一次性脚本。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/scripts/seed_demo.py` | 初始化示例组合与示例公告数据。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/scripts/health_check.py` | 容器就绪探针脚本。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/scripts/snapshot_store.py` | 快照存储 CLI 工具。 |
+| `src/margin/core/audit.py` | Provider 调用审计：不可变 `AuditRecord`、SHA-256 哈希、JSON Lines 本地日志写入与读取。 |
+| `src/margin/core/audit_repository.py` | 业务审计记录持久化契约 `AuditRepository`，含内存实现与 SQLAlchemy/PostgreSQL 实现。 |
+| `src/margin/core/db_audit.py` | 审计记录的 SQLAlchemy ORM 模型 `AuditLogRecordRow` 与索引定义。 |
+| `src/margin/core/models.py` | 共享领域模型，包括业务审计记录 `AuditLogRecord`。 |
+| `src/margin/core/snapshot_store.py` | 本地 append-only 快照存储 `FileSnapshotStore` 与 `SnapshotEntry`。 |
+| `src/margin/core/degradation.py` | Provider 故障降级包装器 `call_with_fallback`。 |
+| `src/margin/core/logging_config.py` | 基于 structlog 的结构化日志配置 `configure_logging`。 |
+| `src/margin/core/metrics.py` | Prometheus 指标注册表 `REGISTRY` 与 HTTP/Provider 计数器/直方图。 |
+| `src/margin/api/metrics.py` | FastAPI `/metrics` 端点，暴露 Prometheus 文本格式指标。 |
+| `src/margin/api/middleware.py` | `TraceIdMiddleware`（trace_id 传播）与 `MetricsMiddleware`（HTTP 指标采集）。 |
+| `src/margin/api/routes/health.py` | `/health`、`/health/ready`、`/health/degraded` 端点实现。 |
+| `Dockerfile` | 后端 API 容器镜像构建定义。 |
+| `web/Dockerfile` | Next.js 前端容器镜像构建定义。 |
+| `docker-compose.yml` | 本地全栈服务编排。 |
+| `.github/workflows/ci.yml` | GitHub Actions 持续集成工作流。 |
+| `docker/prometheus.yml` | Prometheus 抓取配置。 |
+| `scripts/migrate.py` | 容器内执行 Alembic 迁移的一次性脚本。 |
+| `scripts/seed_demo.py` | 初始化示例组合与示例公告数据。 |
+| `scripts/health_check.py` | 容器就绪探针脚本。 |
+| `scripts/snapshot_store.py` | 快照存储 CLI 工具。 |
 
 ---
 
@@ -66,7 +66,7 @@
 
 ### 3.1 `AuditRecord`
 
-源码文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/audit.py`
+源码文件：`src/margin/core/audit.py`
 
 描述一次 Provider 调用的不可变审计记录，使用 Pydantic `BaseModel` 并设置 `frozen=True`。
 
@@ -104,7 +104,7 @@
 | 签名 | `class AuditLogger` |
 | 功能 | append-only 的 Provider 调用审计日志写入器，当前以 JSON Lines 写入本地文件。 |
 | 初始化 | `def __init__(self, log_path: Path \| None = None) -> None` |
-| 默认路径 | `~/.margin/audit/provider_calls.jsonl` |
+| 默认路径 | `.margin/audit/provider_calls.jsonl` |
 
 | 方法 | 签名 | 说明 |
 |---|---|---|
@@ -124,7 +124,7 @@
 
 ### 3.5 `AuditRepository`（Protocol）
 
-源码文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/audit_repository.py`
+源码文件：`src/margin/core/audit_repository.py`
 
 业务审计记录的持久化契约，支持按 `record_type`、`object_id`、`trace_id` 过滤。
 
@@ -161,7 +161,7 @@
 
 ### 3.8 `AuditLogRecord`（领域模型）
 
-源码文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/models.py`
+源码文件：`src/margin/core/models.py`
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -181,7 +181,7 @@
 
 ### 3.9 `AuditLogRecordRow`（ORM 模型）
 
-源码文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/db_audit.py`
+源码文件：`src/margin/core/db_audit.py`
 
 | 项目 | 说明 |
 |---|---|
@@ -213,7 +213,7 @@
 
 ### 4.1 `SnapshotEntry`
 
-源码文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/snapshot_store.py`
+源码文件：`src/margin/core/snapshot_store.py`
 
 指向一个已持久化快照的不可变数据类（`frozen=True`）。
 
@@ -249,7 +249,7 @@
 
 ### 5.1 `CallResult`
 
-`CallResult` 定义于 `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/provider.py`，是 Provider 调用的统一结果模型。
+`CallResult` 定义于 `src/margin/core/provider.py`，是 Provider 调用的统一结果模型。
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -268,7 +268,7 @@
 
 ### 5.2 `call_with_fallback`
 
-源码文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/degradation.py`
+源码文件：`src/margin/core/degradation.py`
 
 | 项目 | 说明 |
 |---|---|
@@ -290,7 +290,7 @@
 
 ### 6.1 `configure_logging`
 
-源码文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/logging_config.py`
+源码文件：`src/margin/core/logging_config.py`
 
 | 项目 | 说明 |
 |---|---|
@@ -327,7 +327,7 @@
 
 ### 7.1 `REGISTRY` 与指标定义
 
-源码文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/metrics.py`
+源码文件：`src/margin/core/metrics.py`
 
 | 名称 | 类型 | 标签 | 说明 |
 |---|---|---|---|
@@ -339,7 +339,7 @@
 
 ### 7.2 `/metrics` 端点
 
-源码文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/metrics.py`
+源码文件：`src/margin/api/metrics.py`
 
 | 项目 | 说明 |
 |---|---|
@@ -350,7 +350,7 @@
 
 ### 7.3 `MetricsMiddleware`
 
-源码文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/middleware.py`
+源码文件：`src/margin/api/middleware.py`
 
 | 项目 | 说明 |
 |---|---|
@@ -365,7 +365,7 @@
 
 ### 8.1 `TraceIdMiddleware`
 
-源码文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/middleware.py`
+源码文件：`src/margin/api/middleware.py`
 
 | 项目 | 说明 |
 |---|---|
@@ -386,7 +386,7 @@
 
 ## 9. 健康检查端点
 
-源码文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/health.py`
+源码文件：`src/margin/api/routes/health.py`
 
 ### 9.1 `GET /health`
 
@@ -421,7 +421,7 @@
 
 ### 10.1 后端 Dockerfile
 
-文件路径：`/Users/wangruiqi/PycharmProjects/Margin/Dockerfile`
+文件路径：`Dockerfile`
 
 | 阶段/指令 | 说明 |
 |---|---|
@@ -438,15 +438,15 @@
 | `COPY alembic ./alembic` | 复制迁移目录。 |
 | `COPY alembic.ini ./` | 复制 Alembic 配置。 |
 | `RUN useradd --create-home --uid 10001 margin` | 创建非 root 用户。 |
-| `RUN mkdir -p /home/margin/.margin/audit /home/margin/.margin/snapshots` | 预创建审计日志与快照持久化目录。 |
-| `RUN chown -R margin:margin /app /home/margin/.margin` | 目录归属非 root 用户。 |
+| `RUN mkdir -p .margin/audit .margin/snapshots` | 在 `WORKDIR /app` 下预创建项目相对的审计日志与快照持久化目录。 |
+| `RUN chown -R margin:margin /app` | 目录归属非 root 用户。 |
 | `USER margin` | 切换到非 root 用户运行。 |
 | `EXPOSE 8000` | 暴露 API 端口。 |
 | `CMD ["uvicorn", "margin.api.main:app", "--host", "0.0.0.0", "--port", "8000"]` | 默认启动命令。 |
 
 ### 10.2 前端 Dockerfile
 
-文件路径：`/Users/wangruiqi/PycharmProjects/Margin/web/Dockerfile`
+文件路径：`web/Dockerfile`
 
 | 阶段/指令 | 说明 |
 |---|---|
@@ -465,7 +465,7 @@
 
 ### 10.3 docker-compose 服务
 
-文件路径：`/Users/wangruiqi/PycharmProjects/Margin/docker-compose.yml`
+文件路径：`docker-compose.yml`
 
 | 服务 | 镜像/构建 | 端口 | 依赖 | 说明 |
 |---|---|---|---|---|
@@ -481,13 +481,13 @@
 | 数据卷 | 用途 |
 |---|---|
 | `margin-postgres` | PostgreSQL 数据持久化。 |
-| `margin-audit` | 审计日志文件持久化（挂载到 `/home/margin/.margin/audit`）。 |
-| `margin-snapshots` | 快照文件持久化（挂载到 `/home/margin/.margin/snapshots`）。 |
+| `margin-audit` | 审计日志文件持久化（挂载到容器工作目录 `/app/.margin/audit`，对应应用相对路径 `.margin/audit`）。 |
+| `margin-snapshots` | 快照文件持久化（挂载到容器工作目录 `/app/.margin/snapshots`，对应应用相对路径 `.margin/snapshots`）。 |
 | `margin-grafana` | Grafana 配置与数据持久化。 |
 
 ### 10.4 CI 工作流
 
-文件路径：`/Users/wangruiqi/PycharmProjects/Margin/.github/workflows/ci.yml`
+文件路径：`.github/workflows/ci.yml`
 
 | Job | 运行环境 | 步骤 | 说明 |
 |---|---|---|---|
@@ -497,7 +497,7 @@
 
 ### 10.5 Prometheus 配置
 
-文件路径：`/Users/wangruiqi/PycharmProjects/Margin/docker/prometheus.yml`
+文件路径：`docker/prometheus.yml`
 
 | 配置项 | 说明 |
 |---|---|
@@ -510,10 +510,10 @@
 
 | 脚本 | 路径 | 功能 |
 |---|---|---|
-| `migrate.py` | `/Users/wangruiqi/PycharmProjects/Margin/scripts/migrate.py` | 容器内执行 `alembic upgrade head`，作为 `migrate` 服务入口。 |
-| `seed_demo.py` | `/Users/wangruiqi/PycharmProjects/Margin/scripts/seed_demo.py` | 创建示例组合、示例交易、示例公告事件；幂等跳过已存在数据。 |
-| `health_check.py` | `/Users/wangruiqi/PycharmProjects/Margin/scripts/health_check.py` | 访问 `http://localhost:8000/health/ready`，HTTP 200 退出码 0，否则退出码 1。 |
-| `snapshot_store.py` | `/Users/wangruiqi/PycharmProjects/Margin/scripts/snapshot_store.py` | 快照 CLI，支持 `write`、`read`、`list` 子命令，操作与核心库兼容的 `FileSnapshotStore`。 |
+| `migrate.py` | `scripts/migrate.py` | 容器内执行 `alembic upgrade head`，作为 `migrate` 服务入口。 |
+| `seed_demo.py` | `scripts/seed_demo.py` | 创建示例组合、示例交易、示例公告事件；幂等跳过已存在数据。 |
+| `health_check.py` | `scripts/health_check.py` | 访问 `http://localhost:8000/health/ready`，HTTP 200 退出码 0，否则退出码 1。 |
+| `snapshot_store.py` | `scripts/snapshot_store.py` | 快照 CLI，支持 `write`、`read`、`list` 子命令，操作与核心库兼容的 `FileSnapshotStore`。 |
 
 ---
 
@@ -534,7 +534,7 @@
 
 - 调用结果封装为 `CallResult`。
 - `call_with_fallback` 在主调用失败时触发 fallback，并更新 `PROVIDER_CALLS` / `PROVIDER_DEGRADED`。
-- `AuditLogger.log_call()` 将调用记录为不可变 `AuditRecord`，写入 `~/.margin/audit/provider_calls.jsonl`。
+- `AuditLogger.log_call()` 将调用记录为不可变 `AuditRecord`，写入 `.margin/audit/provider_calls.jsonl`。
 - `trace_id` 由 `TraceIdMiddleware` 注入并贯穿整个请求链路。
 
 ### 11.3 业务审计记录链路
@@ -559,7 +559,7 @@
 | `MARGIN_LOG_FORMAT` | `json` | 日志格式：`json` 或 `console`。 |
 | `MARGIN_METRICS_ENABLED` | `true` | 是否启用指标。 |
 | `MARGIN_TRACE_ID_HEADER` | `x-margin-trace-id` | trace_id 请求/响应头名称。 |
-| `MARGIN_AUDIT_LOG_PATH` | `~/.margin/audit/provider_calls.jsonl` | Provider 调用审计日志路径。 |
+| `MARGIN_AUDIT_LOG_PATH` | `.margin/audit/provider_calls.jsonl` | Provider 调用审计日志路径。 |
 | `MARGIN_ENVIRONMENT` | `development` | 运行环境。 |
 | `MARGIN_SERVICE_NAME` | `margin-api` | 服务名。 |
 | `MARGIN_SERVICE_VERSION` | `0.1.0` | 服务版本。 |

@@ -12,7 +12,33 @@ from margin.storage.base import Base
 
 
 class EvidenceRecordRow(Base):
-    """Immutable evidence record derived from a retrievable document chunk."""
+    """Immutable evidence record derived from a retrievable document chunk.
+
+    Attributes:
+        evidence_id: Unique identifier of the evidence record.
+        chunk_id: Identifier of the originating chunk.
+        document_id: Identifier of the originating document.
+        source_type: Source type string.
+        source_url: Optional URL of the original source.
+        source_name: Optional human-readable source name.
+        source_level: Source level as an integer.
+        quality_score: Optional explicit quality score.
+        content_hash: Hash of the evidence content.
+        content: Text content of the evidence.
+        symbol: Optional ticker symbol.
+        published_at: Publication timestamp (UTC).
+        available_at: Availability timestamp (UTC).
+        retrieved_at: Retrieval timestamp (UTC).
+        page: Optional page number.
+        section: Optional section name.
+        paragraph_index: Optional paragraph index.
+        table_id: Optional table identifier.
+        row_id: Optional row identifier.
+        quote_span: Optional character span stored as JSONB.
+        snapshot_id: Optional snapshot identifier.
+        snapshot_hash: Optional snapshot content hash.
+        created_at: Timestamp when the row was created (UTC).
+    """
 
     __tablename__ = "evidence_records"
     __table_args__ = (
@@ -47,7 +73,21 @@ class EvidenceRecordRow(Base):
 
 
 class EvidenceClaimRow(Base):
-    """Immutable structured claim produced from evidence references."""
+    """Immutable structured claim produced from evidence references.
+
+    Attributes:
+        claim_id: Unique identifier of the claim.
+        claim_type: Claim classification string.
+        statement: Human-readable claim statement.
+        fact_or_inference: Whether the claim is fact, inference, or unknown.
+        evidence_ids: List of referenced evidence IDs stored as JSONB.
+        confidence: Confidence score.
+        conflicts: List of conflict dictionaries stored as JSONB.
+        effective_at: Timestamp when the claim becomes effective (UTC).
+        locator: Optional primary citation locator stored as JSONB.
+        symbol: Optional ticker symbol.
+        created_at: Timestamp when the row was created (UTC).
+    """
 
     __tablename__ = "evidence_claims"
     __table_args__ = (
@@ -68,7 +108,23 @@ class EvidenceClaimRow(Base):
 
 
 class EvidenceValidationAuditRow(Base):
-    """Append-only validation audit record for a claim."""
+    """Append-only validation audit record for a claim.
+
+    Attributes:
+        audit_id: Unique identifier of the audit record.
+        claim_id: Identifier of the audited claim.
+        status: Validation status string.
+        reason: Human-readable explanation.
+        fail_reason: Optional categorized failure reason string.
+        original_confidence: Claim confidence before capping.
+        capped_confidence: Claim confidence after capping.
+        conflicts_found: Number of conflicts detected.
+        evidences_checked: Number of evidence items examined.
+        evidences_passed: Number of evidence items that passed.
+        requires_counter_review: Whether counter-review is required.
+        checked_at: Timestamp when validation occurred (UTC).
+        created_at: Timestamp when the row was created (UTC).
+    """
 
     __tablename__ = "evidence_validation_audits"
     __table_args__ = (
@@ -94,7 +150,16 @@ class EvidenceValidationAuditRow(Base):
 
 
 class ResearchEvidenceRow(Base):
-    """Immutable link between a research item, a claim, and a supporting evidence item."""
+    """Immutable link between a research item, a claim, and a supporting evidence item.
+
+    Attributes:
+        research_item_id: Identifier of the research item.
+        claim_id: Identifier of the linked claim.
+        evidence_id: Identifier of the linked evidence record.
+        role: Role of the evidence in the research item.
+        rank: Display order of the link.
+        created_at: Timestamp when the row was created (UTC).
+    """
 
     __tablename__ = "research_evidence"
 

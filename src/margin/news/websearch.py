@@ -114,7 +114,14 @@ class SearchQueryRecord(BaseModel):
 
 
 class VerifiedContent(BaseModel):
-    """Accessible original content and its immutable snapshot metadata."""
+    """Accessible original content and its immutable snapshot metadata.
+
+    Attributes:
+        result: Verified search result with accessibility flags and snapshot references.
+        snapshot: Immutable raw snapshot of the downloaded original content.
+        title: Normalized title extracted from the original content.
+        content: Extracted body text from the original content.
+    """
 
     result: SearchResult
     snapshot: RawSnapshot
@@ -189,7 +196,11 @@ class WebSearchProvider(BaseProvider):
         self._api_key = api_key
 
     def configure_secrets(self, secrets: dict[str, str]) -> None:
-        """Configure the API key through the standard ProviderRegistry hook."""
+        """Configure the API key through the standard ProviderRegistry hook.
+
+        Args:
+            secrets: Mapping from secret reference to resolved secret value.
+        """
         api_key = secrets.get(self._secret_ref)
         if api_key:
             self.set_api_key(api_key)
@@ -476,6 +487,7 @@ class WebSearchService:
             provider: Configured web search provider.
             registry: Source registry for content acquisition.
             snapshot_store: Snapshot store for persisting downloaded content.
+            repository: Optional repository for persisting search records and audited results.
         """
         self._provider = provider
         self._verifier = OriginalContentVerifier(registry, snapshot_store)
@@ -514,6 +526,7 @@ class WebSearchService:
             query: Search query string.
             max_results: Maximum number of results to return.
             source_level: Source level assigned to returned results.
+            searched_at: Optional timestamp to record as the search time.
 
         Returns:
             Tuple of (query record, list of document events).

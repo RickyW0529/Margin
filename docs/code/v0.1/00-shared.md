@@ -80,17 +80,17 @@
 
 | 文件路径 | 核心职责 |
 | --- | --- |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/settings.py` | 定义 `MarginSettings` 与缓存工厂 `get_settings()`，集中管理环境配置。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/worker.py` | 装配 APScheduler 调度器、持仓监控 Runner 与文档索引 Runner，提供 `main()` 入口。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/storage/base.py` | 定义所有 PostgreSQL ORM 模型继承的 SQLAlchemy 声明基类 `Base`。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/storage/database.py` | 提供不可变 `DatabaseSettings`、引擎创建函数与绑定会话工厂。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/main.py` | FastAPI 应用工厂 `create_app()`，负责路由、中间件与依赖覆盖装配。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/dependencies.py` | FastAPI 依赖注入工厂，构造数据库引擎、外部 Provider 与各业务 ServiceBundle。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/schemas.py` | 定义路由层共享的 Pydantic 请求/响应模型。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/provider.py` | Provider 类型、状态、元数据、调用结果、基类与业务协议。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/registry.py` | Provider 注册中心，封装注册、发现、健康检查、限流、重试、降级、审计。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/resilience.py` | 限流器、重试配置与带重试/限流的通用调用包装函数。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/secret.py` | 引用式 Secret 管理器，支持环境变量与本地密钥文件。 |
+| `src/margin/settings.py` | 定义 `MarginSettings` 与缓存工厂 `get_settings()`，集中管理环境配置。 |
+| `src/margin/worker.py` | 装配 APScheduler 调度器、持仓监控 Runner 与文档索引 Runner，提供 `main()` 入口。 |
+| `src/margin/storage/base.py` | 定义所有 PostgreSQL ORM 模型继承的 SQLAlchemy 声明基类 `Base`。 |
+| `src/margin/storage/database.py` | 提供不可变 `DatabaseSettings`、引擎创建函数与绑定会话工厂。 |
+| `src/margin/api/main.py` | FastAPI 应用工厂 `create_app()`，负责路由、中间件与依赖覆盖装配。 |
+| `src/margin/api/dependencies.py` | FastAPI 依赖注入工厂，构造数据库引擎、外部 Provider 与各业务 ServiceBundle。 |
+| `src/margin/api/schemas.py` | 定义路由层共享的 Pydantic 请求/响应模型。 |
+| `src/margin/core/provider.py` | Provider 类型、状态、元数据、调用结果、基类与业务协议。 |
+| `src/margin/core/registry.py` | Provider 注册中心，封装注册、发现、健康检查、限流、重试、降级、审计。 |
+| `src/margin/core/resilience.py` | 限流器、重试配置与带重试/限流的通用调用包装函数。 |
+| `src/margin/core/secret.py` | 引用式 Secret 管理器，支持环境变量与本地密钥文件。 |
 
 ---
 
@@ -98,7 +98,7 @@
 
 ### 3.1 `MarginSettings`
 
-- **位置**：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/settings.py`
+- **位置**：`src/margin/settings.py`
 - **说明**：基于 `pydantic_settings.BaseSettings` 的单一配置源。所有字段默认以 `MARGIN_` 为前缀从环境变量读取，并支持 `.env` 文件。`
 - **关键配置项**：
 
@@ -109,7 +109,7 @@
 |  | `database_pool_pre_ping` | `bool` | `True` | 取出连接前是否探测可用性。 |
 | LLM | `llm_api_key` | `SecretStr \| None` | `None` | LLM API 密钥。 |
 |  | `llm_base_url` | `HttpUrl \| None` | `None` | LLM 服务基地址。 |
-|  | `llm_model` | `str` | `gpt-4o-mini` | 默认 LLM 模型。 |
+|  | `llm_model` | `str` | `deepseek-v4-pro` | 默认 LLM 模型。 |
 | Embedding | `embedding_base_url` | `HttpUrl \| None` | `None` | Embedding 服务基地址。 |
 |  | `embedding_api_key` | `SecretStr \| None` | `None` | Embedding API 密钥。 |
 |  | `embedding_model` | `str` | `text-embedding-3-small` | 默认 Embedding 模型。 |
@@ -123,7 +123,7 @@
 |  | `metrics_enabled` | `bool` | `True` | 是否启用指标。 |
 |  | `trace_id_header` | `str` | `x-margin-trace-id` | Trace ID 请求/响应头。 |
 |  | `monitoring_interval_seconds` | `int` | `300` | Worker 监控/索引间隔秒数。 |
-| 审计 | `audit_log_path` | `Path` | `~/.margin/audit/provider_calls.jsonl` | Provider 调用审计日志路径。 |
+| 审计 | `audit_log_path` | `Path` | `.margin/audit/provider_calls.jsonl` | Provider 调用审计日志路径。 |
 | 部署 | `environment` | `Literal["development", "test", "production"]` | `development` | 运行环境。 |
 |  | `service_name` | `str` | `margin-api` | 服务名。 |
 |  | `service_version` | `str` | `0.1.0` | 服务版本。 |
@@ -139,7 +139,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | **签名** | `def get_settings() -> MarginSettings` |
-| **位置** | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/settings.py` |
+| **位置** | `src/margin/settings.py` |
 | **说明** | 使用 `functools.lru_cache` 缓存的配置工厂，每个进程只解析一次环境变量。 |
 | **返回值** | 配置好的 `MarginSettings` 实例。 |
 
@@ -152,7 +152,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | **签名** | `def build_scheduler(monitoring_job: Callable[[], None], *, interval_seconds: int, indexing_job: Callable[[], None] \| None = None) -> BlockingScheduler` |
-| **位置** | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/worker.py` |
+| **位置** | `src/margin/worker.py` |
 | **说明** | 构造 APScheduler 调度器，配置持仓监控任务，可选地同时配置文档索引任务。 |
 
 | 参数 | 类型 | 说明 |
@@ -170,7 +170,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | **签名** | `def build_monitoring_runner() -> HoldingsMonitoringRunner` |
-| **位置** | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/worker.py` |
+| **位置** | `src/margin/worker.py` |
 | **说明** | 根据全局设置构建生产级持仓监控 Runner，包括数据库引擎、PortfolioService、 holdings monitoring service、AKShare 价格 Provider 与新闻事件 Provider。 |
 | **返回值** | 配置好的 `HoldingsMonitoringRunner` 实例。 |
 
@@ -179,7 +179,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | **签名** | `def build_document_indexing_runner() -> DocumentIndexingRunner` |
-| **位置** | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/worker.py` |
+| **位置** | `src/margin/worker.py` |
 | **说明** | 根据全局设置构建文档索引 Runner。若 Embedding 配置完整则使用 `OpenAIEmbeddingProvider`，否则使用无网络能力的占位 `EmbeddingProvider`。 |
 | **返回值** | 配置好的 `DocumentIndexingRunner` 实例。 |
 
@@ -188,7 +188,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | **签名** | `def main() -> None` |
-| **位置** | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/worker.py` |
+| **位置** | `src/margin/worker.py` |
 | **说明** | Worker 入口函数。配置日志、构造 Runner、包装异常捕获的任务函数、启动调度器。 |
 | **返回值** | 无。启动后会阻塞运行。 |
 
@@ -198,7 +198,7 @@
 
 ### 5.1 `Base`
 
-- **位置**：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/storage/base.py`
+- **位置**：`src/margin/storage/base.py`
 - **说明**：所有 PostgreSQL ORM 模型继承的 SQLAlchemy `DeclarativeBase` 子类。提供统一的 `metadata`，用于表注册与 Alembic 迁移管理。
 - **关键属性**：
 
@@ -208,7 +208,7 @@
 
 ### 5.2 `DatabaseSettings`
 
-- **位置**：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/storage/database.py`
+- **位置**：`src/margin/storage/database.py`
 - **说明**：不可变的 PostgreSQL 连接配置数据类。
 
 | 属性 | 类型 | 默认值 | 说明 |
@@ -226,7 +226,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | **签名** | `def create_database_engine(settings: DatabaseSettings \| None = None) -> Engine` |
-| **位置** | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/storage/database.py` |
+| **位置** | `src/margin/storage/database.py` |
 | **说明** | 创建共享的 SQLAlchemy 引擎。若未传入设置，则从环境变量加载。 |
 
 | 参数 | 类型 | 说明 |
@@ -242,7 +242,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | **签名** | `def create_session_factory(engine: Engine) -> SessionFactory` |
-| **位置** | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/storage/database.py` |
+| **位置** | `src/margin/storage/database.py` |
 | **说明** | 创建绑定到指定引擎的会话工厂。 |
 
 | 参数 | 类型 | 说明 |
@@ -269,7 +269,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | **签名** | `def create_app(portfolio_service: PortfolioService \| None = None, research_service: ResearchService \| None = None, strategy_service: StrategyService \| None = None, dashboard_services: DashboardServiceBundle \| None = None, monitoring_services: MonitoringServiceBundle \| None = None) -> FastAPI` |
-| **位置** | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/main.py` |
+| **位置** | `src/margin/api/main.py` |
 | **说明** | 创建并配置 Margin API 应用。若传入业务服务实例，则通过 `dependency_overrides` 覆盖生产依赖，便于测试。 |
 
 | 参数 | 类型 | 说明 |
@@ -289,12 +289,12 @@
 | 项目 | 内容 |
 | --- | --- |
 | **签名** | `app: FastAPI = create_app()` |
-| **位置** | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/main.py` |
+| **位置** | `src/margin/api/main.py` |
 | **说明** | 使用生产配置创建的默认 API 应用实例，供 ASGI 服务器启动。 |
 
 ### 6.3 `MissingConfiguredProvider`
 
-- **位置**：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/dependencies.py`
+- **位置**：`src/margin/api/dependencies.py`
 - **说明**：当外部 Provider 缺少配置时，用于仪表盘状态端点的降级占位对象。无需网络调用即可返回 `DEGRADED` 健康状态。
 
 | 属性 | 类型 | 说明 |
@@ -308,7 +308,7 @@
 
 ### 6.4 依赖工厂函数
 
-所有工厂均位于 `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/dependencies.py`，并使用 `@lru_cache` 进行进程级缓存。
+所有工厂均位于 `src/margin/api/dependencies.py`，并使用 `@lru_cache` 进行进程级缓存。
 
 #### 6.4.1 `build_database_engine()`
 
@@ -402,7 +402,7 @@
 
 ## 7. 共享请求/响应模型
 
-以下模型均位于 `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/schemas.py`，继承自 `pydantic.BaseModel`。
+以下模型均位于 `src/margin/api/schemas.py`，继承自 `pydantic.BaseModel`。
 
 ### 7.1 `TradeCreate`
 
@@ -465,7 +465,7 @@
 
 ## 8. Provider 核心抽象
 
-以下类型、模型与协议均位于 `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/provider.py`。
+以下类型、模型与协议均位于 `src/margin/core/provider.py`。
 
 ### 8.1 `ProviderType`
 
@@ -570,7 +570,7 @@
 
 ## 9. Provider 注册中心
 
-以下类与函数均位于 `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/registry.py`。
+以下类与函数均位于 `src/margin/core/registry.py`。
 
 ### 9.1 `ProviderNotFoundError`
 
@@ -619,7 +619,7 @@
 
 ## 10. 弹性组件
 
-以下类型与函数均位于 `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/resilience.py`。
+以下类型与函数均位于 `src/margin/core/resilience.py`。
 
 ### 10.1 `RateLimitError`
 
@@ -687,7 +687,7 @@
 
 ## 11. 密钥管理
 
-以下类型与类均位于 `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/secret.py`。
+以下类型与类均位于 `src/margin/core/secret.py`。
 
 ### 11.1 `SecretNotFoundError`
 
@@ -698,7 +698,7 @@
 - **说明**：引用式 Secret 管理器。配置文件只保存引用名，真实凭证在运行时从环境变量或本地密钥文件解析。
 - **解析优先级**：
   1. 环境变量 `MARGIN_SECRET_<REF>`。
-  2. 本地文件 `~/.margin/secrets/<ref>` 或自定义目录下的同名文件。
+  2. 本地文件 `.margin/secrets/<ref>` 或自定义目录下的同名文件。
 
 | 属性 | 类型 | 说明 |
 | --- | --- | --- |
@@ -726,7 +726,7 @@
 
 ## 12. FastAPI 应用装配说明
 
-本章节说明 `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/main.py` 中 `create_app()` 的装配逻辑。
+本章节说明 `src/margin/api/main.py` 中 `create_app()` 的装配逻辑。
 
 ### 12.1 注册路由
 
@@ -734,13 +734,13 @@
 
 | 路由文件 | Router 变量 | 功能标签 |
 | --- | --- | --- |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/metrics.py` | `metrics_router` | Prometheus 指标端点 `/metrics`。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/health.py` | `health_router` | 健康检查。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/portfolios.py` | `portfolio_router` | 组合管理。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/research.py` | `research_router` | 研究候选。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/strategy.py` | `strategy_router` | 策略配置。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/dashboard.py` | `dashboard_router` | 仪表盘。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/monitoring.py` | `monitoring_router` | 持仓监控。 |
+| `src/margin/api/metrics.py` | `metrics_router` | Prometheus 指标端点 `/metrics`。 |
+| `src/margin/api/routes/health.py` | `health_router` | 健康检查。 |
+| `src/margin/api/routes/portfolios.py` | `portfolio_router` | 组合管理。 |
+| `src/margin/api/routes/research.py` | `research_router` | 研究候选。 |
+| `src/margin/api/routes/strategy.py` | `strategy_router` | 策略配置。 |
+| `src/margin/api/routes/dashboard.py` | `dashboard_router` | 仪表盘。 |
+| `src/margin/api/routes/monitoring.py` | `monitoring_router` | 持仓监控。 |
 
 ### 12.2 注册中间件
 
@@ -748,8 +748,8 @@
 
 | 中间件 | 类 | 位置 | 职责 |
 | --- | --- | --- | --- |
-| `TraceIdMiddleware` | `margin.api.middleware.TraceIdMiddleware` | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/middleware.py` | 优先读取请求头 `x-margin-trace-id`，不存在则生成新 trace ID，并在响应头回写。 |
-| `MetricsMiddleware` | `margin.api.middleware.MetricsMiddleware` | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/middleware.py` | 记录 HTTP 请求数与耗时，使用路由路径模板避免高基数 URL。 |
+| `TraceIdMiddleware` | `margin.api.middleware.TraceIdMiddleware` | `src/margin/api/middleware.py` | 优先读取请求头 `x-margin-trace-id`，不存在则生成新 trace ID，并在响应头回写。 |
+| `MetricsMiddleware` | `margin.api.middleware.MetricsMiddleware` | `src/margin/api/middleware.py` | 记录 HTTP 请求数与耗时，使用路由路径模板避免高基数 URL。 |
 
 ### 12.3 依赖覆盖机制
 

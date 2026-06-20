@@ -1,6 +1,7 @@
 """Tests for ``AuditLogger`` and the response-hash utility."""
 
 from datetime import datetime
+from pathlib import Path
 
 from margin.core.audit import AuditLogger, AuditRecord, compute_hash
 from margin.core.provider import CallResult
@@ -29,6 +30,14 @@ class TestComputeHash:
 
 class TestAuditLogger:
     """Tests covering JSONL persistence, reading, and parameter summarization."""
+
+    def test_default_log_path_is_project_relative(self, tmp_path, monkeypatch):
+        """The default audit log path must be relative to the current project directory."""
+        monkeypatch.chdir(tmp_path)
+        logger = AuditLogger()
+        assert logger._log_path == Path(".margin/audit/provider_calls.jsonl")
+        assert not logger._log_path.is_absolute()
+        assert (tmp_path / ".margin/audit").is_dir()
 
     def test_log_call_writes_jsonl(self, tmp_path):
         """``log_call`` persists a record and returns an ``AuditRecord`` instance."""

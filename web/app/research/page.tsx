@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Research dashboard page.
+ * Lists research runs, provider status, and candidate cards from the latest run.
+ */
+
 import { CandidateList } from "@/components/candidate-list";
 import { HomeSummary } from "@/components/home-summary";
 import { ProviderStatusPanel } from "@/components/provider-status-panel";
@@ -17,6 +22,10 @@ import { createResearchRunAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Research dashboard page that loads runs, provider status, and candidate cards.
+ * @returns The rendered research dashboard with run form and candidate list.
+ */
 export default async function ResearchDashboardPage() {
   let summary: ResearchHomeSummary | null = null;
   let runs: ResearchRun[] = [];

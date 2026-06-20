@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from sqlalchemy import text
 
+from margin.settings import MarginSettings
 from margin.storage.database import (
     DatabaseSettings,
     create_database_engine,
@@ -26,10 +27,29 @@ def test_database_settings_reads_environment(monkeypatch):
     """
     url = "postgresql+psycopg://margin:margin@localhost:5432/margin"
     monkeypatch.setenv("MARGIN_DATABASE_URL", url)
+    monkeypatch.setenv("MARGIN_DATABASE_ECHO", "true")
+    monkeypatch.setenv("MARGIN_DATABASE_POOL_PRE_PING", "false")
 
     settings = DatabaseSettings.from_env()
 
     assert settings.url == url
+    assert settings.echo is True
+    assert settings.pool_pre_ping is False
+
+
+def test_database_settings_can_be_built_from_margin_settings():
+    margin_settings = MarginSettings(
+        _env_file=None,
+        database_url="postgresql+psycopg://margin:margin@localhost:5432/margin",
+        database_echo=True,
+        database_pool_pre_ping=False,
+    )
+
+    settings = DatabaseSettings.from_settings(margin_settings)
+
+    assert settings.url == str(margin_settings.database_url)
+    assert settings.echo is True
+    assert settings.pool_pre_ping is False
 
 
 def test_session_factory_connects_to_postgres(database_url):

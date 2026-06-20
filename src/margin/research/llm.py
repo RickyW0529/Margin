@@ -54,6 +54,7 @@ class LLMResult:
 
 
 def _compute_hash(data: Any) -> str:
+    """Return a deterministic SHA-256 hash for the supplied data."""
     return hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()
 
 
@@ -70,9 +71,19 @@ class LLMProvider(BaseProvider):
         client: httpx.Client | None = None,
         timeout: float = 60.0,
     ) -> None:
+        """Initialize the provider.
+
+        Args:
+            name: Provider name used in the registry.
+            api_key: LLM API key. Falls back to ``MARGIN_LLM_API_KEY``.
+            base_url: LLM API base URL. Falls back to ``MARGIN_LLM_BASE_URL``.
+            model: Model identifier. Falls back to ``MARGIN_LLM_MODEL``.
+            client: Optional ``httpx.Client`` instance.
+            timeout: Request timeout in seconds.
+        """
         self._api_key = api_key or os.getenv("MARGIN_LLM_API_KEY")
         self._base_url = (base_url or os.getenv("MARGIN_LLM_BASE_URL") or "").rstrip("/")
-        self._model = model or os.getenv("MARGIN_LLM_MODEL") or "gpt-4o-mini"
+        self._model = model or os.getenv("MARGIN_LLM_MODEL") or "deepseek-v4-pro"
         self._timeout = timeout
         self._client = client or httpx.Client()
         self._descriptor = ProviderDescriptor(
@@ -86,6 +97,7 @@ class LLMProvider(BaseProvider):
 
     @property
     def descriptor(self) -> ProviderDescriptor:
+        """Return the provider descriptor for registry integration."""
         return self._descriptor
 
     def complete(
@@ -95,6 +107,16 @@ class LLMProvider(BaseProvider):
         response_schema: dict[str, Any] | None = None,
         temperature: float = 0.0,
     ) -> LLMResult:
+        """Call the LLM with an optional structured JSON schema.
+
+        Args:
+            prompt: User prompt sent to the model.
+            response_schema: Optional JSON schema to enforce structured output.
+            temperature: Sampling temperature.
+
+        Returns:
+            An ``LLMResult`` containing the parsed output or error details.
+        """
         if not self._api_key or not self._base_url:
             return LLMResult(
                 output={},
@@ -163,7 +185,19 @@ class LLMProvider(BaseProvider):
         response_schema: dict[str, Any] | None = None,
         temperature: float = 0.0,
     ) -> LLMResult:
-        """Registry-compatible completion that raises on Provider failure."""
+        """Registry-compatible completion that raises on Provider failure.
+
+        Args:
+            prompt: User prompt sent to the model.
+            response_schema: Optional JSON schema to enforce structured output.
+            temperature: Sampling temperature.
+
+        Returns:
+            The successful ``LLMResult``.
+
+        Raises:
+            ProviderError: If the completion fails.
+        """
         result = self.complete(
             prompt,
             response_schema=response_schema,
@@ -174,12 +208,21 @@ class LLMProvider(BaseProvider):
         return result
 
     def configure_secrets(self, secrets: dict[str, str]) -> None:
-        """Receive the LLM API key from :class:`ProviderRegistry`."""
+        """Receive the LLM API key from :class:`ProviderRegistry`.
+
+        Args:
+            secrets: Mapping of secret names to values.
+        """
         api_key = secrets.get("llm_api_key")
         if api_key:
             self._api_key = api_key
 
     def healthcheck(self) -> HealthCheckResult:
+        """Check connectivity and credentials.
+
+        Returns:
+            A ``HealthCheckResult`` describing the provider status.
+        """
         if not self._api_key or not self._base_url:
             return HealthCheckResult(
                 provider_name=self._descriptor.name,
@@ -224,6 +267,14 @@ class DeterministicLLMProvider(LLMProvider):
         fail: bool = False,
         error: str = "injected failure",
     ) -> None:
+        """Initialize the deterministic test provider.
+
+        Args:
+            name: Provider name.
+            response: Fixed JSON object returned on success.
+            fail: Whether every call should fail.
+            error: Error message used when ``fail`` is True.
+        """
         self._response = response or {"result": "ok"}
         self._fail = fail
         self._error = error
@@ -237,6 +288,7 @@ class DeterministicLLMProvider(LLMProvider):
 
     @property
     def descriptor(self) -> ProviderDescriptor:
+        """Return the provider descriptor."""
         return self._descriptor
 
     def complete(
@@ -246,6 +298,16 @@ class DeterministicLLMProvider(LLMProvider):
         response_schema: dict[str, Any] | None = None,
         temperature: float = 0.0,
     ) -> LLMResult:
+        """Return the configured deterministic response.
+
+        Args:
+            prompt: Ignored.
+            response_schema: Ignored.
+            temperature: Ignored.
+
+        Returns:
+            A successful ``LLMResult`` or a failure when configured to fail.
+        """
         del prompt, response_schema, temperature
         if self._fail:
             return LLMResult(
@@ -264,6 +326,11 @@ class DeterministicLLMProvider(LLMProvider):
         )
 
     def healthcheck(self) -> HealthCheckResult:
+        """Always report healthy.
+
+        Returns:
+            A healthy ``HealthCheckResult``.
+        """
         return HealthCheckResult(
             provider_name=self._descriptor.name,
             status=ProviderStatus.HEALTHY,
@@ -295,6 +362,13 @@ class ModelRouter:
         llm_providers: dict[str, LLMProvider] | None = None,
         provider_registry: ProviderRegistry | None = None,
     ) -> None:
+        """Initialize the router.
+
+        Args:
+            overrides: Mapping that overrides default task-to-provider routing.
+            llm_providers: Named LLM providers to register.
+            provider_registry: Optional shared provider registry.
+        """
         self._mapping = dict(self.DEFAULTS)
         if overrides:
             self._mapping.update(overrides)
@@ -304,9 +378,25 @@ class ModelRouter:
             self.register_provider(name, provider)
 
     def select(self, task: TaskType) -> str:
+        """Return the provider name selected for a task.
+
+        Args:
+            task: Research task type.
+
+        Returns:
+            Provider identifier (e.g. ``"rule"`` or a registered model name).
+        """
         return self._mapping.get(task, "rule")
 
     def get_provider(self, name: str) -> LLMProvider | None:
+        """Return a registered provider by name.
+
+        Args:
+            name: Provider identifier.
+
+        Returns:
+            The registered ``LLMProvider`` or ``None``.
+        """
         return self._providers.get(name)
 
     def register_provider(
@@ -316,6 +406,13 @@ class ModelRouter:
         *,
         fallback_names: list[str] | None = None,
     ) -> None:
+        """Register a named provider with the shared registry.
+
+        Args:
+            name: Provider identifier.
+            provider: LLM provider instance.
+            fallback_names: Ordered list of fallback provider names.
+        """
         self._providers[name] = provider
         self._registry.register(
             provider,
@@ -331,7 +428,17 @@ class ModelRouter:
         response_schema: dict[str, Any] | None = None,
         trace_id: str = "",
     ) -> LLMResult:
-        """Route a completion through the shared Provider Registry."""
+        """Route a completion through the shared Provider Registry.
+
+        Args:
+            task: Research task type.
+            prompt: User prompt.
+            response_schema: Optional JSON schema for structured output.
+            trace_id: Trace identifier for observability.
+
+        Returns:
+            The routed ``LLMResult`` or a failure result on error.
+        """
         provider_name = self.select(task)
         if provider_name == "rule":
             return LLMResult(
@@ -374,9 +481,22 @@ class StructuredOutputGuardrail:
     """Validate that an LLM output conforms to the supported JSON Schema subset."""
 
     def __init__(self, schema: dict[str, Any]) -> None:
+        """Initialize the guardrail with a JSON schema.
+
+        Args:
+            schema: JSON Schema dictionary describing the expected output.
+        """
         self._schema = schema
 
     def validate(self, output: dict[str, Any]) -> tuple[bool, str]:
+        """Validate ``output`` against the configured schema.
+
+        Args:
+            output: Parsed JSON output from an LLM.
+
+        Returns:
+            A tuple of ``(is_valid, error_message)``.
+        """
         return self._validate_value(output, self._schema, "$")
 
     def _validate_value(
@@ -385,6 +505,7 @@ class StructuredOutputGuardrail:
         schema: dict[str, Any],
         path: str,
     ) -> tuple[bool, str]:
+        """Recursively validate a value against a schema fragment."""
         expected_type = schema.get("type")
         type_checks = {
             "object": lambda candidate: isinstance(candidate, dict),

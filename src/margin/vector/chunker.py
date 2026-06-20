@@ -669,7 +669,16 @@ class Chunker:
         parsed: ParsedDocument,
         event: DocumentEvent,
     ) -> list[Chunk]:
-        """Chunk structured parsed blocks while preserving source locators."""
+        """Chunk structured parsed blocks while preserving source locators.
+
+        Args:
+            parsed: Parsed document containing structured blocks with locator metadata.
+            event: The document event the parsed blocks belong to.
+
+        Returns:
+            A list of chunks with page, section, paragraph, table, row, and quote span
+            locators copied from the parsed blocks.
+        """
         if event.processing_status != DocumentStatus.READY:
             return []
         chunks: list[Chunk] = []
@@ -712,6 +721,15 @@ class Chunker:
         self,
         block: ParsedBlock,
     ) -> list[tuple[str, tuple[int, int] | None]]:
+        """Split a parsed block into sub-parts and adjust quote spans.
+
+        Args:
+            block: Parsed block containing text and an optional quote span.
+
+        Returns:
+            A list of ``(text_part, quote_span)`` tuples. When the block has no quote
+            span, ``quote_span`` is ``None``.
+        """
         base = BaseChunker(self._max_size, self._overlap)
         parts = base._split_oversized_part(block.text)
         if block.quote_span is None:

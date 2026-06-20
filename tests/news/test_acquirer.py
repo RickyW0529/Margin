@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -186,6 +187,18 @@ class TestSourceRegistry:
 
 class TestSnapshotStore:
     """Tests for snapshot persistence and retrieval."""
+
+    def test_default_base_dir_is_project_relative(self, tmp_path, monkeypatch):
+        """Default snapshots must be written under the project-relative .margin directory."""
+        monkeypatch.chdir(tmp_path)
+        store = SnapshotStore()
+        snapshot = store.save("url", b"data", content_type="text/plain")
+        assert store._base_dir == Path(".margin/snapshots")
+        assert not store._base_dir.is_absolute()
+        assert snapshot.storage_path is not None
+        assert Path(snapshot.storage_path) == (
+            Path(".margin/snapshots") / f"{snapshot.snapshot_id}.txt"
+        )
 
     def test_save_and_read(self, tmp_path):
         """Snapshots must be persisted and readable by id and extension."""

@@ -1,13 +1,17 @@
-"""Citation Validator — Claim 校验、冲突封顶、ABSTAINED 判定、审计。
+"""Citation Validator — claim validation, conflict capping, ABSTAINED decisions, audit.
 
-对应 spec 05 §7 风险与降级、架构 §10.2 RAG 工作流、§25 故障降级。
-对应 plan 0503：
-  0503.1 引用与来源等级校验 — 校验 evidence_ids、source_level、时点
-  0503.2 冲突处理 — 冲突 Claim 提升反方审查、置信度封顶
-  0503.3 ABSTAINED 判定 — 证据不足/冲突过高时拒绝输出高置信结论
-  0503.4 校验审计 — 记录校验通过/失败原因
+Corresponds to spec 05 §7 risk and downgrade, architecture §10.2 RAG workflow,
+and §25 fault degradation.
+Corresponds to plan 0503:
+    0503.1 Citation and source-level validation — validate evidence_ids, source_level,
+        and point-in-time.
+    0503.2 Conflict handling — conflicting claims trigger counter-review and confidence
+        capping.
+    0503.3 ABSTAINED decision — refuse high-confidence conclusions when evidence is
+        insufficient or conflicts are too high.
+    0503.4 Validation audit — record pass/fail reasons for each validation.
 
-原则（架构 §25）：宁可 ABSTAINED，也不输出虚假的高置信结论。
+Principle (architecture §25): prefer ABSTAINED over false high-confidence conclusions.
 """
 
 from __future__ import annotations
@@ -34,12 +38,12 @@ from margin.evidence.models import (
 from margin.news.models import SourceLevel, ensure_utc, utc_now
 
 # ---------------------------------------------------------------------------
-# 0503.1 / 0503.3 校验状态
+# 0503.1 / 0503.3 Validation status
 # ---------------------------------------------------------------------------
 
 
 class ValidationStatus(StrEnum):
-    """校验结果状态。"""
+    """Status of a single claim validation result."""
 
     PASS = "pass"
     FAIL = "fail"
@@ -47,7 +51,7 @@ class ValidationStatus(StrEnum):
 
 
 class FailReason(StrEnum):
-    """校验失败原因分类。"""
+    """Categorized reason why a claim validation failed or abstained."""
 
     NO_EVIDENCE = "no_evidence"
     EVIDENCE_NOT_FOUND = "evidence_not_found"
@@ -62,12 +66,26 @@ class FailReason(StrEnum):
 
 
 # ---------------------------------------------------------------------------
-# 校验结果
+# Validation result
 # ---------------------------------------------------------------------------
 
 
 class ValidationResult(BaseModel):
-    """单条 Claim 的校验结果。"""
+    """Result of validating a single claim.
+
+    Attributes:
+        claim_id: Identifier of the validated claim.
+        status: Validation status (PASS, FAIL, or ABSTAINED).
+        reason: Human-readable explanation of the outcome.
+        fail_reason: Categorized failure reason, if applicable.
+        original_confidence: Confidence of the claim before any capping.
+        capped_confidence: Confidence after conflict capping.
+        conflicts_found: Number of conflicts detected for the claim.
+        evidences_checked: Number of evidence items examined.
+        evidences_passed: Number of evidence items that passed locator checks.
+        requires_counter_review: Whether a conflict warrants counter-review.
+        checked_at: Timestamp when validation occurred (UTC).
+    """
 
     claim_id: str
     status: ValidationStatus
@@ -86,23 +104,52 @@ class ValidationResult(BaseModel):
     @field_validator("checked_at")
     @classmethod
     def normalize_checked_at(cls, value: datetime) -> datetime:
+        """Normalize the checked-at timestamp to UTC.
+
+        Args:
+            value: A datetime value to normalize.
+
+        Returns:
+            The datetime normalized to UTC.
+        """
         return ensure_utc(value)
 
     @property
     def should_suppress(self) -> bool:
-        """是否应抑制该 Claim（不进入研究信号）。"""
+        """Return whether the claim should be suppressed from research signals.
+
+        FAIL and ABSTAINED results are not allowed to feed high-confidence research
+        conclusions.
+
+        Returns:
+            True if the validation status is FAIL or ABSTAINED.
+        """
         return self.status in (ValidationStatus.FAIL, ValidationStatus.ABSTAINED)
 
 
 # ---------------------------------------------------------------------------
-# 0503.4 校验审计
+# 0503.4 Validation audit
 # ---------------------------------------------------------------------------
 
 
 class ValidationAuditRecord(BaseModel):
-    """校验审计记录（plan 0503.4：记录校验通过/失败原因）。
+    """Append-only audit record capturing the outcome of a claim validation.
 
-    落库后不可篡改。
+    Immutable after persistence.
+
+    Attributes:
+        audit_id: Unique identifier of the audit record.
+        claim_id: Identifier of the audited claim.
+        status: Validation status.
+        reason: Human-readable explanation of the outcome.
+        fail_reason: Categorized failure reason, if applicable.
+        original_confidence: Claim confidence before capping.
+        capped_confidence: Claim confidence after capping.
+        conflicts_found: Number of conflicts detected.
+        evidences_checked: Number of evidence items examined.
+        evidences_passed: Number of evidence items that passed.
+        requires_counter_review: Whether counter-review is required.
+        checked_at: Timestamp when validation occurred (UTC).
     """
 
     audit_id: str
@@ -123,17 +170,33 @@ class ValidationAuditRecord(BaseModel):
     @field_validator("checked_at")
     @classmethod
     def normalize_checked_at(cls, value: datetime) -> datetime:
+        """Normalize the checked-at timestamp to UTC.
+
+        Args:
+            value: A datetime value to normalize.
+
+        Returns:
+            The datetime normalized to UTC.
+        """
         return ensure_utc(value)
 
 
 class ValidationAuditor:
-    """校验审计器 — 记录每次校验，支持审计回溯。"""
+    """Records validation results for later audit and counter-review."""
 
     def __init__(self) -> None:
+        """Initialize an empty auditor."""
         self._records: list[ValidationAuditRecord] = []
 
     def log(self, result: ValidationResult) -> ValidationAuditRecord:
-        """记录一次校验结果。"""
+        """Record a validation result as an append-only audit record.
+
+        Args:
+            result: The validation result to record.
+
+        Returns:
+            The created audit record.
+        """
         record = ValidationAuditRecord(
             audit_id=f"aud_{uuid.uuid4().hex[:12]}",
             claim_id=result.claim_id,
@@ -152,28 +215,57 @@ class ValidationAuditor:
 
     @property
     def records(self) -> list[ValidationAuditRecord]:
+        """Return a copy of all recorded audit records.
+
+        Returns:
+            List of recorded validation audit records.
+        """
         return list(self._records)
 
     @property
     def pass_count(self) -> int:
+        """Return the number of PASS records.
+
+        Returns:
+            Count of records with status PASS.
+        """
         return sum(1 for r in self._records if r.status == ValidationStatus.PASS)
 
     @property
     def fail_count(self) -> int:
+        """Return the number of FAIL records.
+
+        Returns:
+            Count of records with status FAIL.
+        """
         return sum(1 for r in self._records if r.status == ValidationStatus.FAIL)
 
     @property
     def abstained_count(self) -> int:
+        """Return the number of ABSTAINED records.
+
+        Returns:
+            Count of records with status ABSTAINED.
+        """
         return sum(1 for r in self._records if r.status == ValidationStatus.ABSTAINED)
 
 
 # ---------------------------------------------------------------------------
-# 批量校验报告
+# Batch validation report
 # ---------------------------------------------------------------------------
 
 
 class ValidationReport(BaseModel):
-    """批量校验报告。"""
+    """Aggregated report for a batch of claim validations.
+
+    Attributes:
+        results: Individual validation results.
+        total: Total number of claims validated.
+        passed: Number of claims that passed.
+        failed: Number of claims that failed.
+        abstained: Number of claims that abstained.
+        checked_at: Timestamp when the report was generated (UTC).
+    """
 
     results: list[ValidationResult] = Field(default_factory=list)
     total: int = 0
@@ -187,14 +279,25 @@ class ValidationReport(BaseModel):
     @field_validator("checked_at")
     @classmethod
     def normalize_checked_at(cls, value: datetime) -> datetime:
+        """Normalize the report timestamp to UTC.
+
+        Args:
+            value: A datetime value to normalize.
+
+        Returns:
+            The datetime normalized to UTC.
+        """
         return ensure_utc(value)
 
     @property
     def should_suppress_research(self) -> bool:
-        """是否应停止高置信研究信号输出。
+        """Return whether high-confidence research signals should be suppressed.
 
-        当存在 ABSTAINED 或高置信度 Claim 校验失败时，停止高置信输出
-        （对应产品 §15 条目 8）。
+        Suppression occurs when any claim abstained, failed, or had a high-confidence
+        conflict downgrade (product §15 item 8).
+
+        Returns:
+            True if high-confidence research output should be blocked.
         """
         has_abstained = any(
             r.status == ValidationStatus.ABSTAINED for r in self.results
@@ -213,14 +316,29 @@ class ValidationReport(BaseModel):
 
     @property
     def passed_claims(self) -> list[ValidationResult]:
+        """Return the results that passed validation.
+
+        Returns:
+            List of PASS validation results.
+        """
         return [r for r in self.results if r.status == ValidationStatus.PASS]
 
     @property
     def failed_claims(self) -> list[ValidationResult]:
+        """Return the results that failed validation.
+
+        Returns:
+            List of FAIL validation results.
+        """
         return [r for r in self.results if r.status == ValidationStatus.FAIL]
 
     @property
     def abstained_claims(self) -> list[ValidationResult]:
+        """Return the results that abstained.
+
+        Returns:
+            List of ABSTAINED validation results.
+        """
         return [r for r in self.results if r.status == ValidationStatus.ABSTAINED]
 
 
@@ -230,22 +348,23 @@ class ValidationReport(BaseModel):
 
 
 class CitationValidator:
-    """Citation Validator — 校验证据引用、来源等级与时点。
+    """Validates claim evidence references, source levels, and point-in-time.
 
-    校验流程（架构 §10.2 RAG 工作流）：
-    1. 引用存在性校验（evidence_ids 非空且每条都能找到 Evidence）
-    2. 来源等级校验（L5 不能单独支撑；L4 需与 L1-L3 交叉验证）
-    3. 时点校验（available_at <= decision_at）
-    4. 定位校验（每条 Evidence 的 locator 可回溯到原文）
-    5. WebSearch 原文落校验（web_page 类型需有 snapshot）
-    6. 冲突检测（同 claim_type 相反 statement → 冲突，置信度封顶）
-    7. 证据不足判定（无通过校验的 Evidence → ABSTAINED）
+    Validation flow (architecture §10.2 RAG workflow):
+        1. Evidence reference existence (evidence_ids non-empty and resolvable).
+        2. Source-level rules (L5 cannot stand alone; L4 needs L1-L3 cross-validation).
+        3. Point-in-time check (available_at <= decision_at).
+        4. Locator check (each evidence can be traced back to the original source).
+        5. WebSearch original-source check (web_page sources must have a snapshot).
+        6. Conflict detection (opposite statement direction within the same claim_type
+           triggers confidence capping and counter-review).
+        7. Insufficient-evidence decision (no evidence passes -> ABSTAINED).
 
-    降级规则（架构 §25）：
-    - 引用校验失败 → Claim 标记 FAIL，不进入研究信号
-    - 证据冲突 → 置信度封顶，提升反方审查
-    - 证据不足 → ABSTAINED
-    - 原则：宁可 ABSTAINED，也不输出虚假的高置信结论
+    Degradation rules (architecture §25):
+        - Citation failure -> FAIL, do not feed research signals.
+        - Conflicts -> cap confidence and raise counter-review.
+        - Insufficient evidence -> ABSTAINED.
+        - Principle: prefer ABSTAINED over false high-confidence conclusions.
     """
 
     def __init__(
@@ -256,6 +375,18 @@ class CitationValidator:
         high_confidence_threshold: float = 0.7,
         snapshot_resolver: SnapshotResolver | None = None,
     ) -> None:
+        """Initialize the validator with configurable thresholds.
+
+        Args:
+            min_evidence_count: Minimum number of evidence items that must pass
+                validation for a claim to PASS.
+            conflict_cap: Confidence cap applied when non-high conflicts exist.
+            high_conflict_cap: Confidence cap applied when a high-severity conflict
+                exists.
+            high_confidence_threshold: Confidence level considered high-confidence.
+            snapshot_resolver: Optional callable that resolves snapshot IDs to
+                RawSnapshot instances.
+        """
         self._min_evidence = min_evidence_count
         self._conflict_cap = conflict_cap
         self._high_conflict_cap = high_conflict_cap
@@ -269,15 +400,18 @@ class CitationValidator:
         decision_at: datetime,
         precomputed_conflicts: list | None = None,
     ) -> ValidationResult:
-        """校验单个 Claim。
+        """Validate a single claim against its evidence.
 
         Args:
-            claim: 待校验的 Claim。
-            evidences: evidence_id → Evidence 的字典。
-            decision_at: 决策时点。
+            claim: The claim to validate.
+            evidences: Mapping from evidence_id to Evidence.
+            decision_at: Decision timestamp; evidence must be available at or before
+                this time.
+            precomputed_conflicts: Optional list of precomputed ConflictRecord items
+                for the claim. If omitted, conflicts are detected on the fly.
 
         Returns:
-            ValidationResult。
+            A ValidationResult describing the outcome.
         """
         if not claim.has_evidence:
             return self._fail(
@@ -368,7 +502,16 @@ class CitationValidator:
         evidences: dict[str, Evidence],
         decision_at: datetime,
     ) -> ValidationReport:
-        """批量校验 Claim，返回报告。"""
+        """Validate a batch of claims and produce an aggregated report.
+
+        Args:
+            claims: Claims to validate.
+            evidences: Mapping from evidence_id to Evidence.
+            decision_at: Decision timestamp.
+
+        Returns:
+            A ValidationReport summarizing all results.
+        """
         results: list[ValidationResult] = []
         conflicts_map = detect_conflicts(claims, evidences)
         for claim in claims:
@@ -401,6 +544,18 @@ class CitationValidator:
         evidences_checked: int = 0,
         evidences_passed: int = 0,
     ) -> ValidationResult:
+        """Return a FAIL result for a claim.
+
+        Args:
+            claim: The claim being validated.
+            reason: Categorized failure reason.
+            message: Human-readable failure message.
+            evidences_checked: Number of evidence items examined.
+            evidences_passed: Number of evidence items that passed.
+
+        Returns:
+            A ValidationResult with status FAIL.
+        """
         return ValidationResult(
             claim_id=claim.claim_id,
             status=ValidationStatus.FAIL,
@@ -413,6 +568,15 @@ class CitationValidator:
         )
 
     def _abstain(self, claim: Claim, message: str) -> ValidationResult:
+        """Return an ABSTAINED result for a claim.
+
+        Args:
+            claim: The claim being validated.
+            message: Human-readable explanation.
+
+        Returns:
+            A ValidationResult with status ABSTAINED.
+        """
         return ValidationResult(
             claim_id=claim.claim_id,
             status=ValidationStatus.ABSTAINED,
@@ -424,7 +588,14 @@ class CitationValidator:
 
 
 def _fail_reason_from_locator(result: LocatorValidationResult) -> FailReason:
-    """Map a locator validation failure to a stable failure reason."""
+    """Map a locator validation failure to a stable failure reason.
+
+    Args:
+        result: The locator validation result to map.
+
+    Returns:
+        A FailReason matching the locator failure.
+    """
     reasons = " ".join(result.reasons).lower()
     if "lookahead" in reasons:
         return FailReason.LOOKAHEAD
@@ -436,7 +607,7 @@ def _fail_reason_from_locator(result: LocatorValidationResult) -> FailReason:
 
 
 # ---------------------------------------------------------------------------
-# 便捷函数
+# Convenience function
 # ---------------------------------------------------------------------------
 
 
@@ -447,17 +618,17 @@ def validate_claims_with_audit(
     validator: CitationValidator | None = None,
     auditor: ValidationAuditor | None = None,
 ) -> tuple[ValidationReport, ValidationAuditor]:
-    """校验 Claim 并记录审计。
+    """Validate claims and append each result to an audit trail.
 
     Args:
-        claims: 待校验的 Claim 列表。
-        evidences: evidence_id → Evidence 字典。
-        decision_at: 决策时点。
-        validator: 可选的自定义校验器。
-        auditor: 可选的自定义审计器。
+        claims: Claims to validate.
+        evidences: Mapping from evidence_id to Evidence.
+        decision_at: Decision timestamp.
+        validator: Optional custom CitationValidator.
+        auditor: Optional custom ValidationAuditor.
 
     Returns:
-        (校验报告, 审计器)
+        A tuple of (validation report, auditor).
     """
     val = validator or CitationValidator()
     aud = auditor or ValidationAuditor()

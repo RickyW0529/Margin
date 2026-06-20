@@ -1,6 +1,13 @@
+/**
+ * @fileoverview Panel component that displays valuation ranges and value-trap
+ * risk for a research item.
+ */
+
 import type { ValuationView } from "@/lib/api";
 
+/** Props for the ValuationPanel component. */
 type ValuationPanelProps = {
+  /** Valuation view data, or null when unavailable. */
   valuation: ValuationView | null;
 };
 
@@ -16,10 +23,22 @@ const percent = new Intl.NumberFormat("zh-CN", {
   maximumFractionDigits: 0,
 });
 
+/**
+ * Formats a valuation range as a localized currency string.
+ *
+ * @param range Tuple of low and high valuation values, or null.
+ * @returns Formatted range or "--".
+ */
 function rangeText(range: [number, number] | null): string {
   return range ? `${currency.format(range[0])} – ${currency.format(range[1])}` : "--";
 }
 
+/**
+ * Renders valuation ranges, value-trap score, and analyst notes.
+ *
+ * @param valuation Valuation view data to display.
+ * @returns The valuation panel or an empty state.
+ */
 export function ValuationPanel({ valuation }: ValuationPanelProps) {
   if (!valuation) {
     return <div className="empty-state compact">估值数据暂不可用</div>;

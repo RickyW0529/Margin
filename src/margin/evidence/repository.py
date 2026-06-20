@@ -31,7 +31,16 @@ from margin.news.models import SourceLevel, utc_now
 
 
 class ResearchEvidenceLink(BaseModel):
-    """Persisted link between a research item, claim, and evidence record."""
+    """Persisted link between a research item, a claim, and an evidence record.
+
+    Attributes:
+        research_item_id: Identifier of the research item.
+        claim_id: Identifier of the linked claim.
+        evidence_id: Identifier of the linked evidence record.
+        role: Role of the evidence in the research item (e.g. "supporting").
+        rank: Display order of the link.
+        created_at: Timestamp when the link was created (UTC).
+    """
 
     research_item_id: str
     claim_id: str
@@ -47,11 +56,23 @@ class EvidenceRepository:
     """SQLAlchemy-backed append-only persistence boundary for module 05."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
-        """Initialize with a SQLAlchemy session factory."""
+        """Initialize the repository.
+
+        Args:
+            session_factory: Callable that returns a new SQLAlchemy Session.
+        """
         self._session_factory = session_factory
 
     def add_evidence(self, evidence: Evidence) -> None:
-        """Persist an evidence record idempotently, rejecting mutation attempts."""
+        """Persist an evidence record idempotently, rejecting mutation attempts.
+
+        Args:
+            evidence: The evidence record to persist.
+
+        Raises:
+            ValueError: If a different evidence record with the same ID already
+                exists.
+        """
         with self._session_factory.begin() as session:
             row = session.get(EvidenceRecordRow, evidence.evidence_id)
             if row is None:
@@ -61,13 +82,27 @@ class EvidenceRepository:
                 raise ValueError(f"evidence '{evidence.evidence_id}' is immutable")
 
     def get_evidence(self, evidence_id: str) -> Evidence | None:
-        """Fetch an evidence record by ID."""
+        """Fetch an evidence record by ID.
+
+        Args:
+            evidence_id: Unique identifier of the evidence record.
+
+        Returns:
+            The evidence record if found, otherwise None.
+        """
         with self._session_factory() as session:
             row = session.get(EvidenceRecordRow, evidence_id)
             return _evidence_from_row(row) if row is not None else None
 
     def add_claim(self, claim: Claim) -> None:
-        """Persist a claim idempotently, rejecting mutation attempts."""
+        """Persist a claim idempotently, rejecting mutation attempts.
+
+        Args:
+            claim: The claim to persist.
+
+        Raises:
+            ValueError: If a different claim with the same ID already exists.
+        """
         with self._session_factory.begin() as session:
             row = session.get(EvidenceClaimRow, claim.claim_id)
             if row is None:
@@ -77,13 +112,28 @@ class EvidenceRepository:
                 raise ValueError(f"claim '{claim.claim_id}' is immutable")
 
     def get_claim(self, claim_id: str) -> Claim | None:
-        """Fetch a persisted claim by ID."""
+        """Fetch a persisted claim by ID.
+
+        Args:
+            claim_id: Unique identifier of the claim.
+
+        Returns:
+            The claim if found, otherwise None.
+        """
         with self._session_factory() as session:
             row = session.get(EvidenceClaimRow, claim_id)
             return _claim_from_row(row) if row is not None else None
 
     def add_validation_audit(self, audit: ValidationAuditRecord) -> None:
-        """Append a validation audit record, rejecting mutation of existing rows."""
+        """Append a validation audit record, rejecting mutation of existing rows.
+
+        Args:
+            audit: The validation audit record to persist.
+
+        Raises:
+            ValueError: If a different audit record with the same ID already
+                exists.
+        """
         with self._session_factory.begin() as session:
             row = session.get(EvidenceValidationAuditRow, audit.audit_id)
             if row is None:
@@ -93,7 +143,14 @@ class EvidenceRepository:
                 raise ValueError(f"audit '{audit.audit_id}' is immutable")
 
     def list_validation_audits(self, claim_id: str) -> list[ValidationAuditRecord]:
-        """List validation audits for a claim in chronological order."""
+        """List validation audits for a claim in chronological order.
+
+        Args:
+            claim_id: Identifier of the claim whose audits are requested.
+
+        Returns:
+            List of validation audit records ordered by checked_at and audit_id.
+        """
         with self._session_factory() as session:
             rows = session.scalars(
                 select(EvidenceValidationAuditRow)
@@ -114,7 +171,19 @@ class EvidenceRepository:
         role: str,
         rank: int,
     ) -> None:
-        """Persist a research-item evidence link idempotently."""
+        """Persist a research-item evidence link idempotently.
+
+        Args:
+            research_item_id: Identifier of the research item.
+            claim_id: Identifier of the linked claim.
+            evidence_id: Identifier of the linked evidence record.
+            role: Role of the evidence in the research item.
+            rank: Display order of the link.
+
+        Raises:
+            ValueError: If an existing link with the same composite key has a
+                different rank.
+        """
         key = (research_item_id, claim_id, evidence_id, role)
         with self._session_factory.begin() as session:
             row = session.get(ResearchEvidenceRow, key)
@@ -137,7 +206,14 @@ class EvidenceRepository:
                 )
 
     def list_research_evidence(self, research_item_id: str) -> list[ResearchEvidenceLink]:
-        """List evidence links for a research item ordered by rank."""
+        """List evidence links for a research item ordered by rank.
+
+        Args:
+            research_item_id: Identifier of the research item.
+
+        Returns:
+            List of ResearchEvidenceLink records ordered by rank and created_at.
+        """
         with self._session_factory() as session:
             rows = session.scalars(
                 select(ResearchEvidenceRow)
@@ -148,6 +224,7 @@ class EvidenceRepository:
 
 
 def _evidence_to_row(evidence: Evidence) -> EvidenceRecordRow:
+    """Convert an Evidence domain model to a database row."""
     return EvidenceRecordRow(
         evidence_id=evidence.evidence_id,
         chunk_id=evidence.chunk_id,
@@ -176,6 +253,7 @@ def _evidence_to_row(evidence: Evidence) -> EvidenceRecordRow:
 
 
 def _evidence_from_row(row: EvidenceRecordRow) -> Evidence:
+    """Convert an EvidenceRecordRow to an Evidence domain model."""
     return Evidence(
         evidence_id=row.evidence_id,
         chunk_id=row.chunk_id,
@@ -203,6 +281,7 @@ def _evidence_from_row(row: EvidenceRecordRow) -> Evidence:
 
 
 def _claim_to_row(claim: Claim) -> EvidenceClaimRow:
+    """Convert a Claim domain model to a database row."""
     return EvidenceClaimRow(
         claim_id=claim.claim_id,
         claim_type=claim.claim_type.value,
@@ -219,6 +298,7 @@ def _claim_to_row(claim: Claim) -> EvidenceClaimRow:
 
 
 def _claim_from_row(row: EvidenceClaimRow) -> Claim:
+    """Convert an EvidenceClaimRow to a Claim domain model."""
     return Claim(
         claim_id=row.claim_id,
         claim_type=ClaimType(row.claim_type),
@@ -234,6 +314,7 @@ def _claim_from_row(row: EvidenceClaimRow) -> Claim:
 
 
 def _audit_to_row(audit: ValidationAuditRecord) -> EvidenceValidationAuditRow:
+    """Convert a ValidationAuditRecord domain model to a database row."""
     return EvidenceValidationAuditRow(
         audit_id=audit.audit_id,
         claim_id=audit.claim_id,
@@ -252,6 +333,7 @@ def _audit_to_row(audit: ValidationAuditRecord) -> EvidenceValidationAuditRow:
 
 
 def _audit_from_row(row: EvidenceValidationAuditRow) -> ValidationAuditRecord:
+    """Convert an EvidenceValidationAuditRow to a ValidationAuditRecord model."""
     return ValidationAuditRecord(
         audit_id=row.audit_id,
         claim_id=row.claim_id,
@@ -269,6 +351,7 @@ def _audit_from_row(row: EvidenceValidationAuditRow) -> ValidationAuditRecord:
 
 
 def _research_evidence_from_row(row: ResearchEvidenceRow) -> ResearchEvidenceLink:
+    """Convert a ResearchEvidenceRow to a ResearchEvidenceLink model."""
     return ResearchEvidenceLink(
         research_item_id=row.research_item_id,
         claim_id=row.claim_id,

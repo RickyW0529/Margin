@@ -6,13 +6,15 @@ shared SQLAlchemy engine and a bound session factory.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-DEFAULT_DATABASE_URL = "postgresql+psycopg://margin:margin@localhost:5432/margin"
+from margin.settings import DEFAULT_DATABASE_URL as SETTINGS_DEFAULT_DATABASE_URL
+from margin.settings import MarginSettings
+
+DEFAULT_DATABASE_URL = SETTINGS_DEFAULT_DATABASE_URL
 """Default SQLAlchemy connection URL used when no environment override is provided."""
 
 SessionFactory = sessionmaker[Session]
@@ -34,30 +36,46 @@ class DatabaseSettings:
     pool_pre_ping: bool = True
 
     @classmethod
-    def from_env(cls) -> DatabaseSettings:
-        """Load connection settings from environment variables.
+    def from_settings(cls, settings: MarginSettings) -> DatabaseSettings:
+        """Build database settings from centralized application settings.
 
-        The following environment variables are recognized:
-
-        * ``MARGIN_DATABASE_URL`` - database URL (defaults to :data:`DEFAULT_DATABASE_URL`).
-        * ``MARGIN_DATABASE_ECHO`` - enable SQL echoing when set to ``"1"``, ``"true"``,
-          or ``"yes"``.
+        Args:
+            settings: Parsed Margin application settings.
 
         Returns:
-            DatabaseSettings: Settings populated from the process environment.
+            DatabaseSettings: Engine-ready database settings.
         """
         return cls(
-            url=os.getenv("MARGIN_DATABASE_URL", DEFAULT_DATABASE_URL),
-            echo=os.getenv("MARGIN_DATABASE_ECHO", "").lower() in {"1", "true", "yes"},
+            url=str(settings.database_url),
+            echo=settings.database_echo,
+            pool_pre_ping=settings.database_pool_pre_ping,
         )
+
+    @classmethod
+    def from_env(cls) -> DatabaseSettings:
+        """Load connection settings through :class:`MarginSettings`.
+
+        This compatibility constructor keeps older low-level callers working,
+        but environment parsing remains centralized in ``margin.settings``.
+
+        The following environment variables are recognized by ``MarginSettings``:
+
+        * ``MARGIN_DATABASE_URL``
+        * ``MARGIN_DATABASE_ECHO``
+        * ``MARGIN_DATABASE_POOL_PRE_PING``
+
+        Returns:
+            DatabaseSettings: Settings populated from centralized app settings.
+        """
+        return cls.from_settings(MarginSettings())
 
 
 def create_database_engine(settings: DatabaseSettings | None = None) -> Engine:
     """Create the shared SQLAlchemy engine.
 
     Args:
-        settings: Database connection settings. If ``None``, settings are loaded from the
-            environment via :meth:`DatabaseSettings.from_env`.
+        settings: Database connection settings. If ``None``, settings are loaded through
+            :class:`MarginSettings` via :meth:`DatabaseSettings.from_env`.
 
     Returns:
         Engine: Configured SQLAlchemy engine bound to the resolved settings.

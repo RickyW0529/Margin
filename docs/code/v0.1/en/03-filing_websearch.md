@@ -55,27 +55,27 @@ It implements the acquisition, web search, deduplication, and source-leveling re
 
 | File | Purpose |
 | --- | --- |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/__init__.py` | Package exports. Re-exports public classes and functions from acquisition, deduplication, models, and web search modules. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/acquirer.py` | Source registry, connectors, downloader, snapshot store, document parser, security mapper, and the `FilingAcquirer` integration class. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/connectors.py` | Fixture-testable adapters for SSE and SZSE announcement discovery. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/db_models.py` | SQLAlchemy ORM models for cursors, snapshots, document events, outbox, search records, dedup records, and repost edges. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/dedup.py` | Multi-layer deduplication (URL, hash, title/date, SimHash, vector similarity, repost chains) and L1-L5 quality scoring. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/discovery.py` | `DiscoveredDocument` model and `DiscoveryConnector` protocol for incremental source discovery. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/models.py` | Core domain models: `SourceLevel`, `DocumentStatus`, `RawSnapshot`, `DocumentEvent`, `SourceDescriptor`, and factory helpers. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/outbox.py` | `DocumentEventPublisher` and `OutboxConsumer` facades over repository persistence. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/parsed.py` | Block-oriented parsed document models and `StructuredDocumentParser` for HTML, CSV, JSON, PDF, and text. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/providers/__init__.py` | Provider package docstring; third-party adapters live under this package. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/providers/tavily.py` | `TavilySearchAdapter`, a concrete HTTP adapter for the Tavily search API. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/repository.py` | `NewsRepository` and domain record models for PostgreSQL-backed persistence. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/robots.py` | `RobotsChecker` and `RobotsRules` for robots.txt longest-prefix Allow/Disallow compliance. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/scheduler.py` | `IncrementalAcquisitionRunner` and `AcquisitionRunResult` for restart-safe incremental acquisition. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/websearch.py` | Web search models, `WebSearchProvider`, `ComplianceChecker`, `OriginalContentVerifier`, and `WebSearchService`. |
+| `src/margin/news/__init__.py` | Package exports. Re-exports public classes and functions from acquisition, deduplication, models, and web search modules. |
+| `src/margin/news/acquirer.py` | Source registry, connectors, downloader, snapshot store, document parser, security mapper, and the `FilingAcquirer` integration class. |
+| `src/margin/news/connectors.py` | Fixture-testable adapters for SSE and SZSE announcement discovery. |
+| `src/margin/news/db_models.py` | SQLAlchemy ORM models for cursors, snapshots, document events, outbox, search records, dedup records, and repost edges. |
+| `src/margin/news/dedup.py` | Multi-layer deduplication (URL, hash, title/date, SimHash, vector similarity, repost chains) and L1-L5 quality scoring. |
+| `src/margin/news/discovery.py` | `DiscoveredDocument` model and `DiscoveryConnector` protocol for incremental source discovery. |
+| `src/margin/news/models.py` | Core domain models: `SourceLevel`, `DocumentStatus`, `RawSnapshot`, `DocumentEvent`, `SourceDescriptor`, and factory helpers. |
+| `src/margin/news/outbox.py` | `DocumentEventPublisher` and `OutboxConsumer` facades over repository persistence. |
+| `src/margin/news/parsed.py` | Block-oriented parsed document models and `StructuredDocumentParser` for HTML, CSV, JSON, PDF, and text. |
+| `src/margin/news/providers/__init__.py` | Provider package docstring; third-party adapters live under this package. |
+| `src/margin/news/providers/tavily.py` | `TavilySearchAdapter`, a concrete HTTP adapter for the Tavily search API. |
+| `src/margin/news/repository.py` | `NewsRepository` and domain record models for PostgreSQL-backed persistence. |
+| `src/margin/news/robots.py` | `RobotsChecker` and `RobotsRules` for robots.txt longest-prefix Allow/Disallow compliance. |
+| `src/margin/news/scheduler.py` | `IncrementalAcquisitionRunner` and `AcquisitionRunResult` for restart-safe incremental acquisition. |
+| `src/margin/news/websearch.py` | Web search models, `WebSearchProvider`, `ComplianceChecker`, `OriginalContentVerifier`, and `WebSearchService`. |
 
 ---
 
 ## Domain Models
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/models.py`.
+Defined in `src/margin/news/models.py`.
 
 ### `SourceLevel`
 
@@ -175,7 +175,7 @@ Registered source descriptor used by the source registry.
 
 ## Acquisition Layer
 
-Defined primarily in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/acquirer.py`, with exchange-specific discovery adapters in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/connectors.py` and incremental scheduling in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/scheduler.py`.
+Defined primarily in `src/margin/news/acquirer.py`, with exchange-specific discovery adapters in `src/margin/news/connectors.py` and incremental scheduling in `src/margin/news/scheduler.py`.
 
 ### Exceptions
 
@@ -225,7 +225,7 @@ Storage for immutable raw snapshots on the local file system.
 
 | Method | Signature | Description |
 | --- | --- | --- |
-| `__init__` | `(base_dir: Path \| None = None) -> None` | Initialize store; defaults to `~/.margin/snapshots`. |
+| `__init__` | `(base_dir: Path \| None = None) -> None` | Initialize store; defaults to `.margin/snapshots`. |
 | `save` | `(source_url: str, content: bytes, content_type: str, http_status: int \| None = None) -> RawSnapshot` | Persist raw content and return snapshot metadata. |
 | `read` | `(snapshot_id: str, content_type: str) -> bytes \| None` | Read snapshot bytes by ID and extension. |
 | `read_snapshot` | `(snapshot: RawSnapshot) -> bytes \| None` | Read a snapshot using its metadata. |
@@ -275,7 +275,7 @@ Integration class that orchestrates registry, downloader, snapshot store, parser
 
 ### Exchange Announcement Connectors
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/connectors.py`.
+Defined in `src/margin/news/connectors.py`.
 
 #### Module Helpers
 
@@ -304,7 +304,7 @@ Fixture-testable adapter for Shenzhen Stock Exchange announcement discovery.
 
 ### Incremental Scheduling
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/scheduler.py`.
+Defined in `src/margin/news/scheduler.py`.
 
 #### `AcquisitionRunResult`
 
@@ -329,7 +329,7 @@ Runs discovery, acquisition, publishing, and cursor advancement.
 
 ## Web Search Layer
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/websearch.py`, with the Tavily adapter in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/providers/tavily.py`.
+Defined in `src/margin/news/websearch.py`, with the Tavily adapter in `src/margin/news/providers/tavily.py`.
 
 ### Web Search Models
 
@@ -436,7 +436,7 @@ Concrete HTTP adapter for the Tavily search API.
 
 ## Deduplication & Compliance Grading
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/dedup.py`.
+Defined in `src/margin/news/dedup.py`.
 
 ### SimHash Helpers
 
@@ -548,7 +548,7 @@ Deduplicates against persisted canonical events and records every duplicate deci
 
 ## Repository & Outbox
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/repository.py` and `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/outbox.py`. SQLAlchemy row models are in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/db_models.py`.
+Defined in `src/margin/news/repository.py` and `src/margin/news/outbox.py`. SQLAlchemy row models are in `src/margin/news/db_models.py`.
 
 ### Domain Records
 
@@ -620,7 +620,7 @@ SQLAlchemy-backed persistence boundary.
 
 ### Outbox Facades
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/outbox.py`.
+Defined in `src/margin/news/outbox.py`.
 
 #### `DocumentEventPublisher`
 
@@ -642,7 +642,7 @@ Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/outbox.py`.
 
 ## Structured Parsing
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/parsed.py`.
+Defined in `src/margin/news/parsed.py`.
 
 ### `ParsedBlock`
 
@@ -687,7 +687,7 @@ Parser that emits ordered blocks for HTML, CSV, JSON, PDF, and plain text.
 
 ## Robots.txt Compliance
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/robots.py`.
+Defined in `src/margin/news/robots.py`.
 
 ### `RobotsFetcher` Protocol
 
@@ -738,7 +738,7 @@ Cached robots.txt checker.
 
 ### Package Exports
 
-`/Users/wangruiqi/PycharmProjects/Margin/src/margin/news/__init__.py` re-exports the most commonly used symbols for convenience:
+`src/margin/news/__init__.py` re-exports the most commonly used symbols for convenience:
 
 - Acquisition: `BaseConnector`, `ComplianceError`, `DocumentParser`, `Downloader`, `DownloadError`, `FilingAcquirer`, `HTTPConnector`, `ParseError`, `SecurityMapper`, `SnapshotStore`, `SourceNotFoundError`, `SourceRegistry`.
 - Deduplication: `Deduplicator`, `DedupResult`, `NewsProcessor`, `PersistentNewsProcessor`, `QualityScore`, `QualityScorer`, `compute_simhash`, `hamming_distance`, `simhash_similarity`.

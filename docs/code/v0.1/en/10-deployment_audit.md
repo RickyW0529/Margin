@@ -43,27 +43,27 @@ Responsibilities:
 
 | File | Responsibility |
 |------|----------------|
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/audit.py` | Append-only JSONL audit logger for Provider calls with parameter redaction and response hashing. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/audit_repository.py` | Protocol and in-memory/SQLAlchemy implementations for business audit record persistence. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/db_audit.py` | SQLAlchemy ORM model for immutable audit records in PostgreSQL. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/degradation.py` | Fallback wrapper for Provider calls with Prometheus instrumentation. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/logging_config.py` | Structured logging configuration using `structlog`. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/metrics.py` | Shared Prometheus `CollectorRegistry` and metric definitions. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/models.py` | Shared lightweight Pydantic models, including `AuditLogRecord`. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/provider.py` | Provider contracts, `CallResult`, `HealthCheckResult`, and typed protocols. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/snapshot_store.py` | Append-only content-addressed snapshot store on local filesystem. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/metrics.py` | FastAPI router that exposes `/metrics`. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/middleware.py` | `TraceIdMiddleware` and `MetricsMiddleware`. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/health.py` | `/health`, `/health/ready`, and `/health/degraded` endpoints. |
-| `/Users/wangruiqi/PycharmProjects/Margin/Dockerfile` | Backend API container image. |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/Dockerfile` | Next.js frontend container image. |
-| `/Users/wangruiqi/PycharmProjects/Margin/docker-compose.yml` | Full local stack including Postgres, migrate, seed, API, worker, web, Prometheus, and Grafana. |
-| `/Users/wangruiqi/PycharmProjects/Margin/.github/workflows/ci.yml` | GitHub Actions CI pipeline for backend, frontend, and Docker validation. |
-| `/Users/wangruiqi/PycharmProjects/Margin/docker/prometheus.yml` | Prometheus scrape configuration for the Margin API. |
-| `/Users/wangruiqi/PycharmProjects/Margin/scripts/migrate.py` | One-shot migration entry point used by Compose. |
-| `/Users/wangruiqi/PycharmProjects/Margin/scripts/seed_demo.py` | One-shot demo data seed script used by Compose. |
-| `/Users/wangruiqi/PycharmProjects/Margin/scripts/health_check.py` | Container readiness probe used by Docker healthcheck. |
-| `/Users/wangruiqi/PycharmProjects/Margin/scripts/snapshot_store.py` | CLI for writing, reading, and listing snapshots. |
+| `src/margin/core/audit.py` | Append-only JSONL audit logger for Provider calls with parameter redaction and response hashing. |
+| `src/margin/core/audit_repository.py` | Protocol and in-memory/SQLAlchemy implementations for business audit record persistence. |
+| `src/margin/core/db_audit.py` | SQLAlchemy ORM model for immutable audit records in PostgreSQL. |
+| `src/margin/core/degradation.py` | Fallback wrapper for Provider calls with Prometheus instrumentation. |
+| `src/margin/core/logging_config.py` | Structured logging configuration using `structlog`. |
+| `src/margin/core/metrics.py` | Shared Prometheus `CollectorRegistry` and metric definitions. |
+| `src/margin/core/models.py` | Shared lightweight Pydantic models, including `AuditLogRecord`. |
+| `src/margin/core/provider.py` | Provider contracts, `CallResult`, `HealthCheckResult`, and typed protocols. |
+| `src/margin/core/snapshot_store.py` | Append-only content-addressed snapshot store on local filesystem. |
+| `src/margin/api/metrics.py` | FastAPI router that exposes `/metrics`. |
+| `src/margin/api/middleware.py` | `TraceIdMiddleware` and `MetricsMiddleware`. |
+| `src/margin/api/routes/health.py` | `/health`, `/health/ready`, and `/health/degraded` endpoints. |
+| `Dockerfile` | Backend API container image. |
+| `web/Dockerfile` | Next.js frontend container image. |
+| `docker-compose.yml` | Full local stack including Postgres, migrate, seed, API, worker, web, Prometheus, and Grafana. |
+| `.github/workflows/ci.yml` | GitHub Actions CI pipeline for backend, frontend, and Docker validation. |
+| `docker/prometheus.yml` | Prometheus scrape configuration for the Margin API. |
+| `scripts/migrate.py` | One-shot migration entry point used by Compose. |
+| `scripts/seed_demo.py` | One-shot demo data seed script used by Compose. |
+| `scripts/health_check.py` | Container readiness probe used by Docker healthcheck. |
+| `scripts/snapshot_store.py` | CLI for writing, reading, and listing snapshots. |
 
 ## Audit
 
@@ -71,7 +71,7 @@ Margin maintains two audit surfaces. Provider calls are recorded by `AuditLogger
 
 ### Provider Call Audit
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/audit.py`.
+Defined in `src/margin/core/audit.py`.
 
 #### `AuditRecord`
 
@@ -110,7 +110,7 @@ Append-only audit log writer. The current implementation writes JSON Lines to a 
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `__init__` | `(log_path: Path \| None = None)` | Create the log file parent directories. Defaults to `~/.margin/audit/provider_calls.jsonl`. |
+| `__init__` | `(log_path: Path \| None = None)` | Create the log file parent directories. Defaults to `.margin/audit/provider_calls.jsonl`. |
 | `log_call` | `(provider_name, provider_version, method, params, result, trace_id="") -> AuditRecord` | Build a sanitized `AuditRecord` and append it to the log. |
 | `_append` | `(record: AuditRecord) -> None` | Serialize and append a single record to the JSONL file. |
 | `read_all` | `() -> list[AuditRecord]` | Parse every record from the log file; returns an empty list when the file is missing. |
@@ -121,7 +121,7 @@ Sanitize call parameters before persistence. Sensitive keys (`token`, `api_key`,
 
 ### Business Audit Records
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/models.py`.
+Defined in `src/margin/core/models.py`.
 
 #### `AuditLogRecord`
 
@@ -145,7 +145,7 @@ Immutable Pydantic model for critical business-level audit events (for example, 
 
 ### Audit Repository Protocol and Implementations
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/audit_repository.py`.
+Defined in `src/margin/core/audit_repository.py`.
 
 #### `AuditRepository` (Protocol)
 
@@ -183,7 +183,7 @@ PostgreSQL-backed implementation.
 
 ### PostgreSQL Audit ORM Model
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/db_audit.py`.
+Defined in `src/margin/core/db_audit.py`.
 
 #### `AuditLogRecordRow`
 
@@ -210,7 +210,7 @@ SQLAlchemy ORM model mapped to the `audit_records` table.
 
 ## Snapshot Store
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/snapshot_store.py`.
+Defined in `src/margin/core/snapshot_store.py`.
 
 The `FileSnapshotStore` is an append-only, content-addressed store for serialized JSON snapshots. Each snapshot is written under `<base>/<object_type>/<object_id>/<snapshot_id>.json` and indexed by a per-object `index.jsonl` file that records snapshot lineage without duplicating payload data.
 
@@ -240,13 +240,13 @@ Frozen dataclass pointing to a persisted snapshot.
 
 ## Degradation
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/degradation.py`.
+Defined in `src/margin/core/degradation.py`.
 
 This module wraps Provider calls so that a failure of the primary path can optionally fall back to a secondary implementation. Prometheus counters track primary/fallback outcomes and degraded states.
 
 #### `CallResult`
 
-See `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/provider.py`. The relevant fields for degradation are:
+See `src/margin/core/provider.py`. The relevant fields for degradation are:
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -276,7 +276,7 @@ Behavior:
 
 ## Logging
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/logging_config.py`.
+Defined in `src/margin/core/logging_config.py`.
 
 #### `configure_logging(*, log_level: str = "INFO", log_format: str = "json") -> None`
 
@@ -307,7 +307,7 @@ The function clears existing root handlers to avoid duplicate log lines, attache
 
 ## Metrics
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/metrics.py` and `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/metrics.py`.
+Defined in `src/margin/core/metrics.py` and `src/margin/api/metrics.py`.
 
 #### `REGISTRY`
 
@@ -324,7 +324,7 @@ A dedicated `prometheus_client.CollectorRegistry(auto_describe=True)` used inste
 
 #### `/metrics` endpoint
 
-In `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/metrics.py`.
+In `src/margin/api/metrics.py`.
 
 | Function | Route | Description |
 |----------|-------|-------------|
@@ -332,7 +332,7 @@ In `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/metrics.py`.
 
 #### `MetricsMiddleware`
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/middleware.py`.
+Defined in `src/margin/api/middleware.py`.
 
 Records HTTP request counts and durations. It uses the route path template when available to avoid high-cardinality raw URL labels.
 
@@ -342,7 +342,7 @@ Records HTTP request counts and durations. It uses the route path template when 
 
 ## Middleware
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/middleware.py`.
+Defined in `src/margin/api/middleware.py`.
 
 #### `TraceIdMiddleware`
 
@@ -358,7 +358,7 @@ Helper that reads the trace id attached by `TraceIdMiddleware` from request scop
 
 ## Health Endpoints
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/health.py`.
+Defined in `src/margin/api/routes/health.py`.
 
 #### `health()`
 
@@ -404,7 +404,7 @@ Aggregated degradation status across infrastructure. Currently checks database h
 
 ### Docker Images
 
-#### `/Users/wangruiqi/PycharmProjects/Margin/Dockerfile`
+#### `Dockerfile`
 
 Backend API image.
 
@@ -414,10 +414,10 @@ Backend API image.
 | Environment | `PYTHONDONTWRITEBYTECODE=1`, `PYTHONUNBUFFERED=1`, `PIP_NO_CACHE_DIR=1` |
 | Dependency install | Copies `pyproject.toml`, `README.md`, and `src/margin/__init__.py`, then runs `pip install -e ".[data]"` to maximize layer caching. |
 | Source copy | Copies `src`, `scripts`, `alembic`, and `alembic.ini`. |
-| User setup | Creates `margin` user with UID `10001`, prepares `/home/margin/.margin/audit` and `/home/margin/.margin/snapshots`, and changes ownership. |
+| User setup | Creates `margin` user with UID `10001`, prepares project-relative `.margin/audit` and `.margin/snapshots` under `WORKDIR /app`, and changes ownership. |
 | Runtime | Exposes port `8000` and runs `uvicorn margin.api.main:app --host 0.0.0.0 --port 8000` as the `margin` user. |
 
-#### `/Users/wangruiqi/PycharmProjects/Margin/web/Dockerfile`
+#### `web/Dockerfile`
 
 Next.js frontend image.
 
@@ -432,7 +432,7 @@ Next.js frontend image.
 
 ### Docker Compose Services
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/docker-compose.yml`.
+Defined in `docker-compose.yml`.
 
 | Service | Purpose | Key Configuration |
 |---------|---------|-------------------|
@@ -456,7 +456,7 @@ Volumes:
 
 ### CI Workflow
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/.github/workflows/ci.yml`.
+Defined in `.github/workflows/ci.yml`.
 
 | Job | Steps |
 |-----|-------|
@@ -466,7 +466,7 @@ Defined in `/Users/wangruiqi/PycharmProjects/Margin/.github/workflows/ci.yml`.
 
 ### Prometheus Configuration
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/docker/prometheus.yml`.
+Defined in `docker/prometheus.yml`.
 
 | Setting | Value |
 |---------|-------|
@@ -479,19 +479,19 @@ Defined in `/Users/wangruiqi/PycharmProjects/Margin/docker/prometheus.yml`.
 
 | Script | Purpose |
 |--------|---------|
-| `/Users/wangruiqi/PycharmProjects/Margin/scripts/migrate.py` | Runs `alembic upgrade head` as the migration service entry point in Compose. |
-| `/Users/wangruiqi/PycharmProjects/Margin/scripts/seed_demo.py` | Populates a demo portfolio, trades, and a demo filing event after migrations finish. |
-| `/Users/wangruiqi/PycharmProjects/Margin/scripts/health_check.py` | HTTP readiness probe; exits `0` only when `GET http://localhost:8000/health/ready` returns HTTP 200. |
-| `/Users/wangruiqi/PycharmProjects/Margin/scripts/snapshot_store.py` | CLI for the snapshot store supporting `write`, `read`, and `list` commands. |
+| `scripts/migrate.py` | Runs `alembic upgrade head` as the migration service entry point in Compose. |
+| `scripts/seed_demo.py` | Populates a demo portfolio, trades, and a demo filing event after migrations finish. |
+| `scripts/health_check.py` | HTTP readiness probe; exits `0` only when `GET http://localhost:8000/health/ready` returns HTTP 200. |
+| `scripts/snapshot_store.py` | CLI for the snapshot store supporting `write`, `read`, and `list` commands. |
 
 ## Cross-Module Usage Notes
 
-- `AuditLogger` is intended for Provider call logging and is consumed by Provider implementations. It writes to `~/.margin/audit/provider_calls.jsonl` by default; the path can also be overridden through `MarginSettings.audit_log_path`.
-- `SQLAlchemyAuditRepository` is injected into `ResearchService` via `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/dependencies.py` so research decisions are persisted as immutable business audit records.
+- `AuditLogger` is intended for Provider call logging and is consumed by Provider implementations. It writes to `.margin/audit/provider_calls.jsonl` by default; the path can also be overridden through `MarginSettings.audit_log_path`.
+- `SQLAlchemyAuditRepository` is injected into `ResearchService` via `src/margin/api/dependencies.py` so research decisions are persisted as immutable business audit records.
 - `MemoryAuditRepository` is used in unit tests to avoid database setup while still validating append-only semantics.
-- `FileSnapshotStore` can be used by any service that needs to persist lineage snapshots of critical objects (for example, strategy versions or research reports). The CLI script at `/Users/wangruiqi/PycharmProjects/Margin/scripts/snapshot_store.py` uses the same implementation to guarantee compatibility.
-- `call_with_fallback` is called by Provider adapters and reports to the metrics defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/core/metrics.py`.
-- `configure_logging` is invoked once during `create_app()` in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/main.py`.
+- `FileSnapshotStore` can be used by any service that needs to persist lineage snapshots of critical objects (for example, strategy versions or research reports). The CLI script at `scripts/snapshot_store.py` uses the same implementation to guarantee compatibility.
+- `call_with_fallback` is called by Provider adapters and reports to the metrics defined in `src/margin/core/metrics.py`.
+- `configure_logging` is invoked once during `create_app()` in `src/margin/api/main.py`.
 - `TraceIdMiddleware` is added before `MetricsMiddleware` in `create_app()` so the trace id is available for the entire request lifecycle.
 - `MetricsMiddleware` and the `/metrics` router expose HTTP and Provider metrics to Prometheus.
 - `health`, `ready`, and `degraded` routes are registered in `create_app()` and used by Docker healthchecks and Kubernetes probes.

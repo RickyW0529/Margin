@@ -75,6 +75,14 @@ class ResearchRun(BaseModel):
     @field_validator("decision_at", "created_at")
     @classmethod
     def normalize_timestamps(cls, value: datetime) -> datetime:
+        """Normalize timestamp fields to UTC.
+
+        Args:
+            value: The datetime value to normalize.
+
+        Returns:
+            A timezone-aware UTC datetime.
+        """
         return ensure_utc(value)
 
 
@@ -104,11 +112,30 @@ class ResearchItem(BaseModel):
     @field_validator("created_at")
     @classmethod
     def normalize_created_at(cls, value: datetime) -> datetime:
+        """Normalize the created_at timestamp to UTC.
+
+        Args:
+            value: The datetime value to normalize.
+
+        Returns:
+            A timezone-aware UTC datetime.
+        """
         return ensure_utc(value)
 
     @field_validator("confidence")
     @classmethod
     def validate_confidence(cls, value: float) -> float:
+        """Validate that confidence is within the unit interval.
+
+        Args:
+            value: Confidence score to validate.
+
+        Returns:
+            The validated confidence score.
+
+        Raises:
+            ValueError: If confidence is not between 0.0 and 1.0.
+        """
         if not 0.0 <= value <= 1.0:
             raise ValueError(f"confidence must be in [0, 1], got {value}")
         return value
@@ -181,6 +208,14 @@ class FeedbackRecord(BaseModel):
     @field_validator("created_at")
     @classmethod
     def normalize_created_at(cls, value: datetime) -> datetime:
+        """Normalize the created_at timestamp to UTC.
+
+        Args:
+            value: The datetime value to normalize.
+
+        Returns:
+            A timezone-aware UTC datetime.
+        """
         return ensure_utc(value)
 
 
@@ -253,6 +288,14 @@ class JobRun(BaseModel):
     @field_validator("created_at")
     @classmethod
     def normalize_created_at(cls, value: datetime) -> datetime:
+        """Normalize the created_at timestamp to UTC.
+
+        Args:
+            value: The datetime value to normalize.
+
+        Returns:
+            A timezone-aware UTC datetime.
+        """
         return ensure_utc(value)
 
 
@@ -289,6 +332,14 @@ class ResearchReport(BaseModel):
     @field_validator("generated_at")
     @classmethod
     def normalize_generated_at(cls, value: datetime) -> datetime:
+        """Normalize the generated_at timestamp to UTC.
+
+        Args:
+            value: The datetime value to normalize.
+
+        Returns:
+            A timezone-aware UTC datetime.
+        """
         return ensure_utc(value)
 
 
@@ -307,4 +358,12 @@ class ReportExport(BaseModel):
     @field_validator("generated_at")
     @classmethod
     def normalize_generated_at(cls, value: datetime) -> datetime:
+        """Normalize the generated_at timestamp to UTC.
+
+        Args:
+            value: The datetime value to normalize.
+
+        Returns:
+            A timezone-aware UTC datetime.
+        """
         return ensure_utc(value)

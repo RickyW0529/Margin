@@ -6,6 +6,8 @@ normalization needed by Docker Compose interpolation.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from margin.settings import MarginSettings, get_settings
 
 
@@ -14,6 +16,17 @@ def test_settings_reads_database_url():
     settings = MarginSettings(_env_file=None)
     assert "postgresql" in str(settings.database_url)
     assert settings.log_level in {"DEBUG", "INFO", "WARNING", "ERROR"}
+
+
+def test_settings_default_llm_model_is_deepseek_pro():
+    settings = MarginSettings(_env_file=None)
+    assert settings.llm_model == "deepseek-v4-pro"
+
+
+def test_settings_default_audit_log_path_is_project_relative():
+    settings = MarginSettings(_env_file=None)
+    assert settings.audit_log_path == Path(".margin/audit/provider_calls.jsonl")
+    assert not settings.audit_log_path.is_absolute()
 
 
 def test_settings_caches_instance():

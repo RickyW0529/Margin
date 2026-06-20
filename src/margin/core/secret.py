@@ -22,7 +22,7 @@ class SecretManager:
 
     Supports two sources in priority order:
         1. Environment variables (``MARGIN_SECRET_<REF>``).
-        2. Local Secret files (``~/.margin/secrets/<ref>`` or a custom directory).
+        2. Local Secret files (``.margin/secrets/<ref>`` or a custom directory).
 
     Each reference name in a ``ProviderDescriptor.secret_refs`` list is resolved
     to the real credential value via ``resolve()``. Only reference names live in
@@ -43,11 +43,11 @@ class SecretManager:
 
         Args:
             secrets_dir: Directory containing local Secret files. Defaults to
-                ``~/.margin/secrets``.
+                ``.margin/secrets``.
             env_prefix: Prefix for environment variables. Defaults to
                 ``MARGIN_SECRET_``.
         """
-        self._secrets_dir = secrets_dir or Path.home() / ".margin" / "secrets"
+        self._secrets_dir = secrets_dir or Path(".margin") / "secrets"
         self._env_prefix = env_prefix
         self._cache: dict[str, str] = {}
 
@@ -121,7 +121,12 @@ class SecretManager:
 
 
 class SecretRefInfo(BaseModel):
-    """Secret reference metadata for display (does not contain the value)."""
+    """Secret reference metadata for display (does not contain the value).
+
+    Attributes:
+        ref: Secret reference name.
+        resolvable: Whether the reference can be resolved to a value.
+    """
 
     ref: str
     resolvable: bool

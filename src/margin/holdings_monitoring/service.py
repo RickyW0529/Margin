@@ -42,6 +42,14 @@ class HoldingsMonitoringService:
         repository: MonitoringRepository | None = None,
         portfolio_service: PortfolioService | None = None,
     ) -> None:
+        """Initialize the service with optional repository and portfolio service.
+
+        Args:
+            repository: Repository used to persist alerts and reviews.
+                Defaults to MemoryMonitoringRepository.
+            portfolio_service: Optional portfolio service used to load positions
+                when evaluating by identifier.
+        """
         self._repository = repository or MemoryMonitoringRepository()
         self._portfolio_service = portfolio_service
 
@@ -60,7 +68,30 @@ class HoldingsMonitoringService:
         news_events: list[DocumentEvent] | None = None,
         decision_at: datetime | None = None,
     ) -> PositionMonitoringSnapshot:
-        """Evaluate one position with deterministic monitoring rules."""
+        """Evaluate one position with deterministic monitoring rules.
+
+        The rules check for missing prices, drawdown thresholds, scheduled reviews,
+        strategy failures, model rank changes, industry exposure, upcoming events,
+        and recent news events. Persistable alerts are deduplicated against a
+        cooldown window before being stored.
+
+        Args:
+            portfolio_id: Identifier of the portfolio that owns the position.
+            position: Position to evaluate.
+            thesis: Optional investment thesis for the position.
+            current_price: Optional latest market price. Falls back to
+                position.current_price when omitted.
+            evidence_refs: Optional evidence references to attach to emitted alerts.
+            model_rank_delta: Optional model rank change to trigger a watch alert.
+            industry_exposure: Optional industry exposure ratio to trigger a watch alert.
+            strategy_failure: Whether a strategy execution failure was detected.
+            upcoming_event_at: Optional timestamp of an upcoming key event.
+            news_events: Optional list of recent document events to evaluate.
+            decision_at: Optional evaluation timestamp. Defaults to the current UTC time.
+
+        Returns:
+            Snapshot summarizing the position health, thesis status, reasons, and alerts.
+        """
         evaluated_at = _ensure_dt(decision_at)
         evidence_refs = evidence_refs or []
         news_events = news_events or []
@@ -304,7 +335,25 @@ class HoldingsMonitoringService:
         upcoming_event_at: datetime | None = None,
         decision_at: datetime | None = None,
     ) -> PositionMonitoringSnapshot:
-        """Load one position from PortfolioService and evaluate it."""
+        """Load one position from PortfolioService and evaluate it.
+
+        Args:
+            portfolio_id: Identifier of the portfolio that owns the position.
+            position_id: Identifier of the position to evaluate.
+            current_price: Optional latest market price.
+            evidence_refs: Optional evidence references to attach to emitted alerts.
+            model_rank_delta: Optional model rank change to trigger a watch alert.
+            industry_exposure: Optional industry exposure ratio to trigger a watch alert.
+            strategy_failure: Whether a strategy execution failure was detected.
+            upcoming_event_at: Optional timestamp of an upcoming key event.
+            decision_at: Optional evaluation timestamp. Defaults to the current UTC time.
+
+        Returns:
+            Snapshot summarizing the position health, thesis status, reasons, and alerts.
+
+        Raises:
+            RuntimeError: If the service was not initialized with a portfolio service.
+        """
         if self._portfolio_service is None:
             raise RuntimeError("portfolio service is required for evaluate_position_by_id")
         detail = self._portfolio_service.get_position_detail(portfolio_id, position_id)
@@ -326,6 +375,15 @@ class HoldingsMonitoringService:
         portfolio_id: str,
         position_id: str | None = None,
     ) -> list[AlertEvent]:
+        """Return alerts for a portfolio, optionally filtered by position.
+
+        Args:
+            portfolio_id: Portfolio identifier to filter by.
+            position_id: Optional position identifier to further filter alerts.
+
+        Returns:
+            Sorted list of matching alert events.
+        """
         return self._repository.list_alerts(portfolio_id, position_id)
 
     def record_review(
@@ -338,6 +396,22 @@ class HoldingsMonitoringService:
         rationale: str,
         action_taken_at: datetime | None = None,
     ) -> PositionReviewRecord:
+        """Record a manual review decision for a position or alert.
+
+        Args:
+            portfolio_id: Identifier of the portfolio that owns the position.
+            position_id: Identifier of the reviewed position.
+            alert_id: Optional identifier of the alert that prompted the review.
+            decision: Review decision selected by the user.
+            rationale: Human-readable explanation of the review decision.
+            action_taken_at: Optional timestamp when action was taken.
+
+        Returns:
+            The persisted review record.
+
+        Raises:
+            KeyError: If alert_id is provided but no matching alert exists.
+        """
         if alert_id is not None and self._repository.get_alert(alert_id) is None:
             raise KeyError(f"alert '{alert_id}' not found")
         review = PositionReviewRecord(
@@ -356,6 +430,15 @@ class HoldingsMonitoringService:
         portfolio_id: str,
         position_id: str | None = None,
     ) -> list[PositionReviewRecord]:
+        """Return review records for a portfolio or position.
+
+        Args:
+            portfolio_id: Portfolio identifier to filter by.
+            position_id: Optional position identifier to further filter reviews.
+
+        Returns:
+            Sorted list of matching review records.
+        """
         return self._repository.list_reviews(portfolio_id, position_id)
 
     def get_behavior_metrics(
@@ -363,6 +446,18 @@ class HoldingsMonitoringService:
         portfolio_id: str,
         position_id: str,
     ) -> list[BehaviorMetric]:
+        """Compute behavior metrics linking alerts to their reviews.
+
+        For each review that references a known alert, the latency between the
+        alert trigger and the review action is recorded.
+
+        Args:
+            portfolio_id: Identifier of the portfolio that owns the position.
+            position_id: Identifier of the position to compute metrics for.
+
+        Returns:
+            List of behavior metrics for the position.
+        """
         alerts = {alert.alert_id: alert for alert in self.list_alerts(portfolio_id, position_id)}
         metrics: list[BehaviorMetric] = []
         for review in self.list_reviews(portfolio_id, position_id):
@@ -393,6 +488,20 @@ class HoldingsMonitoringService:
         position_id: str,
         trades: list[Trade] | None = None,
     ) -> list[OperationHistoryEntry]:
+        """Build a unified chronological operation history for a position.
+
+        Combines trade history (loaded from PortfolioService when trades is None),
+        alerts, and manual reviews into a single sorted timeline.
+
+        Args:
+            portfolio_id: Identifier of the portfolio that owns the position.
+            position_id: Identifier of the position.
+            trades: Optional explicit trade list. When omitted, trades are loaded
+                from the portfolio service.
+
+        Returns:
+            Chronologically sorted operation history entries.
+        """
         resolved_trades = trades
         if resolved_trades is None and self._portfolio_service is not None:
             detail = self._portfolio_service.get_position_detail(portfolio_id, position_id)
@@ -497,6 +606,15 @@ class MonitoringServiceBundle:
         portfolio_service: PortfolioService | None = None,
         repository: MemoryMonitoringRepository | None = None,
     ) -> MonitoringServiceBundle:
+        """Create a bundle backed by in-memory repositories.
+
+        Args:
+            portfolio_service: Optional portfolio service to inject.
+            repository: Optional in-memory monitoring repository to inject.
+
+        Returns:
+            A bundle configured for testing or embedded usage.
+        """
         return cls(
             monitoring=HoldingsMonitoringService(
                 repository=repository or MemoryMonitoringRepository(),
@@ -511,6 +629,15 @@ class MonitoringServiceBundle:
         repository: MonitoringRepository,
         portfolio_service: PortfolioService,
     ) -> MonitoringServiceBundle:
+        """Create a bundle backed by a real monitoring repository.
+
+        Args:
+            repository: Monitoring repository used to persist alerts and reviews.
+            portfolio_service: Portfolio service used to load positions.
+
+        Returns:
+            A bundle configured for production usage.
+        """
         return cls(
             monitoring=HoldingsMonitoringService(
                 repository=repository,

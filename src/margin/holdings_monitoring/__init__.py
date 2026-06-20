@@ -1,4 +1,8 @@
-"""Holdings monitoring module."""
+"""Public exports for the holdings monitoring package.
+
+This package provides domain models, persistence repositories, deterministic evaluation
+rules, and runner adapters for monitoring held positions after they enter a portfolio.
+"""
 
 from margin.holdings_monitoring.models import (
     AlertEvent,

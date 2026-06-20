@@ -1,3 +1,10 @@
+/**
+ * @fileoverview Unit tests for the write/mutation helpers in `api.ts`.
+ *
+ * Verifies that POST payloads and endpoint paths are forwarded correctly to the
+ * Margin backend using Vitest mocks.
+ */
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -7,6 +14,7 @@ import {
   evaluatePositionMonitoring,
 } from "./api";
 
+/** Mock for `response.json()` shared across tests. */
 const json = vi.fn();
 
 describe("api mutation helpers", () => {

@@ -18,6 +18,13 @@ class PersistentEmbeddingPipeline:
         embedding_provider: Any,
         repository: VectorRepository,
     ) -> None:
+        """Initialize the persistent embedding pipeline.
+
+        Args:
+            embedding_provider: Provider used to generate query embeddings. Must
+                expose an ``embed`` method.
+            repository: Persistent repository for chunks and embeddings.
+        """
         self._embedding_provider = embedding_provider
         self._repository = repository
 
@@ -27,6 +34,18 @@ class PersistentEmbeddingPipeline:
         top_k: int = 10,
         filters: dict[str, Any] | None = None,
     ) -> list[tuple[Chunk, float]]:
+        """Search persisted embeddings using a vectorized query.
+
+        Args:
+            query_text: Raw query text to embed and search for.
+            top_k: Maximum number of results to return.
+            filters: Optional metadata filters such as ``symbol`` and ``doc_type``.
+                ``doc_type`` may be a string or a collection of strings.
+
+        Returns:
+            A list of ``(Chunk, cosine_similarity)`` tuples sorted by similarity in
+            descending order.
+        """
         resolved = filters or {}
         query_vector = self._embedding_provider.embed(query_text)
         doc_types = resolved.get("doc_type")
@@ -47,6 +66,18 @@ class PersistentEmbeddingPipeline:
         top_k: int = 10,
         filters: dict[str, Any] | None = None,
     ) -> list[tuple[Chunk, float]]:
+        """Search persisted chunks using token overlap as a keyword fallback.
+
+        Args:
+            query: Raw query text.
+            top_k: Maximum number of results to return.
+            filters: Optional metadata filters such as ``symbol`` and ``doc_type``.
+                ``doc_type`` may be a string or a collection of strings.
+
+        Returns:
+            A list of ``(Chunk, overlap_ratio)`` tuples sorted by overlap in descending
+            order.
+        """
         resolved = filters or {}
         doc_types = resolved.get("doc_type")
         if isinstance(doc_types, str):
@@ -71,4 +102,14 @@ class PersistentEmbeddingPipeline:
 
 
 def _tokenize(text: str) -> list[str]:
+    """Tokenize text for the fallback keyword scorer.
+
+    English words, Chinese characters, and digits are extracted and lowercased.
+
+    Args:
+        text: Input text.
+
+    Returns:
+        A list of lowercase tokens.
+    """
     return re.findall(r"[\u4e00-\u9fff]|[a-z]+|\d+", text.lower())

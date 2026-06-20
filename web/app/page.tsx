@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Home page for the Margin workspace.
+ * Aggregates portfolio, research, and provider status into a high-level dashboard.
+ */
+
 import Link from "next/link";
 
 import { ProviderStatusPanel } from "@/components/provider-status-panel";
@@ -16,6 +21,10 @@ export const dynamic = "force-dynamic";
 
 const DEFAULT_PORTFOLIO_ID = process.env.MARGIN_DEFAULT_PORTFOLIO_ID ?? "demo";
 
+/**
+ * Workspace home page that fetches summary data from multiple APIs in parallel.
+ * @returns The rendered home page with metrics, navigation, and provider status.
+ */
 export default async function HomePage() {
   const [dashboardResult, researchResult, runsResult, providersResult] =
     await Promise.allSettled([

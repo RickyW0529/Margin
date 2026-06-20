@@ -1,4 +1,6 @@
 .DS_Store
+.Codex-goal.md
+.Codex-goal.archive.md
 .idea/
 .pytest_cache/
 .ruff_cache/
@@ -7,6 +9,7 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
+.margin/
 web/node_modules/
 web/.next/
 dist/

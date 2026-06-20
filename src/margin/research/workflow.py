@@ -70,6 +70,21 @@ class ResearchWorkflow:
         snapshot_resolver: Any | None = None,
         repository: ResearchRepository | None = None,
     ) -> None:
+        """Initialize a new workflow run.
+
+        Args:
+            symbol: Primary symbol under research.
+            decision_at: Timestamp used as the research decision point.
+            tool_registry: Registry of tools available to agents.
+            llm_provider: Optional LLM provider for agent prompts.
+            model_router: Optional model router for provider selection.
+            strategy_config: Optional strategy overrides and parameters.
+            portfolio_id: Optional portfolio identifier for constraint checks.
+            claims: Optional pre-existing claims to include in validation.
+            evidences: Optional pre-existing evidence records.
+            snapshot_resolver: Optional resolver for citation snapshot lookups.
+            repository: Repository used to persist the terminal snapshot.
+        """
         self._run_id = f"run_{uuid.uuid4().hex[:12]}"
         self._symbol = symbol
         self._decision_at = decision_at
@@ -92,13 +107,16 @@ class ResearchWorkflow:
 
     @property
     def run_id(self) -> str:
+        """Return the unique run identifier."""
         return self._run_id
 
     @property
     def state(self) -> WorkflowState:
+        """Return the current workflow state."""
         return self._state
 
     def _make_context(self) -> AgentContext:
+        """Build an agent context for the current run state."""
         return AgentContext(
             symbol=self._symbol,
             decision_at=self._decision_at,
@@ -115,6 +133,14 @@ class ResearchWorkflow:
         )
 
     def _run_agent(self, agent) -> Any:
+        """Execute an agent and record its trace.
+
+        Args:
+            agent: Agent instance to run.
+
+        Returns:
+            The raw ``AgentOutput`` returned by the agent.
+        """
         context = self._make_context()
         output = agent.run(context)
         self._prior_outputs[agent.node_name] = output.data
@@ -132,6 +158,11 @@ class ResearchWorkflow:
         return output
 
     def run(self) -> WorkflowResult:
+        """Run the full research workflow and persist the terminal snapshot.
+
+        Returns:
+            ``WorkflowResult`` describing the final state, signals, and snapshot.
+        """
         try:
             return self._execute()
         except Exception as exc:
@@ -141,6 +172,7 @@ class ResearchWorkflow:
             )
 
     def _execute(self) -> WorkflowResult:
+        """Execute the agent pipeline in order."""
         self._state = WorkflowState.DATA_READY
 
         # Agent 1 & 2: universe + quant
@@ -253,6 +285,16 @@ class ResearchWorkflow:
         signals: list[ResearchSignal] | None = None,
         error: str | None = None,
     ) -> WorkflowResult:
+        """Finalize the run, build a snapshot, and persist it.
+
+        Args:
+            state: Terminal workflow state.
+            signals: Optional signals produced by the workflow.
+            error: Optional error or abstention reason.
+
+        Returns:
+            ``WorkflowResult`` with snapshot and persistence status.
+        """
         self._state = state
         signals = signals or []
         snapshot = self._build_snapshot(state, signals, error)
@@ -285,6 +327,7 @@ class ResearchWorkflow:
         signals: list[ResearchSignal],
         error: str | None,
     ) -> ResearchSnapshot:
+        """Build an immutable research snapshot from the current run state."""
         snapshot = (
             ResearchSnapshotBuilder()
             .for_run(self._run_id)

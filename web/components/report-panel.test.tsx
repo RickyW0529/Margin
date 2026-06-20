@@ -1,9 +1,14 @@
+/**
+ * @fileoverview Unit tests for the ReportPanel component.
+ */
+
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { ReportPanel } from "./report-panel";
 import type { ReportExport, ResearchReport } from "@/lib/api";
 
+/** Mock research report used in ReportPanel tests. */
 const report: ResearchReport = {
   item_id: "di_1",
   run_id: "dr_1",
@@ -17,6 +22,7 @@ const report: ResearchReport = {
   generated_at: "2026-06-19T00:00:00Z",
 };
 
+/** Mock report export used in ReportPanel tests. */
 const exported: ReportExport = {
   item_id: "di_1",
   format: "json",
@@ -26,6 +32,7 @@ const exported: ReportExport = {
   generated_at: "2026-06-19T00:00:00Z",
 };
 
+/** Tests for ReportPanel rendering behavior. */
 describe("ReportPanel", () => {
   it("renders report preview and export metadata", () => {
     render(<ReportPanel report={report} exported={exported} />);

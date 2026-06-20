@@ -17,7 +17,7 @@ from margin.core.snapshot_store import FileSnapshotStore
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Margin snapshot store CLI")
-    parser.add_argument("--base-path", default=str(Path.home() / ".margin" / "snapshots"))
+    parser.add_argument("--base-path", default=str(Path(".margin") / "snapshots"))
     sub = parser.add_subparsers(dest="command")
 
     write_parser = sub.add_parser("write")

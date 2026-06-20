@@ -1,9 +1,14 @@
+/**
+ * @fileoverview Unit tests for the CandidateCard component.
+ */
+
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { CandidateCard } from "./candidate-card";
 import type { ResearchCandidateCard } from "@/lib/api";
 
+/** Mock research candidate used in CandidateCard tests. */
 const card: ResearchCandidateCard = {
   item_id: "di_1",
   run_id: "dr_1",
@@ -28,6 +33,7 @@ const card: ResearchCandidateCard = {
   disclaimer: "本系统输出研究分析，不构成买卖指令。",
 };
 
+/** Tests for CandidateCard rendering behavior. */
 describe("CandidateCard", () => {
   it("renders candidate signal, evidence, valuation, counter argument and disclaimer", () => {
     render(<CandidateCard card={card} />);

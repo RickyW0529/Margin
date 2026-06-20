@@ -35,7 +35,7 @@ class AIConfig(BaseModel):
     """AI provider and prompt settings for a strategy."""
 
     provider: str = "openai"
-    model: str = "gpt-4o-mini"
+    model: str = "deepseek-v4-pro"
     websearch_provider: str = "tavily"
     system_prompt_template: str = "default"
     custom_instructions: str = ""
@@ -50,6 +50,17 @@ class EvidenceConfig(BaseModel):
     @field_validator("min_evidence_count")
     @classmethod
     def validate_min_evidence(cls, value: int) -> int:
+        """Ensure the minimum evidence count is non-negative.
+
+        Args:
+            value: The requested minimum number of evidence items.
+
+        Returns:
+            The validated minimum evidence count.
+
+        Raises:
+            ValueError: If ``value`` is negative.
+        """
         if value < 0:
             raise ValueError("min_evidence_count must be non-negative")
         return value
@@ -93,6 +104,17 @@ class RiskConfig(BaseModel):
     @field_validator("max_position_weight", "max_sector_weight")
     @classmethod
     def validate_weights(cls, value: float) -> float:
+        """Ensure portfolio weights are valid probabilities in (0, 1].
+
+        Args:
+            value: The requested position or sector weight.
+
+        Returns:
+            The validated weight.
+
+        Raises:
+            ValueError: If ``value`` is not in the interval ``(0, 1]``.
+        """
         if not 0.0 < value <= 1.0:
             raise ValueError("weight must be in (0, 1]")
         return value
@@ -152,6 +174,14 @@ class StrategyVersion(BaseModel):
     @field_validator("created_at")
     @classmethod
     def normalize_created_at(cls, value: datetime) -> datetime:
+        """Normalize the creation timestamp to UTC.
+
+        Args:
+            value: The raw creation timestamp.
+
+        Returns:
+            The timestamp normalized to UTC.
+        """
         return ensure_utc(value)
 
 
@@ -171,10 +201,26 @@ class StrategyProfile(BaseModel):
     @field_validator("created_at", "updated_at")
     @classmethod
     def normalize_timestamps(cls, value: datetime) -> datetime:
+        """Normalize profile timestamps to UTC.
+
+        Args:
+            value: A raw profile timestamp.
+
+        Returns:
+            The timestamp normalized to UTC.
+        """
         return ensure_utc(value)
 
     def with_version(self, version: StrategyVersion) -> StrategyProfile:
-        """Return a new profile with the given version appended."""
+        """Return a new profile with the given version appended.
+
+        Args:
+            version: The immutable strategy version to append.
+
+        Returns:
+            A new :class:`StrategyProfile` with ``version`` added and
+            ``updated_at`` refreshed.
+        """
         return self.model_copy(
             update={
                 "versions": self.versions + (version,),
@@ -183,7 +229,15 @@ class StrategyProfile(BaseModel):
         )
 
     def with_active_version(self, version_id: str) -> StrategyProfile:
-        """Return a new profile with the active version updated."""
+        """Return a new profile with the active version updated.
+
+        Args:
+            version_id: The identifier of the version to mark as active.
+
+        Returns:
+            A new :class:`StrategyProfile` with ``active_version_id`` set to
+            ``version_id`` and ``updated_at`` refreshed.
+        """
         return self.model_copy(
             update={
                 "active_version_id": version_id,

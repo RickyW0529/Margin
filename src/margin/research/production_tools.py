@@ -47,7 +47,19 @@ def build_production_tool_registry(
     snapshot_store: SnapshotStore | None = None,
     vector_repository: VectorRepository | None = None,
 ) -> ToolRegistry:
-    """Build the production tool registry with usable read-only adapters."""
+    """Build the production tool registry with usable read-only adapters.
+
+    Args:
+        settings: Application settings including the web search API key.
+        market_data_provider: Optional market data provider. Defaults to ``AKShareProvider``.
+        embedding_provider: Optional embedding provider for vector retrieval.
+        news_repository: Optional repository for persisting search records and snapshots.
+        snapshot_store: Optional store for document snapshots.
+        vector_repository: Optional repository for persistent vector retrieval.
+
+    Returns:
+        A ``ToolRegistry`` configured with production adapters.
+    """
     market_provider = market_data_provider or AKShareProvider()
     pipeline = (
         PersistentEmbeddingPipeline(

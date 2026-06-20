@@ -10,11 +10,17 @@ from margin.core.secret import SecretManager, SecretNotFoundError
 class TestSecretManager:
     """Unit tests covering how ``SecretManager`` resolves, checks, and caches secrets."""
 
-    def test_resolve_from_env(self, monkeypatch):
+    def test_resolve_from_env(self, monkeypatch, tmp_path):
         """A secret prefixed with ``MARGIN_SECRET_`` is resolved from the environment."""
         monkeypatch.setenv("MARGIN_SECRET_TUSHARE_TOKEN", "abc123")
-        sm = SecretManager(secrets_dir=Path("/tmp/nonexistent"))
+        sm = SecretManager(secrets_dir=tmp_path / "nonexistent")
         assert sm.resolve("tushare_token") == "abc123"
+
+    def test_default_secret_directory_is_project_relative(self):
+        """Default local secrets must live under the project-relative .margin directory."""
+        sm = SecretManager()
+        assert sm._secrets_dir == Path(".margin/secrets")
+        assert not sm._secrets_dir.is_absolute()
 
     def test_resolve_from_file(self, tmp_path):
         """A secret stored as a file in ``secrets_dir`` is read and stripped."""
@@ -42,10 +48,10 @@ class TestSecretManager:
         with pytest.raises(SecretNotFoundError):
             sm.resolve("missing")
 
-    def test_has_true(self, monkeypatch):
+    def test_has_true(self, monkeypatch, tmp_path):
         """``has`` returns ``True`` when the secret exists in the environment."""
         monkeypatch.setenv("MARGIN_SECRET_EXISTS", "val")
-        sm = SecretManager(secrets_dir=Path("/tmp/nonexistent"))
+        sm = SecretManager(secrets_dir=tmp_path / "nonexistent")
         assert sm.has("exists") is True
 
     def test_has_false(self, tmp_path, monkeypatch):
@@ -68,10 +74,10 @@ class TestSecretManager:
         assert "ref_b" in refs
         assert "ref_c" in refs
 
-    def test_caches_resolved_value(self, monkeypatch):
+    def test_caches_resolved_value(self, monkeypatch, tmp_path):
         """A resolved secret is cached and later environment changes are ignored."""
         monkeypatch.setenv("MARGIN_SECRET_CACHED", "v1")
-        sm = SecretManager(secrets_dir=Path("/tmp/nonexistent"))
+        sm = SecretManager(secrets_dir=tmp_path / "nonexistent")
         sm.resolve("cached")
         monkeypatch.setenv("MARGIN_SECRET_CACHED", "v2")
         assert sm.resolve("cached") == "v1"

@@ -65,12 +65,20 @@ class PortfolioRiskReport(BaseModel):
 
     @property
     def has_breach(self) -> bool:
-        """Whether any metric in the report breaches its threshold."""
+        """Whether any metric in the report breaches its threshold.
+
+        Returns:
+            True if at least one metric exceeds its threshold, otherwise False.
+        """
         return any(m.breached for m in self.metrics)
 
     @property
     def breached_metrics(self) -> list[RiskMetric]:
-        """Return only the metrics that have breached their thresholds."""
+        """Return only the metrics that have breached their thresholds.
+
+        Returns:
+            A list of ``RiskMetric`` instances whose ``breached`` flag is True.
+        """
         return [m for m in self.metrics if m.breached]
 
 

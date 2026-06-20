@@ -1,9 +1,22 @@
+/**
+ * @fileoverview Panel component that displays evidence claims and source
+ * locators for a research item.
+ */
+
 import type { EvidenceView } from "@/lib/api";
 
+/** Props for the EvidencePanel component. */
 type EvidencePanelProps = {
+  /** Evidence view data, or null when unavailable. */
   evidence: EvidenceView | null;
 };
 
+/**
+ * Renders evidence claims and source locators for a research item.
+ *
+ * @param evidence Evidence view data to display.
+ * @returns The evidence panel or an empty state.
+ */
 export function EvidencePanel({ evidence }: EvidencePanelProps) {
   if (!evidence || !evidence.locators_available) {
     return <div className="empty-state compact">证据暂不可用</div>;

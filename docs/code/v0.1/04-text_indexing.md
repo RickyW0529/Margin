@@ -40,18 +40,18 @@ DocumentEvent → Chunker → Chunk → EmbeddingProvider → VectorStore
 
 | 文件 | 路径 | 职责 |
 |------|------|------|
-| `__init__.py` | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/vector/__init__.py` | 聚合导出模块公共 API。 |
-| `models.py` | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/vector/models.py` | 定义 `Chunk`、`RetrievalResult`、`DocType` 等核心领域模型。 |
-| `db_models.py` | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/vector/db_models.py` | SQLAlchemy ORM 表：`ChunkRow`、`ChunkEmbeddingRow`、`IndexAuditRecordRow`、`RetrievalAuditRecordRow`。 |
-| `chunker.py` | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/vector/chunker.py` | 文档分块策略与分块器工厂。 |
-| `embedding.py` | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/vector/embedding.py` | 嵌入 Provider、内存向量存储、BM25 索引、索引审计与 `EmbeddingPipeline`。 |
-| `persistent_pipeline.py` | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/vector/persistent_pipeline.py` | 基于 PostgreSQL/pgvector 的持久化检索流水线封装。 |
-| `retrieval.py` | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/vector/retrieval.py` | 混合检索、重排、检索约束与 `RetrievalTool`。 |
-| `repository.py` | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/vector/repository.py` | `VectorRepository`，负责 Chunk、Embedding、审计记录的持久化与检索。 |
-| `indexing_runner.py` | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/vector/indexing_runner.py` | 消费文档 Outbox，完成 Chunk 与 Embedding 的持久化索引。 |
-| `providers/__init__.py` | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/vector/providers/__init__.py` | Provider 子包说明。 |
-| `providers/openai_embedding.py` | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/vector/providers/openai_embedding.py` | OpenAI 兼容 `/embeddings` 嵌入 Provider。 |
-| `providers/rerank.py` | `/Users/wangruiqi/PycharmProjects/Margin/src/margin/vector/providers/rerank.py` | HTTP 重排 Provider，兼容 Cohere/OpenAI 风格 `/rerank`。 |
+| `__init__.py` | `src/margin/vector/__init__.py` | 聚合导出模块公共 API。 |
+| `models.py` | `src/margin/vector/models.py` | 定义 `Chunk`、`RetrievalResult`、`DocType` 等核心领域模型。 |
+| `db_models.py` | `src/margin/vector/db_models.py` | SQLAlchemy ORM 表：`ChunkRow`、`ChunkEmbeddingRow`、`IndexAuditRecordRow`、`RetrievalAuditRecordRow`。 |
+| `chunker.py` | `src/margin/vector/chunker.py` | 文档分块策略与分块器工厂。 |
+| `embedding.py` | `src/margin/vector/embedding.py` | 嵌入 Provider、内存向量存储、BM25 索引、索引审计与 `EmbeddingPipeline`。 |
+| `persistent_pipeline.py` | `src/margin/vector/persistent_pipeline.py` | 基于 PostgreSQL/pgvector 的持久化检索流水线封装。 |
+| `retrieval.py` | `src/margin/vector/retrieval.py` | 混合检索、重排、检索约束与 `RetrievalTool`。 |
+| `repository.py` | `src/margin/vector/repository.py` | `VectorRepository`，负责 Chunk、Embedding、审计记录的持久化与检索。 |
+| `indexing_runner.py` | `src/margin/vector/indexing_runner.py` | 消费文档 Outbox，完成 Chunk 与 Embedding 的持久化索引。 |
+| `providers/__init__.py` | `src/margin/vector/providers/__init__.py` | Provider 子包说明。 |
+| `providers/openai_embedding.py` | `src/margin/vector/providers/openai_embedding.py` | OpenAI 兼容 `/embeddings` 嵌入 Provider。 |
+| `providers/rerank.py` | `src/margin/vector/providers/rerank.py` | HTTP 重排 Provider，兼容 Cohere/OpenAI 风格 `/rerank`。 |
 
 ---
 

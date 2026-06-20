@@ -63,10 +63,16 @@ class MemoryMonitoringRepository:
     """In-memory monitoring repository for tests and embedded usage."""
 
     def __init__(self) -> None:
+        """Initialize empty in-memory stores for alerts and reviews."""
         self._alerts: dict[str, AlertEvent] = {}
         self._reviews: dict[str, PositionReviewRecord] = {}
 
     def add_alert(self, alert: AlertEvent) -> None:
+        """Append an alert event.
+
+        Args:
+            alert: The alert to store.
+        """
         self._alerts[alert.alert_id] = alert
 
     def list_alerts(
@@ -74,6 +80,15 @@ class MemoryMonitoringRepository:
         portfolio_id: str,
         position_id: str | None = None,
     ) -> list[AlertEvent]:
+        """Return alerts for a portfolio, optionally filtered by position.
+
+        Args:
+            portfolio_id: Portfolio identifier to filter by.
+            position_id: Optional position identifier to further filter alerts.
+
+        Returns:
+            Sorted list of matching alert events.
+        """
         alerts = [
             alert for alert in self._alerts.values()
             if alert.portfolio_id == portfolio_id
@@ -83,6 +98,14 @@ class MemoryMonitoringRepository:
         return sorted(alerts, key=lambda item: (item.triggered_at, item.alert_id))
 
     def get_alert(self, alert_id: str) -> AlertEvent | None:
+        """Return one alert by identifier.
+
+        Args:
+            alert_id: Unique identifier of the alert.
+
+        Returns:
+            The alert if found, otherwise None.
+        """
         return self._alerts.get(alert_id)
 
     def get_latest_alert(
@@ -91,6 +114,16 @@ class MemoryMonitoringRepository:
         position_id: str,
         rule_name: str,
     ) -> AlertEvent | None:
+        """Return the latest alert emitted by one monitoring rule.
+
+        Args:
+            portfolio_id: Portfolio identifier to filter by.
+            position_id: Position identifier to filter by.
+            rule_name: Name of the monitoring rule.
+
+        Returns:
+            The most recent matching alert, or None if no alert matches.
+        """
         alerts = [
             alert
             for alert in self._alerts.values()
@@ -101,6 +134,11 @@ class MemoryMonitoringRepository:
         return max(alerts, key=lambda item: item.triggered_at, default=None)
 
     def add_review(self, review: PositionReviewRecord) -> None:
+        """Append a manual position review.
+
+        Args:
+            review: The review record to store.
+        """
         self._reviews[review.review_id] = review
 
     def list_reviews(
@@ -108,6 +146,15 @@ class MemoryMonitoringRepository:
         portfolio_id: str,
         position_id: str | None = None,
     ) -> list[PositionReviewRecord]:
+        """Return review records for a portfolio or position.
+
+        Args:
+            portfolio_id: Portfolio identifier to filter by.
+            position_id: Optional position identifier to further filter reviews.
+
+        Returns:
+            Sorted list of matching review records.
+        """
         reviews = [
             review for review in self._reviews.values()
             if review.portfolio_id == portfolio_id
@@ -121,9 +168,19 @@ class SQLAlchemyMonitoringRepository:
     """PostgreSQL monitoring repository backed by short SQLAlchemy sessions."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
+        """Initialize the repository with a SQLAlchemy session factory.
+
+        Args:
+            session_factory: Callable that returns a new SQLAlchemy session.
+        """
         self._session_factory = session_factory
 
     def add_alert(self, alert: AlertEvent) -> None:
+        """Append an alert event.
+
+        Args:
+            alert: The alert to persist.
+        """
         with self._session_factory.begin() as session:
             session.add(_alert_to_row(alert))
 
@@ -132,6 +189,15 @@ class SQLAlchemyMonitoringRepository:
         portfolio_id: str,
         position_id: str | None = None,
     ) -> list[AlertEvent]:
+        """Return alerts for a portfolio, optionally filtered by position.
+
+        Args:
+            portfolio_id: Portfolio identifier to filter by.
+            position_id: Optional position identifier to further filter alerts.
+
+        Returns:
+            Sorted list of matching alert events.
+        """
         statement = select(AlertEventRow).where(
             AlertEventRow.portfolio_id == portfolio_id
         )
@@ -145,6 +211,14 @@ class SQLAlchemyMonitoringRepository:
             return [_alert_from_row(row) for row in session.scalars(statement).all()]
 
     def get_alert(self, alert_id: str) -> AlertEvent | None:
+        """Return one alert by identifier.
+
+        Args:
+            alert_id: Unique identifier of the alert.
+
+        Returns:
+            The alert if found, otherwise None.
+        """
         with self._session_factory() as session:
             row = session.get(AlertEventRow, alert_id)
             return _alert_from_row(row) if row is not None else None
@@ -155,6 +229,16 @@ class SQLAlchemyMonitoringRepository:
         position_id: str,
         rule_name: str,
     ) -> AlertEvent | None:
+        """Return the latest alert emitted by one monitoring rule.
+
+        Args:
+            portfolio_id: Portfolio identifier to filter by.
+            position_id: Position identifier to filter by.
+            rule_name: Name of the monitoring rule.
+
+        Returns:
+            The most recent matching alert, or None if no alert matches.
+        """
         statement = (
             select(AlertEventRow)
             .where(
@@ -170,6 +254,11 @@ class SQLAlchemyMonitoringRepository:
             return _alert_from_row(row) if row is not None else None
 
     def add_review(self, review: PositionReviewRecord) -> None:
+        """Append a manual position review.
+
+        Args:
+            review: The review record to persist.
+        """
         with self._session_factory.begin() as session:
             session.add(_review_to_row(review))
 
@@ -178,6 +267,15 @@ class SQLAlchemyMonitoringRepository:
         portfolio_id: str,
         position_id: str | None = None,
     ) -> list[PositionReviewRecord]:
+        """Return review records for a portfolio or position.
+
+        Args:
+            portfolio_id: Portfolio identifier to filter by.
+            position_id: Optional position identifier to further filter reviews.
+
+        Returns:
+            Sorted list of matching review records.
+        """
         statement = select(PositionReviewRow).where(
             PositionReviewRow.portfolio_id == portfolio_id
         )

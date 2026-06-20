@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Server actions for position monitoring and review.
+ * Handles position evaluation updates and manual review submissions.
+ */
+
 "use server";
 
 import { revalidatePath } from "next/cache";
@@ -8,6 +13,11 @@ import {
   type ReviewDecision,
 } from "@/lib/api";
 
+/**
+ * Submits an updated monitoring evaluation for a position.
+ * @param positionId - The position identifier.
+ * @param formData - Form values containing portfolio_id, price, exposure, and failure flags.
+ */
 export async function evaluatePositionAction(
   positionId: string,
   formData: FormData,
@@ -26,6 +36,11 @@ export async function evaluatePositionAction(
   revalidatePath(`/positions/${positionId}`);
 }
 
+/**
+ * Creates a manual review record for a position.
+ * @param positionId - The position identifier.
+ * @param formData - Form values containing portfolio_id, decision, rationale, and optional alert_id.
+ */
 export async function createPositionReviewAction(
   positionId: string,
   formData: FormData,

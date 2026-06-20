@@ -33,42 +33,42 @@
 
 | 文件路径 | 说明 |
 | --- | --- |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/dashboard/__init__.py` | 模块公开接口，聚合模型、仓库与服务的导出。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/dashboard/db_models.py` | SQLAlchemy 行模型：`DashboardRunRow`、`DashboardItemRow`、`DashboardFeedbackRow`。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/dashboard/models.py` | Pydantic 领域模型与枚举：运行、研究项、卡片、证据、估值、报告、反馈等。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/dashboard/repository.py` | 仓库协议与实现：`DashboardRepository`、`MemoryDashboardRepository`、`SQLAlchemyDashboardRepository` 及行/模型转换函数。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/dashboard/service.py` | 业务服务：运行聚合、查询、证据、估值、反馈、审计、报告、导出、Provider 状态、任务与 `DashboardServiceBundle`。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/dashboard.py` | FastAPI 路由，前缀 `/api/v1`，覆盖运行、项、证据、估值、审计、报告、导出、反馈、Provider 状态与任务。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/app/research/page.tsx` | 研究候选面板首页，异步服务端组件。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/app/research/loading.tsx` | 首页加载占位。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/app/research/page.test.tsx` | 首页渲染测试。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/app/research/actions.ts` | Server Action `createResearchRunAction`，提交表单后创建运行并重定向。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/app/research/runs/[runId]/page.tsx` | 运行详情页，展示运行元信息与候选卡片列表。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/app/research/runs/[runId]/loading.tsx` | 运行详情页加载占位。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/app/research/items/[itemId]/page.tsx` | 研究项详情页，展示结论、估值、证据、报告与反馈表单。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/app/research/items/[itemId]/loading.tsx` | 研究项详情页加载占位。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/app/research/items/[itemId]/actions.ts` | Server Action `createResearchFeedbackAction`，提交研究项反馈。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/candidate-card.tsx` | 单个候选卡片组件。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/candidate-card.test.tsx` | 候选卡片渲染测试。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/candidate-list.tsx` | 候选卡片列表容器。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/evidence-panel.tsx` | 证据展开面板。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/evidence-panel.test.tsx` | 证据面板渲染测试。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/report-panel.tsx` | 研究报告与导出面板。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/report-panel.test.tsx` | 报告面板渲染测试。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/valuation-panel.tsx` | 估值视图面板。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/home-summary.tsx` | 首页六宫格摘要。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/home-summary.test.tsx` | 首页摘要渲染测试。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/research-status-badge.tsx` | 研究状态徽章。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/research-run-form.tsx` | 启动研究运行表单。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/research-feedback-form.tsx` | 研究反馈表单。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/provider-status-panel.tsx` | Provider 健康状态列表。 |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/page-loading.tsx` | 通用页面骨架屏。 |
+| `src/margin/dashboard/__init__.py` | 模块公开接口，聚合模型、仓库与服务的导出。 |
+| `src/margin/dashboard/db_models.py` | SQLAlchemy 行模型：`DashboardRunRow`、`DashboardItemRow`、`DashboardFeedbackRow`。 |
+| `src/margin/dashboard/models.py` | Pydantic 领域模型与枚举：运行、研究项、卡片、证据、估值、报告、反馈等。 |
+| `src/margin/dashboard/repository.py` | 仓库协议与实现：`DashboardRepository`、`MemoryDashboardRepository`、`SQLAlchemyDashboardRepository` 及行/模型转换函数。 |
+| `src/margin/dashboard/service.py` | 业务服务：运行聚合、查询、证据、估值、反馈、审计、报告、导出、Provider 状态、任务与 `DashboardServiceBundle`。 |
+| `src/margin/api/routes/dashboard.py` | FastAPI 路由，前缀 `/api/v1`，覆盖运行、项、证据、估值、审计、报告、导出、反馈、Provider 状态与任务。 |
+| `web/app/research/page.tsx` | 研究候选面板首页，异步服务端组件。 |
+| `web/app/research/loading.tsx` | 首页加载占位。 |
+| `web/app/research/page.test.tsx` | 首页渲染测试。 |
+| `web/app/research/actions.ts` | Server Action `createResearchRunAction`，提交表单后创建运行并重定向。 |
+| `web/app/research/runs/[runId]/page.tsx` | 运行详情页，展示运行元信息与候选卡片列表。 |
+| `web/app/research/runs/[runId]/loading.tsx` | 运行详情页加载占位。 |
+| `web/app/research/items/[itemId]/page.tsx` | 研究项详情页，展示结论、估值、证据、报告与反馈表单。 |
+| `web/app/research/items/[itemId]/loading.tsx` | 研究项详情页加载占位。 |
+| `web/app/research/items/[itemId]/actions.ts` | Server Action `createResearchFeedbackAction`，提交研究项反馈。 |
+| `web/components/candidate-card.tsx` | 单个候选卡片组件。 |
+| `web/components/candidate-card.test.tsx` | 候选卡片渲染测试。 |
+| `web/components/candidate-list.tsx` | 候选卡片列表容器。 |
+| `web/components/evidence-panel.tsx` | 证据展开面板。 |
+| `web/components/evidence-panel.test.tsx` | 证据面板渲染测试。 |
+| `web/components/report-panel.tsx` | 研究报告与导出面板。 |
+| `web/components/report-panel.test.tsx` | 报告面板渲染测试。 |
+| `web/components/valuation-panel.tsx` | 估值视图面板。 |
+| `web/components/home-summary.tsx` | 首页六宫格摘要。 |
+| `web/components/home-summary.test.tsx` | 首页摘要渲染测试。 |
+| `web/components/research-status-badge.tsx` | 研究状态徽章。 |
+| `web/components/research-run-form.tsx` | 启动研究运行表单。 |
+| `web/components/research-feedback-form.tsx` | 研究反馈表单。 |
+| `web/components/provider-status-panel.tsx` | Provider 健康状态列表。 |
+| `web/components/page-loading.tsx` | 通用页面骨架屏。 |
 
 ---
 
 ## 3. 领域模型
 
-定义文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/dashboard/models.py`。
+定义文件：`src/margin/dashboard/models.py`。
 
 ### 3.1 枚举
 
@@ -217,7 +217,7 @@
 
 ## 4. 服务层
 
-定义文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/dashboard/service.py`。
+定义文件：`src/margin/dashboard/service.py`。
 
 ### 4.1 `DashboardResearchService`
 
@@ -373,7 +373,7 @@ FastAPI 依赖注入容器。
 
 ## 5. 持久层
 
-定义文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/dashboard/repository.py`。
+定义文件：`src/margin/dashboard/repository.py`。
 
 ### 5.1 `DashboardRepository`（Protocol）
 
@@ -419,7 +419,7 @@ PostgreSQL 实现。
 
 ## 6. FastAPI 端点
 
-定义文件：`/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/dashboard.py`。
+定义文件：`src/margin/api/routes/dashboard.py`。
 
 路由前缀：`/api/v1`，Tag：`dashboard`。
 
@@ -457,7 +457,7 @@ PostgreSQL 实现。
 
 ### 7.1 `ResearchDashboardPage`
 
-文件：`/Users/wangruiqi/PycharmProjects/Margin/web/app/research/page.tsx`
+文件：`web/app/research/page.tsx`
 
 - 导出 `dynamic = "force-dynamic"`，禁用默认缓存。
 - 并发拉取 `fetchResearchHome()`、`fetchResearchRuns()`、`fetchProviderStatus()`。
@@ -471,7 +471,7 @@ PostgreSQL 实现。
 
 ### 7.2 `ResearchRunPage`
 
-文件：`/Users/wangruiqi/PycharmProjects/Margin/web/app/research/runs/[runId]/page.tsx`
+文件：`web/app/research/runs/[runId]/page.tsx`
 
 - 接收 `params: Promise<{ runId: string }>`。
 - 并发拉取 `fetchResearchRun(runId)` 与 `fetchResearchRunCards(runId)`。
@@ -481,7 +481,7 @@ PostgreSQL 实现。
 
 ### 7.3 `ResearchItemPage`
 
-文件：`/Users/wangruiqi/PycharmProjects/Margin/web/app/research/items/[itemId]/page.tsx`
+文件：`web/app/research/items/[itemId]/page.tsx`
 
 - 接收 `params: Promise<{ itemId: string }>`。
 - 并发拉取：
@@ -502,7 +502,7 @@ PostgreSQL 实现。
 
 ### 7.4 `createResearchRunAction`
 
-文件：`/Users/wangruiqi/PycharmProjects/Margin/web/app/research/actions.ts`
+文件：`web/app/research/actions.ts`
 
 - Server Action。
 - 从 `FormData` 提取 `strategy_id`（必填）、`version_id`（必填）、`portfolio_id`、`symbols`。
@@ -512,7 +512,7 @@ PostgreSQL 实现。
 
 ### 7.5 `createResearchFeedbackAction`
 
-文件：`/Users/wangruiqi/PycharmProjects/Margin/web/app/research/items/[itemId]/actions.ts`
+文件：`web/app/research/items/[itemId]/actions.ts`
 
 - Server Action，签名为 `(itemId: string, formData: FormData) => void`。
 - 解析 `feedback_type`（限定 `accept`、`reject`、`watch`、`comment`，非法默认 `comment`）。
@@ -526,7 +526,7 @@ PostgreSQL 实现。
 
 ### 8.1 `CandidateCard`
 
-文件：`/Users/wangruiqi/PycharmProjects/Margin/web/components/candidate-card.tsx`
+文件：`web/components/candidate-card.tsx`
 
 | Props | 类型 | 说明 |
 | --- | --- | --- |
@@ -547,7 +547,7 @@ PostgreSQL 实现。
 
 ### 8.2 `CandidateList`
 
-文件：`/Users/wangruiqi/PycharmProjects/Margin/web/components/candidate-list.tsx`
+文件：`web/components/candidate-list.tsx`
 
 | Props | 类型 | 说明 |
 | --- | --- | --- |
@@ -557,7 +557,7 @@ PostgreSQL 实现。
 
 ### 8.3 `EvidencePanel`
 
-文件：`/Users/wangruiqi/PycharmProjects/Margin/web/components/evidence-panel.tsx`
+文件：`web/components/evidence-panel.tsx`
 
 | Props | 类型 | 说明 |
 | --- | --- | --- |
@@ -571,7 +571,7 @@ PostgreSQL 实现。
 
 ### 8.4 `ReportPanel`
 
-文件：`/Users/wangruiqi/PycharmProjects/Margin/web/components/report-panel.tsx`
+文件：`web/components/report-panel.tsx`
 
 | Props | 类型 | 说明 |
 | --- | --- | --- |
@@ -587,7 +587,7 @@ PostgreSQL 实现。
 
 ### 8.5 `ValuationPanel`
 
-文件：`/Users/wangruiqi/PycharmProjects/Margin/web/components/valuation-panel.tsx`
+文件：`web/components/valuation-panel.tsx`
 
 | Props | 类型 | 说明 |
 | --- | --- | --- |
@@ -600,7 +600,7 @@ PostgreSQL 实现。
 
 ### 8.6 `HomeSummary`
 
-文件：`/Users/wangruiqi/PycharmProjects/Margin/web/components/home-summary.tsx`
+文件：`web/components/home-summary.tsx`
 
 | Props | 类型 | 说明 |
 | --- | --- | --- |
@@ -610,7 +610,7 @@ PostgreSQL 实现。
 
 ### 8.7 `ResearchStatusBadge`
 
-文件：`/Users/wangruiqi/PycharmProjects/Margin/web/components/research-status-badge.tsx`
+文件：`web/components/research-status-badge.tsx`
 
 | Props | 类型 | 说明 |
 | --- | --- | --- |
@@ -623,7 +623,7 @@ PostgreSQL 实现。
 
 ### 8.8 `ResearchRunForm`
 
-文件：`/Users/wangruiqi/PycharmProjects/Margin/web/components/research-run-form.tsx`
+文件：`web/components/research-run-form.tsx`
 
 | Props | 类型 | 说明 |
 | --- | --- | --- |
@@ -636,7 +636,7 @@ PostgreSQL 实现。
 
 ### 8.9 `ResearchFeedbackForm`
 
-文件：`/Users/wangruiqi/PycharmProjects/Margin/web/components/research-feedback-form.tsx`
+文件：`web/components/research-feedback-form.tsx`
 
 | Props | 类型 | 说明 |
 | --- | --- | --- |
@@ -650,7 +650,7 @@ PostgreSQL 实现。
 
 ### 8.10 `ProviderStatusPanel`
 
-文件：`/Users/wangruiqi/PycharmProjects/Margin/web/components/provider-status-panel.tsx`
+文件：`web/components/provider-status-panel.tsx`
 
 | Props | 类型 | 说明 |
 | --- | --- | --- |
@@ -664,7 +664,7 @@ PostgreSQL 实现。
 
 ### 8.11 `PageLoading`
 
-文件：`/Users/wangruiqi/PycharmProjects/Margin/web/components/page-loading.tsx`
+文件：`web/components/page-loading.tsx`
 
 | Props | 类型 | 说明 |
 | --- | --- | --- |
@@ -675,7 +675,7 @@ PostgreSQL 实现。
 
 ### 8.12 `PositionReviewBadge`
 
-文件：`/Users/wangruiqi/PycharmProjects/Margin/web/components/position-review-badge.tsx`
+文件：`web/components/position-review-badge.tsx`
 
 | Props | 类型 | 说明 |
 | --- | --- | --- |

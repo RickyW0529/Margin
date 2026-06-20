@@ -5,6 +5,11 @@ from __future__ import annotations
 from margin.strategy.models import StrategyConfig, StrategyState, StrategyVersion
 
 
+def test_strategy_ai_default_model_is_deepseek_pro():
+    config = StrategyConfig()
+    assert config.ai.model == "deepseek-v4-pro"
+
+
 def test_strategy_version_is_immutable():
     version = StrategyVersion(
         strategy_id="st_001",

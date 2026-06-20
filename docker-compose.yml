@@ -25,7 +25,7 @@ services:
       MARGIN_DATABASE_URL: postgresql+psycopg://margin:margin@postgres:5432/margin
       MARGIN_LLM_BASE_URL: ${MARGIN_LLM_BASE_URL:-}
       MARGIN_LLM_API_KEY: ${MARGIN_LLM_API_KEY:-}
-      MARGIN_LLM_MODEL: ${MARGIN_LLM_MODEL:-deepseek-v4-flash}
+      MARGIN_LLM_MODEL: ${MARGIN_LLM_MODEL:-deepseek-v4-pro}
       MARGIN_EMBEDDING_BASE_URL: ${MARGIN_EMBEDDING_BASE_URL:-}
       MARGIN_EMBEDDING_API_KEY: ${MARGIN_EMBEDDING_API_KEY:-}
       MARGIN_EMBEDDING_MODEL: ${MARGIN_EMBEDDING_MODEL:-embedding-3}
@@ -72,8 +72,8 @@ services:
         condition: service_completed_successfully
     volumes:
       # Persistent volumes for audit logs and snapshots survive container restarts.
-      - margin-audit:/home/margin/.margin/audit
-      - margin-snapshots:/home/margin/.margin/snapshots
+      - margin-audit:/app/.margin/audit
+      - margin-snapshots:/app/.margin/snapshots
     command: ["uvicorn", "margin.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
     healthcheck:
       test: ["CMD", "python", "scripts/health_check.py"]
@@ -92,8 +92,8 @@ services:
       seed:
         condition: service_completed_successfully
     volumes:
-      - margin-audit:/home/margin/.margin/audit
-      - margin-snapshots:/home/margin/.margin/snapshots
+      - margin-audit:/app/.margin/audit
+      - margin-snapshots:/app/.margin/snapshots
     command: ["python", "-m", "margin.worker"]
 
   # Next.js frontend.

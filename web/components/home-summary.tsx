@@ -1,13 +1,33 @@
+/**
+ * @fileoverview Dashboard summary component that renders key research run
+ * metrics in a grid of tiles.
+ */
+
 import type { ResearchHomeSummary } from "@/lib/api";
 
+/** Props for the HomeSummary component. */
 type HomeSummaryProps = {
+  /** Research home summary data, or null when loading. */
   summary: ResearchHomeSummary | null;
 };
 
+/**
+ * Safely reads a numeric stat from the summary, defaulting to zero.
+ *
+ * @param summary Research home summary, or null.
+ * @param key Stat key to read from run_stats.
+ * @returns The stat value, or 0 if unavailable.
+ */
 function stat(summary: ResearchHomeSummary | null, key: string): number {
   return summary?.run_stats[key] ?? 0;
 }
 
+/**
+ * Renders the research dashboard summary grid.
+ *
+ * @param summary Research home summary data to display.
+ * @returns The summary grid element.
+ */
 export function HomeSummary({ summary }: HomeSummaryProps) {
   return (
     <section className="metric-grid" aria-label="研究首页摘要">
@@ -45,6 +65,14 @@ export function HomeSummary({ summary }: HomeSummaryProps) {
   );
 }
 
+/**
+ * Renders a single labeled metric tile within the summary grid.
+ *
+ * @param title Tile label.
+ * @param value Primary metric value.
+ * @param helper Secondary helper text.
+ * @returns The metric tile element.
+ */
 function SummaryTile({
   title,
   value,

@@ -21,7 +21,11 @@ class AuditRepository(Protocol):
     """Persistence contract for immutable audit records."""
 
     def record(self, record: AuditLogRecord) -> None:
-        """Append an audit record."""
+        """Append an audit record.
+
+        Args:
+            record: The immutable audit record to persist.
+        """
         ...
 
     def list_records(
@@ -31,17 +35,40 @@ class AuditRepository(Protocol):
         trace_id: str | None = None,
         limit: int = 100,
     ) -> list[AuditLogRecord]:
-        """Return audit records ordered by recorded_at desc."""
+        """Return audit records ordered by recorded_at desc.
+
+        Args:
+            record_type: Filter by record type.
+            object_id: Filter by object identifier.
+            trace_id: Filter by trace identifier.
+            limit: Maximum number of records to return.
+
+        Returns:
+            Matching records, most recent first.
+        """
         ...
 
 
 class MemoryAuditRepository:
-    """In-memory audit repository for tests."""
+    """In-memory audit repository for tests.
+
+    Attributes:
+        _records: Mapping from record id to immutable audit record.
+    """
 
     def __init__(self) -> None:
+        """Initialize an empty in-memory repository."""
         self._records: dict[str, AuditLogRecord] = {}
 
     def record(self, record: AuditLogRecord) -> None:
+        """Append an audit record, rejecting duplicate ids.
+
+        Args:
+            record: The immutable audit record to store.
+
+        Raises:
+            ValueError: When a record with the same ``record_id`` already exists.
+        """
         # Reject duplicates to preserve the append-only / immutable contract in memory.
         if record.record_id in self._records:
             raise ValueError(f"audit record '{record.record_id}' already exists")
@@ -54,6 +81,17 @@ class MemoryAuditRepository:
         trace_id: str | None = None,
         limit: int = 100,
     ) -> list[AuditLogRecord]:
+        """Return in-memory audit records ordered by recorded_at desc.
+
+        Args:
+            record_type: Filter by record type.
+            object_id: Filter by object identifier.
+            trace_id: Filter by trace identifier.
+            limit: Maximum number of records to return.
+
+        Returns:
+            Matching records, most recent first.
+        """
         records = list(self._records.values())
         if record_type is not None:
             records = [r for r in records if r.record_type == record_type]
@@ -67,12 +105,26 @@ class MemoryAuditRepository:
 
 
 class SQLAlchemyAuditRepository:
-    """PostgreSQL audit repository."""
+    """PostgreSQL audit repository backed by SQLAlchemy.
+
+    Attributes:
+        _session_factory: Callable that returns a new SQLAlchemy session.
+    """
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
+        """Initialize the repository.
+
+        Args:
+            session_factory: Callable that returns a new SQLAlchemy session.
+        """
         self._session_factory = session_factory
 
     def record(self, record: AuditLogRecord) -> None:
+        """Persist an audit record to PostgreSQL.
+
+        Args:
+            record: The immutable audit record to store.
+        """
         # ``begin()`` commits on success and rolls back on exception automatically.
         with self._session_factory.begin() as session:
             session.add(_record_to_row(record))
@@ -84,6 +136,17 @@ class SQLAlchemyAuditRepository:
         trace_id: str | None = None,
         limit: int = 100,
     ) -> list[AuditLogRecord]:
+        """Return persisted audit records ordered by recorded_at desc.
+
+        Args:
+            record_type: Filter by record type.
+            object_id: Filter by object identifier.
+            trace_id: Filter by trace identifier.
+            limit: Maximum number of records to return.
+
+        Returns:
+            Matching records, most recent first.
+        """
         statement = select(AuditLogRecordRow).order_by(AuditLogRecordRow.recorded_at.desc())
         if record_type is not None:
             statement = statement.where(AuditLogRecordRow.record_type == record_type)

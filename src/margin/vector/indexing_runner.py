@@ -20,13 +20,36 @@ class DocumentIndexingRunner:
         embedding_provider: Any,
         chunker: Chunker | None = None,
     ) -> None:
+        """Initialize the indexing runner.
+
+        Args:
+            news_repository: Repository used to claim document outbox messages and
+                load document events.
+            vector_repository: Repository used to persist chunks, embeddings, and
+                audit records.
+            embedding_provider: Provider used to generate chunk embeddings. Must
+                expose an ``embed_batch`` method.
+            chunker: Chunker used to split document events into chunks. Defaults to
+                a new ``Chunker`` instance.
+        """
         self._news = news_repository
         self._vectors = vector_repository
         self._embedding = embedding_provider
         self._chunker = chunker or Chunker()
 
     def run_once(self, *, limit: int = 50) -> int:
-        """Consume one batch of vector-index outbox messages."""
+        """Consume one batch of vector-index outbox messages.
+
+        For each claimed outbox message, the corresponding document event is loaded,
+        chunked, embedded, and persisted. Successfully processed messages are marked
+        as delivered; failures are marked with an error message.
+
+        Args:
+            limit: Maximum number of outbox messages to process in this batch.
+
+        Returns:
+            The total number of chunks indexed across all processed messages.
+        """
         indexed = 0
         for message in self._news.claim_outbox("vector_index", limit):
             try:
@@ -70,6 +93,14 @@ class DocumentIndexingRunner:
 
 
 def _provider_name(provider: Any) -> str:
+    """Return the provider's canonical name.
+
+    Args:
+        provider: An embedding provider instance.
+
+    Returns:
+        The provider name, falling back to the descriptor name when necessary.
+    """
     value = getattr(provider, "name", None)
     if value:
         return str(value)
@@ -77,6 +108,14 @@ def _provider_name(provider: Any) -> str:
 
 
 def _provider_version(provider: Any) -> str:
+    """Return the provider's version string.
+
+    Args:
+        provider: An embedding provider instance.
+
+    Returns:
+        The provider version, falling back to the descriptor version when necessary.
+    """
     value = getattr(provider, "version", None)
     if value:
         return str(value)

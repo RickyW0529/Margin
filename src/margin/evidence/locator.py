@@ -35,6 +35,7 @@ from margin.evidence.models import Evidence
 from margin.news.models import RawSnapshot, SourceLevel, ensure_utc
 
 SnapshotResolver = Callable[[str], RawSnapshot | None]
+"""Callable that resolves a snapshot ID to a RawSnapshot, or None if not found."""
 
 # ---------------------------------------------------------------------------
 # 0502.1 Source types

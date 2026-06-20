@@ -24,10 +24,21 @@ class DashboardRepository(Protocol):
     """Repository contract consumed by dashboard query and orchestration services."""
 
     def add_run(self, run: ResearchRun) -> None:
-        """Persist a dashboard run."""
+        """Persist a dashboard run.
+
+        Args:
+            run: The research run to persist.
+        """
 
     def get_run(self, run_id: str) -> ResearchRun | None:
-        """Return one run by identifier."""
+        """Return one run by identifier.
+
+        Args:
+            run_id: Unique identifier of the run.
+
+        Returns:
+            The matching research run, or None if not found.
+        """
 
     def list_runs(
         self,
@@ -37,36 +48,89 @@ class DashboardRepository(Protocol):
         status: str | None = None,
         limit: int = 100,
     ) -> list[ResearchRun]:
-        """Return dashboard runs sorted newest first."""
+        """Return dashboard runs sorted newest first.
+
+        Args:
+            strategy_id: Optional strategy filter.
+            portfolio_id: Optional portfolio filter.
+            status: Optional status filter.
+            limit: Maximum number of runs to return.
+
+        Returns:
+            A list of matching research runs.
+        """
 
     def add_items(self, items: list[ResearchItem]) -> None:
-        """Persist run items."""
+        """Persist run items.
+
+        Args:
+            items: Research items to persist.
+        """
 
     def get_item(self, item_id: str) -> ResearchItem | None:
-        """Return one item by identifier."""
+        """Return one item by identifier.
+
+        Args:
+            item_id: Unique identifier of the item.
+
+        Returns:
+            The matching research item, or None if not found.
+        """
 
     def list_items(self, run_id: str) -> list[ResearchItem]:
-        """Return all items for a run."""
+        """Return all items for a run.
+
+        Args:
+            run_id: Identifier of the parent research run.
+
+        Returns:
+            All research items belonging to the run.
+        """
 
     def add_feedback(self, feedback: FeedbackRecord) -> None:
-        """Append user feedback."""
+        """Append user feedback.
+
+        Args:
+            feedback: Feedback record to persist.
+        """
 
     def list_feedback(self, item_id: str) -> list[FeedbackRecord]:
-        """Return feedback for one item."""
+        """Return feedback for one item.
+
+        Args:
+            item_id: Identifier of the research item.
+
+        Returns:
+            A list of feedback records for the item.
+        """
 
 
 class MemoryDashboardRepository:
     """In-memory dashboard repository for tests and local usage."""
 
     def __init__(self) -> None:
+        """Initialize empty in-memory stores for runs, items, and feedback."""
         self._runs: dict[str, ResearchRun] = {}
         self._items: dict[str, ResearchItem] = {}
         self._feedback: dict[str, list[FeedbackRecord]] = {}
 
     def add_run(self, run: ResearchRun) -> None:
+        """Persist a dashboard run in memory.
+
+        Args:
+            run: The research run to store.
+        """
         self._runs[run.run_id] = run
 
     def get_run(self, run_id: str) -> ResearchRun | None:
+        """Return one run by identifier.
+
+        Args:
+            run_id: Unique identifier of the run.
+
+        Returns:
+            The matching research run, or None if not found.
+        """
         return self._runs.get(run_id)
 
     def list_runs(
@@ -77,6 +141,17 @@ class MemoryDashboardRepository:
         status: str | None = None,
         limit: int = 100,
     ) -> list[ResearchRun]:
+        """Return dashboard runs sorted newest first.
+
+        Args:
+            strategy_id: Optional strategy filter.
+            portfolio_id: Optional portfolio filter.
+            status: Optional status filter.
+            limit: Maximum number of runs to return.
+
+        Returns:
+            A list of matching research runs.
+        """
         runs = list(self._runs.values())
         if strategy_id:
             runs = [run for run in runs if run.strategy_id == strategy_id]
@@ -88,21 +163,55 @@ class MemoryDashboardRepository:
         return runs[:limit]
 
     def add_items(self, items: list[ResearchItem]) -> None:
+        """Persist run items in memory.
+
+        Args:
+            items: Research items to store.
+        """
         for item in items:
             self._items[item.item_id] = item
 
     def get_item(self, item_id: str) -> ResearchItem | None:
+        """Return one item by identifier.
+
+        Args:
+            item_id: Unique identifier of the item.
+
+        Returns:
+            The matching research item, or None if not found.
+        """
         return self._items.get(item_id)
 
     def list_items(self, run_id: str) -> list[ResearchItem]:
+        """Return all items for a run.
+
+        Args:
+            run_id: Identifier of the parent research run.
+
+        Returns:
+            All research items belonging to the run, sorted by created_at.
+        """
         items = [item for item in self._items.values() if item.run_id == run_id]
         items.sort(key=lambda item: item.created_at)
         return items
 
     def add_feedback(self, feedback: FeedbackRecord) -> None:
+        """Append user feedback in memory.
+
+        Args:
+            feedback: Feedback record to store.
+        """
         self._feedback.setdefault(feedback.item_id, []).append(feedback)
 
     def list_feedback(self, item_id: str) -> list[FeedbackRecord]:
+        """Return feedback for one item.
+
+        Args:
+            item_id: Identifier of the research item.
+
+        Returns:
+            A list of feedback records for the item.
+        """
         return list(self._feedback.get(item_id, []))
 
 
@@ -110,13 +219,31 @@ class SQLAlchemyDashboardRepository:
     """PostgreSQL-backed dashboard repository."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
+        """Initialize the repository with a SQLAlchemy session factory.
+
+        Args:
+            session_factory: Callable that returns a new SQLAlchemy session.
+        """
         self._session_factory = session_factory
 
     def add_run(self, run: ResearchRun) -> None:
+        """Persist a dashboard run to PostgreSQL.
+
+        Args:
+            run: The research run to persist.
+        """
         with self._session_factory.begin() as session:
             session.merge(_run_to_row(run))
 
     def get_run(self, run_id: str) -> ResearchRun | None:
+        """Return one run by identifier.
+
+        Args:
+            run_id: Unique identifier of the run.
+
+        Returns:
+            The matching research run, or None if not found.
+        """
         with self._session_factory() as session:
             row = session.get(DashboardRunRow, run_id)
             return _run_from_row(row) if row else None
@@ -129,6 +256,17 @@ class SQLAlchemyDashboardRepository:
         status: str | None = None,
         limit: int = 100,
     ) -> list[ResearchRun]:
+        """Return dashboard runs sorted newest first.
+
+        Args:
+            strategy_id: Optional strategy filter.
+            portfolio_id: Optional portfolio filter.
+            status: Optional status filter.
+            limit: Maximum number of runs to return.
+
+        Returns:
+            A list of matching research runs.
+        """
         with self._session_factory() as session:
             statement = select(DashboardRunRow)
             if strategy_id:
@@ -143,16 +281,37 @@ class SQLAlchemyDashboardRepository:
             return [_run_from_row(row) for row in rows]
 
     def add_items(self, items: list[ResearchItem]) -> None:
+        """Persist run items to PostgreSQL.
+
+        Args:
+            items: Research items to persist.
+        """
         with self._session_factory.begin() as session:
             for item in items:
                 session.merge(_item_to_row(item))
 
     def get_item(self, item_id: str) -> ResearchItem | None:
+        """Return one item by identifier.
+
+        Args:
+            item_id: Unique identifier of the item.
+
+        Returns:
+            The matching research item, or None if not found.
+        """
         with self._session_factory() as session:
             row = session.get(DashboardItemRow, item_id)
             return _item_from_row(row) if row else None
 
     def list_items(self, run_id: str) -> list[ResearchItem]:
+        """Return all items for a run.
+
+        Args:
+            run_id: Identifier of the parent research run.
+
+        Returns:
+            All research items belonging to the run, sorted by created_at.
+        """
         with self._session_factory() as session:
             rows = session.scalars(
                 select(DashboardItemRow)
@@ -162,6 +321,11 @@ class SQLAlchemyDashboardRepository:
             return [_item_from_row(row) for row in rows]
 
     def add_feedback(self, feedback: FeedbackRecord) -> None:
+        """Append user feedback to PostgreSQL.
+
+        Args:
+            feedback: Feedback record to persist.
+        """
         with self._session_factory.begin() as session:
             session.add(
                 DashboardFeedbackRow(
@@ -174,6 +338,14 @@ class SQLAlchemyDashboardRepository:
             )
 
     def list_feedback(self, item_id: str) -> list[FeedbackRecord]:
+        """Return feedback for one item.
+
+        Args:
+            item_id: Identifier of the research item.
+
+        Returns:
+            A list of feedback records for the item.
+        """
         with self._session_factory() as session:
             rows = session.scalars(
                 select(DashboardFeedbackRow)

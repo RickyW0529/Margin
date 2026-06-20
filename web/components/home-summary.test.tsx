@@ -1,9 +1,14 @@
+/**
+ * @fileoverview Unit tests for the HomeSummary component.
+ */
+
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { HomeSummary } from "./home-summary";
 import type { ResearchHomeSummary } from "@/lib/api";
 
+/** Mock research home summary used in HomeSummary tests. */
 const summary: ResearchHomeSummary = {
   decision_at: "2026-06-19T00:00:00Z",
   run_id: "dr_1",
@@ -22,6 +27,7 @@ const summary: ResearchHomeSummary = {
   },
 };
 
+/** Tests for HomeSummary rendering behavior. */
 describe("HomeSummary", () => {
   it("renders the six dashboard blocks and run stats", () => {
     render(<HomeSummary summary={summary} />);

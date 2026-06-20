@@ -56,19 +56,19 @@ The module is intentionally deterministic and intraday-safe: it does not perform
 
 | File | Purpose |
 |------|---------|
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/holdings_monitoring/__init__.py` | Public package exports. Re-exports models, repositories, and services. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/holdings_monitoring/db_models.py` | SQLAlchemy ORM rows `AlertEventRow` and `PositionReviewRow` with indexes. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/holdings_monitoring/models.py` | Pydantic domain models and enums: `AlertEvent`, `PositionMonitoringSnapshot`, `PositionReviewRecord`, `OperationHistoryEntry`, `BehaviorMetric`. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/holdings_monitoring/repository.py` | `MonitoringRepository` protocol plus `MemoryMonitoringRepository` and `SQLAlchemyMonitoringRepository` implementations. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/holdings_monitoring/runner.py` | `HoldingsMonitoringRunner` and adapter protocols/providers for prices, news, and notifications. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/holdings_monitoring/service.py` | Core `HoldingsMonitoringService` with rule engine, plus `MonitoringServiceBundle` for dependency injection. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/monitoring.py` | FastAPI router exposing evaluation, alerts, reviews, history, and behavior metrics endpoints. |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/app/positions/[positionId]/page.tsx` | Next.js server component that loads position detail, alerts, and history. |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/app/positions/[positionId]/loading.tsx` | Loading UI for the position detail page. |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/app/positions/[positionId]/actions.ts` | Server actions that bind form submissions to the monitoring and review API endpoints. |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/position-detail.tsx` | Main React component rendering the position detail view, monitoring panel, review form, and operation history. |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/position-detail.test.tsx` | Vitest tests for `PositionDetailView`. |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/position-review-badge.tsx` | Small badge component mapping thesis status to a localized label and tone. |
+| `src/margin/holdings_monitoring/__init__.py` | Public package exports. Re-exports models, repositories, and services. |
+| `src/margin/holdings_monitoring/db_models.py` | SQLAlchemy ORM rows `AlertEventRow` and `PositionReviewRow` with indexes. |
+| `src/margin/holdings_monitoring/models.py` | Pydantic domain models and enums: `AlertEvent`, `PositionMonitoringSnapshot`, `PositionReviewRecord`, `OperationHistoryEntry`, `BehaviorMetric`. |
+| `src/margin/holdings_monitoring/repository.py` | `MonitoringRepository` protocol plus `MemoryMonitoringRepository` and `SQLAlchemyMonitoringRepository` implementations. |
+| `src/margin/holdings_monitoring/runner.py` | `HoldingsMonitoringRunner` and adapter protocols/providers for prices, news, and notifications. |
+| `src/margin/holdings_monitoring/service.py` | Core `HoldingsMonitoringService` with rule engine, plus `MonitoringServiceBundle` for dependency injection. |
+| `src/margin/api/routes/monitoring.py` | FastAPI router exposing evaluation, alerts, reviews, history, and behavior metrics endpoints. |
+| `web/app/positions/[positionId]/page.tsx` | Next.js server component that loads position detail, alerts, and history. |
+| `web/app/positions/[positionId]/loading.tsx` | Loading UI for the position detail page. |
+| `web/app/positions/[positionId]/actions.ts` | Server actions that bind form submissions to the monitoring and review API endpoints. |
+| `web/components/position-detail.tsx` | Main React component rendering the position detail view, monitoring panel, review form, and operation history. |
+| `web/components/position-detail.test.tsx` | Vitest tests for `PositionDetailView`. |
+| `web/components/position-review-badge.tsx` | Small badge component mapping thesis status to a localized label and tone. |
 
 ---
 
@@ -335,7 +335,7 @@ Private mapping helpers:
 
 ## 7. FastAPI Endpoints
 
-Router: `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/monitoring.py`
+Router: `src/margin/api/routes/monitoring.py`
 
 Prefix: `/api/v1`
 Tag: `monitoring`
@@ -381,7 +381,7 @@ All endpoints inject `MonitoringServiceBundle` via `get_monitoring_services`. `K
 
 ### `PositionPage`
 
-File: `/Users/wangruiqi/PycharmProjects/Margin/web/app/positions/[positionId]/page.tsx`
+File: `web/app/positions/[positionId]/page.tsx`
 
 Server component for the `/positions/{positionId}` route.
 
@@ -399,7 +399,7 @@ Behavior:
 
 ### Server Actions
 
-File: `/Users/wangruiqi/PycharmProjects/Margin/web/app/positions/[positionId]/actions.ts`
+File: `web/app/positions/[positionId]/actions.ts`
 
 | Function | Parameters | Description |
 |----------|------------|-------------|
@@ -422,7 +422,7 @@ Helper functions in `actions.ts`:
 
 ### 9.1 PositionDetailView
 
-File: `/Users/wangruiqi/PycharmProjects/Margin/web/components/position-detail.tsx`
+File: `web/components/position-detail.tsx`
 
 `function PositionDetailView(props: PositionDetailViewProps)` — Main interactive view for a single position.
 
@@ -467,7 +467,7 @@ Helper functions:
 
 ### 9.2 PositionReviewBadge
 
-File: `/Users/wangruiqi/PycharmProjects/Margin/web/components/position-review-badge.tsx`
+File: `web/components/position-review-badge.tsx`
 
 `function PositionReviewBadge({ status }: PositionReviewBadgeProps)` — Maps a thesis/review status to a localized badge.
 
@@ -501,5 +501,5 @@ Label mapping:
 - **News module (module 03)**: `RepositoryNewsEventProvider` consumes `NewsRepository.list_unique_events()` to supply `DocumentEvent` objects. The service scans event titles and content for Chinese negative terms to emit `negative_event` or `new_disclosure` alerts.
 - **Data module (AKShare)**: `AKShareLatestPriceProvider` wraps `AKShareProvider` to fetch daily adjusted bars and resolve the latest close per symbol.
 - **Dashboard module (module 08)**: `PositionReviewBadge` can be reused in dashboard candidate cards to render `position_review_status` or `research_status`.
-- **API wiring**: `get_monitoring_services` in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/dependencies.py` builds a production `MonitoringServiceBundle` using `SQLAlchemyMonitoringRepository` and `SQLAlchemyPortfolioRepository`, both sharing a database engine.
-- **Frontend API client**: `/Users/wangruiqi/PycharmProjects/Margin/web/lib/api.ts` defines TypeScript types (`AlertEvent`, `OperationHistoryEntry`, `PositionMonitoringSnapshot`, `PositionReviewRecord`, etc.) and fetch helpers (`fetchPositionAlerts`, `fetchPositionHistory`, `evaluatePositionMonitoring`, `createPositionReview`) used by the position page.
+- **API wiring**: `get_monitoring_services` in `src/margin/api/dependencies.py` builds a production `MonitoringServiceBundle` using `SQLAlchemyMonitoringRepository` and `SQLAlchemyPortfolioRepository`, both sharing a database engine.
+- **Frontend API client**: `web/lib/api.ts` defines TypeScript types (`AlertEvent`, `OperationHistoryEntry`, `PositionMonitoringSnapshot`, `PositionReviewRecord`, etc.) and fetch helpers (`fetchPositionAlerts`, `fetchPositionHistory`, `evaluatePositionMonitoring`, `createPositionReview`) used by the position page.

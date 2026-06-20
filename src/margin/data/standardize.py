@@ -150,6 +150,12 @@ FIELD_MAPPINGS: dict[DataDomain, dict[str, FieldMapping]] = {
         "成交额": FieldMapping(source_field="成交额", target_field="amount"),
     },
 }
+"""Default field mappings from external source fields to the standard schema.
+
+The outer dictionary is keyed by :class:`DataDomain`. Each inner dictionary maps
+a source field name to a :class:`FieldMapping` rule describing the target field,
+optional transform, and unit conversion factor.
+"""
 
 
 # ---------------------------------------------------------------------------

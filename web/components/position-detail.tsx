@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Detailed position view component that shows a single portfolio
+ * position, its investment thesis, monitoring alerts, review form, and history.
+ */
+
 import {
   Activity,
   AlertCircle,
@@ -9,15 +14,24 @@ import {
 
 import type { AlertEvent, OperationHistoryEntry, PositionDetail } from "@/lib/api";
 
+/** Form action handler used by evaluation and review forms. */
 type FormAction = (formData: FormData) => void | Promise<void>;
 
+/** Props for the PositionDetailView component. */
 type PositionDetailViewProps = {
+  /** Portfolio identifier the position belongs to. */
   portfolioId: string;
+  /** Server action invoked by the monitoring evaluation form. */
   evaluateAction: FormAction;
+  /** Server action invoked by the review form. */
   reviewAction: FormAction;
+  /** Position detail data, or null while loading. */
   detail: PositionDetail | null;
+  /** Active monitoring alerts for the position. */
   alerts?: AlertEvent[];
+  /** Operation history entries to display. */
   history?: OperationHistoryEntry[];
+  /** Error message to display, or null when no error. */
   error: string | null;
 };
 
@@ -32,14 +46,39 @@ const percent = new Intl.NumberFormat("zh-CN", {
   maximumFractionDigits: 1,
 });
 
+/**
+ * Formats a monetary value as a localized CNY string.
+ *
+ * @param value Monetary value, or null/undefined if unavailable.
+ * @returns Formatted currency or "--".
+ */
 function money(value: number | null | undefined): string {
   return value == null ? "--" : currency.format(value);
 }
 
+/**
+ * Formats a fractional ratio as a localized percentage string.
+ *
+ * @param value Ratio value, or null/undefined if unavailable.
+ * @returns Formatted percentage or "--".
+ */
 function ratio(value: number | null | undefined): string {
   return value == null ? "--" : percent.format(value);
 }
 
+/**
+ * Renders the full position detail workspace including metrics, thesis,
+ * monitoring alerts, evaluation form, review form, and history.
+ *
+ * @param portfolioId Portfolio identifier.
+ * @param evaluateAction Monitoring evaluation form action.
+ * @param reviewAction Review form action.
+ * @param detail Position detail data.
+ * @param alerts Monitoring alerts.
+ * @param history Operation history entries.
+ * @param error Error message.
+ * @returns The position detail workspace.
+ */
 export function PositionDetailView({
   portfolioId,
   evaluateAction,
@@ -188,6 +227,14 @@ export function PositionDetailView({
   );
 }
 
+/**
+ * Form for re-evaluating monitoring alerts against updated market inputs.
+ *
+ * @param action Form submission handler.
+ * @param portfolioId Portfolio identifier.
+ * @param detail Position detail providing default values.
+ * @returns The evaluation form element.
+ */
 function MonitoringEvaluateForm({
   action,
   portfolioId,
@@ -248,6 +295,14 @@ function MonitoringEvaluateForm({
   );
 }
 
+/**
+ * Form for recording a position review decision and rationale.
+ *
+ * @param action Form submission handler.
+ * @param portfolioId Portfolio identifier.
+ * @param alerts Active alerts available to link with the review.
+ * @returns The review form element.
+ */
 function ReviewForm({
   action,
   portfolioId,
@@ -298,6 +353,13 @@ function ReviewForm({
   );
 }
 
+/**
+ * Renders a labeled metric tile.
+ *
+ * @param label Metric label.
+ * @param value Metric value.
+ * @returns The metric tile element.
+ */
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="metric-tile">
@@ -307,6 +369,13 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
+/**
+ * Renders a titled list of thesis conditions, or nothing when empty.
+ *
+ * @param title List title.
+ * @param items Condition strings.
+ * @returns The condition list element, or null when empty.
+ */
 function ConditionList({ title, items }: { title: string; items: string[] }) {
   if (items.length === 0) {
     return null;
@@ -324,6 +393,12 @@ function ConditionList({ title, items }: { title: string; items: string[] }) {
   );
 }
 
+/**
+ * Derives operation history entries from a position's trade history.
+ *
+ * @param detail Position detail containing trades.
+ * @returns Operation history entries derived from trades.
+ */
 function tradesToHistory(detail: PositionDetail): OperationHistoryEntry[] {
   return detail.trade_history.map((trade) => ({
     event_id: trade.trade_id,
@@ -335,6 +410,12 @@ function tradesToHistory(detail: PositionDetail): OperationHistoryEntry[] {
   }));
 }
 
+/**
+ * Returns a human-readable summary for an operation history entry.
+ *
+ * @param entry Operation history entry.
+ * @returns Localized summary string.
+ */
 function historySummary(entry: OperationHistoryEntry): string {
   if (entry.event_type === "alert") {
     return "触发提醒";

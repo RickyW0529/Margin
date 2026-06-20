@@ -50,6 +50,7 @@ class AgentTrace(BaseModel):
     @field_validator("timestamp")
     @classmethod
     def normalize_timestamp(cls, value: datetime) -> datetime:
+        """Ensure the timestamp is UTC."""
         return ensure_utc(value)
 
 
@@ -73,11 +74,23 @@ class ResearchSignal(BaseModel):
     @field_validator("generated_at")
     @classmethod
     def normalize_generated_at(cls, value: datetime) -> datetime:
+        """Ensure the generated timestamp is UTC."""
         return ensure_utc(value)
 
     @field_validator("confidence")
     @classmethod
     def validate_confidence(cls, value: float) -> float:
+        """Validate that confidence is within [0, 1].
+
+        Args:
+            value: Confidence value to validate.
+
+        Returns:
+            The validated confidence value.
+
+        Raises:
+            ValueError: If confidence is outside [0, 1].
+        """
         if not 0.0 <= value <= 1.0:
             raise ValueError(f"confidence must be in [0, 1], got {value}")
         return value
@@ -121,4 +134,5 @@ class ResearchSnapshot(BaseModel):
     @field_validator("decision_at", "created_at")
     @classmethod
     def normalize_created_at(cls, value: datetime) -> datetime:
+        """Ensure decision and created timestamps are UTC."""
         return ensure_utc(value)

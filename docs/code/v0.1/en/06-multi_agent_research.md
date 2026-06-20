@@ -36,24 +36,24 @@ The module is intentionally read-only: no agent may write to the portfolio, and 
 
 | File | Responsibility |
 |------|----------------|
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/__init__.py` | Public API exports. Re-exports the main classes, enums, and protocols used by callers. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/models.py` | Pydantic domain models: `ResearchSignal`, `ResearchSnapshot`, `AgentTrace`, `VersionRef`, plus enums `SignalType` and `WorkflowState`. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/workflow.py` | `ResearchWorkflow` state machine and `WorkflowResult`. Executes the 12-agent pipeline. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/llm.py` | LLM provider adapter, deterministic test provider, `ModelRouter`, and `StructuredOutputGuardrail`. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/agents.py` | `Agent` framework, shared `AgentContext`/`AgentOutput`, and the 12 research agent implementations. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/tools.py` | Typed research tool hierarchy, `ToolRegistry`, `ToolPermission`, and `ToolCallRecord` auditing. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/production_tools.py` | `build_production_tool_registry` wires real market data, vector retrieval, web search, and document collection adapters into a `ToolRegistry`. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/snapshot.py` | `ResearchSnapshotBuilder` constructs immutable audit snapshots. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/repository.py` | `ResearchRepository` protocol plus in-memory and PostgreSQL implementations. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/db_models.py` | SQLAlchemy `ResearchSnapshotRow` table definition. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/service.py` | `ResearchService` entry point that wires dependencies and runs workflows. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/research.py` | FastAPI router exposing `POST /research/run` and `GET /research/tools`. |
+| `src/margin/research/__init__.py` | Public API exports. Re-exports the main classes, enums, and protocols used by callers. |
+| `src/margin/research/models.py` | Pydantic domain models: `ResearchSignal`, `ResearchSnapshot`, `AgentTrace`, `VersionRef`, plus enums `SignalType` and `WorkflowState`. |
+| `src/margin/research/workflow.py` | `ResearchWorkflow` state machine and `WorkflowResult`. Executes the 12-agent pipeline. |
+| `src/margin/research/llm.py` | LLM provider adapter, deterministic test provider, `ModelRouter`, and `StructuredOutputGuardrail`. |
+| `src/margin/research/agents.py` | `Agent` framework, shared `AgentContext`/`AgentOutput`, and the 12 research agent implementations. |
+| `src/margin/research/tools.py` | Typed research tool hierarchy, `ToolRegistry`, `ToolPermission`, and `ToolCallRecord` auditing. |
+| `src/margin/research/production_tools.py` | `build_production_tool_registry` wires real market data, vector retrieval, web search, and document collection adapters into a `ToolRegistry`. |
+| `src/margin/research/snapshot.py` | `ResearchSnapshotBuilder` constructs immutable audit snapshots. |
+| `src/margin/research/repository.py` | `ResearchRepository` protocol plus in-memory and PostgreSQL implementations. |
+| `src/margin/research/db_models.py` | SQLAlchemy `ResearchSnapshotRow` table definition. |
+| `src/margin/research/service.py` | `ResearchService` entry point that wires dependencies and runs workflows. |
+| `src/margin/api/routes/research.py` | FastAPI router exposing `POST /research/run` and `GET /research/tools`. |
 
 ---
 
 ## 3. Domain models
 
-Source file: `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/models.py`
+Source file: `src/margin/research/models.py`
 
 ### Enums
 
@@ -158,7 +158,7 @@ Immutable audit snapshot of a research run. This is the object persisted by `Res
 
 ## 4. Workflow
 
-Source file: `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/workflow.py`
+Source file: `src/margin/research/workflow.py`
 
 ### `WorkflowResult`
 
@@ -234,7 +234,7 @@ The workflow aborts if universe filtering or quant research fails. It abstains i
 
 ## 5. LLM layer
 
-Source file: `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/llm.py`
+Source file: `src/margin/research/llm.py`
 
 ### `TaskType`
 
@@ -279,7 +279,7 @@ OpenAI-compatible LLM provider with structured JSON output. Implements the Margi
 | `name` | `str` | `"openai_llm"` | Provider name. |
 | `api_key` | `str \| None` | `os.getenv("MARGIN_LLM_API_KEY")` | API key. |
 | `base_url` | `str \| None` | `os.getenv("MARGIN_LLM_BASE_URL")` | Base URL with trailing slash removed. |
-| `model` | `str \| None` | `os.getenv("MARGIN_LLM_MODEL")` or `"gpt-4o-mini"` | Model name. |
+| `model` | `str \| None` | `os.getenv("MARGIN_LLM_MODEL")` or `"deepseek-v4-pro"` | Model name. |
 | `client` | `httpx.Client \| None` | `httpx.Client()` | HTTP client. |
 | `timeout` | `float` | `60.0` | Request timeout in seconds. |
 
@@ -364,7 +364,7 @@ Validates that an LLM output conforms to a supported JSON Schema subset, includi
 
 ## 6. Agents
 
-Source file: `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/agents.py`
+Source file: `src/margin/research/agents.py`
 
 ### `AgentContext`
 
@@ -594,7 +594,7 @@ Agent #12: validates evidence references, source levels, and timing.
 
 ## 7. Tools
 
-Source file: `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/tools.py`
+Source file: `src/margin/research/tools.py`
 
 ### `ToolResult`
 
@@ -752,7 +752,7 @@ Recursive helper that scrubs sensitive keys (`api_key`, `token`, `password`, `se
 
 ## 8. Production tool adapters
 
-Source file: `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/production_tools.py`
+Source file: `src/margin/research/production_tools.py`
 
 `build_production_tool_registry` assembles a `ToolRegistry` with real data adapters. It is the bridge between the abstract research tools and Margin's market-data, news, and vector modules.
 
@@ -792,7 +792,7 @@ Source file: `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/produc
 
 ### `ResearchSnapshotBuilder`
 
-Source file: `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/snapshot.py`
+Source file: `src/margin/research/snapshot.py`
 
 Fluent builder for immutable `ResearchSnapshot` instances. Each `with_*` method returns `self` to allow chaining.
 
@@ -821,7 +821,7 @@ Fluent builder for immutable `ResearchSnapshot` instances. Each `with_*` method 
 
 ### `ResearchRepository`
 
-Source file: `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/repository.py`
+Source file: `src/margin/research/repository.py`
 
 Protocol defining the persistence boundary required by `ResearchWorkflow`.
 
@@ -863,7 +863,7 @@ PostgreSQL-backed append-only research snapshot repository.
 
 ### `ResearchSnapshotRow`
 
-Source file: `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/db_models.py`
+Source file: `src/margin/research/db_models.py`
 
 SQLAlchemy row for append-only serialized research snapshots.
 
@@ -885,7 +885,7 @@ Index: `ix_research_snapshots_run_created` on `(run_id, created_at)`.
 
 ### `ResearchService`
 
-Source file: `/Users/wangruiqi/PycharmProjects/Margin/src/margin/research/service.py`
+Source file: `src/margin/research/service.py`
 
 High-level entry point for running research workflows.
 
@@ -909,7 +909,7 @@ High-level entry point for running research workflows.
 
 ### FastAPI routes
 
-Source file: `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/research.py`
+Source file: `src/margin/api/routes/research.py`
 
 Router prefix: `/research`
 

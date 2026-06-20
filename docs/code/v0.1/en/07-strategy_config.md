@@ -89,7 +89,7 @@ AI provider and prompt settings for a strategy.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `provider` | `str` | `openai` | AI provider name. |
-| `model` | `str` | `gpt-4o-mini` | Model identifier. |
+| `model` | `str` | `deepseek-v4-pro` | Model identifier. |
 | `websearch_provider` | `str` | `tavily` | Web search provider. |
 | `system_prompt_template` | `str` | `default` | Template key for the system prompt. |
 | `custom_instructions` | `str` | `""` | Free-text user instructions appended to prompts. |

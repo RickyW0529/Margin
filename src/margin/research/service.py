@@ -25,6 +25,16 @@ class ResearchService:
         repository: ResearchRepository | None = None,
         audit_repository: AuditRepository | None = None,
     ) -> None:
+        """Initialize the research service.
+
+        Args:
+            tool_registry: Registry of tools. Defaults to a registry with
+                default tools registered.
+            llm_provider: Optional LLM provider used for LLM-based agents.
+            strategy_config: Optional strategy parameters passed to workflows.
+            repository: Repository used to persist terminal snapshots.
+            audit_repository: Optional repository for audit log records.
+        """
         self._tools = tool_registry or ToolRegistry()
         if not self._tools.list_tools():
             self._tools.register_defaults()
@@ -59,6 +69,16 @@ class ResearchService:
         decision_at: datetime | None = None,
         portfolio_id: str | None = None,
     ) -> WorkflowResult:
+        """Run a research workflow for the given symbol.
+
+        Args:
+            symbol: Symbol under research.
+            decision_at: Optional decision timestamp. Defaults to UTC now.
+            portfolio_id: Optional portfolio identifier for constraint checks.
+
+        Returns:
+            ``WorkflowResult`` containing signals, traces, and the snapshot.
+        """
         decision_at = decision_at or datetime.now(UTC)
         workflow = ResearchWorkflow(
             symbol=symbol,

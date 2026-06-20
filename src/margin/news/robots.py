@@ -21,7 +21,15 @@ class RobotsFetcher(Protocol):
     URL.
     """
 
-    def __call__(self, url: str) -> tuple[int, bytes]: ...
+    def __call__(self, url: str) -> tuple[int, bytes]:
+        """Fetch robots.txt and return its status and body.
+
+        Args:
+            url: Full robots.txt URL.
+
+        Returns:
+            Tuple of HTTP status code and raw response body bytes.
+        """
 
 
 def _default_fetcher(url: str) -> tuple[int, bytes]:

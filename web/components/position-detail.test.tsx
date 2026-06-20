@@ -1,8 +1,13 @@
+/**
+ * @fileoverview Unit tests for the PositionDetailView component.
+ */
+
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { PositionDetailView } from "./position-detail";
 
+/** Tests for PositionDetailView rendering behavior. */
 describe("PositionDetailView", () => {
   it("renders cost, thesis, invalidation conditions, and trade history", () => {
     render(

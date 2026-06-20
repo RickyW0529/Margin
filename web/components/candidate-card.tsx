@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Card component that renders a single research candidate with
+ * valuation, confidence, evidence count, counter-arguments, and status badges.
+ */
+
 import { ShieldAlert } from "lucide-react";
 import Link from "next/link";
 
@@ -5,7 +10,9 @@ import type { ResearchCandidateCard } from "@/lib/api";
 import { PositionReviewBadge } from "./position-review-badge";
 import { ResearchStatusBadge } from "./research-status-badge";
 
+/** Props for the CandidateCard component. */
 type CandidateCardProps = {
+  /** Research candidate data to display. */
   card: ResearchCandidateCard;
 };
 
@@ -21,6 +28,12 @@ const percent = new Intl.NumberFormat("zh-CN", {
   maximumFractionDigits: 0,
 });
 
+/**
+ * Formats a valuation range as a localized currency string.
+ *
+ * @param range Tuple of low and high valuation values, or null if unavailable.
+ * @returns Formatted range or a fallback message.
+ */
 function moneyRange(range: [number, number] | null): string {
   if (!range) {
     return "估值暂不可用";
@@ -28,10 +41,22 @@ function moneyRange(range: [number, number] | null): string {
   return `${currency.format(range[0])} – ${currency.format(range[1])}`;
 }
 
+/**
+ * Formats a fractional score as a localized percentage.
+ *
+ * @param value Fractional score, or null if unavailable.
+ * @returns Formatted percentage or "--".
+ */
 function score(value: number | null): string {
   return value == null ? "--" : percent.format(value);
 }
 
+/**
+ * Renders a research candidate card with key metrics and a link to evidence.
+ *
+ * @param card Research candidate data to display.
+ * @returns The candidate card element.
+ */
 export function CandidateCard({ card }: CandidateCardProps) {
   const evidenceCount = card.evidence_summary.count ?? 0;
 

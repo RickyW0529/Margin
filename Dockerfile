@@ -20,8 +20,8 @@ COPY alembic.ini ./
 
 # Run as a non-root user and prepare persistent directories for audit/snapshots.
 RUN useradd --create-home --uid 10001 margin \
-    && mkdir -p /home/margin/.margin/audit /home/margin/.margin/snapshots \
-    && chown -R margin:margin /app /home/margin/.margin
+    && mkdir -p .margin/audit .margin/snapshots \
+    && chown -R margin:margin /app
 
 USER margin
 

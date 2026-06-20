@@ -56,21 +56,21 @@ Key responsibilities:
 
 | File | Purpose |
 |------|---------|
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/portfolio/__init__.py` | Package exports. Re-exports models, service, repositories, cost/risk engines, and importer helpers. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/portfolio/models.py` | Pydantic domain models: `Portfolio`, `Position`, `Trade`, `PositionThesis`, `ImportRecord`, `AlertEvent`, plus enums and `make_trade`. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/portfolio/db_models.py` | SQLAlchemy ORM rows: `PortfolioRow`, `TradeRow`, `PositionThesisRow`. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/portfolio/repository.py` | `PortfolioRepository` protocol and `MemoryPortfolioRepository` / `SQLAlchemyPortfolioRepository` implementations plus row mappers. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/portfolio/cost.py` | `CostCalculator` and internal `_CostTracker` for moving weighted average cost basis. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/portfolio/risk.py` | `PortfolioRiskEngine`, `PortfolioRiskReport`, and `RiskMetric` for eight-dimensional risk measurement. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/portfolio/importer.py` | `TradeImporter`, `BrokerImportPlugin`, validation exceptions, `validate_trade_fields`, and `compute_raw_hash`. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/portfolio/service.py` | `PortfolioService` integrating persistence, import, cost calculation, risk engine, and dashboard views. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/routes/portfolios.py` | FastAPI routes under `/api/v1` for portfolios, positions, trades, imports, risk, and theses. |
-| `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/schemas.py` | Request/response Pydantic schemas used by the portfolio routes. |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/app/portfolios/[portfolioId]/page.tsx` | Next.js server component that loads a portfolio dashboard and renders `PortfolioWorkspace`. |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/app/portfolios/[portfolioId]/loading.tsx` | Loading UI shown while the portfolio page fetches data. |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/app/portfolios/[portfolioId]/page.test.tsx` | Tests for the server page route. |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/portfolio-workspace.tsx` | Client component that renders the portfolio dashboard, metrics, positions table, exposures, and events. |
-| `/Users/wangruiqi/PycharmProjects/Margin/web/components/portfolio-workspace.test.tsx` | Unit tests for `PortfolioWorkspace`. |
+| `src/margin/portfolio/__init__.py` | Package exports. Re-exports models, service, repositories, cost/risk engines, and importer helpers. |
+| `src/margin/portfolio/models.py` | Pydantic domain models: `Portfolio`, `Position`, `Trade`, `PositionThesis`, `ImportRecord`, `AlertEvent`, plus enums and `make_trade`. |
+| `src/margin/portfolio/db_models.py` | SQLAlchemy ORM rows: `PortfolioRow`, `TradeRow`, `PositionThesisRow`. |
+| `src/margin/portfolio/repository.py` | `PortfolioRepository` protocol and `MemoryPortfolioRepository` / `SQLAlchemyPortfolioRepository` implementations plus row mappers. |
+| `src/margin/portfolio/cost.py` | `CostCalculator` and internal `_CostTracker` for moving weighted average cost basis. |
+| `src/margin/portfolio/risk.py` | `PortfolioRiskEngine`, `PortfolioRiskReport`, and `RiskMetric` for eight-dimensional risk measurement. |
+| `src/margin/portfolio/importer.py` | `TradeImporter`, `BrokerImportPlugin`, validation exceptions, `validate_trade_fields`, and `compute_raw_hash`. |
+| `src/margin/portfolio/service.py` | `PortfolioService` integrating persistence, import, cost calculation, risk engine, and dashboard views. |
+| `src/margin/api/routes/portfolios.py` | FastAPI routes under `/api/v1` for portfolios, positions, trades, imports, risk, and theses. |
+| `src/margin/api/schemas.py` | Request/response Pydantic schemas used by the portfolio routes. |
+| `web/app/portfolios/[portfolioId]/page.tsx` | Next.js server component that loads a portfolio dashboard and renders `PortfolioWorkspace`. |
+| `web/app/portfolios/[portfolioId]/loading.tsx` | Loading UI shown while the portfolio page fetches data. |
+| `web/app/portfolios/[portfolioId]/page.test.tsx` | Tests for the server page route. |
+| `web/components/portfolio-workspace.tsx` | Client component that renders the portfolio dashboard, metrics, positions table, exposures, and events. |
+| `web/components/portfolio-workspace.test.tsx` | Unit tests for `PortfolioWorkspace`. |
 
 ---
 
@@ -469,7 +469,7 @@ Error handling:
 
 ### Request/Response Schemas
 
-Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/schemas.py`:
+Defined in `src/margin/api/schemas.py`:
 
 | Schema | Purpose |
 |--------|---------|
@@ -494,13 +494,13 @@ Defined in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/schemas.py`:
 Behavior:
 
 1. Awaits `params` and extracts `portfolioId`.
-2. Fetches `PortfolioDashboard` and `Position[]` in parallel via `fetchPortfolioDashboard(portfolioId)` and `fetchPortfolioPositions(portfolioId)` from `/Users/wangruiqi/PycharmProjects/Margin/web/lib/api.ts`.
+2. Fetches `PortfolioDashboard` and `Position[]` in parallel via `fetchPortfolioDashboard(portfolioId)` and `fetchPortfolioPositions(portfolioId)` from `web/lib/api.ts`.
 3. On error, sets a localized error message (`组合数据暂时不可用`).
 4. Renders `PortfolioWorkspace` with `dashboard`, `positions`, and `error`.
 
 ### PortfolioWorkspace
 
-`PortfolioWorkspace` is a client component in `/Users/wangruiqi/PycharmProjects/Margin/web/components/portfolio-workspace.tsx`.
+`PortfolioWorkspace` is a client component in `web/components/portfolio-workspace.tsx`.
 
 | Prop | Type | Description |
 |------|------|-------------|
@@ -534,9 +534,9 @@ Helper functions inside the component:
 
 ## Cross-Module Usage Notes
 
-- **Dependency injection**: `PortfolioService` is provided to FastAPI route handlers via `get_portfolio_service` in `/Users/wangruiqi/PycharmProjects/Margin/src/margin/api/dependencies.py`. This lets the API use a single service instance (often backed by `SQLAlchemyPortfolioRepository`) across requests.
+- **Dependency injection**: `PortfolioService` is provided to FastAPI route handlers via `get_portfolio_service` in `src/margin/api/dependencies.py`. This lets the API use a single service instance (often backed by `SQLAlchemyPortfolioRepository`) across requests.
 - **Holdings monitoring (module 09)**: The monitoring module consumes domain types defined here (`Position`, `PositionThesis`, `ThesisStatus`, `Trade`, `AlertEvent`) and evaluates position health, thesis status, and alerts. It does not own the trade or portfolio storage.
 - **Research candidate dashboard (module 08)**: Portfolio context such as current positions and constraints can be supplied to research runs; the research module reads portfolio data through the API rather than writing to holdings storage.
-- **Position detail page**: `/web/app/positions/[positionId]/page.tsx` calls `fetchPositionDetail(portfolioId, positionId)`, which hits the portfolio detail endpoint defined in this module.
+- **Position detail page**: `web/app/positions/[positionId]/page.tsx` calls `fetchPositionDetail(portfolioId, positionId)`, which hits the portfolio detail endpoint defined in this module.
 - **Cash synchronization**: `PortfolioService.add_trade` and import methods update the portfolio `cash` balance immediately via `_apply_cash_delta`, keeping cash consistent with recorded trades.
 - **Immutability and versioning**: Trades and thesis versions are append-only. Updating a thesis creates a new `PositionThesis` row with an incremented version, preserving history.

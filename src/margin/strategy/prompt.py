@@ -25,7 +25,22 @@ class PromptLayerBuilder:
         evidence_context: str = "",
         task: str = "",
     ) -> tuple[PromptLayer, ...]:
-        """Return all prompt layers for audit and serialization."""
+        """Return all prompt layers for audit and serialization.
+
+        Args:
+            config: The strategy configuration driving the prompt content.
+            custom_instructions: Optional override for the user's custom
+                instructions. Falls back to ``config.ai.custom_instructions``
+                when omitted.
+            evidence_context: Optional retrieved evidence to append as the
+                final prompt layer.
+            task: Optional task description to include in the task context
+                layer. Falls back to a default task when omitted.
+
+        Returns:
+            An ordered tuple of :class:`PromptLayer` objects from outermost
+            guardrail to innermost evidence context.
+        """
         custom = (
             custom_instructions
             if custom_instructions is not None
@@ -76,7 +91,22 @@ class PromptLayerBuilder:
         evidence_context: str = "",
         task: str = "",
     ) -> str:
-        """Return the final merged prompt string."""
+        """Return the final merged prompt string.
+
+        Args:
+            config: The strategy configuration driving the prompt content.
+            custom_instructions: Optional override for the user's custom
+                instructions. Falls back to ``config.ai.custom_instructions``
+                when omitted.
+            evidence_context: Optional retrieved evidence to append as the
+                final prompt layer.
+            task: Optional task description to include in the task context
+                layer. Falls back to a default task when omitted.
+
+        Returns:
+            A single string containing all non-empty prompt layers joined by
+            blank lines.
+        """
         layers = self.build_layers(
             config,
             custom_instructions=custom_instructions,
@@ -88,6 +118,7 @@ class PromptLayerBuilder:
         )
 
     def _guardrail_prompt(self) -> str:
+        """Return the immutable system guardrail prompt."""
         return (
             "You are a compliance-aware research assistant. You must: "
             "cite all factual claims with evidence references; "
@@ -100,6 +131,7 @@ class PromptLayerBuilder:
         )
 
     def _platform_prompt(self) -> str:
+        """Return the immutable platform research prompt."""
         return (
             "You are researching A-share listed companies for a local-first, "
             "evidence-driven investment research system. Use only the retrieved "
@@ -107,6 +139,15 @@ class PromptLayerBuilder:
         )
 
     def _template_prompt(self, config: StrategyConfig) -> str:
+        """Return the strategy-specific prompt derived from ``config``.
+
+        Args:
+            config: The strategy configuration to summarize in the prompt.
+
+        Returns:
+            A string describing the strategy horizon, universe, evidence
+            requirements, and risk limits.
+        """
         return (
             f"Strategy horizon: {config.horizon} days. "
             f"Universe: {', '.join(config.universe)}. "
@@ -117,6 +158,14 @@ class PromptLayerBuilder:
         )
 
     def _default_task(self, config: StrategyConfig) -> str:
+        """Return the default task context for a strategy run.
+
+        Args:
+            config: The strategy configuration (reserved for future use).
+
+        Returns:
+            A default task instruction asking for a structured research signal.
+        """
         return (
             "Analyze the given symbol according to the strategy above. "
             "Output a structured research signal with signal_type, confidence, "

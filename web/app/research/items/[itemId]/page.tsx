@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Research item detail page.
+ * Displays evidence, valuation, audit trace, report, and feedback for a research item.
+ */
+
 import { EvidencePanel } from "@/components/evidence-panel";
 import { ReportPanel } from "@/components/report-panel";
 import { ResearchFeedbackForm } from "@/components/research-feedback-form";
@@ -20,10 +25,18 @@ import {
 
 import { createResearchFeedbackAction } from "./actions";
 
+/**
+ * Props for the research item detail page.
+ */
 type ResearchItemPageProps = {
   params: Promise<{ itemId: string }>;
 };
 
+/**
+ * Research item detail page that loads item data and binds the feedback action.
+ * @param params - Route params containing the research item identifier.
+ * @returns The rendered research item detail page.
+ */
 export default async function ResearchItemPage({ params }: ResearchItemPageProps) {
   const { itemId } = await params;
   let item: ResearchItem | null = null;

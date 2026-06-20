@@ -14,6 +14,12 @@ import structlog
 
 
 def configure_logging(*, log_level: str = "INFO", log_format: str = "json") -> None:
+    """Configure structlog and stdlib logging for Margin.
+
+    Args:
+        log_level: Minimum log level (e.g. ``INFO``, ``DEBUG``).
+        log_format: Output format, either ``json`` or ``console``.
+    """
     # Shared processors run for both stdlib logging and structlog bound loggers.
     shared_processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,

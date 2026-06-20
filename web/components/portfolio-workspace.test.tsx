@@ -1,8 +1,13 @@
+/**
+ * @fileoverview Unit tests for the PortfolioWorkspace component.
+ */
+
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { PortfolioWorkspace } from "./portfolio-workspace";
 
+/** Mock portfolio dashboard used in PortfolioWorkspace tests. */
 const dashboard = {
   portfolio: {
     portfolio_id: "pf_demo",
@@ -32,6 +37,7 @@ const dashboard = {
   },
 };
 
+/** Mock positions used in PortfolioWorkspace tests. */
 const positions = [
   {
     position_id: "pos_1",
@@ -51,6 +57,7 @@ const positions = [
   },
 ];
 
+/** Tests for PortfolioWorkspace rendering behavior. */
 describe("PortfolioWorkspace", () => {
   it("renders portfolio metrics, positions, exposures, and events", () => {
     render(

@@ -40,7 +40,16 @@ def build_scheduler(
     interval_seconds: int,
     indexing_job: Callable[[], None] | None = None,
 ) -> BlockingScheduler:
-    """Build the worker scheduler without starting it."""
+    """Build the worker scheduler without starting it.
+
+    Args:
+        monitoring_job: Callable executed on each monitoring tick.
+        interval_seconds: Seconds between successive job executions.
+        indexing_job: Optional callable executed on each indexing tick.
+
+    Returns:
+        BlockingScheduler: Configured APScheduler instance with the requested jobs.
+    """
     scheduler = BlockingScheduler(timezone="Asia/Shanghai")
     scheduler.add_job(
         monitoring_job,
@@ -69,7 +78,12 @@ def build_scheduler(
 
 
 def build_monitoring_runner() -> HoldingsMonitoringRunner:
-    """Build the production monitoring runner from centralized settings."""
+    """Build the production monitoring runner from centralized settings.
+
+    Returns:
+        HoldingsMonitoringRunner: Runner wired to database-backed portfolio and
+            monitoring services, AKShare price data, and repository news events.
+    """
     settings = get_settings()
     engine = create_database_engine(
         DatabaseSettings(
@@ -97,7 +111,13 @@ def build_monitoring_runner() -> HoldingsMonitoringRunner:
 
 
 def build_document_indexing_runner() -> DocumentIndexingRunner:
-    """Build the module 03 to module 04 persistent indexing worker."""
+    """Build the module 03 to module 04 persistent indexing worker.
+
+    Returns:
+        DocumentIndexingRunner: Runner wired to the news repository, vector store,
+            and either an OpenAI embedding provider or a no-op fallback depending on
+            configured credentials.
+    """
     settings = get_settings()
     engine = create_database_engine(
         DatabaseSettings(

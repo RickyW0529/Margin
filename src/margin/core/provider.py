@@ -37,7 +37,16 @@ class ProviderStatus(StrEnum):
 
 
 class HealthCheckResult(BaseModel):
-    """Result of a Provider health check."""
+    """Result of a Provider health check.
+
+    Attributes:
+        provider_name: Name of the checked Provider.
+        status: Health status enum value.
+        checked_at: Timestamp of the check.
+        latency_ms: Check latency in milliseconds, if measured.
+        message: Human-readable status message.
+        details: Additional structured details.
+    """
 
     provider_name: str
     status: ProviderStatus
@@ -48,7 +57,22 @@ class HealthCheckResult(BaseModel):
 
 
 class CallResult(BaseModel):
-    """Result of a Provider method call, including audit and cost metadata."""
+    """Result of a Provider method call, including audit and cost metadata.
+
+    Attributes:
+        provider_name: Name of the called Provider.
+        provider_version: Version of the Provider.
+        success: Whether the call succeeded.
+        data: Payload returned by the Provider method.
+        error: Error message when the call failed.
+        fetched_at: Timestamp when the call was attempted.
+        available_at: Timestamp when the data becomes available.
+        response_hash: SHA-256 hash of the response payload.
+        cost: Estimated cost of the call.
+        latency_ms: Round-trip latency in milliseconds.
+        attempt_count: Number of attempts made before the final result.
+        from_fallback: Whether the result came from a fallback Provider.
+    """
 
     provider_name: str
     provider_version: str
