@@ -179,6 +179,13 @@ Provider adapters:
 - OpenAI-compatible embeddings;
 - optional rerank provider.
 
+Dashboard provider status is built from runtime providers and currently reports:
+
+- `openai_llm`: real chat-completions healthcheck when configured; `degraded` when missing configuration; `unhealthy` when the remote check fails;
+- `openai_embedding`: real embedding healthcheck when configured; `degraded` when missing configuration; `unhealthy` when the remote check fails;
+- `tavily_websearch`: `degraded` when `MARGIN_WEBSEARCH_API_KEY` is missing; real Tavily search healthcheck when configured;
+- `http_rerank`: `degraded` when `MARGIN_RERANK_API_KEY` or `MARGIN_RERANK_BASE_URL` is missing; real rerank healthcheck when configured.
+
 ## 8. Research Workflow
 
 ```mermaid
@@ -197,7 +204,7 @@ sequenceDiagram
     Research->>WF: execute
     WF->>Tools: market / portfolio / retrieval / websearch
     Tools-->>WF: tool results + audit
-    WF->>LLM: structured reasoning tasks
+    WF->>LLM: websearch / summary / risk / reflection / signal
     LLM-->>WF: output
     WF->>WF: citation validation + abstain rules
     WF-->>Research: research snapshot
@@ -206,6 +213,10 @@ sequenceDiagram
     Dash->>DB: persist dashboard run and items
     Dash-->>UI: candidate cards
 ```
+
+Normal-path websearch query generation, text summary, risk review, reflection/counter-argument, and signal composition use the configured OpenAI-compatible LLM with JSON-schema guardrails. Conservative rule paths are still used when market data is degraded, portfolio constraints fail, citation validation fails, or the LLM call/guardrail fails.
+
+In v0.1, `risk_review` and `reflect_counter_argument` record real `model_version`, trace metadata, and structured outputs. They do not yet require every risk or counter-argument to carry its own evidence reference. Per-item evidence grounding, locators, stricter language controls, and tighter evidence-grounded prompts are v0.2 scope.
 
 ## 9. Document Indexing and RAG Flow
 
@@ -397,13 +408,13 @@ v0.1 exposes:
 | Failure | Behavior |
 | --- | --- |
 | database unavailable | `/health/ready` returns 503 |
-| LLM missing or failed | research abstains or uses conservative fallback |
-| embedding missing | indexing uses fallback or skips real remote embedding |
-| WebSearch key missing | WebSearch tool is unavailable/degraded |
+| LLM missing or healthcheck failed | `/provider-status` reports `degraded` / `unhealthy`; research abstains or uses conservative fallback |
+| embedding missing or healthcheck failed | `/provider-status` reports `degraded` / `unhealthy`; indexing skips real remote embedding or follows retrieval degradation |
+| WebSearch key missing | `/provider-status` reports `tavily_websearch=degraded`; WebSearch is unavailable/degraded |
 | AKShare unavailable | monitoring emits `DATA_MISSING` semantics and continues |
 | citation validation failed | candidate becomes `abstained` |
 | evidence conflict | confidence is reduced or publication is blocked |
-| rerank missing | hybrid retrieval falls back to base ranking |
+| rerank missing | `/provider-status` reports `http_rerank=degraded`; hybrid retrieval falls back to base ranking |
 
 ## 15. Verification
 

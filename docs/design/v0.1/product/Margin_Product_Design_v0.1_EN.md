@@ -204,7 +204,15 @@ Alerts are appended to `alert_events`; human decisions are appended to `position
 - Rerank is optional;
 - real market data availability depends on upstream accessibility and rate limits;
 - strategy configuration has backend APIs but not a full v0.1 frontend editor;
+- provider secrets are configured through `.env` or environment variables; a frontend provider settings page is v0.2 scope;
+- `risk_review` and `reflect_counter_argument` produce structured LLM outputs in v0.1, but do not require each risk or counter-argument to carry its own evidence reference;
 - large-scale Parquet/DuckDB analytics are future work.
+
+`GET /api/v1/provider-status` currently reports `openai_llm`, `openai_embedding`, `tavily_websearch`, and `http_rerank`. Configured LLM and embedding providers perform real remote health checks. Missing Tavily or rerank configuration is shown as `degraded` instead of being hidden.
+
+The research signal composer uses the LLM on the normal path, then falls back to conservative rule output when market data is degraded, portfolio constraints fail, citation validation fails, or the LLM call fails.
+
+v0.2 should add evidence-grounded risk/counter-argument generation, including per-item `evidence_ids`, locators, stricter language/output controls, and provider configuration UI.
 
 ## 11. Summary
 

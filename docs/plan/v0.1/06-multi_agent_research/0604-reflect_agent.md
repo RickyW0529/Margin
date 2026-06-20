@@ -13,12 +13,12 @@ depends_on: [0603]
 
 ## 1. 任务目标
 
-实现 Risk and Value-Trap Review Agent（输出风险评分而非未经校准的概率）、Reflect / Counter-Argument Agent（审查反方证据、冲突与未知项）、Portfolio Constraint Agent（检查组合暴露与持仓逻辑）。反方审查强度由策略配置驱动。
+实现 Risk and Value-Trap Review Agent（输出风险评分而非未经校准的概率）、Reflect / Counter-Argument Agent（输出结构化反方理由、冲突标记与未知项）、Portfolio Constraint Agent（检查组合暴露与持仓逻辑）。反方审查强度由策略配置驱动。v0.1 不要求每条风险/反方理由绑定独立证据引用；逐条证据引用、locator 与中文输出约束进入 v0.2。
 
 ## 2. 工作项拆解
 
 - 0604.1 Risk and Value-Trap Review Agent — 风险评分，不输出未校准概率。
-- 0604.2 Reflect / Counter-Argument Agent — 反方证据、冲突、未知项审查。
+- 0604.2 Reflect / Counter-Argument Agent — 结构化反方理由、冲突标记、未知项审查。
 - 0604.3 Portfolio Constraint Agent — 组合暴露与持仓逻辑检查，对接 02。
 - 0604.4 输出 Schema 与降级 — 结构化风险/反方/约束输出，单 Agent 失败按降级策略处理。
 
@@ -46,7 +46,7 @@ depends_on: [0603]
 ## 6. 验收动作
 
 - 风险评分为评分而非未校准概率（对应 spec 06 §4）；
-- 反方审查覆盖冲突与未知项；
+- 反方审查覆盖反方理由、冲突标记与未知项；逐条证据绑定不属于 v0.1 验收；
 - 组合约束超限时标记。
 
 ## 7. 审计追溯

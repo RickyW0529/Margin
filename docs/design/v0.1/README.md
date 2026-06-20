@@ -13,8 +13,8 @@
 | 后端 | FastAPI + SQLAlchemy + PostgreSQL/pgvector + APScheduler |
 | 前端 | Next.js App Router + TypeScript |
 | 部署 | Docker Compose: postgres, migrate, seed, api, worker, web, prometheus, grafana |
-| AI Provider | OpenAI-compatible LLM；OpenAI-compatible Embedding；可选 Rerank |
-| 默认实测配置 | DeepSeek LLM + 智谱 Embedding-3 |
+| AI Provider | OpenAI-compatible LLM；OpenAI-compatible Embedding；可选 Tavily WebSearch；可选 Rerank |
+| 默认实测配置 | DeepSeek LLM + 智谱 Embedding-3；Tavily/Rerank 缺配置时显式 degraded |
 
 v0.1 的产品边界是本地优先、证据驱动、用户决策保留的个人投资研究系统。系统不自动下单、不保存券商密码、不输出无条件买卖指令；当行情、证据、引用或 Provider 质量不足时，默认降级为 `ABSTAINED` 或 `DATA_MISSING`。
 
@@ -41,9 +41,9 @@ v0.1 的产品边界是本地优先、证据驱动、用户决策保留的个人
 | 03 公告与 WebSearch | `src/margin/news/` | 交易所公告模型、raw snapshot、DocumentEvent、outbox、Tavily adapter、去重与合规边界 |
 | 04 文本索引 | `src/margin/vector/` | parser/chunker、EmbeddingProvider、pgvector 持久化、混合检索、indexing runner |
 | 05 RAG 证据 | `src/margin/evidence/` | Evidence/Claim 模型、locator、source level、claim validation、证据视图 |
-| 06 多 Agent 研究 | `src/margin/research/` | ToolRegistry、LLM provider、研究 workflow、summary/reflect/citation/universe agent |
+| 06 多 Agent 研究 | `src/margin/research/` | ToolRegistry、LLM provider、研究 workflow、summary/reflect/citation/universe agent；Signal Composer 正常路径优先 LLM，硬性降级与 LLM 失败时使用规则 |
 | 07 策略配置 | `src/margin/strategy/`, `src/margin/api/routes/strategy.py` | 策略模板、自定义策略、版本生命周期、prompt 合成与沙箱验证 |
-| 08 研究候选面板 | `src/margin/dashboard/`, `web/app/research/` | research run、candidate card、证据/估值/审计/报告/导出、Provider status |
+| 08 研究候选面板 | `src/margin/dashboard/`, `web/app/research/` | research run、candidate card、证据/估值/审计/报告/导出、真实 Provider status |
 | 09 持仓监控 | `src/margin/holdings_monitoring/`, `web/app/positions/` | 持仓监控快照、P0-P3 alert、复盘记录、操作历史、行为指标 |
 | 10 部署与审计 | `docker-compose.yml`, `src/margin/core/`, `src/margin/worker.py` | Docker 一键启动、migrate/seed、Worker、Prometheus/Grafana、不可变 audit、降级与健康检查 |
 
@@ -88,8 +88,17 @@ v0.1 的产品边界是本地优先、证据驱动、用户决策保留的个人
 
 所有密钥只允许进入本地 `.env` 或运行环境变量，不能提交到 Git。
 
-## 7. 变更说明
+`GET /api/v1/provider-status` 当前展示 `openai_llm`、`openai_embedding`、`tavily_websearch`、`http_rerank` 四类状态。LLM 与 Embedding 有配置时执行真实远端 healthcheck；Tavily / Rerank 未配置时返回 `degraded`，不会被静默隐藏。
 
+## 7. 当前已知产品/实现边界
+
+- v0.1 的 `risk_review` 与 `reflect_counter_argument` 已使用 LLM 输出结构化风险、反方理由与未知项，但不强制每条风险/反方理由绑定证据引用；逐条 evidence-grounded risk/reflect 属于 v0.2。
+- v0.1 的 `signal_composer` 正常路径优先 LLM 生成结构化研究信号；当行情退化、组合约束违规、引用校验失败或 LLM 失败时，系统使用规则型保守输出或 `ABSTAINED`。
+- v0.1 前端支持查看 Provider 状态和触发研究运行；Provider 密钥配置 UI 放入 v0.2。
+
+## 8. 变更说明
+
+- 2026-06-20：同步最新代码状态：Provider status 改为真实探测 LLM/Embedding 并显式展示 Tavily/Rerank degraded；Signal Composer 正常路径优先 LLM；risk/reflect 逐条证据约束列入 v0.2。
 - 2026-06-19：将 v0.1 设计文档更新为当前实现快照，补齐部署、监控、审计、Dashboard、持仓监控和数据库 ER 图。
 - 2026-06-19：删除 v0.1 中 MCP Server / MCP Gateway / 自定义 HTTP 工具误导描述，统一为内部工具注册、工具仓库和权限模式。
 - 2026-06-19：根 README 与开源社区文档同步为当前 v0.1 状态。

@@ -19,7 +19,7 @@ depends_on: [0802]
 
 - 0803.1 拒绝判断列表 — ABSTAINED 与拒绝原因展示。
 - 0803.2 任务运行状态 — jobs/nightly-runs/job_run_id 查询。
-- 0803.3 provider-status 与 feedback — Provider 状态、用户反馈接口。
+- 0803.3 provider-status 与 feedback — Provider 状态、用户反馈接口；provider-status 展示 LLM、Embedding、Tavily WebSearch、Rerank，缺配置时显式 degraded。
 - 0803.4 Report Renderer 与 Export Service — 报告渲染与导出。
 
 ## 3. 依赖关系
@@ -40,7 +40,7 @@ depends_on: [0802]
 
 - M1：拒绝判断列表可用（第 1 天）。
 - M2：任务运行状态视图（第 2 天）。
-- M3：provider-status 与 feedback（第 3 天）。
+- M3：provider-status 与 feedback（第 3 天），包含缺配置 Provider 的 degraded 状态。
 - M4：Report Renderer 与 Export Service（第 5 天）。
 
 ## 6. 验收动作

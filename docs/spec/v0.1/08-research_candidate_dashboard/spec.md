@@ -42,6 +42,8 @@ GET  /api/v1/jobs/{job_run_id}
 
 关键查询参数：`date`、`strategy_id`/`strategy_version_id`、`portfolio_id`、`universe_id`、`run_id`（不可变研究运行快照）、`decision_at`（时点一致性校验）。
 
+`/provider-status` 当前固定展示 `openai_llm`、`openai_embedding`、`tavily_websearch`、`http_rerank`。LLM / Embedding 配置完整时执行真实远端 healthcheck；Tavily / Rerank 缺配置时显示 `degraded`，不从结果中隐藏。
+
 ## 4. 数据模型
 
 首页信息层级（产品 §7.1 / 架构 §16.2）：市场状态摘要、今日候选、现有持仓复核、高优先级风险、拒绝判断、策略运行状态。

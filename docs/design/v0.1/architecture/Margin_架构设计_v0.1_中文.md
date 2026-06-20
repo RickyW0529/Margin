@@ -254,6 +254,13 @@ ProviderRegistry 负责：
 | Embedding | `vector/providers/openai_embedding.py` | `MARGIN_EMBEDDING_*` |
 | Rerank | `vector/providers/rerank.py` | `MARGIN_RERANK_*` |
 
+Dashboard Provider 状态由 `build_provider_status_providers()` 注入，当前固定展示四类运行时状态：
+
+- `openai_llm`：配置完整时执行真实 chat completion healthcheck；缺配置为 `degraded`，请求失败为 `unhealthy`；
+- `openai_embedding`：配置完整时执行真实 embedding healthcheck；缺配置为 `degraded`，请求失败为 `unhealthy`；
+- `tavily_websearch`：缺 `MARGIN_WEBSEARCH_API_KEY` 时为 `degraded`；配置后执行真实 Tavily search healthcheck；
+- `http_rerank`：缺 `MARGIN_RERANK_API_KEY` 或 `MARGIN_RERANK_BASE_URL` 时为 `degraded`；配置后执行真实 rerank healthcheck。
+
 ### 7.2 ToolRegistry
 
 ToolRegistry 是 v0.1 的 AI 工具边界。它替代 MCP Server/Gateway，避免把单产品场景过度设计成多产品工具平台。
@@ -297,7 +304,7 @@ sequenceDiagram
     Research->>WF: execute(decision_at, universe)
     WF->>Tools: market/portfolio/retrieval/websearch
     Tools-->>WF: ToolResult + audit records
-    WF->>LLM: summary/reflection/counter arguments
+    WF->>LLM: websearch/summary/risk/reflection/signal
     LLM-->>WF: structured output
     WF->>WF: citation validation + abstain rules
     WF-->>Research: ResearchSnapshot
@@ -315,6 +322,17 @@ sequenceDiagram
 | `abstained` | 数据缺失、证据不足、引用失败、冲突或 Provider 降级 |
 | `invalidated` | 后续监控或用户复盘标记研究逻辑失效 |
 | `data_missing` | 行情或关键输入不可用 |
+
+### 8.2 LLM 与规则边界
+
+v0.1 的 Agent 输出全部经过 JSON Schema guardrail。正常路径中，WebSearch query、Text Summary、Risk Review、Reflect / Counter-Argument、Research Signal Composer 使用 OpenAI-compatible LLM。以下场景强制保守处理：
+
+- 行情或核心市场数据退化：Signal Composer 直接输出 `abstained`，不继续生成高置信信号；
+- 组合约束违规：Signal Composer 直接输出 `abstained`；
+- LLM 调用失败或结构化输出不合规：Signal Composer 使用规则型 fallback；
+- Citation Validator 失败：最终 signal 覆盖为 `abstained`。
+
+当前 `risk_review` 与 `reflect_counter_argument` 记录真实 `model_version`、trace 与结构化输出，但 v0.1 不要求每条风险/反方理由绑定独立 `evidence_id`。逐条证据约束、locator 绑定、中文输出约束和更严格 evidence-grounded prompt 进入 v0.2。
 
 ## 9. 文本索引与 RAG 数据流
 
@@ -709,13 +727,13 @@ v0.1 可观测能力：
 | 场景 | 行为 |
 | --- | --- |
 | 数据库不可达 | `/health/ready` 返回 503 |
-| LLM 缺失 | 研究服务使用保守 fallback 或拒绝高置信输出 |
-| Embedding 缺失 | 索引 worker 使用默认本地 embedding fallback 或跳过真实索引 |
-| WebSearch key 缺失 | WebSearch 工具不注册或返回降级 |
+| LLM 缺失或 healthcheck 失败 | `/provider-status` 显示 `degraded` / `unhealthy`；研究服务使用保守 fallback 或拒绝高置信输出 |
+| Embedding 缺失或 healthcheck 失败 | `/provider-status` 显示 `degraded` / `unhealthy`；索引跳过真实远端 embedding 或按检索降级策略处理 |
+| WebSearch key 缺失 | `/provider-status` 显示 `tavily_websearch=degraded`；WebSearch 工具返回降级 |
 | AKShare 不可达 | 持仓监控记录 `DATA_MISSING`，worker 不崩溃 |
 | 引用校验失败 | research item `abstained` |
 | Evidence 冲突 | 降低置信度或拒绝发布 |
-| Rerank 缺失 | 使用基础混合召回排序 |
+| Rerank 缺失 | `/provider-status` 显示 `http_rerank=degraded`；使用基础混合召回排序 |
 
 ## 17. 测试与验证
 
@@ -781,6 +799,7 @@ v0.1 是单用户本地研究产品。v0.2 可扩展：
 
 - 多 AI Provider UI；
 - 模型路由和自动模型选择；
+- `risk_review` / `reflect_counter_argument` 逐条绑定 evidence_ids、locator 和中文输出约束；
 - 策略配置前端；
 - 更完整的文档导入；
 - 更强的 WebSearch/source 管理；

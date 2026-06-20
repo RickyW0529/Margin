@@ -78,8 +78,11 @@ Useful checks:
 ```bash
 curl -fsS http://localhost:8000/health
 curl -fsS http://localhost:8000/health/ready
+curl -fsS http://localhost:8000/api/v1/provider-status
 curl -fsS http://localhost:8000/api/v1/portfolios/demo
 ```
+
+`/api/v1/provider-status` reports `openai_llm`, `openai_embedding`, `tavily_websearch`, and `http_rerank`. Configured LLM and embedding providers perform real remote health checks. Missing Tavily or rerank credentials are reported as `degraded` instead of being hidden.
 
 ## 5. Local Development
 
@@ -157,7 +160,13 @@ Margin v0.1 intentionally does not include:
 
 AI tools are internal, typed, permissioned, and audited through `ToolRegistry`.
 
-## 9. Recommended Contribution Areas
+## 9. Current AI Boundaries
+
+The normal research path uses the configured OpenAI-compatible LLM for web-search query generation, text summary, risk review, reflection/counter-argument, and signal composition. Conservative rule paths still take over when market data is degraded, portfolio constraints fail, citation validation fails, or an LLM call fails.
+
+v0.1 records model versions, traces, and structured outputs for `risk_review` and `reflect_counter_argument`, but it does not require every risk or counter-argument to carry its own evidence reference. That stricter evidence grounding is planned for v0.2.
+
+## 10. Recommended Contribution Areas
 
 Good first contribution areas:
 
@@ -168,6 +177,7 @@ Good first contribution areas:
 - monitoring rules;
 - documentation and examples;
 - provider observability and degradation tests.
+- v0.2 evidence-grounded risk/counter-argument prompts with per-item `evidence_ids` and locators.
 
 Before contributing:
 
@@ -177,7 +187,7 @@ Before contributing:
 4. add tests for new behavior;
 5. run backend and frontend verification where relevant.
 
-## 10. Documentation Map
+## 11. Documentation Map
 
 - Design index: `docs/design/v0.1/README.md`
 - Product design CN: `docs/design/v0.1/product/Margin_产品设计_v0.1_中文.md`
@@ -187,6 +197,6 @@ Before contributing:
 - Specs: `docs/spec/v0.1/`
 - Plans: `docs/plan/v0.1/`
 
-## 11. License
+## 12. License
 
 MIT. See `LICENSE`.

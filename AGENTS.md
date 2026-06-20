@@ -213,8 +213,8 @@ ruff check --fix src tests
 - `0501-evidence_tiering` 已补齐 Evidence/Claim 结构、source level 质量评分、locator 快照字段、跨 Claim 冲突检测、L4/L5 限制与 PostgreSQL append-only Claim/Evidence 持久化。
 - `0502-citation_locator` 已补齐 PDF/HTML/表格 locator、PIT 校验、WebSearch 原文/快照校验与 snapshot resolver，可接 `NewsRepository.get_snapshot` 校验快照 URL/hash/status。
 - `0503-claim_validation` 已补齐 CitationValidator 批量冲突校验、引用失败具体 FAIL reason、ABSTAINED 判定、反方审查标记、校验审计持久化与 `research_evidence` 关联表。
-- `0601`-`0606` 已补齐多 Agent 研究工作流、工具调用、摘要/反思/校验链路、研究快照与持久化审计。
+- `0601`-`0606` 已补齐多 Agent 研究工作流、工具调用、摘要/反思/校验链路、研究快照与持久化审计；`signal_composer` 正常路径优先真实 LLM，硬性降级或 LLM 失败时使用规则输出；`risk_review` / `reflect_counter_argument` 逐条证据引用属于 v0.2。
 - `0701`-`0703` 已补齐策略模板、自定义 Prompt、版本生命周期、校验/沙箱执行与 API 持久化。
-- `0801`-`0803` 已补齐研究候选面板 Candidate Card、证据展开、估值/反方/反馈视图、调度入口、Provider 状态、API 与 Next.js 页面。
+- `0801`-`0803` 已补齐研究候选面板 Candidate Card、证据展开、估值/反方/反馈视图、调度入口、Provider 状态、API 与 Next.js 页面；`/api/v1/provider-status` 真实探测 LLM/Embedding，并显式展示 Tavily/Rerank 缺配置 degraded。
 - `0901`-`0903` 已补齐持仓健康状态判定、确定性盘中规则引擎、P0-P3 提醒、alert_event 持久化、复盘记录、操作历史与处理时长度量。
 - `1001`-`1004` 已补齐 migrate/seed/web/api/worker/postgres/prometheus/grafana 一键部署、测试库隔离、不可变审计、结构化日志、Trace/指标、Grafana dashboard、Provider 降级与 CI 验证。

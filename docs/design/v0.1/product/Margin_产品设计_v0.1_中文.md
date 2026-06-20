@@ -279,6 +279,12 @@ v0.1 的策略页面尚未完全产品化为前端配置中心，但后端能力
 - 在持仓监控中显示 `DATA_MISSING` 或相应 alert；
 - 在审计记录中保留失败原因和 trace。
 
+当前实现补充：
+
+- `GET /api/v1/provider-status` 会展示 `openai_llm`、`openai_embedding`、`tavily_websearch`、`http_rerank`。LLM 与 Embedding 有配置时执行真实远端请求；Tavily/Rerank 缺配置时显示 `degraded`。
+- `RiskReviewAgent` 与 `ReflectCounterArgumentAgent` 在 v0.1 中返回结构化风险、反方理由和未知项，并记录 `model_version` / trace；它们不保证每条风险或反方理由都有独立证据引用。逐条证据约束、中文输出约束和更严格 evidence-grounded prompt 属于 v0.2。
+- `ResearchSignalComposer` 正常路径优先调用 LLM 生成结构化 signal；行情退化、组合约束违规、引用校验失败或 LLM 失败时，走规则型保守输出。
+
 ## 9. 通知与告警设计
 
 v0.1 的通知是本地结构化 alert，不接短信、邮件或 IM。
@@ -331,12 +337,15 @@ v0.1 的通知是本地结构化 alert，不接短信、邮件或 IM。
 - 真实行情源可能因网络、上游接口或频控不可达；
 - 策略配置已有 API，但前端配置中心仍属于后续增强；
 - Rerank 是可选 Provider；
+- Provider 密钥当前通过 `.env` / 环境变量配置，前端 Provider 配置页属于 v0.2；
+- 风险与反方审查当前是结构化 LLM 输出，但不强制逐条证据引用；
 - 大规模历史回测和 Parquet/DuckDB 分析层仍未作为 v0.1 生产主链路。
 
 ### 12.2 v0.2 候选方向
 
 - 多 LLM Provider 配置 UI；
 - 模型路由和自动模型选择；
+- 风险/反方/未知项逐条绑定 evidence_ids、locator 和中文输出约束；
 - 策略配置前端；
 - 更完整的 WebSearch/source 管理；
 - 更强的文档导入和重索引控制；

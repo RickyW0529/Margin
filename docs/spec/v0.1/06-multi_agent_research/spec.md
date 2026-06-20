@@ -41,9 +41,9 @@ AI 层总体结构（架构 §8）：用户请求/定时任务 → 路由层 →
 6. Evidence Research Agent — 检索与组织证据 Claim；
 7. Valuation Tool Agent — 调用估值工具完成数值计算；
 8. Risk and Value-Trap Review Agent — 输出风险评分而非未校准概率；
-9. Reflect / Counter-Argument Agent — 审查反方证据、冲突、未知项；
+9. Reflect / Counter-Argument Agent — 输出结构化反方理由、冲突标记与未知项；v0.1 记录 LLM trace 与模型版本，但不强制每条反方理由绑定独立证据引用；
 10. Portfolio Constraint Agent — 检查组合暴露与持仓逻辑；
-11. Research Signal Composer — 生成研究信号与面板卡片；
+11. Research Signal Composer — 正常路径优先调用 LLM 生成研究信号与面板卡片；行情退化、组合约束违规、LLM 失败或引用校验失败时使用规则型保守输出；
 12. Citation Validator — 校验证据引用、来源等级、时点。
 
 工作流状态（架构 §12.2）：Initialized → DataReady → EvidenceReady → AnalysisReady → ReviewReady → Published；DataReady → Aborted（数据错误）；EvidenceReady/ReviewReady → Abstained（证据不足/风险冲突过高）。
@@ -74,6 +74,8 @@ AI 层总体结构（架构 §8）：用户请求/定时任务 → 路由层 →
 - 数据错误 → 工作流 Aborted，停止高置信研究信号；
 - 证据不足/冲突过高 → Abstained；
 - 单 Agent 失败 → 按该 Agent 降级策略处理，不阻塞整条链路或伪造结果。
+
+v0.2 才强化 `risk_review` / `reflect_counter_argument` 的逐条证据引用、locator 绑定、中文输出约束与更严格 evidence-grounded prompt。v0.1 只要求它们输出结构化 JSON，并在最终研究信号阶段通过 Citation Validator 校验 signal 的证据引用。
 
 ## 8. 审计追溯
 

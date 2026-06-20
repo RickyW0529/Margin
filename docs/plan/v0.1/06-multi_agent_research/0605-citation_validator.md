@@ -13,11 +13,11 @@ depends_on: [0604, 0703, 1002]
 
 ## 1. 任务目标
 
-实现 Research Signal Composer（生成研究信号与面板卡片）与 Citation Validator（校验证据引用、来源等级、时点）。落地工作流状态机（Initialized→DataReady→EvidenceReady→AnalysisReady→ReviewReady→Published，及 Aborted/Abstained）与不可变研究信号快照（股票池/数据/策略/Prompt/工具/模型/检索/证据/输出/输入输出哈希）。
+实现 Research Signal Composer（正常路径优先 LLM 生成研究信号与面板卡片，硬性降级或 LLM 失败时使用规则输出）与 Citation Validator（校验证据引用、来源等级、时点）。落地工作流状态机（Initialized→DataReady→EvidenceReady→AnalysisReady→ReviewReady→Published，及 Aborted/Abstained）与不可变研究信号快照（股票池/数据/策略/Prompt/工具/模型/检索/证据/输出/输入输出哈希）。
 
 ## 2. 工作项拆解
 
-- 0605.1 Research Signal Composer — 生成 RESEARCH_CANDIDATE/WATCH/ABSTAINED 信号与面板卡片。
+- 0605.1 Research Signal Composer — 正常路径优先 LLM 生成 RESEARCH_CANDIDATE/WATCH/ABSTAINED 信号；行情退化、组合约束违规、LLM 失败或引用失败时保守降级。
 - 0605.2 Citation Validator — 校验引用、来源等级、时点，对接 05 模块。
 - 0605.3 工作流状态机 — 状态流转与 Aborted/Abstained 分支。
 - 0605.4 不可变研究信号快照 — 冻结全量快照，落库不可篡改。
@@ -48,6 +48,7 @@ depends_on: [0604, 0703, 1002]
 - 完整晚间工作流可运行（对应产品 §15 条目 3）；
 - 所有研究信号保留不可变审计记录（对应产品 §15 条目 9）；
 - 数据异常时工作流 Aborted，停止高置信信号（对应产品 §15 条目 8）。
+- `signal_composer` trace 在 LLM 正常路径记录真实 `model_version`；规则降级路径记录 `rule`。
 
 ## 7. 审计追溯
 
