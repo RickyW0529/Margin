@@ -597,28 +597,93 @@ class ResearchSignalComposer(Agent):
                 },
             )
 
-        if risk > 0.7 or reflect.get("conflict_flags"):
-            return self._make_output(
-                context,
-                True,
-                {
-                    "signal_type": "watch",
-                    "confidence": round(1 - risk, 2),
-                    "statement": "High risk or conflicts flagged; watch only",
-                    "evidence_refs": evidence_ids,
-                },
-            )
-
-        return self._make_output(
-            context,
-            True,
-            {
-                "signal_type": "research_candidate",
-                "confidence": round(max(0.0, 0.8 - risk), 2),
-                "statement": f"{context.symbol} passes initial research screen",
-                "evidence_refs": evidence_ids,
-            },
+        risk_payload = json.dumps(
+            context.prior_outputs.get("risk_review", {}),
+            default=str,
         )
+        valuation_payload = json.dumps(
+            context.prior_outputs.get("valuation_tool", {}),
+            default=str,
+        )
+        quant_payload = json.dumps(
+            context.prior_outputs.get("quant_research", {}),
+            default=str,
+        )
+        prompt = (
+            "Compose the final research signal for a margin-of-safety research "
+            "workflow. Choose one signal_type from research_candidate, watch, "
+            "or abstained. Use only the provided evidence_ids in evidence_refs; "
+            "if evidence supports the statement, include at least one evidence_ref. "
+            "Return JSON with signal_type, confidence, statement, evidence_refs. "
+            f"Symbol: {context.symbol}. "
+            f"Decision date: {context.decision_at.isoformat()}. "
+            f"Risk review: {risk_payload}. "
+            f"Counter review: {json.dumps(reflect, default=str)}. "
+            f"Valuation: {valuation_payload}. "
+            f"Quant: {quant_payload}. "
+            f"Portfolio constraints: {json.dumps(constraints, default=str)}. "
+            f"Available evidence_ids: {json.dumps(evidence_ids)}."
+        )
+        llm_result = self._call_llm(context, prompt, TaskType.SIGNAL)
+        if llm_result.success:
+            data = self._normalize_llm_signal(llm_result.output, evidence_ids)
+            return self._make_output(context, True, data, llm_result=llm_result)
+
+        fallback = self._rule_signal(context, risk, reflect, evidence_ids)
+        return self._make_output(context, True, fallback)
+
+    def _normalize_llm_signal(
+        self,
+        output: dict[str, Any],
+        evidence_ids: list[str],
+    ) -> dict[str, Any]:
+        allowed_types = {"research_candidate", "watch", "abstained"}
+        signal_type = str(output.get("signal_type", "watch"))
+        if signal_type not in allowed_types:
+            signal_type = "watch"
+
+        raw_confidence = output.get("confidence", 0.0)
+        try:
+            confidence = float(raw_confidence)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        confidence = round(min(max(confidence, 0.0), 1.0), 2)
+
+        statement = str(output.get("statement") or "LLM composed research signal")
+        raw_refs = output.get("evidence_refs")
+        refs = [str(ref) for ref in raw_refs] if isinstance(raw_refs, list) else []
+        valid_refs = [ref for ref in refs if ref in set(evidence_ids)]
+        if not valid_refs and evidence_ids and signal_type != "abstained":
+            valid_refs = list(evidence_ids)
+
+        return {
+            "signal_type": signal_type,
+            "confidence": confidence,
+            "statement": statement,
+            "evidence_refs": valid_refs,
+        }
+
+    def _rule_signal(
+        self,
+        context: AgentContext,
+        risk: float,
+        reflect: dict[str, Any],
+        evidence_ids: list[str],
+    ) -> dict[str, Any]:
+        if risk > 0.7 or reflect.get("conflict_flags"):
+            return {
+                "signal_type": "watch",
+                "confidence": round(1 - risk, 2),
+                "statement": "High risk or conflicts flagged; watch only",
+                "evidence_refs": evidence_ids,
+            }
+
+        return {
+            "signal_type": "research_candidate",
+            "confidence": round(max(0.0, 0.8 - risk), 2),
+            "statement": f"{context.symbol} passes initial research screen",
+            "evidence_refs": evidence_ids,
+        }
 
 
 class CitationValidatorAgent(RuleAgent):

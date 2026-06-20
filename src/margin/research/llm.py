@@ -187,10 +187,30 @@ class LLMProvider(BaseProvider):
                 checked_at=utc_now(),
                 message="LLM not configured",
             )
+        result = self.complete(
+            'Return JSON only: {"ok": true}',
+            response_schema={
+                "type": "object",
+                "properties": {"ok": {"type": "boolean"}},
+                "required": ["ok"],
+            },
+            temperature=0.0,
+        )
+        if not result.success:
+            return HealthCheckResult(
+                provider_name=self._descriptor.name,
+                status=ProviderStatus.UNHEALTHY,
+                checked_at=utc_now(),
+                latency_ms=result.latency_ms,
+                message=result.error or "LLM healthcheck failed",
+                details={"model": self._model},
+            )
         return HealthCheckResult(
             provider_name=self._descriptor.name,
             status=ProviderStatus.HEALTHY,
             checked_at=utc_now(),
+            latency_ms=result.latency_ms,
+            details={"model": self._model},
         )
 
 

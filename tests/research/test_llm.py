@@ -2,7 +2,33 @@
 
 from __future__ import annotations
 
-from margin.research.llm import DeterministicLLMProvider, ModelRouter, TaskType
+from margin.core.provider import ProviderStatus
+from margin.research.llm import DeterministicLLMProvider, LLMProvider, ModelRouter, TaskType
+
+
+class _FakeResponse:
+    def __init__(self, payload: dict, status_code: int = 200) -> None:
+        self._payload = payload
+        self.status_code = status_code
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise RuntimeError(f"HTTP {self.status_code}")
+
+    def json(self) -> dict:
+        return self._payload
+
+
+class _FakeClient:
+    def __init__(self, response: _FakeResponse | Exception) -> None:
+        self.response = response
+        self.calls: list[dict] = []
+
+    def post(self, *args, **kwargs):
+        self.calls.append({"args": args, "kwargs": kwargs})
+        if isinstance(self.response, Exception):
+            raise self.response
+        return self.response
 
 
 def test_deterministic_provider_returns_injected_output():
@@ -61,3 +87,46 @@ def test_model_router_uses_registered_fallback_provider():
 
     assert result.success is True
     assert result.model == "fallback"
+
+
+def test_llm_healthcheck_performs_real_completion_request():
+    client = _FakeClient(
+        _FakeResponse(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"ok": true}',
+                        },
+                    }
+                ]
+            }
+        )
+    )
+    provider = LLMProvider(
+        api_key="test-key",
+        base_url="https://llm.example.com",
+        model="deepseek-v4-flash",
+        client=client,
+    )
+
+    health = provider.healthcheck()
+
+    assert health.status == ProviderStatus.HEALTHY
+    assert health.provider_name == "openai_llm"
+    assert client.calls
+    assert client.calls[0]["args"][0] == "https://llm.example.com/chat/completions"
+
+
+def test_llm_healthcheck_reports_unhealthy_when_completion_fails():
+    provider = LLMProvider(
+        api_key="test-key",
+        base_url="https://llm.example.com",
+        model="deepseek-v4-flash",
+        client=_FakeClient(RuntimeError("network down")),
+    )
+
+    health = provider.healthcheck()
+
+    assert health.status == ProviderStatus.UNHEALTHY
+    assert "network down" in (health.message or "")

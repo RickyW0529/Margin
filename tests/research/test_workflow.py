@@ -59,6 +59,10 @@ def _make_workflow(symbol: str = "000001.SZ", response: dict | None = None) -> R
         "risk_factors": [],
         "counter_arguments": [],
         "unknowns": [],
+        "signal_type": "research_candidate",
+        "confidence": 0.72,
+        "statement": "LLM composed research signal",
+        "evidence_refs": [],
     }
     return ResearchWorkflow(
         symbol=symbol,
@@ -112,6 +116,30 @@ def test_workflow_records_traces():
     result = workflow.run()
     assert len(result.traces) > 0
     assert result.traces[0].trace_id.startswith("trc_")
+
+
+def test_signal_composer_uses_llm_when_provider_is_configured():
+    workflow = _make_workflow(
+        response={
+            "queries": ["q"],
+            "summaries": [],
+            "risk_score": 0.2,
+            "risk_factors": [],
+            "counter_arguments": [],
+            "unknowns": [],
+            "signal_type": "research_candidate",
+            "confidence": 0.66,
+            "statement": "LLM signal with evidence",
+            "evidence_refs": [],
+        }
+    )
+
+    result = workflow.run()
+
+    signal_trace = next(
+        trace for trace in result.traces if trace.agent_node == "signal_composer"
+    )
+    assert signal_trace.model_version == "deterministic_llm"
 
 
 def test_workflow_snapshot_contains_state():

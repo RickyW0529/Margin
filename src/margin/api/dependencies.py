@@ -7,13 +7,23 @@ application instance reuses the same database engine and repository objects.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import lru_cache
+from typing import Any
 
 from margin.core.audit_repository import SQLAlchemyAuditRepository
+from margin.core.provider import (
+    HealthCheckResult,
+    ProviderDescriptor,
+    ProviderStatus,
+    ProviderType,
+)
 from margin.dashboard.repository import SQLAlchemyDashboardRepository
 from margin.dashboard.service import DashboardServiceBundle
 from margin.holdings_monitoring.repository import SQLAlchemyMonitoringRepository
 from margin.holdings_monitoring.service import MonitoringServiceBundle
+from margin.news.models import utc_now
+from margin.news.providers.tavily import TavilySearchAdapter
 from margin.news.repository import NewsRepository
 from margin.portfolio.repository import SQLAlchemyPortfolioRepository
 from margin.portfolio.service import PortfolioService
@@ -30,7 +40,25 @@ from margin.storage.database import (
 from margin.strategy.repository import SQLAlchemyStrategyRepository
 from margin.strategy.service import StrategyService
 from margin.vector.providers.openai_embedding import OpenAIEmbeddingProvider
+from margin.vector.providers.rerank import HTTPRerankProvider
 from margin.vector.repository import VectorRepository
+
+
+@dataclass(frozen=True)
+class MissingConfiguredProvider:
+    """Provider-status placeholder for an external provider missing configuration."""
+
+    descriptor: ProviderDescriptor
+    message: str
+
+    def healthcheck(self) -> HealthCheckResult:
+        """Return a degraded status without attempting a network call."""
+        return HealthCheckResult(
+            provider_name=self.descriptor.name,
+            status=ProviderStatus.DEGRADED,
+            checked_at=utc_now(),
+            message=self.message,
+        )
 
 
 def build_database_engine(settings: MarginSettings):
@@ -73,6 +101,93 @@ def build_embedding_provider(
         model=settings.embedding_model,
         dimension=settings.embedding_dimension,
     )
+
+
+def build_websearch_provider(settings: MarginSettings) -> TavilySearchAdapter | None:
+    """Build the configured Tavily WebSearch provider."""
+    if settings.websearch_api_key is None:
+        return None
+    api_key = settings.websearch_api_key.get_secret_value().strip()
+    if not api_key:
+        return None
+    return TavilySearchAdapter(api_key=api_key)
+
+
+def build_rerank_provider(settings: MarginSettings) -> HTTPRerankProvider | None:
+    """Build the configured HTTP rerank provider."""
+    if settings.rerank_api_key is None or settings.rerank_base_url is None:
+        return None
+    api_key = settings.rerank_api_key.get_secret_value().strip()
+    if not api_key:
+        return None
+    return HTTPRerankProvider(
+        api_key=api_key,
+        base_url=str(settings.rerank_base_url),
+        model=settings.rerank_model,
+    )
+
+
+def _missing_provider(
+    *,
+    name: str,
+    provider_type: ProviderType,
+    message: str,
+    capabilities: list[str],
+    secret_refs: list[str],
+) -> MissingConfiguredProvider:
+    return MissingConfiguredProvider(
+        descriptor=ProviderDescriptor(
+            name=name,
+            version="unconfigured",
+            provider_type=provider_type,
+            capabilities=capabilities,
+            secret_refs=secret_refs,
+            config={},
+        ),
+        message=message,
+    )
+
+
+def build_provider_status_providers(settings: MarginSettings) -> list[Any]:
+    """Build all providers surfaced by the dashboard status endpoint.
+
+    Missing external integrations are represented as degraded placeholders so
+    the frontend shows explicit gaps instead of silently omitting them.
+    """
+    llm_provider = build_llm_provider(settings) or _missing_provider(
+        name="openai_llm",
+        provider_type=ProviderType.LLM,
+        capabilities=["complete", "complete_structured"],
+        secret_refs=["MARGIN_LLM_API_KEY"],
+        message="MARGIN_LLM_API_KEY or MARGIN_LLM_BASE_URL not configured",
+    )
+    embedding_provider = build_embedding_provider(settings) or _missing_provider(
+        name="openai_embedding",
+        provider_type=ProviderType.EMBEDDING,
+        capabilities=["embed", "embed_batch"],
+        secret_refs=["MARGIN_EMBEDDING_API_KEY"],
+        message="MARGIN_EMBEDDING_API_KEY or MARGIN_EMBEDDING_BASE_URL not configured",
+    )
+    websearch_provider = build_websearch_provider(settings) or _missing_provider(
+        name="tavily_websearch",
+        provider_type=ProviderType.WEB_SEARCH,
+        capabilities=["search"],
+        secret_refs=["MARGIN_WEBSEARCH_API_KEY"],
+        message="MARGIN_WEBSEARCH_API_KEY not configured",
+    )
+    rerank_provider = build_rerank_provider(settings) or _missing_provider(
+        name="http_rerank",
+        provider_type=ProviderType.RERANK,
+        capabilities=["rerank"],
+        secret_refs=["MARGIN_RERANK_API_KEY"],
+        message="MARGIN_RERANK_API_KEY or MARGIN_RERANK_BASE_URL not configured",
+    )
+    return [
+        llm_provider,
+        embedding_provider,
+        websearch_provider,
+        rerank_provider,
+    ]
 
 
 @lru_cache
@@ -161,11 +276,7 @@ def get_dashboard_services() -> DashboardServiceBundle:
             repository=research_repository,
             audit_repository=SQLAlchemyAuditRepository(session_factory),
         ),
-        providers=[
-            provider
-            for provider in (llm_provider, embedding_provider)
-            if provider is not None
-        ],
+        providers=build_provider_status_providers(settings),
     )
 
 

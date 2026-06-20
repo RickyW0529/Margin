@@ -202,6 +202,27 @@ def test_signal_composer_abstains_when_market_data_is_degraded():
     assert "market data" in output.data["statement"].lower()
 
 
+def test_signal_composer_falls_back_to_watch_when_llm_fails_with_high_risk():
+    llm = DeterministicLLMProvider(fail=True)
+    agent = ResearchSignalComposer(llm)
+    context = _make_context(
+        llm=llm,
+        prior_outputs={
+            "risk_review": {"risk_score": 0.9, "risk_factors": ["leverage"]},
+            "reflect_counter_argument": {"counter_arguments": [], "unknowns": []},
+            "portfolio_constraint": {"passed": True, "violations": []},
+            "evidence_research": {"evidence_ids": ["ev_1"]},
+        },
+    )
+
+    output = agent.run(context)
+
+    assert output.success is True
+    assert output.model_version == "rule"
+    assert output.data["signal_type"] == "watch"
+    assert output.data["evidence_refs"] == ["ev_1"]
+
+
 def test_citation_validator_fails_without_evidence_refs():
     agent = CitationValidatorAgent()
     context = _make_context(

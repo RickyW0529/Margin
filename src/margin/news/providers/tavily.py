@@ -10,6 +10,14 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from margin.core.provider import (
+    HealthCheckResult,
+    ProviderDescriptor,
+    ProviderStatus,
+    ProviderType,
+)
+from margin.news.models import utc_now
+
 
 class TavilySearchAdapter:
     """Adapter mapping Tavily HTTP responses into Margin raw search results.
@@ -53,6 +61,19 @@ class TavilySearchAdapter:
         self._client = client
         self._base_url = base_url
         self._timeout = timeout
+        self._descriptor = ProviderDescriptor(
+            name="tavily_websearch",
+            version="tavily_search",
+            provider_type=ProviderType.WEB_SEARCH,
+            capabilities=["search"],
+            secret_refs=["MARGIN_WEBSEARCH_API_KEY"],
+            config={"base_url": self._base_url},
+        )
+
+    @property
+    def descriptor(self) -> ProviderDescriptor:
+        """Return the provider descriptor."""
+        return self._descriptor
 
     def search(self, query: str, max_results: int = 10) -> list[dict[str, str]]:
         """Execute a Tavily search and return raw result dictionaries.
@@ -107,3 +128,20 @@ class TavilySearchAdapter:
                 }
             )
         return results
+
+    def healthcheck(self) -> HealthCheckResult:
+        """Run a real lightweight Tavily search health check."""
+        try:
+            self.search("healthcheck", max_results=1)
+        except Exception as exc:
+            return HealthCheckResult(
+                provider_name=self._descriptor.name,
+                status=ProviderStatus.UNHEALTHY,
+                checked_at=utc_now(),
+                message=str(exc),
+            )
+        return HealthCheckResult(
+            provider_name=self._descriptor.name,
+            status=ProviderStatus.HEALTHY,
+            checked_at=utc_now(),
+        )
