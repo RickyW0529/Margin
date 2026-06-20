@@ -7,13 +7,11 @@
 <p align="center">
   <a href="./README.md">English</a>
   ·
-  <a href="./docs/PROJECT_v0.1_OPEN_SOURCE.md">开源项目文档</a>
-  ·
   <a href="./docs/README.md">文档索引</a>
   ·
-  <a href="./docs/spec/v0.1/README.md">功能规格</a>
+  <a href="./docs/design/v0.2/README.md">设计文档</a>
   ·
-  <a href="./docs/plan/v0.1/README.md">实施计划</a>
+  <a href="./docs/code/README.md">代码文档</a>
 </p>
 
 <p align="center">
@@ -133,15 +131,13 @@ docker compose config --quiet
 
 | 文档 | 路径 |
 | --- | --- |
-| 开源项目文档 | [docs/PROJECT_v0.1_OPEN_SOURCE.md](./docs/PROJECT_v0.1_OPEN_SOURCE.md) |
 | 文档总索引 | [docs/README.md](./docs/README.md) |
-| 设计文档索引 | [docs/design/v0.1/README.md](./docs/design/v0.1/README.md) |
-| 中文产品设计 | [docs/design/v0.1/product/Margin_产品设计_v0.1_中文.md](./docs/design/v0.1/product/Margin_产品设计_v0.1_中文.md) |
-| English Product Design | [docs/design/v0.1/product/Margin_Product_Design_v0.1_EN.md](./docs/design/v0.1/product/Margin_Product_Design_v0.1_EN.md) |
-| 中文架构设计 | [docs/design/v0.1/architecture/Margin_架构设计_v0.1_中文.md](./docs/design/v0.1/architecture/Margin_架构设计_v0.1_中文.md) |
-| English Architecture Design | [docs/design/v0.1/architecture/Margin_Architecture_Design_v0.1_EN.md](./docs/design/v0.1/architecture/Margin_Architecture_Design_v0.1_EN.md) |
-| 功能规格 | [docs/spec/v0.1/](./docs/spec/v0.1/) |
-| 实施计划 | [docs/plan/v0.1/](./docs/plan/v0.1/) |
+| 当前设计文档索引 | [docs/design/v0.2/README.md](./docs/design/v0.2/README.md) |
+| 中文产品设计 | [docs/design/v0.2/product/Margin_产品设计_v0.2_中文.md](./docs/design/v0.2/product/Margin_产品设计_v0.2_中文.md) |
+| English Product Design | [docs/design/v0.2/product/Margin_Product_Design_v0.2_EN.md](./docs/design/v0.2/product/Margin_Product_Design_v0.2_EN.md) |
+| 中文架构设计 | [docs/design/v0.2/architecture/Margin_架构设计_v0.2_中文.md](./docs/design/v0.2/architecture/Margin_架构设计_v0.2_中文.md) |
+| English Architecture Design | [docs/design/v0.2/architecture/Margin_Architecture_Design_v0.2_EN.md](./docs/design/v0.2/architecture/Margin_Architecture_Design_v0.2_EN.md) |
+| 当前代码文档 | [docs/code/README.md](./docs/code/README.md) |
 
 ## 安全边界
 

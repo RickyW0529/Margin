@@ -1,18 +1,97 @@
-# Margin（安全边际）开源投资研究系统｜架构设计文档 v0.1
+# Margin（安全边际）开源投资研究系统｜架构设计文档 v0.2
 
 > 文档类型：系统架构设计文档
-> 产品版本：v0.1
-> 文档版本：v0.1
-> 状态：active
+> 产品版本：v0.2
+> 文档版本：v0.2
+> 状态：draft
 > 架构模式：模块化单体 + 本地 Docker Compose + 持久化 Worker + Provider/Tool 插拔边界
 > 当前实现：FastAPI、Next.js、PostgreSQL/pgvector、APScheduler、Prometheus、Grafana、OpenAI-compatible LLM/Embedding
-> 重要边界：v0.1 不实现 MCP Server、MCP Gateway、自定义 HTTP 工具运行时或自动下单。
+> 重要边界：当前代码仍为 v0.1 基线；v0.2 不实现 MCP Server、MCP Gateway、自定义 HTTP 工具运行时或自动下单。
 
 ---
 
+## 0. v0.2 增量架构
+
+v0.2 在 v0.1 模块化单体上新增 `11-valuation_discovery` 业务边界。该模块负责公司池时点快照、全量量化闸门、行业估值模型、内在价值快照、低估置信度和事件驱动刷新；它不替代现有数据、公告、向量、证据、Agent、策略和 Dashboard 模块。
+
+### 0.1 增量数据流
+
+```mermaid
+flowchart LR
+    Provider[01 数据 Provider] --> Universe[公司池快照]
+    Universe --> Quant[11 量化闸门]
+    Provider --> Fundamental[财务/行情时点快照]
+    Fundamental --> Quant
+    Quant --> Rejected[量化淘汰结果]
+    Quant --> Passed[量化通过结果]
+    Filing[03 公告/新闻增量] --> Vector[04 pgvector 索引]
+    Vector --> Evidence[05 证据检索]
+    Passed --> Research[06 AI 深度研究]
+    Evidence --> Research
+    Strategy[07 公司池/阈值/投资风格 Prompt 版本] --> Quant
+    Strategy --> Research
+    Research --> Valuation[11 内在价值与置信度快照]
+    Rejected --> Dashboard[08 全公司面板]
+    Valuation --> Dashboard
+    Price[每日价格变化] --> Reprice[折价率/安全边际重算]
+    Valuation --> Reprice
+    Reprice --> Dashboard
+```
+
+### 0.2 模块职责
+
+| 模块 | v0.2 增量职责 |
+| --- | --- |
+| 01 data_provider | 动态获取沪深 300 成分股、行情、财务、行业和估值原始字段，保留时点 |
+| 03 filing_websearch | 每日增量获取公告与新闻，判定事件重要度并生成更新事件 |
+| 04 text_indexing | 公告和新闻原文解析、分块、Embedding、pgvector 持久化 |
+| 05 rag_evidence | 为财务结论、风险、反方理由和估值假设提供可定位证据 |
+| 06 multi_agent_research | 对量化通过或待更新公司执行 evidence-grounded AI 研究 |
+| 07 strategy_config | 版本化 Provider 引用、公司池、量化阈值和用户投资风格 Prompt |
+| 08 dashboard | 展示公司池全部公司、量化淘汰原因、AI 状态和估值结果 |
+| 10 deployment_audit | 调度每日增量同步、事件队列、失败重试和运行审计 |
+| 11 valuation_discovery | 公司池快照、行业模型注册表、量化闸门、估值快照、置信度与刷新决策 |
+
+### 0.3 核心组件
+
+- `UniverseProvider`：按 `universe_id` 和 `as_of` 返回指数成分股；第一期实现 `CSI300`；
+- `UniverseSnapshotService`：将成分股及权重保存为不可变时点快照；
+- `FundamentalSnapshotService`：维护最近 5 年财务、3 年行情及估值历史；
+- `IndustryValuationModelRegistry`：按行业映射银行、保险、周期、普通制造/消费和成长模型；
+- `QuantGateEngine`：计算估值、质量、风险、数据完整度和淘汰原因；
+- `ResearchRefreshPolicy`：根据新财报、重大公告、实质新闻、行业变化、假设失效和复核到期决定是否调用 AI；
+- `IntrinsicValueService`：组合行业模型结果、证据质量和 AI 审查，生成内在价值区间；
+- `ConfidenceCalibrationService`：计算低估置信度，不允许 LLM 直接提供最终概率；
+- `ValuationSnapshotRepository`：append-only 保存量化和 AI 估值快照。
+
+### 0.4 建议数据实体
+
+| 实体 | 作用 |
+| --- | --- |
+| `universe_definitions` | 公司池定义，例如 `CSI300` |
+| `universe_snapshots` | 某一时点的公司池快照 |
+| `universe_members` | 快照中的证券、权重、行业 |
+| `fundamental_snapshots` | 财务与估值输入的时点快照 |
+| `quant_screen_runs` | 一次公司池全量量化运行 |
+| `quant_screen_results` | 每家公司得分、状态和淘汰原因 |
+| `research_refresh_events` | 触发 AI 更新的事件及去重状态 |
+| `valuation_assessments` | 内在价值区间、置信区间、低估置信度和失效条件 |
+| `valuation_evidence` | 估值结论到 Evidence/Claim 的关联 |
+
+所有实体必须携带 `as_of`、`available_at`、数据/模型/策略版本和输入哈希。历史估值结果不可原地覆盖。
+
+### 0.5 调度与缓存
+
+- 每日收盘后同步价格和公司池变化；
+- 公告、新闻和财务披露按增量游标同步；
+- 全部公司每日重算轻量折价率和安全边际；
+- 量化层可按数据变化增量计算，并保留周期性全量校验；
+- AI 仅消费 `research_refresh_events`，没有实质变化时复用最近有效评估；
+- 公告和新闻原文只存一份内容快照，向量按内容哈希幂等更新。
+
 ## 1. 架构目标
 
-Margin v0.1 的架构目标是把个人投资研究链路做成可运行、可审计、可降级的本地系统，而不是只做一个前端演示。
+Margin v0.1 已把个人投资研究链路做成可运行、可审计、可降级的本地系统；v0.2 在此基础上增加持续估值发现能力。
 
 核心目标：
 
@@ -123,7 +202,7 @@ flowchart TB
 
 ## 3. 分层架构
 
-v0.1 采用“产品模块 + 横切能力”的分层方式。每层都有明确代码目录和数据边界。
+v0.2 采用“产品模块 + 横切能力”的分层方式。每层都有明确代码目录和数据边界。
 
 ```mermaid
 flowchart TB
@@ -224,9 +303,9 @@ flowchart TB
 
 ### 6.2 API 设计原则
 
-- v0.1 REST API 优先，不引入 GraphQL；
+- v0.2 REST API 优先，不引入 GraphQL；
 - Dashboard 端点直接为前端 BFF 服务，减少前端拼装复杂度；
-- 研究 run 在 v0.1 以同步 MVP 方式触发，但保留 job run 表达；
+- 研究 run 在 v0.2 以同步 MVP 方式触发，但保留 job run 表达；
 - 失败用 404/400/422/503 表达，不把内部异常暴露给前端；
 - `TraceIdMiddleware` 为请求写入 trace header，`MetricsMiddleware` 记录 Prometheus 指标。
 
@@ -263,7 +342,7 @@ Dashboard Provider 状态由 `build_provider_status_providers()` 注入，当前
 
 ### 7.2 ToolRegistry
 
-ToolRegistry 是 v0.1 的 AI 工具边界。它替代 MCP Server/Gateway，避免把单产品场景过度设计成多产品工具平台。
+ToolRegistry 是 v0.2 的 AI 工具边界。它替代 MCP Server/Gateway，避免把单产品场景过度设计成多产品工具平台。
 
 ```mermaid
 flowchart LR
@@ -325,14 +404,14 @@ sequenceDiagram
 
 ### 8.2 LLM 与规则边界
 
-v0.1 的 Agent 输出全部经过 JSON Schema guardrail。正常路径中，WebSearch query、Text Summary、Risk Review、Reflect / Counter-Argument、Research Signal Composer 使用 OpenAI-compatible LLM。以下场景强制保守处理：
+v0.2 的 Agent 输出全部经过 JSON Schema guardrail。正常路径中，WebSearch query、Text Summary、Risk Review、Reflect / Counter-Argument、Research Signal Composer 使用 OpenAI-compatible LLM。以下场景强制保守处理：
 
 - 行情或核心市场数据退化：Signal Composer 直接输出 `abstained`，不继续生成高置信信号；
 - 组合约束违规：Signal Composer 直接输出 `abstained`；
 - LLM 调用失败或结构化输出不合规：Signal Composer 使用规则型 fallback；
 - Citation Validator 失败：最终 signal 覆盖为 `abstained`。
 
-当前 `risk_review` 与 `reflect_counter_argument` 记录真实 `model_version`、trace 与结构化输出，但 v0.1 不要求每条风险/反方理由绑定独立 `evidence_id`。逐条证据约束、locator 绑定、中文输出约束和更严格 evidence-grounded prompt 进入 v0.2。
+当前 `risk_review` 与 `reflect_counter_argument` 记录真实 `model_version`、trace 与结构化输出，但 v0.2 不要求每条风险/反方理由绑定独立 `evidence_id`。逐条证据约束、locator 绑定、中文输出约束和更严格 evidence-grounded prompt 进入 v0.2。
 
 ## 9. 文本索引与 RAG 数据流
 
@@ -354,7 +433,7 @@ flowchart TD
     Evidence --> Research[Research Workflow]
 ```
 
-v0.1 支持：
+v0.2 支持：
 
 - HTML/PDF/CSV/JSON/Text parser；
 - chunk metadata；
@@ -438,7 +517,7 @@ flowchart TB
 
 ## 12. PostgreSQL / pgvector ER 图
 
-当前 v0.1 迁移生成 29 张 public tables。持仓是由 `trades` 聚合计算出的当前视图，不单独落 `positions` 表。
+当前 v0.2 迁移生成 29 张 public tables。持仓是由 `trades` 聚合计算出的当前视图，不单独落 `positions` 表。
 
 ```mermaid
 erDiagram
@@ -665,7 +744,7 @@ erDiagram
 
 ## 13. 数据不可变与审计策略
 
-v0.1 使用“业务可追加 + 研究快照不可变”的设计：
+v0.2 使用“业务可追加 + 研究快照不可变”的设计：
 
 - `trades` 记录成交事实；
 - `research_snapshots` 保存一次研究运行的终态；
@@ -710,7 +789,7 @@ v0.1 使用“业务可追加 + 研究快照不可变”的设计：
 
 ## 15. 可观测性
 
-v0.1 可观测能力：
+v0.2 可观测能力：
 
 - `/health`：进程存活；
 - `/health/ready`：数据库可用；
@@ -793,9 +872,9 @@ flowchart TB
 - 研究项详情展示证据、估值、审计、报告；
 - CSS 采用全局样式，后续可逐步提取设计 token 和组件库。
 
-## 19. v0.1 与后续版本边界
+## 19. v0.2 与后续版本边界
 
-v0.1 是单用户本地研究产品。v0.2 可扩展：
+v0.2 是单用户本地研究产品。v0.2 可扩展：
 
 - 多 AI Provider UI；
 - 模型路由和自动模型选择；
@@ -806,15 +885,16 @@ v0.1 是单用户本地研究产品。v0.2 可扩展：
 - 成本与质量观测；
 - 更细粒度的 Provider 权限。
 
-任何新增产品大版本范围应进入 `docs/design/v0.2`，不修改 v0.1 的审计边界。开发过程中的模块 spec 与 plan 仅存放在被 Git 忽略的 `docs/superpowers/`。
+v0.2 设计评审后，使用 Superpowers 在被 Git 忽略的 `docs/superpowers/` 中按功能模块拆分临时 spec 与详细 plan。未来 v0.3 从 `docs/design/v0.2` 复制后增量迭代，不回写 v0.2 的审计边界。
 
 ## 20. 总结
 
-Margin v0.1 的架构不是“AI 调几个工具生成股票观点”，而是一套本地优先的研究操作系统：
+Margin v0.1 已提供本地优先的研究操作系统基线；v0.2 设计在此基础上增加公司池与持续估值发现：
 
 - 数据进入系统后有快照和时点；
 - 文档进入系统后有 outbox、chunk、embedding 和检索审计；
 - AI 输出必须经过工具审计和证据校验；
 - 候选面板与持仓监控共享同一审计链；
 - 外部 Provider 失败时系统保守降级；
-- 所有核心能力都能通过 Docker Compose、测试和浏览器 E2E 验证。
+- v0.1 核心能力能通过 Docker Compose、测试和浏览器 E2E 验证；
+- v0.2 新增能力必须按模块完成实现、迁移、测试和验收，并同步更新对应的 `docs/code/` 文档。

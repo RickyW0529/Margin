@@ -7,13 +7,11 @@
 <p align="center">
   <a href="./README.zh-CN.md">简体中文</a>
   ·
-  <a href="./docs/PROJECT_v0.1_OPEN_SOURCE.md">Open Source Guide</a>
-  ·
   <a href="./docs/README.md">Documentation</a>
   ·
-  <a href="./docs/spec/v0.1/README.md">Specs</a>
+  <a href="./docs/design/v0.2/README.md">Design</a>
   ·
-  <a href="./docs/plan/v0.1/README.md">Plans</a>
+  <a href="./docs/code/README.md">Code Docs</a>
 </p>
 
 <p align="center">
@@ -133,15 +131,13 @@ docker compose config --quiet
 
 | Document | Path |
 | --- | --- |
-| Open source guide | [docs/PROJECT_v0.1_OPEN_SOURCE.md](./docs/PROJECT_v0.1_OPEN_SOURCE.md) |
 | Documentation index | [docs/README.md](./docs/README.md) |
-| Design index | [docs/design/v0.1/README.md](./docs/design/v0.1/README.md) |
-| Product design, Chinese | [docs/design/v0.1/product/Margin_产品设计_v0.1_中文.md](./docs/design/v0.1/product/Margin_产品设计_v0.1_中文.md) |
-| Product design, English | [docs/design/v0.1/product/Margin_Product_Design_v0.1_EN.md](./docs/design/v0.1/product/Margin_Product_Design_v0.1_EN.md) |
-| Architecture design, Chinese | [docs/design/v0.1/architecture/Margin_架构设计_v0.1_中文.md](./docs/design/v0.1/architecture/Margin_架构设计_v0.1_中文.md) |
-| Architecture design, English | [docs/design/v0.1/architecture/Margin_Architecture_Design_v0.1_EN.md](./docs/design/v0.1/architecture/Margin_Architecture_Design_v0.1_EN.md) |
-| Specs | [docs/spec/v0.1/](./docs/spec/v0.1/) |
-| Plans | [docs/plan/v0.1/](./docs/plan/v0.1/) |
+| Current design index | [docs/design/v0.2/README.md](./docs/design/v0.2/README.md) |
+| Product design, Chinese | [docs/design/v0.2/product/Margin_产品设计_v0.2_中文.md](./docs/design/v0.2/product/Margin_产品设计_v0.2_中文.md) |
+| Product design, English | [docs/design/v0.2/product/Margin_Product_Design_v0.2_EN.md](./docs/design/v0.2/product/Margin_Product_Design_v0.2_EN.md) |
+| Architecture design, Chinese | [docs/design/v0.2/architecture/Margin_架构设计_v0.2_中文.md](./docs/design/v0.2/architecture/Margin_架构设计_v0.2_中文.md) |
+| Architecture design, English | [docs/design/v0.2/architecture/Margin_Architecture_Design_v0.2_EN.md](./docs/design/v0.2/architecture/Margin_Architecture_Design_v0.2_EN.md) |
+| Current code documentation | [docs/code/README.md](./docs/code/README.md) |
 
 ## Safety Boundaries
 
