@@ -10,7 +10,17 @@ from __future__ import annotations
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -53,6 +63,7 @@ class ChunkRow(Base):
     __table_args__ = (
         Index("ix_chunks_symbol_available", "symbol", "available_at"),
         Index("ix_chunks_doc_type", "doc_type"),
+        Index("ix_chunks_active_available", "is_active", "available_at"),
     )
 
     chunk_id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -74,9 +85,53 @@ class ChunkRow(Base):
     table_id: Mapped[str | None] = mapped_column(String(64))
     row_id: Mapped[str | None] = mapped_column(String(64))
     quote_span: Mapped[list[int] | None] = mapped_column(JSONB)
+    locator: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    trust_level: Mapped[str] = mapped_column(
+        String(48),
+        nullable=False,
+        default="trusted_official_content",
+    )
+    is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
     keywords: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     total_chunks: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class ChunkSecurityLinkRow(Base):
+    """Many-to-many security relation for a chunk."""
+
+    __tablename__ = "chunk_security_links"
+    __table_args__ = (
+        UniqueConstraint(
+            "chunk_id",
+            "security_id",
+            "link_type",
+            name="uq_chunk_security_link",
+        ),
+        Index("ix_chunk_security_links_security", "security_id", "chunk_id"),
+    )
+
+    chunk_id: Mapped[str] = mapped_column(
+        ForeignKey("chunks.chunk_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    security_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    link_type: Mapped[str] = mapped_column(String(32), primary_key=True)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+
+
+class IndexedDocumentRow(Base):
+    """Audit row for a parsed/chunked/indexed document."""
+
+    __tablename__ = "indexed_documents"
+
+    document_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    parser_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(96), nullable=False)
+    chunk_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    embedding_keys: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class ChunkEmbeddingRow(Base):

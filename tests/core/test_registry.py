@@ -78,18 +78,22 @@ class MockProvider(BaseProvider):
         )
 
     def get_bars(self, symbols, start, end, frequency="1d"):
+        """get bars."""
         self.call_log.append(("get_bars", (symbols, start, end), {"frequency": frequency}))
         return [{"symbol": s, "close": 100.0} for s in symbols]
 
     def get_financials(self, symbols, start, end):
+        """get financials."""
         self.call_log.append(("get_financials", (symbols, start, end), {}))
         return [{"symbol": s, "revenue": 1e8} for s in symbols]
 
     def failing_method(self, *args, **kwargs):
+        """failing method."""
         self.call_log.append(("failing_method", args, kwargs))
         raise ProviderError("simulated failure")
 
     def non_retry_failure(self):
+        """non retry failure."""
         self.call_log.append(("non_retry_failure", (), {}))
         raise ValueError("bad input")
 
@@ -227,6 +231,7 @@ class TestCall:
         call_count = 0
         original = provider.get_bars
         def flaky_get_bars(symbols, start, end, frequency="1d"):
+            """flaky get bars."""
             nonlocal call_count
             call_count += 1
             if call_count < 3:
@@ -291,6 +296,7 @@ class TestCall:
         secondary = MockProvider(name="secondary")
 
         def failing_get_bars(symbols, start, end, frequency="1d"):
+            """failing get bars."""
             raise ProviderError("primary down")
 
         primary.get_bars = failing_get_bars
@@ -303,6 +309,7 @@ class TestCall:
         registry._fallbacks["primary"] = ["secondary"]
 
         def secondary_method(symbols, start, end, frequency="1d"):
+            """secondary method."""
             return [{"symbol": s, "close": 200.0} for s in symbols]
         secondary.get_bars = secondary_method
 
@@ -371,6 +378,7 @@ class TestCostTracking:
         call_count = 0
         original = provider.get_bars
         def flaky(symbols, start, end, frequency="1d"):
+            """flaky."""
             nonlocal call_count
             call_count += 1
             if call_count < 3:

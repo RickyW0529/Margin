@@ -7,8 +7,6 @@ from datetime import UTC, datetime
 import pytest
 
 from margin.dashboard.models import (
-    CandidateCard,
-    ItemStatus,
     ResearchItem,
     ResearchRun,
     RunStatus,
@@ -16,6 +14,7 @@ from margin.dashboard.models import (
 
 
 def test_research_run_defaults_and_utc_normalization():
+    """research run defaults and utc normalization."""
     run = ResearchRun(
         decision_at=datetime(2026, 6, 19, 9, 30, tzinfo=UTC),
         strategy_id="st_demo",
@@ -30,22 +29,10 @@ def test_research_run_defaults_and_utc_normalization():
 
 
 def test_research_item_validates_confidence_range():
+    """research item validates confidence range."""
     with pytest.raises(ValueError, match="confidence"):
         ResearchItem(
             run_id="dr_1",
             symbol="000001.SZ",
             confidence=1.5,
         )
-
-
-def test_candidate_card_contains_non_trading_disclaimer():
-    card = CandidateCard(
-        item_id="di_1",
-        run_id="dr_1",
-        symbol="000001.SZ",
-        signal_type="research_candidate",
-        research_status=ItemStatus.PUBLISHED.value,
-        strategy_version="sv_demo",
-    )
-
-    assert "不构成买卖指令" in card.disclaimer

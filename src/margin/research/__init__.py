@@ -1,6 +1,5 @@
-"""Multi-agent research module."""
+"""v0.2 AI delta-review research module."""
 
-from margin.research.agents import Agent, AgentContext, AgentOutput
 from margin.research.llm import DeterministicLLMProvider, LLMProvider, ModelRouter, TaskType
 from margin.research.models import (
     ResearchSignal,
@@ -16,13 +15,8 @@ from margin.research.repository import (
 )
 from margin.research.service import ResearchService
 from margin.research.snapshot import ResearchSnapshotBuilder
-from margin.research.tools import ToolPermission, ToolRegistry
-from margin.research.workflow import ResearchWorkflow, WorkflowResult
 
 __all__ = [
-    "Agent",
-    "AgentContext",
-    "AgentOutput",
     "DeterministicLLMProvider",
     "LLMProvider",
     "MemoryResearchRepository",
@@ -32,13 +26,9 @@ __all__ = [
     "ResearchSnapshot",
     "ResearchSnapshotBuilder",
     "ResearchRepository",
-    "ResearchWorkflow",
     "SQLAlchemyResearchRepository",
     "SignalType",
     "TaskType",
-    "ToolPermission",
-    "ToolRegistry",
     "VersionRef",
-    "WorkflowResult",
     "WorkflowState",
 ]

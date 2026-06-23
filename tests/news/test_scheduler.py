@@ -35,10 +35,13 @@ def news_repository(database_url):
 
 
 class FakeConnector:
+    """FakeConnector."""
     def __init__(self):
+        """Initialize the instance."""
         self.cursors: list[str | None] = []
 
     def discover(self, cursor: str | None, limit: int):
+        """discover."""
         self.cursors.append(cursor)
         if cursor == "cursor-1":
             return []
@@ -54,7 +57,9 @@ class FakeConnector:
 
 
 class FakeAcquirer:
+    """FakeAcquirer."""
     def acquire(self, source_name: str, url: str, title_override=None, published_at=None):
+        """acquire."""
         return make_document_event(
             source_url=url,
             source_name=source_name,

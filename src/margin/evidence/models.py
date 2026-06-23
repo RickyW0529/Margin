@@ -56,6 +56,109 @@ class ConflictSeverity(StrEnum):
     HIGH = "high"
 
 
+class ClaimStatus(StrEnum):
+    """v0.2 validation status for a research claim."""
+
+    SUPPORTED = "supported"
+    PARTIALLY_SUPPORTED = "partially_supported"
+    CONFLICTED = "conflicted"
+    UNSUPPORTED = "unsupported"
+    ABSTAINED = "abstained"
+
+
+class ClaimEvidenceRole(StrEnum):
+    """Role of an evidence item relative to a claim."""
+
+    SUPPORTS = "supports"
+    REFUTES = "refutes"
+    CONTEXT = "context"
+    CONFLICTS = "conflicts"
+
+
+class EvidencePackageQualityStatus(StrEnum):
+    """Aggregate quality status for a frozen evidence package."""
+
+    USABLE = "usable"
+    PARTIAL = "partial"
+    ABSTAIN_REQUIRED = "abstain_required"
+    INVALID = "invalid"
+
+
+class EvidencePackage(BaseModel):
+    """Frozen package of evidence/claim IDs served to one research decision.
+
+    Evidence packages are versioned snapshots. Downstream research nodes should
+    consume package IDs rather than mutable retrieval results so that an AI
+    assessment can be replayed and audited later.
+    """
+
+    package_id: str
+    version: int
+    security_id: str
+    decision_at: datetime
+    scope_hash: str
+    questions: tuple[str, ...]
+    evidence_ids: tuple[str, ...]
+    claim_ids: tuple[str, ...]
+    conflict_ids: tuple[str, ...]
+    coverage: float = Field(ge=0.0, le=1.0)
+    quality_status: EvidencePackageQualityStatus
+    max_available_at: datetime | None
+    retrieval_audit_id: str | None
+    parent_package_id: str | None = None
+    added_evidence_ids: tuple[str, ...] = Field(default_factory=tuple)
+
+    model_config = {"frozen": True}
+
+    @field_validator("decision_at", "max_available_at")
+    @classmethod
+    def normalize_package_timestamps(
+        cls, value: datetime | None
+    ) -> datetime | None:
+        """Normalize package timestamps to UTC."""
+        return ensure_utc(value) if value is not None else None
+
+
+class EvidenceConflict(BaseModel):
+    """Conflict between two evidence records within a frozen package."""
+
+    conflict_id: str
+    package_id: str
+    version: int
+    security_id: str
+    evidence_id: str
+    conflicting_evidence_id: str
+    reason: str
+    severity: ConflictSeverity = ConflictSeverity.MEDIUM
+    created_at: datetime = Field(default_factory=utc_now)
+
+    model_config = {"frozen": True}
+
+    @field_validator("created_at")
+    @classmethod
+    def normalize_created_at(cls, value: datetime) -> datetime:
+        """Normalize conflict creation timestamp to UTC."""
+        return ensure_utc(value)
+
+
+class ClaimEvidenceLink(BaseModel):
+    """Append-only role link between a claim and an evidence record."""
+
+    claim_id: str
+    evidence_id: str
+    role: ClaimEvidenceRole
+    rank: int = 0
+    created_at: datetime = Field(default_factory=utc_now)
+
+    model_config = {"frozen": True}
+
+    @field_validator("created_at")
+    @classmethod
+    def normalize_link_created_at(cls, value: datetime) -> datetime:
+        """Normalize link creation timestamp to UTC."""
+        return ensure_utc(value)
+
+
 # ---------------------------------------------------------------------------
 # Evidence — a single evidence record built from a Chunk
 # ---------------------------------------------------------------------------
@@ -108,10 +211,13 @@ class Evidence(BaseModel):
     available_at: datetime = Field(default_factory=utc_now)
     retrieved_at: datetime = Field(default_factory=utc_now)
     page: int | None = None
+    bbox: tuple[float, float, float, float] | None = None
     section: str | None = None
     paragraph_index: int | None = None
+    dom_path: str | None = None
     table_id: str | None = None
     row_id: str | None = None
+    column_id: str | None = None
     quote_span: tuple[int, int] | None = None
     snapshot_id: str | None = None
     snapshot_hash: str | None = None
@@ -170,10 +276,13 @@ class Evidence(BaseModel):
         """
         has_structural = (
             self.page is not None
+            or self.bbox is not None
             or bool(self.section)
             or self.paragraph_index is not None
+            or bool(self.dom_path)
             or bool(self.table_id)
             or bool(self.row_id)
+            or bool(self.column_id)
             or self.quote_span is not None
         )
         return bool(self.source_url) and has_structural
@@ -194,6 +303,7 @@ class Evidence(BaseModel):
             A new Evidence instance.
         """
         inferred_type = source_type or _infer_source_type(chunk)
+        locator = getattr(chunk, "locator", None)
         return cls(
             evidence_id=f"ev_{uuid.uuid4().hex[:12]}",
             chunk_id=chunk.chunk_id,
@@ -208,12 +318,19 @@ class Evidence(BaseModel):
             published_at=chunk.published_at,
             available_at=chunk.available_at,
             retrieved_at=utc_now(),
-            page=chunk.page,
-            section=chunk.section,
-            paragraph_index=chunk.paragraph_index,
-            table_id=chunk.table_id,
-            row_id=chunk.row_id,
-            quote_span=chunk.quote_span,
+            page=chunk.page if chunk.page is not None else getattr(locator, "page", None),
+            bbox=getattr(locator, "bbox", None),
+            section=chunk.section or getattr(locator, "section", None),
+            paragraph_index=(
+                chunk.paragraph_index
+                if chunk.paragraph_index is not None
+                else getattr(locator, "paragraph_index", None)
+            ),
+            dom_path=getattr(locator, "dom_path", None),
+            table_id=chunk.table_id or getattr(locator, "table_id", None),
+            row_id=chunk.row_id or getattr(locator, "row_id", None),
+            column_id=getattr(locator, "column_id", None),
+            quote_span=chunk.quote_span or getattr(locator, "quote_span", None),
             snapshot_id=getattr(chunk, "snapshot_id", None),
             snapshot_hash=getattr(chunk, "snapshot_hash", None),
         )
@@ -315,6 +432,7 @@ class Claim(BaseModel):
     claim_id: str
     claim_type: ClaimType = ClaimType.CUSTOM
     statement: str
+    status: ClaimStatus = ClaimStatus.UNSUPPORTED
     fact_or_inference: FactOrInference = FactOrInference.UNKNOWN
     evidence_ids: list[str] = Field(default_factory=list)
     confidence: float = 0.0

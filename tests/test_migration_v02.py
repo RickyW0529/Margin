@@ -1,0 +1,60 @@
+"""Migration verifier tests for v0.2 deployment audit."""
+
+from __future__ import annotations
+
+from sqlalchemy.engine import make_url
+
+from scripts.verify_migrations import verify_clean_database
+
+
+def test_migration_sequence_from_clean_database(database_url: str) -> None:
+    """migration sequence from clean database."""
+    url = make_url(database_url)
+    clean_database_name = f"{url.database}_migration_v02"
+
+    result = verify_clean_database(
+        database_url,
+        database_name=clean_database_name,
+        drop_existing=True,
+    )
+
+    assert result.current_head == result.expected_head
+    assert result.current_head == "20260623_0034_pointer_lineage"
+    assert result.failed_revision is None
+    assert {
+        "orchestration_runs",
+        "orchestration_step_attempts",
+        "transactional_outbox",
+        "capacity_limit_versions",
+        "quant_input_snapshots",
+        "quant_screen_results",
+        "effective_assessment_pointers",
+        "news_refresh_runs",
+        "news_refresh_targets",
+        "document_security_links",
+        "document_materiality_scores",
+        "news_context_bundles",
+        "news_context_documents",
+        "indexed_documents",
+        "chunk_security_links",
+        "evidence_packages",
+        "evidence_package_items",
+        "claim_evidence_links",
+        "evidence_conflicts",
+        "news_context_evidence",
+        "ai_graph_runs",
+        "ai_graph_node_runs",
+        "ai_graph_checkpoints",
+        "tool_call_records",
+        "llm_call_records",
+        "research_delta_reviews",
+        "research_delta_outbox",
+    } <= set(result.tables)
+    assert {
+        "portfolios",
+        "trades",
+        "position_theses",
+        "alert_events",
+        "position_reviews",
+    }.isdisjoint(result.tables)
+    assert result.pgvector_available is True

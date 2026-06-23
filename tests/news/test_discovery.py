@@ -8,22 +8,29 @@ from margin.news.connectors import SSEAnnouncementConnector, SZSEAnnouncementCon
 
 
 class FakeResponse:
+    """FakeResponse."""
     def __init__(self, payload: dict):
+        """Initialize the instance."""
         self._payload = payload
 
     def raise_for_status(self):
+        """raise for status."""
         return None
 
     def json(self):
+        """json."""
         return self._payload
 
 
 class FakeClient:
+    """FakeClient."""
     def __init__(self, payload: dict):
+        """Initialize the instance."""
         self.payload = payload
         self.requests: list[dict] = []
 
     def get(self, url: str, **kwargs):
+        """get."""
         self.requests.append({"url": url, **kwargs})
         return FakeResponse(self.payload)
 

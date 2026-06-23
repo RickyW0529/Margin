@@ -12,6 +12,7 @@ import sys
 
 
 def main() -> int:
+    """main."""
     return subprocess.call(["alembic", "upgrade", "head"])
 
 

@@ -564,6 +564,12 @@ class WebSearchService:
                 snapshot_hash=verified_content.snapshot.content_hash,
             )
             events.append(event)
+            if self._repository is not None:
+                self._repository.add_snapshot(verified_content.snapshot)
+                self._repository.add_document_event(
+                    event,
+                    publishable=True,
+                )
 
         audited_record = record.model_copy(update={"results": tuple(audited_results)})
         if self._repository is not None:

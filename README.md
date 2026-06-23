@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.1-d6b04d">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.2-d6b04d">
   <img alt="Status" src="https://img.shields.io/badge/status-active-2f855a">
   <img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776ab">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-yes-2f855a">
@@ -25,34 +25,37 @@ Margin is an open-source personal investment research system. Its core rule is s
 
 Margin is not a trading bot. It does not place orders, store brokerage passwords, or promise returns.
 
-## What v0.1 Does
+## What v0.2 Does
 
-Margin v0.1 connects the full local research loop:
+Margin v0.2 connects the research-candidate loop:
 
-- portfolio and trade management;
-- filing/WebSearch snapshots and document events;
-- parsing, chunking, embeddings, pgvector retrieval;
-- RAG evidence and citation validation;
-- internal audited AI tools and multi-agent research workflow;
-- strategy templates, custom configs, prompt generation, and version lifecycle;
-- research candidate dashboard with evidence, valuation, audit, report, and export;
-- holdings monitoring with P0-P3 alerts, reviews, and operation history;
+- Raw/Fact/Canonical market-data warehouse with PIT semantics;
+- AKShare/Tushare provider access and provider health gates;
+- filing/WebSearch snapshots, news target queues, and document events;
+- parsing, chunking, embeddings, hybrid retrieval, and pgvector storage;
+- RAG evidence packages, source locators, claim validation, and citation audit;
+- valuation discovery with quant gating, news refresh, RAG, AI delta review, and effective-assessment pointers;
+- LangGraph-based AI review with scoped read-only tools, prompt factory, reflection, checkpoints, and hash-only audit;
+- versioned strategy, provider, scope, indicator, prompt, and tool-policy configuration;
+- research candidate dashboard with server-side filters, current-vs-effective assessment display, evidence locators, read-only Copilot, and Provider settings;
 - Docker Compose deployment with PostgreSQL, API, worker, web, Prometheus, and Grafana.
 
 ```mermaid
 flowchart TB
     Web[Next.js Web] --> API[FastAPI API]
-    API --> Portfolio[Portfolio]
     API --> Dashboard[Research Dashboard]
-    API --> Monitoring[Holdings Monitoring]
-    Dashboard --> Research[Research Workflow]
-    Research --> Tools[Internal ToolRegistry]
+    API --> Valuation[Valuation Discovery]
+    Valuation --> Research[AI Delta Review]
+    Research --> Tools[Scoped Read-only Tools]
     Tools --> Retrieval[Vector Retrieval]
+    Valuation --> News[News / Filing Refresh]
+    API --> Data[Data Warehouse]
     Research --> LLM[LLM Provider]
     Retrieval --> Embedding[Embedding Provider]
     API --> PG[(PostgreSQL + pgvector)]
-    Monitoring --> PG
-    Worker[APScheduler Worker] --> Monitoring
+    Data --> PG
+    News --> PG
+    Worker[APScheduler Worker] --> Valuation
     Worker --> Retrieval
     API --> Prometheus[Prometheus]
     Prometheus --> Grafana[Grafana]
@@ -79,7 +82,7 @@ Health checks:
 ```bash
 curl -fsS http://localhost:8000/health
 curl -fsS http://localhost:8000/health/ready
-curl -fsS http://localhost:8000/api/v1/portfolios/demo
+curl -fsS "http://localhost:8000/api/v1/research?scope_version_id=scope-current&universe=ALL_A"
 ```
 
 ## Provider Configuration
@@ -95,11 +98,14 @@ MARGIN_EMBEDDING_API_KEY=
 MARGIN_EMBEDDING_MODEL=embedding-3
 MARGIN_EMBEDDING_DIMENSION=2048
 MARGIN_WEBSEARCH_API_KEY=
-MARGIN_SECRET_TUSHARE_TOKEN=
+MARGIN_TUSHARE_TOKEN=
+MARGIN_TUSHARE_HTTP_URL=https://teajoin.com
 MARGIN_RERANK_API_KEY=
+MARGIN_ADMIN_API_TOKEN=dev-admin-token
+MARGIN_CSRF_TOKEN=dev-csrf-token
 ```
 
-Missing optional providers degrade conservatively. The system should abstain instead of producing a high-confidence research signal when core data or evidence is unavailable.
+`MARGIN_ADMIN_API_TOKEN` and `MARGIN_CSRF_TOKEN` protect local mutating endpoints such as Provider settings and refresh triggers; replace the defaults outside local development. Missing optional providers degrade conservatively. The system should abstain instead of producing a high-confidence research signal when core data or evidence is unavailable. Tavily quota exhaustion, AKShare upstream network failures, and missing Rerank config are exposed explicitly as degraded/unhealthy or `service_not_configured`, not as fake success.
 
 ## Development
 
@@ -127,6 +133,19 @@ Compose:
 docker compose config --quiet
 ```
 
+Local smoke:
+
+```bash
+python scripts/smoke_dashboard_e2e.py --base-url http://localhost:3000
+MARGIN_ADMIN_API_TOKEN=dev-admin-token MARGIN_CSRF_TOKEN=dev-csrf-token \
+  python scripts/smoke_valuation_discovery_p1.py \
+  --scope-version-id scope-current \
+  --decision-at 2026-06-23T00:00:00+00:00 \
+  --api-url http://localhost:8000
+```
+
+The dashboard and valuation smoke scripts bypass system proxies for local URLs so localhost checks are not routed through external proxies. Real-provider smoke still reports the actual network, quota, and authentication outcome as a structured blocker.
+
 ## Documentation
 
 | Document | Path |
@@ -141,10 +160,11 @@ docker compose config --quiet
 
 ## Safety Boundaries
 
-Margin v0.1 intentionally does not include:
+Margin v0.2 intentionally does not include:
 
 - automatic buy/sell orders;
 - brokerage credential storage;
+- holdings or position management;
 - guaranteed-return language;
 - MCP Server or MCP Gateway;
 - arbitrary custom HTTP tools;

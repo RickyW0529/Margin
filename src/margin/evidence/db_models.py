@@ -4,7 +4,17 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    DateTime,
+    Float,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -62,10 +72,13 @@ class EvidenceRecordRow(Base):
     available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     page: Mapped[int | None] = mapped_column(Integer)
+    bbox: Mapped[list[float] | None] = mapped_column(JSONB)
     section: Mapped[str | None] = mapped_column(Text)
     paragraph_index: Mapped[int | None] = mapped_column(Integer)
+    dom_path: Mapped[str | None] = mapped_column(Text)
     table_id: Mapped[str | None] = mapped_column(String(64))
     row_id: Mapped[str | None] = mapped_column(String(64))
+    column_id: Mapped[str | None] = mapped_column(String(128))
     quote_span: Mapped[list[int] | None] = mapped_column(JSONB)
     snapshot_id: Mapped[str | None] = mapped_column(String(64))
     snapshot_hash: Mapped[str | None] = mapped_column(String(96))
@@ -97,6 +110,7 @@ class EvidenceClaimRow(Base):
     claim_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     claim_type: Mapped[str] = mapped_column(String(64), nullable=False)
     statement: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="unsupported")
     fact_or_inference: Mapped[str] = mapped_column(String(32), nullable=False)
     evidence_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
@@ -174,4 +188,134 @@ class ResearchEvidenceRow(Base):
     )
     role: Mapped[str] = mapped_column(String(32), primary_key=True)
     rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EvidencePackageRow(Base):
+    """Frozen evidence package version served to research graph nodes."""
+
+    __tablename__ = "evidence_packages"
+    __table_args__ = (
+        Index("ix_evidence_packages_security_decision", "security_id", "decision_at"),
+        Index("ix_evidence_packages_parent", "parent_package_id"),
+    )
+
+    package_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    security_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    decision_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    scope_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    questions: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    evidence_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    claim_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    conflict_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    coverage: Mapped[float] = mapped_column(Float, nullable=False)
+    quality_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    max_available_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retrieval_audit_id: Mapped[str | None] = mapped_column(String(64))
+    parent_package_id: Mapped[str | None] = mapped_column(String(64))
+    added_evidence_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EvidencePackageItemRow(Base):
+    """Materialized package membership for evidence, claims, and conflicts."""
+
+    __tablename__ = "evidence_package_items"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["package_id", "version"],
+            ["evidence_packages.package_id", "evidence_packages.version"],
+            ondelete="RESTRICT",
+        ),
+        Index("ix_evidence_package_items_item", "item_type", "item_id"),
+    )
+
+    package_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    item_type: Mapped[str] = mapped_column(String(32), primary_key=True)
+    item_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ClaimEvidenceLinkRow(Base):
+    """Append-only relationship between a claim and evidence with a role."""
+
+    __tablename__ = "claim_evidence_links"
+    __table_args__ = (
+        UniqueConstraint(
+            "claim_id",
+            "evidence_id",
+            "role",
+            name="uq_claim_evidence_link_role",
+        ),
+        Index("ix_claim_evidence_links_evidence", "evidence_id"),
+    )
+
+    claim_id: Mapped[str] = mapped_column(
+        ForeignKey("evidence_claims.claim_id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    evidence_id: Mapped[str] = mapped_column(
+        ForeignKey("evidence_records.evidence_id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    role: Mapped[str] = mapped_column(String(32), primary_key=True)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EvidenceConflictRow(Base):
+    """Persisted deterministic conflict between two evidence records."""
+
+    __tablename__ = "evidence_conflicts"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["package_id", "version"],
+            ["evidence_packages.package_id", "evidence_packages.version"],
+            ondelete="RESTRICT",
+        ),
+        Index("ix_evidence_conflicts_package", "package_id", "version"),
+        Index("ix_evidence_conflicts_security", "security_id"),
+    )
+
+    conflict_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    package_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    security_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    evidence_id: Mapped[str] = mapped_column(
+        ForeignKey("evidence_records.evidence_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    conflicting_evidence_id: Mapped[str] = mapped_column(
+        ForeignKey("evidence_records.evidence_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    severity: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NewsContextEvidenceRow(Base):
+    """Immutable link between a news context bundle and an evidence item."""
+
+    __tablename__ = "news_context_evidence"
+    __table_args__ = (
+        UniqueConstraint(
+            "bundle_id",
+            "evidence_id",
+            name="uq_news_context_evidence",
+        ),
+        Index("ix_news_context_evidence_evidence", "evidence_id"),
+    )
+
+    bundle_id: Mapped[str] = mapped_column(
+        ForeignKey("news_context_bundles.bundle_id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    evidence_id: Mapped[str] = mapped_column(
+        ForeignKey("evidence_records.evidence_id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -8,6 +8,7 @@ from tests.conftest import resolve_test_database_url
 
 
 def test_test_database_defaults_to_dedicated_database(monkeypatch):
+    """database defaults to dedicated database."""
     monkeypatch.delenv("MARGIN_TEST_DATABASE_URL", raising=False)
 
     url = resolve_test_database_url()
@@ -16,6 +17,7 @@ def test_test_database_defaults_to_dedicated_database(monkeypatch):
 
 
 def test_test_database_rejects_development_database(monkeypatch):
+    """database rejects development database."""
     monkeypatch.setenv(
         "MARGIN_TEST_DATABASE_URL",
         "postgresql+psycopg://margin:margin@localhost:5432/margin",

@@ -483,6 +483,7 @@ class DocumentParser:
                 """Extract visible body text while ignoring script/style tags."""
 
                 def __init__(self):
+                    """Initialize the instance."""
                     super().__init__()
                     self._in_body = False
                     self._in_script = False

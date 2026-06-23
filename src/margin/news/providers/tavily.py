@@ -8,6 +8,7 @@ via the ``MARGIN_WEBSEARCH_API_KEY`` environment variable.
 from __future__ import annotations
 
 import os
+from enum import StrEnum
 from typing import Any
 
 from margin.core.provider import (
@@ -17,6 +18,36 @@ from margin.core.provider import (
     ProviderType,
 )
 from margin.news.models import utc_now
+
+
+class TavilyErrorCode(StrEnum):
+    """Stable token-safe Tavily error codes."""
+
+    RATE_LIMITED = "provider_429"
+    BUDGET_EXCEEDED = "provider_budget_exceeded"
+    PAYGO_LIMIT_EXCEEDED = "provider_paygo_limit_exceeded"
+    AUTH_FAILED = "provider_auth_failed"
+    SERVER_ERROR = "provider_5xx"
+    BAD_RESPONSE = "provider_bad_response"
+
+
+class TavilyProviderError(RuntimeError):
+    """Token-safe Tavily provider error."""
+
+    def __init__(
+        self,
+        *,
+        code: TavilyErrorCode,
+        retryable: bool,
+        message: str,
+        retry_after_seconds: int | None = None,
+    ) -> None:
+        """Initialize the instance."""
+        self.provider_name = "tavily_websearch"
+        self.code = code
+        self.retryable = retryable
+        self.retry_after_seconds = retry_after_seconds
+        super().__init__(message)
 
 
 class TavilySearchAdapter:
@@ -105,21 +136,61 @@ class TavilySearchAdapter:
             timeout=self._timeout,
         )
         if response.status_code == 429:
-            raise RuntimeError("Tavily rate limit exceeded")
+            raise TavilyProviderError(
+                code=TavilyErrorCode.RATE_LIMITED,
+                retryable=True,
+                message="Tavily rate limit exceeded",
+            )
+        if response.status_code in (401, 403):
+            raise TavilyProviderError(
+                code=TavilyErrorCode.AUTH_FAILED,
+                retryable=False,
+                message="Tavily authentication failed",
+            )
+        if response.status_code == 432:
+            raise TavilyProviderError(
+                code=TavilyErrorCode.BUDGET_EXCEEDED,
+                retryable=False,
+                message="Tavily key or plan usage limit exceeded",
+            )
+        if response.status_code == 433:
+            raise TavilyProviderError(
+                code=TavilyErrorCode.PAYGO_LIMIT_EXCEEDED,
+                retryable=False,
+                message="Tavily pay-as-you-go limit exceeded",
+            )
+        if response.status_code >= 500:
+            raise TavilyProviderError(
+                code=TavilyErrorCode.SERVER_ERROR,
+                retryable=True,
+                message=f"Tavily server error: HTTP {response.status_code}",
+            )
         try:
             response.raise_for_status()
         except Exception as exc:
-            raise RuntimeError(f"Tavily search failed: {exc}") from exc
+            raise TavilyProviderError(
+                code=TavilyErrorCode.BAD_RESPONSE,
+                retryable=False,
+                message=f"Tavily search failed: HTTP {response.status_code}",
+            ) from exc
 
         payload = response.json()
         raw_results = payload.get("results")
         if not isinstance(raw_results, list):
-            raise RuntimeError("Malformed Tavily response: missing results list")
+            raise TavilyProviderError(
+                code=TavilyErrorCode.BAD_RESPONSE,
+                retryable=False,
+                message="Malformed Tavily response: missing results list",
+            )
 
         results: list[dict[str, str]] = []
         for item in raw_results[:max_results]:
             if not isinstance(item, dict):
-                raise RuntimeError("Malformed Tavily response: result must be object")
+                raise TavilyProviderError(
+                    code=TavilyErrorCode.BAD_RESPONSE,
+                    retryable=False,
+                    message="Malformed Tavily response: result must be object",
+                )
             results.append(
                 {
                     "url": str(item.get("url") or ""),

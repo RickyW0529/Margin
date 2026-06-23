@@ -9,6 +9,7 @@ from margin.research.snapshot import ResearchSnapshotBuilder
 
 
 def test_snapshot_hashes_inputs_and_outputs():
+    """snapshot hashes inputs and outputs."""
     signal = ResearchSignal(symbol="000001.SZ", signal_type=SignalType.WATCH, confidence=0.5)
     builder = ResearchSnapshotBuilder()
     snapshot = (
@@ -27,6 +28,7 @@ def test_snapshot_hashes_inputs_and_outputs():
 
 
 def test_snapshot_is_frozen():
+    """snapshot is frozen."""
     snapshot = ResearchSnapshotBuilder().for_run("run_2").with_state(WorkflowState.ABORTED).build()
     # Pydantic frozen model should reject mutation attempts
     try:

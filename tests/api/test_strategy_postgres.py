@@ -43,5 +43,7 @@ def test_strategy_api_persists_across_default_service_instances(database_url, mo
         assert [item["strategy_id"] for item in listed.json()] == [strategy_id]
     finally:
         get_strategy_service.cache_clear()
-        Base.metadata.drop_all(engine)
+        with session_factory.begin() as session:
+            session.query(StrategyVersionRow).delete()
+            session.query(StrategyProfileRow).delete()
         engine.dispose()

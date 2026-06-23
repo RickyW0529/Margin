@@ -8,11 +8,12 @@ once per process.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import HttpUrl, PostgresDsn, SecretStr, field_validator
+from pydantic import Field, HttpUrl, PostgresDsn, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://margin:margin@localhost:5432/margin"
@@ -42,6 +43,12 @@ class MarginSettings(BaseSettings):
         metrics_enabled: Whether observability metrics are enabled.
         trace_id_header: HTTP header used to propagate trace identifiers.
         monitoring_interval_seconds: Interval between periodic monitoring runs.
+        data_snapshot_root: Root directory for compressed provider payload snapshots.
+        data_sync_on_startup: Whether startup should enqueue stale data sync work.
+        data_freshness_timezone: Timezone used for data freshness calculations.
+        data_smoke_symbols: Comma-separated A-share symbols used by smoke checks.
+        tushare_token: Optional Tushare token used by real provider smoke.
+        tushare_http_url: Optional Tushare-compatible API endpoint URL.
         audit_log_path: Filesystem path for the provider audit log.
         environment: Deployment environment name.
         service_name: Service identifier used in logs and metrics.
@@ -78,6 +85,39 @@ class MarginSettings(BaseSettings):
 
     # WebSearch
     websearch_api_key: SecretStr | None = None
+
+    # CORS / web frontend origin
+    web_origin: str = "http://localhost:3000"
+
+    # Local admin / encrypted provider secrets
+    admin_api_token: SecretStr | None = None
+    csrf_token: SecretStr | None = None
+    secret_master_key: SecretStr | None = None
+    secret_key_version: str = "local-v1"
+    allow_local_provider_urls: bool = False
+    resolve_provider_dns: bool = True
+
+    # Data provider / warehouse sync
+    tushare_token: SecretStr | None = None
+    tushare_http_url: str | None = None
+    data_snapshot_root: Path = Path(".margin") / "snapshots" / "data"
+    data_sync_on_startup: bool = True
+    data_freshness_timezone: str = "Asia/Shanghai"
+    data_smoke_symbols: str = "000001.SZ"
+
+    # Capacity / budget governance
+    capacity_limit_version: str = "limits-v0.2.0"
+    worker_max_concurrency: int = Field(default=4, gt=0)
+    graph_max_concurrency: int = Field(default=2, gt=0)
+    provider_default_rpm: int = Field(default=60, gt=0)
+    provider_default_tpm: int = Field(default=200_000, gt=0)
+    llm_daily_token_budget: int = Field(default=2_000_000, gt=0)
+    llm_daily_cost_budget: Decimal = Field(default=Decimal("20.00"), gt=0)
+    news_target_queue_high_water: int = Field(default=5_000, gt=0)
+    embedding_batch_size: int = Field(default=64, gt=0)
+    embedding_max_concurrency: int = Field(default=2, gt=0)
+    database_pool_size: int = Field(default=10, gt=0)
+    database_statement_timeout_ms: int = Field(default=30_000, gt=0)
 
     # Logging / Observability
     log_level: str = "INFO"

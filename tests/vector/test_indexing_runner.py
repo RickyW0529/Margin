@@ -10,54 +10,68 @@ from margin.vector.indexing_runner import DocumentIndexingRunner
 
 
 class FakeNewsRepository:
+    """FakeNewsRepository."""
     def __init__(self, event) -> None:
+        """Initialize the instance."""
         self.event = event
         self.delivered: list[int] = []
         self.failed: list[tuple[int, str]] = []
 
     def claim_outbox(self, topic, limit):
+        """claim outbox."""
         del topic, limit
         return [SimpleNamespace(outbox_id=1, event_id=self.event.event_id)]
 
     def get_document_event(self, event_id):
+        """get document event."""
         return self.event if event_id == self.event.event_id else None
 
     def mark_outbox_delivered(self, outbox_id):
+        """mark outbox delivered."""
         self.delivered.append(outbox_id)
 
     def mark_outbox_failed(self, outbox_id, error):
+        """mark outbox failed."""
         self.failed.append((outbox_id, error))
 
 
 class FakeEmbeddingProvider:
+    """FakeEmbeddingProvider."""
     name = "fake_embedding"
     version = "v1"
 
     def embed_batch(self, texts):
+        """embed batch."""
         return [[float(len(text)), 1.0] for text in texts]
 
 
 class FakeVectorRepository:
+    """FakeVectorRepository."""
     def __init__(self) -> None:
+        """Initialize the instance."""
         self.chunks = []
         self.embeddings = []
         self.audits = []
 
     def upsert_chunks(self, chunks):
+        """upsert chunks."""
         self.chunks.extend(chunks)
         return len(chunks)
 
     def upsert_embeddings(self, items, **metadata):
+        """upsert embeddings."""
         self.embeddings.extend(items)
         self.embedding_metadata = metadata
         return len(items)
 
     def record_index_audit(self, **audit):
+        """record index audit."""
         self.audits.append(audit)
         return 1
 
 
 def test_indexing_runner_consumes_outbox_and_persists_chunks_and_vectors():
+    """indexing runner consumes outbox and persists chunks and vectors."""
     event = make_document_event(
         source_url="https://example.com/filing",
         source_name="exchange",

@@ -46,13 +46,6 @@ class JobStatus(StrEnum):
     FAILED = "failed"
 
 
-class ReportFormat(StrEnum):
-    """Supported report/export formats for dashboard research items."""
-
-    MARKDOWN = "markdown"
-    JSON = "json"
-
-
 class ResearchRun(BaseModel):
     """A run-level immutable aggregate for module 08 dashboard queries."""
 
@@ -60,7 +53,6 @@ class ResearchRun(BaseModel):
     decision_at: datetime
     strategy_id: str
     version_id: str
-    portfolio_id: str | None = None
     universe: list[str] = Field(default_factory=list)
     status: RunStatus = RunStatus.PUBLISHED
     summary: str = ""
@@ -104,7 +96,6 @@ class ResearchItem(BaseModel):
     claim_ids: list[str] = Field(default_factory=list)
     risk_score: float | None = None
     counter_arguments: list[str] = Field(default_factory=list)
-    portfolio_constraint_violations: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utc_now)
 
     model_config = {"frozen": True}
@@ -141,59 +132,6 @@ class ResearchItem(BaseModel):
         return value
 
 
-class EvidenceLocator(BaseModel):
-    """Dashboard-friendly evidence locator."""
-
-    evidence_id: str
-    source_level: str = "unknown"
-    source_url: str | None = None
-    content: str = ""
-    page: int | None = None
-    section: str | None = None
-
-    model_config = {"frozen": True}
-
-
-class ClaimView(BaseModel):
-    """Claim rendered in the evidence panel."""
-
-    claim_id: str
-    statement: str
-    fact_or_inference: str = "unknown"
-    confidence: float = 0.0
-    has_conflict: bool = False
-    evidence_ids: list[str] = Field(default_factory=list)
-
-    model_config = {"frozen": True}
-
-
-class EvidenceView(BaseModel):
-    """Expanded evidence view for a research item."""
-
-    item_id: str
-    claims: list[ClaimView] = Field(default_factory=list)
-    evidence_by_level: dict[str, list[EvidenceLocator]] = Field(default_factory=dict)
-    source_distribution: dict[str, int] = Field(default_factory=dict)
-    overall_confidence: float = 0.0
-    locators_available: bool = False
-
-    model_config = {"frozen": True}
-
-
-class ValuationView(BaseModel):
-    """Valuation view for a research item."""
-
-    item_id: str
-    base_valuation_range: tuple[float, float] | None = None
-    pessimistic_range: tuple[float, float] | None = None
-    margin_of_safety: float | None = None
-    value_trap_score: float | None = None
-    method: str | None = None
-    notes: str = ""
-
-    model_config = {"frozen": True}
-
-
 class FeedbackRecord(BaseModel):
     """Append-only user feedback for a research item."""
 
@@ -219,57 +157,159 @@ class FeedbackRecord(BaseModel):
         return ensure_utc(value)
 
 
-class CandidateCard(BaseModel):
-    """Derived candidate card used by the research dashboard UI."""
-
-    item_id: str
-    run_id: str
-    symbol: str
-    signal_type: str = ""
-    confidence: float = 0.0
-    statement: str = ""
-    current_price: float | None = None
-    quantitative_rank: int | None = None
-    research_status: str = ""
-    position_review_status: str | None = None
-    valuation_range: tuple[float, float] | None = None
-    margin_of_safety: float | None = None
-    value_trap_score: float | None = None
-    event_window: str | None = None
-    catalysts: list[str] = Field(default_factory=list)
-    counter_arguments: list[str] = Field(default_factory=list)
-    evidence_summary: dict[str, Any] = Field(default_factory=dict)
-    watch_conditions: list[str] = Field(default_factory=list)
-    invalidation_conditions: list[str] = Field(default_factory=list)
-    strategy_version: str = ""
-    disclaimer: str = "本系统输出研究分析，不构成买卖指令。"
-
-    model_config = {"frozen": True}
-
-
-class HomeSummary(BaseModel):
-    """Six-block home summary for the research candidate dashboard."""
-
-    decision_at: datetime | None = None
-    run_id: str | None = None
-    strategy_id: str | None = None
-    version_id: str | None = None
-    run_status: str | None = None
-    today_candidates: list[CandidateCard] = Field(default_factory=list)
-    position_reviews: list[CandidateCard] = Field(default_factory=list)
-    high_priority_risks: list[CandidateCard] = Field(default_factory=list)
-    rejections: list[CandidateCard] = Field(default_factory=list)
-    run_stats: dict[str, int] = Field(default_factory=dict)
-
-    model_config = {"frozen": True}
-
-
 class ProviderStatus(BaseModel):
     """Health metadata for a dashboard-facing provider or subsystem."""
 
     provider: str
     status: str
     message: str = ""
+
+    model_config = {"frozen": True}
+
+
+class DashboardPageInfo(BaseModel):
+    """Cursor page metadata for v0.2 dashboard BFF responses."""
+
+    next_cursor: str | None = None
+    previous_cursor: str | None = None
+    has_next_page: bool = False
+    page_size: int = 50
+
+    model_config = {"frozen": True}
+
+
+class DashboardFilters(BaseModel):
+    """Server-side filters for v0.2 research candidate queries."""
+
+    screening_status: str | None = None
+    data_status: str | None = None
+    review_required: bool | None = None
+    assessment_freshness: str | None = None
+    query: str | None = None
+
+    model_config = {"frozen": True}
+
+
+class DashboardSort(BaseModel):
+    """Safe sort descriptor for v0.2 research candidate queries."""
+
+    field: str = "final_score"
+    direction: str = "desc"
+
+    model_config = {"frozen": True}
+
+    @field_validator("field")
+    @classmethod
+    def validate_field(cls, value: str) -> str:
+        """Validate sort field."""
+        allowed = {"final_score", "confidence", "last_checked_at", "symbol"}
+        if value not in allowed:
+            raise ValueError(f"unsupported dashboard sort field: {value}")
+        return value
+
+    @field_validator("direction")
+    @classmethod
+    def validate_direction(cls, value: str) -> str:
+        """Validate sort direction."""
+        normalized = value.lower()
+        if normalized not in {"asc", "desc"}:
+            raise ValueError(f"unsupported dashboard sort direction: {value}")
+        return normalized
+
+
+class ResearchCandidateListItemV2(BaseModel):
+    """One row in the v0.2 all-company research candidate list."""
+
+    item_id: str
+    security_id: str
+    symbol: str
+    name: str
+    scope_version_id: str
+    screening_status: str
+    data_status: str
+    risk_flags: tuple[str, ...] = Field(default_factory=tuple)
+    review_required: bool = False
+    research_guardrail: str = "allow_research"
+    current_review_outcome: str | None = None
+    effective_assessment_id: str | None = None
+    assessment_freshness: str | None = None
+    stale_reason: str | None = None
+    final_score: float | None = None
+    discount_rate: float | None = None
+    confidence: float | None = None
+    last_checked_at: datetime
+
+    model_config = {"frozen": True}
+
+    @field_validator("last_checked_at")
+    @classmethod
+    def normalize_last_checked_at(cls, value: datetime) -> datetime:
+        """Normalize last checked timestamp."""
+        return ensure_utc(value)
+
+
+class ResearchCandidateListResponse(BaseModel):
+    """Paged v0.2 research candidate list response."""
+
+    items: tuple[ResearchCandidateListItemV2, ...] = Field(default_factory=tuple)
+    page_info: DashboardPageInfo = Field(default_factory=DashboardPageInfo)
+    facets: dict[str, dict[str, int]] = Field(default_factory=dict)
+    as_of: datetime = Field(default_factory=utc_now)
+    scope_version_id: str
+
+    model_config = {"frozen": True}
+
+    @field_validator("as_of")
+    @classmethod
+    def normalize_as_of(cls, value: datetime) -> datetime:
+        """Normalize as_of timestamp."""
+        return ensure_utc(value)
+
+
+class ResearchItemDetailV2(BaseModel):
+    """Company detail BFF DTO for the v0.2 dashboard."""
+
+    item: ResearchCandidateListItemV2
+    current_review: dict[str, Any] = Field(default_factory=dict)
+    effective_assessment: dict[str, Any] = Field(default_factory=dict)
+    factors: dict[str, Any] = Field(default_factory=dict)
+    thesis: dict[str, Any] = Field(default_factory=dict)
+    evidence: tuple[dict[str, Any], ...] = Field(default_factory=tuple)
+    versions: dict[str, str] = Field(default_factory=dict)
+
+    model_config = {"frozen": True}
+
+
+class ProviderSettingsView(BaseModel):
+    """Provider settings DTO shown by the dashboard."""
+
+    provider_id: str
+    provider_name: str
+    configured: bool = False
+    last_four: str | None = None
+    version_id: str | None = None
+    status: str = "inactive"
+    health: str | None = None
+
+    model_config = {"frozen": True}
+
+
+class ScopeSettingsView(BaseModel):
+    """Scope settings DTO shown by the dashboard."""
+
+    scope_version_id: str
+    universe_code: str
+    indicator_view_version_id: str | None = None
+    active: bool = False
+
+    model_config = {"frozen": True}
+
+
+class ReadOnlyCopilotResponse(BaseModel):
+    """Read-only dashboard Copilot response."""
+
+    answer: str
+    references: tuple[dict[str, str], ...] = Field(default_factory=tuple)
 
     model_config = {"frozen": True}
 
@@ -298,72 +338,3 @@ class JobRun(BaseModel):
         """
         return ensure_utc(value)
 
-
-class AuditView(BaseModel):
-    """Audit trace for a research dashboard item."""
-
-    item_id: str
-    workflow_run_id: str
-    snapshot_id: str | None = None
-    workflow_state: str | None = None
-    input_hash: str | None = None
-    output_hash: str | None = None
-    trace_count: int = 0
-    tool_call_ids: list[str] = Field(default_factory=list)
-    error: str | None = None
-
-    model_config = {"frozen": True}
-
-
-class ResearchReport(BaseModel):
-    """Rendered research report for a dashboard item."""
-
-    item_id: str
-    run_id: str
-    symbol: str
-    title: str
-    format: ReportFormat = ReportFormat.MARKDOWN
-    content: str
-    sections: dict[str, Any] = Field(default_factory=dict)
-    generated_at: datetime = Field(default_factory=utc_now)
-
-    model_config = {"frozen": True}
-
-    @field_validator("generated_at")
-    @classmethod
-    def normalize_generated_at(cls, value: datetime) -> datetime:
-        """Normalize the generated_at timestamp to UTC.
-
-        Args:
-            value: The datetime value to normalize.
-
-        Returns:
-            A timezone-aware UTC datetime.
-        """
-        return ensure_utc(value)
-
-
-class ReportExport(BaseModel):
-    """Export payload for a rendered dashboard research report."""
-
-    item_id: str
-    format: ReportFormat
-    filename: str
-    mime_type: str
-    content: str
-    generated_at: datetime = Field(default_factory=utc_now)
-
-    model_config = {"frozen": True}
-
-    @field_validator("generated_at")
-    @classmethod
-    def normalize_generated_at(cls, value: datetime) -> datetime:
-        """Normalize the generated_at timestamp to UTC.
-
-        Args:
-            value: The datetime value to normalize.
-
-        Returns:
-            A timezone-aware UTC datetime.
-        """
-        return ensure_utc(value)

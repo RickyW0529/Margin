@@ -48,14 +48,14 @@ Margin/
 | 编号 | 模块名（英文 slug） | 中文名 |
 |------|----------------------|--------|
 | 01 | data_provider | 数据 Provider 模块 |
-| 02 | holdings | 持仓模块 |
+| 02 | holdings | 历史编号（v0.2 已删除实现） |
 | 03 | filing_websearch | 公告与 WebSearch 模块 |
 | 04 | text_indexing | 文本索引模块 |
 | 05 | rag_evidence | RAG 证据模块 |
 | 06 | multi_agent_research | 多 Agent 研究流程模块 |
 | 07 | strategy_config | 策略配置模块 |
 | 08 | research_candidate_dashboard | 研究候选面板模块 |
-| 09 | holdings_monitoring | 持仓监控模块 |
+| 09 | holdings_monitoring | 历史编号（v0.2 已删除实现） |
 | 10 | deployment_audit | 部署与审计模块 |
 | 11 | valuation_discovery | 公司池与估值发现模块 |
 
@@ -131,19 +131,23 @@ ruff check --fix src tests
 
 - `ruff check` 必须 0 error。
 - `pytest` 必须全绿。
-- 当前已实现子任务：`0101-provider_registry`、`0102-akshare_tushare_access`、`0103-field_standardization`、`0104-point_in_time_and_quality`、`0201-manual_csv_import`、`0202-cost_and_position`、`0203-basic_dashboard`、`0301-filing_acquisition`、`0302-websearch_provider`、`0303-dedup_and_compliance`、`0401-parse_and_chunk`、`0402-embedding_pipeline`、`0403-hybrid_recall`、`0501-evidence_tiering`、`0502-citation_locator`、`0503-claim_validation`、`0601-provider_and_tools`、`0602-websearch_agent`、`0603-summary_agent`、`0604-reflect_agent`、`0605-citation_validator`、`0606-universe_quant_agent`、`0701-strategy_template`、`0702-custom_prompt`、`0703-version_management`、`0801-candidate_card`、`0802-evidence_expansion`、`0803-rejection_reason`、`0901-thesis_state`、`0902-alerts`、`0903-review_record`、`1001-docker_compose`、`1002-storage_snapshot`、`1003-logging_observability`、`1004-failure_degradation`。
-- `0203-basic_dashboard` 已补齐 PostgreSQL repository、FastAPI 端点、Next.js App Router 面板、前端测试与 build 验证。
+- 当前已实现子任务：`0101-provider_registry`、`0102-akshare_tushare_access`、`0103-field_standardization`、`0104-point_in_time_and_quality`、`0301-filing_acquisition`、`0302-websearch_provider`、`0303-dedup_and_compliance`、`0401-parse_and_chunk`、`0402-embedding_pipeline`、`0403-hybrid_recall`、`0501-evidence_tiering`、`0502-citation_locator`、`0503-claim_validation`、`0601-provider_and_tools`、`0602-websearch_agent`、`0603-summary_agent`、`0604-reflect_agent`、`0605-citation_validator`、`0606-universe_quant_agent`、`0701-strategy_template`、`0702-custom_prompt`、`0703-version_management`、`0801-candidate_card`、`0802-evidence_expansion`、`0803-rejection_reason`、`1001-docker_compose`、`1002-storage_snapshot`、`1003-logging_observability`、`1004-failure_degradation`。
 - `0301-filing_acquisition` 已补齐 PostgreSQL 游标/快照/事件/outbox、SSE/SZSE discovery adapter、增量 runner 与 DocumentEventPublisher；真实交易所实网 smoke 需要网络与目标站点可访问。
 - `0302-websearch_provider` 已补齐 Tavily adapter、robots 执行、查询/结果持久化与原文校验前审计；实网 smoke 需要 `MARGIN_WEBSEARCH_API_KEY`。
 - `0303-dedup_and_compliance` 已补齐向量相似度回调、跨进程持久化去重决策与转载链。
+- v0.2 `03-filing_websearch` 已补齐完整 NewsTarget 队列、refresh run/target 对账、目标驱动 WebSearch 编排、官方公告 cursor 安全同步、document-security link、materiality score、NewsContextBundle、News API 与 Tavily token-safe smoke；实网 smoke 需要 `MARGIN_WEBSEARCH_API_KEY` 和外部网络可达。
 - `0401-parse_and_chunk` 已补齐结构化 HTML/PDF/CSV/JSON/Text parser、表格/页码/quote_span 定位与 structured block 分块。
 - `0402-embedding_pipeline` 已补齐 OpenAI-compatible EmbeddingProvider、pgvector 持久化 chunk/vector/index audit；实网 smoke 需要 `MARGIN_EMBEDDING_API_KEY`、`MARGIN_EMBEDDING_BASE_URL`、`MARGIN_EMBEDDING_MODEL`、`MARGIN_EMBEDDING_DIMENSION`。
 - `0403-hybrid_recall` 已补齐 HTTP RerankProvider、持久化检索 audit 与 replay；实网 smoke 需要 `MARGIN_RERANK_API_KEY`、`MARGIN_RERANK_BASE_URL`、`MARGIN_RERANK_MODEL`。
+- v0.2 `04-text_indexing` 已补齐 symbol-independent stable chunk ID、`SourceLocator`、`chunk_security_links`、`indexed_documents`、结构化 parser/StructuredChunker、embedding 批量原子写入、outbox lease/retry recovery、基于 link-table 的 PIT 检索与 token-safe embedding smoke；真实 smoke 需要 `MARGIN_EMBEDDING_API_KEY`、`MARGIN_EMBEDDING_BASE_URL`、`MARGIN_EMBEDDING_MODEL`、`MARGIN_EMBEDDING_DIMENSION`。
 - `0501-evidence_tiering` 已补齐 Evidence/Claim 结构、source level 质量评分、locator 快照字段、跨 Claim 冲突检测、L4/L5 限制与 PostgreSQL append-only Claim/Evidence 持久化。
-- `0502-citation_locator` 已补齐 PDF/HTML/表格 locator、PIT 校验、WebSearch 原文/快照校验与 snapshot resolver，可接 `NewsRepository.get_snapshot` 校验快照 URL/hash/status。
+- `0502-citation_locator` 已补齐 PDF/HTML/表格 locator、PIT 校验、WebSearch 原文/快照校验与 snapshot resolver；`NewsRepository.get_snapshot` 可校验 URL/hash/status，内容重放使用可读取原文 bytes/text 的 resolver。
 - `0503-claim_validation` 已补齐 CitationValidator 批量冲突校验、引用失败具体 FAIL reason、ABSTAINED 判定、反方审查标记、校验审计持久化与 `research_evidence` 关联表。
+- v0.2 `05-rag_evidence` 已补齐冻结 EvidencePackage、稳定且幂等的 Evidence ID、补证 package revision、NewsContext-Evidence link、Claim-Evidence 角色、结构化冲突、PDF/HTML/CSV locator replay、PIT/source-level 校验、append-only PostgreSQL 审计和 DB-backed smoke。
 - `0601`-`0606` 已补齐多 Agent 研究工作流、工具调用、摘要/反思/校验链路、研究快照与持久化审计；`signal_composer` 正常路径优先真实 LLM，硬性降级或 LLM 失败时使用规则输出；`risk_review` / `reflect_counter_argument` 逐条证据引用属于 v0.2。
 - `0701`-`0703` 已补齐策略模板、自定义 Prompt、版本生命周期、校验/沙箱执行与 API 持久化。
+- v0.2 `01-data_provider` 已补齐 Raw/Fact/Canonical 数据仓库、指标目录、行业与公司行动 PIT、同步/freshness、保留审计和真实 Tushare ingestion smoke；AKShare 实网请求已执行，但当前环境到 EastMoney 的代理连接被外部断开。
+- v0.2 `07-strategy_config` 已补齐版本化 Provider/Universe/Indicator/Quant/Prompt/Tool/Scope 配置、AES-GCM Secret Store、write-only 密钥 API、SSRF/host allowlist、真实 Provider health 激活闸门、幂等审计和前端 Provider Settings；真实 Tushare/Tavily/LLM/Embedding health 通过，Rerank 尚缺本地配置。
 - `0801`-`0803` 已补齐研究候选面板 Candidate Card、证据展开、估值/反方/反馈视图、调度入口、Provider 状态、API 与 Next.js 页面；`/api/v1/provider-status` 真实探测 LLM/Embedding，并显式展示 Tavily/Rerank 缺配置 degraded。
-- `0901`-`0903` 已补齐持仓健康状态判定、确定性盘中规则引擎、P0-P3 提醒、alert_event 持久化、复盘记录、操作历史与处理时长度量。
+- v0.2 已删除模块 02/09 的源码、API、前端、Worker 调度和数据库表；编号仅用于历史审计。
 - `1001`-`1004` 已补齐 migrate/seed/web/api/worker/postgres/prometheus/grafana 一键部署、测试库隔离、不可变审计、结构化日志、Trace/指标、Grafana dashboard、Provider 降级与 CI 验证。

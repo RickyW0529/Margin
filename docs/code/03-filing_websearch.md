@@ -25,10 +25,13 @@
 
 - **源管理**：注册数据源（交易所、IR、媒体、WebSearch 等）并维护其可信度等级。
 - **发现与增量采集**：通过交易所公告连接器发现 URL，使用 `IncrementalAcquisitionRunner` 进行断点续传式采集。
+- **v0.2 目标队列**：`NewsTargetQueue` 在外部调用前完整持久化每日量化研究目标；批次大小只限制吞吐，不裁剪公司覆盖范围。
+- **v0.2 Refresh Run**：`news_refresh_runs` / `news_refresh_targets` 记录 target 完整性、优先级、claim、retry/backoff、partial/final 失败和对账状态。
 - **下载与快照**：使用 `Downloader` + `SnapshotStore` 下载原始内容并保存不可变快照。
 - **格式检测与解析**：支持 HTML、PDF、JSON、CSV、XML、纯文本，输出结构化文本与元数据。
 - **证券映射**：从标题与正文中提取标准化证券代码。
 - **Web 搜索**：通过可插拔 `WebSearchProvider` 调用第三方搜索 API，对结果进行合规边界检查与原内容验证。
+- **Materiality 与 Context Bundle**：`DocumentMaterialityService` 输出确定性相关度/重要度/新颖度评分；`NewsContextBundleBuilder` 把已完成文档和未完成 target 语义一起交给下游 RAG/AI。
 - **去重与质量评分**：URL、内容哈希、标题-日期、SimHash、向量相似度、转载链检测，并计算 L1-L5 来源等级与质量分。
 - **持久化与 Outbox**：使用 `NewsRepository` 将快照、事件、查询记录、重复决策、转载边写入 PostgreSQL，并通过事务性 Outbox 投递给下游索引队列。
 - **合规边界**：robots.txt 检查、禁止绕过登录墙/付费墙、401/403 拒绝、原内容可访问性验证。
@@ -40,20 +43,29 @@
 | 文件路径 | 说明 |
 | --- | --- |
 | `src/margin/news/__init__.py` | 包入口，导出公共 API（采集、搜索、去重、模型等）。 |
-| `src/margin/news/models.py` | 领域模型：`SourceLevel`、`DocumentStatus`、`RawSnapshot`、`DocumentEvent`、`SourceDescriptor` 及工厂函数。 |
+| `src/margin/news/models.py` | 领域模型：`SourceLevel`、`DocumentStatus`、`RawSnapshot`、`DocumentEvent`、`SourceDescriptor`、v0.2 refresh target/context DTO 及工厂函数。 |
+| `src/margin/news/target_queue.py` | v0.2 目标队列：完整 enqueue、幂等 target、批次 claim、retry/backoff、终态对账。 |
+| `src/margin/news/query_templates.py` | v0.2 WebSearch 查询模板：版本化 query 生成、template hash、目标 dedupe key 关联。 |
+| `src/margin/news/refresh_service.py` | v0.2 target-driven WebSearch 编排：先持久化全部 target，再调用 provider，限流时 run 进入 waiting。 |
+| `src/margin/news/official_sync.py` | v0.2 官方公告同步：全局 cursor 增量，只有 DocumentEvent 落库后才推进 cursor。 |
+| `src/margin/news/materiality.py` | v0.2 确定性文档重要度评分：监管处罚、停复牌、重大合同、诉讼、控制权变化等规则。 |
+| `src/margin/news/context_bundle.py` | v0.2 新闻上下文包：按 source/materiality/novelty/time 排序，并暴露 target 是否完整。 |
+| `src/margin/news/service.py` | v0.2 API 应用服务：启动 refresh、查询 run reconciliation。 |
 | `src/margin/news/discovery.py` | 增量发现模型：`DiscoveredDocument`、`DiscoveryConnector` 协议。 |
 | `src/margin/news/connectors.py` | 交易所公告适配器：`SSEAnnouncementConnector`、`SZSEAnnouncementConnector`。 |
 | `src/margin/news/acquirer.py` | 采集核心：`SourceRegistry`、`SnapshotStore`、`Downloader`、`DocumentParser`、`SecurityMapper`、`FilingAcquirer` 及异常。 |
 | `src/margin/news/websearch.py` | WebSearch：`WebSearchProvider`、`WebSearchService`、`ComplianceChecker`、`OriginalContentVerifier`、搜索结果模型。 |
 | `src/margin/news/providers/__init__.py` | 第三方 provider 包入口（当前为空）。 |
-| `src/margin/news/providers/tavily.py` | Tavily 搜索适配器：`TavilySearchAdapter`。 |
+| `src/margin/news/providers/tavily.py` | Tavily 搜索适配器：`TavilySearchAdapter`、token-safe `TavilyProviderError` 与稳定错误码。 |
 | `src/margin/news/dedup.py` | 去重与评分：`Deduplicator`、`NewsProcessor`、`PersistentNewsProcessor`、`QualityScorer`、SimHash 工具。 |
 | `src/margin/news/repository.py` | PostgreSQL 仓库：`NewsRepository`、`OutboxMessage`、`DedupRecord`、`RepostEdge` 及行映射函数。 |
-| `src/margin/news/db_models.py` | SQLAlchemy 行模型：快照、事件、Outbox、搜索记录、去重记录、转载边、游标。 |
+| `src/margin/news/db_models.py` | SQLAlchemy 行模型：快照、事件、Outbox、搜索记录、去重记录、转载边、游标、v0.2 refresh run/target、文档证券关系、materiality、context bundle。 |
 | `src/margin/news/outbox.py` | Outbox 发布者/消费者：`DocumentEventPublisher`、`OutboxConsumer`。 |
 | `src/margin/news/parsed.py` | 结构化解析：`ParsedBlock`、`ParsedDocument`、`StructuredDocumentParser`。 |
 | `src/margin/news/robots.py` | robots.txt 合规：`RobotsRules`、`RobotsChecker`、`RobotsFetcher` 协议。 |
 | `src/margin/news/scheduler.py` | 增量调度：`AcquisitionRunResult`、`IncrementalAcquisitionRunner`。 |
+| `src/margin/api/routes/news.py` | v0.2 News API：`POST /api/v1/news/refresh`、`GET /api/v1/news/runs/{run_id}`。 |
+| `scripts/smoke_news_websearch.py` | Tavily 实网 smoke：只输出状态、结果数、query_id、snapshot 数，不输出 token/raw text。 |
 
 ---
 

@@ -83,6 +83,10 @@ class SecretManager:
             f"Secret '{ref}' not found: env {env_key} unset and {file_path} missing"
         )
 
+    def resolve_versioned(self, ref, store) -> str:
+        """Resolve a versioned Secret Store reference through a trusted store."""
+        return store.resolve(ref).get_secret_value()
+
     def has(self, ref: str) -> bool:
         """Check whether a Secret reference can be resolved.
 

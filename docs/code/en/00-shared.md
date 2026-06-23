@@ -83,6 +83,18 @@ Single source of truth for all Margin environment configuration.
 | `rerank_api_key` | `SecretStr \| None` | `None` | API key for the rerank provider. |
 | `rerank_model` | `str` | `""` | Default rerank model name. |
 | `websearch_api_key` | `SecretStr \| None` | `None` | API key for the Tavily web search provider. |
+| `admin_api_token` | `SecretStr \| None` | `None` | Local-admin Bearer for v0.2 config mutations; missing config fails closed. |
+| `csrf_token` | `SecretStr \| None` | `None` | CSRF token for v0.2 config mutations. |
+| `secret_master_key` | `SecretStr \| None` | `None` | 32-byte/base64 AES-GCM-256 Secret Store master key. |
+| `secret_key_version` | `str` | `local-v1` | Key version included in encryption associated data. |
+| `allow_local_provider_urls` | `bool` | `False` | Allow explicitly local provider URLs for development. |
+| `resolve_provider_dns` | `bool` | `True` | Resolve DNS targets for SSRF IP checks. |
+| `tushare_token` | `SecretStr \| None` | `None` | Tushare token. It is masked in representations and must not be logged. |
+| `tushare_http_url` | `str \| None` | `None` | Optional Tushare-compatible API URL. |
+| `data_snapshot_root` | `Path` | `.margin/snapshots/data` | Root directory for v0.2 compressed raw provider snapshots. |
+| `data_sync_on_startup` | `bool` | `True` | Whether the worker enables the data-provider sync job. |
+| `data_freshness_timezone` | `str` | `Asia/Shanghai` | Timezone used for data freshness calculations. |
+| `data_smoke_symbols` | `str` | `000001.SZ` | Symbols used by real data-provider smoke checks. |
 | `log_level` | `str` | `INFO` | Logging level. |
 | `log_format` | `Literal["json", "console"]` | `json` | Logging output format. |
 | `metrics_enabled` | `bool` | `True` | Whether Prometheus metrics are enabled. |
@@ -130,9 +142,9 @@ Implements the persistent APScheduler worker that runs recurring holdings monito
 
 | Aspect | Description |
 | --- | --- |
-| Signature | `(monitoring_job: Callable[[], None], *, interval_seconds: int, indexing_job: Callable[[], None] \| None = None) -> BlockingScheduler` |
+| Signature | `(monitoring_job: Callable[[], None], *, interval_seconds: int, indexing_job: Callable[[], None] \| None = None, data_sync_job: Callable[[], None] \| None = None) -> BlockingScheduler` |
 | Purpose | Builds an APScheduler `BlockingScheduler` configured for the Asia/Shanghai timezone without starting it. |
-| Parameters | `monitoring_job` — callable executed for holdings monitoring. <br> `interval_seconds` — sweep interval in seconds. <br> `indexing_job` — optional callable executed for document indexing. |
+| Parameters | `monitoring_job` — callable executed for holdings monitoring. <br> `interval_seconds` — sweep interval in seconds. <br> `indexing_job` — optional callable executed for document indexing. <br> `data_sync_job` — optional callable executed for data-provider sync readiness/work. |
 | Returns | Configured `BlockingScheduler` with interval jobs. |
 
 ### Function: `build_monitoring_runner`
@@ -152,6 +164,15 @@ Implements the persistent APScheduler worker that runs recurring holdings monito
 | Purpose | Builds the persistent document indexing runner that indexes news content for vector search. |
 | Parameters | None. |
 | Returns | `DocumentIndexingRunner` using either `OpenAIEmbeddingProvider` when configured or a fallback `EmbeddingProvider`. |
+
+### Function: `build_data_ingestion_stack`
+
+| Aspect | Description |
+| --- | --- |
+| Signature | `(settings: MarginSettings \| None = None) -> DataWarehouseIngestionStack` |
+| Purpose | Builds the v0.2 data warehouse ingestion stack from centralized settings or an explicit settings object. |
+| Parameters | Optional `settings`; when omitted, `get_settings()` is used. |
+| Returns | `DataWarehouseIngestionStack` configured with PostgreSQL sessions and compressed snapshot root. |
 
 ### Function: `main`
 
@@ -352,6 +373,25 @@ Provider-status placeholder for an external provider whose configuration is miss
 | Purpose | Builds all providers surfaced by the dashboard status endpoint. Missing integrations are represented as degraded placeholders. |
 | Parameters | `settings` — `MarginSettings` instance. |
 | Returns | List containing LLM, embedding, web search, and rerank providers (or degraded placeholders). |
+
+### Function: `build_data_warehouse_stack`
+
+| Aspect | Description |
+| --- | --- |
+| Signature | `(settings: MarginSettings) -> DataWarehouseIngestionStack` |
+| Purpose | Builds the DB-backed data warehouse ingestion stack from centralized settings. |
+| Parameters | `settings` — `MarginSettings` instance. |
+| Returns | `DataWarehouseIngestionStack` instance. |
+
+### Dependency Factory: `get_data_warehouse_stack`
+
+| Aspect | Description |
+| --- | --- |
+| Signature | `() -> DataWarehouseIngestionStack` |
+| Decorator | `@lru_cache` |
+| Purpose | Returns the cached production data warehouse ingestion stack. |
+| Parameters | None. |
+| Returns | `DataWarehouseIngestionStack` instance. |
 
 ### Dependency Factory: `get_portfolio_service`
 
@@ -905,6 +945,10 @@ Secret reference metadata for display; does not contain the secret value.
 | --- | --- | --- |
 | `ref` | `str` | Secret reference name. |
 | `resolvable` | `bool` | Whether the reference can be resolved. |
+
+### v0.2 `SecretStore`
+
+`src/margin/core/secret_store.py` implements AES-GCM-256 versioned provider secrets. `create_or_replace` encrypts with a random nonce and deactivates the prior active version; `metadata` returns configured/last-four/version/status/time only; `resolve` returns a masked `SecretValue` to trusted provider adapters. Production `get_secret_store()` requires `MARGIN_SECRET_MASTER_KEY` and never generates an ephemeral replacement key.
 
 ---
 

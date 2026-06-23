@@ -72,6 +72,7 @@ class TestWithRetry:
         """A successful call returns immediately after one attempt."""
         calls = []
         def func():
+            """func."""
             calls.append(1)
             return "ok"
 
@@ -84,6 +85,7 @@ class TestWithRetry:
         """``ProviderError`` triggers retries until the function succeeds."""
         calls = []
         def func():
+            """func."""
             calls.append(1)
             if len(calls) < 3:
                 raise ProviderError("fail")
@@ -99,6 +101,7 @@ class TestWithRetry:
         """If all retries are exhausted, the last ``ProviderError`` is re-raised."""
         calls = []
         def func():
+            """func."""
             calls.append(1)
             raise ProviderError("always fail")
 
@@ -111,6 +114,7 @@ class TestWithRetry:
         """Non-retryable exceptions are raised immediately without retries."""
         calls = []
         def func():
+            """func."""
             calls.append(1)
             raise ValueError("not retryable")
 
@@ -123,10 +127,12 @@ class TestWithRetry:
         """``with_retry`` calls the injected ``sleep`` function with the computed delays."""
         sleep_calls = []
         def fake_sleep(seconds):
+            """fake sleep."""
             sleep_calls.append(seconds)
 
         attempts = []
         def func():
+            """func."""
             attempts.append(1)
             if len(attempts) < 3:
                 raise ProviderError("fail")
@@ -141,6 +147,7 @@ class TestWithRetry:
         rl = RateLimiter(max_calls=10, per_seconds=60.0)
         calls = []
         def func():
+            """func."""
             calls.append(1)
             return "ok"
 

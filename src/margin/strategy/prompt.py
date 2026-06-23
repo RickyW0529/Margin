@@ -153,7 +153,6 @@ class PromptLayerBuilder:
             f"Universe: {', '.join(config.universe)}. "
             f"Minimum evidence count: {config.evidence.min_evidence_count}. "
             f"Required evidence levels: {', '.join(config.evidence.required_levels)}. "
-            f"Max position weight: {config.risk.max_position_weight}. "
             f"Risk score threshold: {config.risk.risk_score_threshold}."
         )
 

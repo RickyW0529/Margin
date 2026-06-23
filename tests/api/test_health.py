@@ -12,6 +12,7 @@ from margin.api.main import create_app
 
 
 def test_health_returns_ok():
+    """health returns ok."""
     app = create_app()
     client = TestClient(app)
     response = client.get("/health")
@@ -20,6 +21,7 @@ def test_health_returns_ok():
 
 
 def test_ready_endpoint_checks_database():
+    """ready endpoint checks database."""
     app = create_app()
     client = TestClient(app)
     response = client.get("/health/ready")
@@ -27,6 +29,7 @@ def test_ready_endpoint_checks_database():
 
 
 def test_degraded_endpoint_returns_status():
+    """degraded endpoint returns status."""
     app = create_app()
     client = TestClient(app)
     response = client.get("/health/degraded")
@@ -35,7 +38,9 @@ def test_degraded_endpoint_returns_status():
 
 
 def test_ready_endpoint_returns_valid_sanitized_json_on_database_failure(monkeypatch):
+    """ready endpoint returns valid sanitized json on database failure."""
     def fail_engine(*args, **kwargs):
+        """fail engine."""
         del args, kwargs
         raise RuntimeError('database "secret" unavailable')
 
@@ -48,6 +53,7 @@ def test_ready_endpoint_returns_valid_sanitized_json_on_database_failure(monkeyp
     response = client.get("/health/ready")
 
     assert response.status_code == 503
-    assert response.json() == {"status": "not_ready"}
+    assert response.json()["status"] == "not_ready"
+    assert "checks" in response.json()
     # Internal error text must not appear in the externally visible response.
     assert "secret" not in response.text

@@ -65,7 +65,9 @@ def test_postgres_strategy_repository_round_trips_prompt_layers(database_url):
         assert stored == profile
         assert stored.versions[0].prompt_layers == version.prompt_layers
     finally:
-        Base.metadata.drop_all(engine)
+        with session_factory.begin() as session:
+            session.query(StrategyVersionRow).delete()
+            session.query(StrategyProfileRow).delete()
         engine.dispose()
 
 
@@ -118,5 +120,7 @@ def test_postgres_strategy_repository_updates_existing_version_lifecycle_state(
         assert stored.versions[0].state == StrategyState.BACKTESTING
         assert stored.versions[0].sandbox_result.validation_ok is True
     finally:
-        Base.metadata.drop_all(engine)
+        with session_factory.begin() as session:
+            session.query(StrategyVersionRow).delete()
+            session.query(StrategyProfileRow).delete()
         engine.dispose()

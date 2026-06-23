@@ -245,6 +245,7 @@ class TestMockConnector(BaseConnector):
 
     @property
     def source_name(self) -> str:
+        """source name."""
         return "mock"
 
     def fetch(self, url: str, **kwargs):
@@ -295,6 +296,7 @@ class TestDownloader:
 
             @property
             def source_name(self):
+                """source name."""
                 return "forbidden"
 
             def fetch(self, url, **kwargs):
@@ -334,6 +336,7 @@ class TestDownloader:
 
             @property
             def source_name(self):
+                """source name."""
                 return "fail"
 
             def fetch(self, url, **kwargs):
@@ -365,11 +368,15 @@ class TestDownloader:
         """Non-2xx responses must fail before an error page is persisted as evidence."""
 
         class NotFoundConnector(BaseConnector):
+            """A connector that simulates a 404 response."""
+
             @property
             def source_name(self):
+                """Return the source name."""
                 return "missing"
 
             def fetch(self, url, **kwargs):
+                """Fetch a URL and return content with status code."""
                 return b"not found", "text/html", 404
 
         registry = SourceRegistry()
@@ -390,11 +397,13 @@ class TestDownloader:
         captured = {}
 
         class Response:
+            """Response."""
             content = b"ok"
             status_code = 200
             headers = {"Content-Type": "text/plain"}
 
         def fake_get(url, **kwargs):
+            """fake get."""
             captured.update(kwargs)
             return Response()
 
@@ -527,6 +536,7 @@ class TestFilingAcquirer:
 
             @property
             def source_name(self):
+                """source name."""
                 return "fail"
 
             def fetch(self, url, **kwargs):
@@ -558,7 +568,9 @@ class TestFilingAcquirer:
         """A preserved raw snapshot must not make an unparsed filing actionable."""
 
         class FailingParser:
+            """FailingParser."""
             def parse(self, snapshot):
+                """parse."""
                 raise ParseError("cannot parse")
 
         registry = SourceRegistry()

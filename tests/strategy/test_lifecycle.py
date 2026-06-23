@@ -9,21 +9,25 @@ from margin.strategy.models import StrategyConfig, StrategyState, StrategyVersio
 
 
 def test_draft_can_validate():
+    """draft can validate."""
     lifecycle = StrategyLifecycle()
     assert lifecycle.can_transition(StrategyState.DRAFT, StrategyState.VALIDATING)
 
 
 def test_active_can_archive():
+    """active can archive."""
     lifecycle = StrategyLifecycle()
     assert lifecycle.can_transition(StrategyState.ACTIVE, StrategyState.ARCHIVED)
 
 
 def test_draft_cannot_activate():
+    """draft cannot activate."""
     lifecycle = StrategyLifecycle()
     assert not lifecycle.can_transition(StrategyState.DRAFT, StrategyState.ACTIVE)
 
 
 def test_transition_returns_updated_version():
+    """transition returns updated version."""
     lifecycle = StrategyLifecycle()
     version = StrategyVersion(
         strategy_id="st_1",
@@ -37,6 +41,7 @@ def test_transition_returns_updated_version():
 
 
 def test_invalid_transition_raises():
+    """invalid transition raises."""
     lifecycle = StrategyLifecycle()
     version = StrategyVersion(
         strategy_id="st_1",

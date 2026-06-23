@@ -15,6 +15,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import zstandard as zstd
+
 
 @dataclass(frozen=True)
 class SnapshotEntry:
@@ -39,6 +41,70 @@ class SnapshotEntry:
     created_at: datetime
     metadata: dict[str, Any]
     payload: Any = None
+
+
+@dataclass(frozen=True)
+class CompressedSnapshotEntry:
+    """Pointer to a compressed content-addressed provider payload."""
+
+    provider: str
+    storage_uri: str
+    payload_hash: str
+    compression: str
+    raw_size: int
+    compressed_size: int
+    created_at: datetime
+
+
+class CompressedSnapshotStore:
+    """Content-addressed JSON snapshot store using zstd compression.
+
+    The same canonical JSON payload is stored only once per provider and always
+    resolves to the same URI/hash pair.
+    """
+
+    def __init__(self, base_path: str | Path, *, compression_level: int = 3) -> None:
+        """Initialize the snapshot store.
+
+        Args:
+            base_path: Root directory for storing compressed snapshot files.
+            compression_level: Zstd compression level (default 3).
+        """
+        self._base = Path(base_path)
+        self._base.mkdir(parents=True, exist_ok=True)
+        self._compressor = zstd.ZstdCompressor(level=compression_level)
+
+    def write_json(self, provider: str, payload: Any) -> CompressedSnapshotEntry:
+        """Write a canonical JSON payload and return its content-addressed pointer."""
+        normalized_provider = provider.strip().lower()
+        if not normalized_provider:
+            raise ValueError("provider must be non-empty")
+        serialized = json.dumps(
+            payload,
+            sort_keys=True,
+            default=str,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        payload_hash = "sha256:" + hashlib.sha256(serialized).hexdigest()
+        digest = payload_hash.removeprefix("sha256:")
+        relative = Path(normalized_provider) / f"{digest}.json.zst"
+        full_path = self._base / relative
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        compressed = self._compressor.compress(serialized)
+        if not full_path.exists():
+            temporary_path = full_path.with_name(f".{full_path.name}.{uuid.uuid4().hex}.tmp")
+            temporary_path.write_bytes(compressed)
+            temporary_path.replace(full_path)
+        return CompressedSnapshotEntry(
+            provider=normalized_provider,
+            storage_uri=str(relative),
+            payload_hash=payload_hash,
+            compression="zstd",
+            raw_size=len(serialized),
+            compressed_size=full_path.stat().st_size,
+            created_at=datetime.now(UTC),
+        )
 
 
 class FileSnapshotStore:

@@ -405,6 +405,7 @@ class TestReranker:
         from margin.vector.models import RetrievalResult
 
         def custom(query, content):
+            """custom."""
             return 1.0 if "target" in content else 0.0
 
         chunks = [

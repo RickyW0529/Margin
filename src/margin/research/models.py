@@ -66,7 +66,6 @@ class ResearchSignal(BaseModel):
     claim_ids: tuple[str, ...] = ()
     risk_score: float | None = None
     counter_arguments: tuple[str, ...] = ()
-    portfolio_constraint_violations: tuple[str, ...] = ()
     generated_at: datetime = Field(default_factory=utc_now)
 
     model_config = {"frozen": True}

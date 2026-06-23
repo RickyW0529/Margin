@@ -12,6 +12,7 @@ import urllib.request
 
 
 def main() -> int:
+    """main."""
     try:
         with urllib.request.urlopen("http://localhost:8000/health/ready", timeout=5) as resp:
             return 0 if resp.status == 200 else 1

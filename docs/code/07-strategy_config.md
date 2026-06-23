@@ -29,6 +29,33 @@
 - 提供内存与 PostgreSQL（SQLAlchemy）两种仓库实现。
 - 通过 FastAPI 路由暴露 RESTful 接口。
 
+### 1.1 v0.2 已实现配置边界
+
+当前代码同时实现了独立于旧 `StrategyProfile` 的 v0.2 版本化配置边界：
+
+- `ProviderConfigVersion`：Provider 非敏感配置和独立 `secret_version_id` 引用。
+- `UniverseDefinitionVersion`：沪深 300、中证 500、全 A 等公司池规则和成员快照。
+- `IndicatorViewVersion`：仅控制用户/AI 可见指标；不会删除量化所需指标。
+- `QuantFeatureSetVersion`：定义量化 required/optional 指标、历史窗口和缺失策略。
+- `QuantStrategyVersion`：定义因子权重、阈值与 calibration report 引用。
+- `UserStylePromptVersion`、`ToolPolicyVersionRef`：冻结用户表达风格和工具权限版本。
+- `ResearchScopeVersion`：冻结上述版本 ID、Canonical rule 和 Provider config；`scope_hash` 使用 canonical JSON + SHA-256 确定性计算。
+
+配置生命周期为 `draft -> review -> active -> deprecated`。PostgreSQL partial unique index 和 repository 激活事务共同保证同一配置 family 只有一个 active 版本。量化策略没有 calibration report 时不能激活；Research Scope 引用缺失、非 active 或 deprecated 版本时不能激活。
+
+用户指标视图与量化特征集是正交配置：`IndicatorViewVersion` 可以隐藏 `pb`，但 `QuantFeatureSetVersion.required_indicators` 仍可要求 `pb`，因此前端展示偏好不会改变底层全量数据同步和量化输入。
+
+### 1.2 Secret Store 与权限边界
+
+- `SecretStore` 使用 AES-GCM-256、每次写入随机 96-bit nonce，并把 provider、secret name、version ID、key version 作为 associated data。
+- 数据库只保存密文、nonce、key version、algorithm、last four 和审计元数据；API 不返回明文、密文、nonce 或 key material。
+- Secret 按版本保存；替换 secret 会停用旧版本。active Provider config 不允许原地换 secret，必须创建新 config version。
+- Provider secret API 要求 local admin Bearer、`X-CSRF-Token` 和 `Idempotency-Key`。配置缺失时 fail closed。
+- 所有 v0.2 create/activate mutation 都把 actor/action/idempotency key 写入 append-only `strategy_config_audits`；数据库唯一 partial index 保证并发重放只产生一个审计事件。
+- 前端 Provider Settings 只用密码输入框，保存/测试后立即清空明文；只显示 `•••• last_four`。本地管理员凭据只保存在当前标签页 `sessionStorage`。
+- Provider health 使用冻结的 config/secret version，真实调用 Tushare、AKShare、Tavily、LLM、Embedding 或 Rerank 的轻量 `healthcheck()`；错误经过 secret redaction。
+- Provider URL 同时执行 scheme、DNS/IP 禁止网段和 provider host allowlist 校验；自定义公网 host 必须显式 `allow_custom_base_url=true`，且不能绕过 loopback/private/link-local 限制。
+
 ---
 
 ## 2. 文件级摘要
@@ -45,7 +72,12 @@
 | `src/margin/strategy/prompt.py` | 分层 Prompt 构建器。 |
 | `src/margin/strategy/repository.py` | 仓库协议及内存、SQLAlchemy 两种实现。 |
 | `src/margin/strategy/service.py` | 业务入口 `StrategyService`，编排创建、更新、校验、生命周期与 Prompt。 |
+| `src/margin/strategy/scope.py` | `ScopeResolver`，解析 active 配置并生成冻结 Research Scope。 |
+| `src/margin/strategy/provider_config.py` | Provider health、SSRF guard、secret-safe 结果。 |
+| `src/margin/core/secret_store.py` | AES-GCM 版本化 Secret Store 与脱敏。 |
 | `src/margin/api/routes/strategy.py` | FastAPI 路由，前缀 `/strategies`。 |
+| `src/margin/api/routes/strategy_config.py` | v0.2 配置路由，前缀 `/api/v1`。 |
+| `web/components/provider-settings-panel.tsx` | Provider 密钥写入、last-four 展示和真实连接测试。 |
 
 ---
 
@@ -469,6 +501,41 @@ PostgreSQL 实现。
 | `POST` | `/{strategy_id}/archive` | 归档当前激活版本 | 路径参数 | `dict[str, Any]` |
 | `GET` | `/{strategy_id}/versions/{version_id}/prompt` | 获取合并 Prompt | 路径参数 + 查询参数 `task: str` | `PromptResponse` |
 
+### 8.1 v0.2 配置 API
+
+位置：`src/margin/api/routes/strategy_config.py`，前缀 `/api/v1`。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET/POST` | `/provider-configs` | 列出安全 Provider 摘要/创建 Provider config version |
+| `PUT` | `/provider-configs/{version_id}/secret` | 加密写入 secret，仅返回 last-four metadata |
+| `POST` | `/provider-configs/{version_id}/test` | 使用冻结 config/secret 做真实只读 healthcheck |
+| `POST` | `/provider-configs/{version_id}/activate` | 激活 Provider config |
+| `GET/POST` | `/universe-configs` | 公司池版本 |
+| `POST` | `/universe-configs/{version_id}/activate` | 激活公司池版本 |
+| `GET/POST` | `/indicator-views` | 用户可见指标版本 |
+| `POST` | `/indicator-views/{version_id}/activate` | 激活指标视图 |
+| `GET/POST` | `/quant-feature-sets` | 量化输入特征集版本 |
+| `POST` | `/quant-feature-sets/{version_id}/activate` | 激活量化特征集 |
+| `GET/POST` | `/quant-strategies` | 量化策略版本 |
+| `POST` | `/quant-strategies/{version_id}/activate` | 激活已校准量化策略 |
+| `GET/POST` | `/style-prompts` | 用户风格 Prompt 版本 |
+| `POST` | `/style-prompts/{version_id}/activate` | 校验系统边界后激活风格 Prompt |
+| `GET/POST` | `/research-scopes` | 冻结 Research Scope |
+| `POST` | `/research-scopes/{version_id}/activate` | 校验引用并激活 Scope |
+
+所有 v0.2 mutating API 都要求 local admin Bearer、CSRF 和 `Idempotency-Key`。生产环境需要配置 `MARGIN_ADMIN_API_TOKEN`、`MARGIN_CSRF_TOKEN` 和 32-byte/base64 `MARGIN_SECRET_MASTER_KEY`。
+
+### 8.2 真实 Provider smoke
+
+真实 smoke 不由单元测试替代：
+
+1. 在本地环境或前端 Provider Settings 写入 Tushare、Tavily、LLM、Embedding、Rerank 凭据。
+2. 对对应 config version 调用 `POST /api/v1/provider-configs/{id}/test`。
+3. Tushare/AKShare/Tavily/LLM/Embedding/Rerank adapter 分别执行现有轻量 `healthcheck()`。
+4. 输出只记录 provider、status、latency、error code 和脱敏错误；不得打印 header、token、密文或原始响应。
+5. 外部网络、代理、额度或 Provider 端故障记录为真实失败证据，不切换 mock 冒充成功。
+
 请求模型字段：
 
 - `CreateStrategyRequest`：`owner_id`, `template`, `name`, `description`
@@ -490,6 +557,7 @@ PostgreSQL 实现。
 - `models.py` 中的 `utc_now` 与 `ensure_utc` 来自 `src/margin/news/models.py`，保证时间戳统一 UTC。
 - `db_models.py` 依赖 `src/margin/storage/base.py` 提供的 SQLAlchemy `Base`。
 - API 层通过 `src/margin/api/dependencies.py` 中的 `get_strategy_service` 解析 `StrategyService` 实例。
+- data/quant/news/AI run 创建时应保存 `ResearchScopeVersion.version_id` 与 `scope_hash`，后续重试或重启不得重新解析当前 active 配置。
 - 投研执行模块（如 `09-holdings_monitoring`、`10-research_execution`）应使用 `StrategyService.get_prompt` 获取最终 Prompt，并使用 `StrategyProfile.active_version_id` 确定当前生效版本。
 - 决策输出必须遵守 `DecisionConfig.prohibited_outputs`，其中 `GUARANTEED_RETURN` 与 `DIRECT_BUY_SELL_ORDER` 由 `StrategyValidator.merge_with_guardrails` 强制注入，无法被用户覆盖。
 - `PromptLayer` 的 `editable` 标记用于前端区分可编辑层（`user_custom`、`task_context`）与系统只读层。

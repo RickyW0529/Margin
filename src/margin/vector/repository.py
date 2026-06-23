@@ -13,17 +13,27 @@ import math
 from collections.abc import Callable
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from margin.news.models import SourceLevel, utc_now
 from margin.vector.db_models import (
     ChunkEmbeddingRow,
     ChunkRow,
+    ChunkSecurityLinkRow,
     IndexAuditRecordRow,
+    IndexedDocumentRow,
     RetrievalAuditRecordRow,
 )
-from margin.vector.models import Chunk, DocType, RetrievalResult
+from margin.vector.models import (
+    Chunk,
+    ChunkSecurityLink,
+    DocType,
+    IndexedDocument,
+    RetrievalResult,
+    SourceLocator,
+    TrustLevel,
+)
 
 
 class VectorRepository:
@@ -52,7 +62,12 @@ class VectorRepository:
         self._session_factory = session_factory
         self._dimension = dimension
 
-    def upsert_chunks(self, chunks: list[Chunk]) -> int:
+    def upsert_chunks(
+        self,
+        chunks: list[Chunk],
+        *,
+        links: list[ChunkSecurityLink] | None = None,
+    ) -> int:
         """Persist chunk metadata idempotently.
 
         Inserts new chunks or updates existing rows by ``chunk_id``.
@@ -70,7 +85,90 @@ class VectorRepository:
                     session.add(_chunk_to_row(chunk))
                 else:
                     _update_chunk_row(row, chunk)
+            for link in links or []:
+                key = (link.chunk_id, link.security_id, link.link_type)
+                row = session.get(ChunkSecurityLinkRow, key)
+                if row is None:
+                    session.add(
+                        ChunkSecurityLinkRow(
+                            chunk_id=link.chunk_id,
+                            security_id=link.security_id,
+                            link_type=link.link_type,
+                            confidence=link.confidence,
+                        )
+                    )
+                else:
+                    row.confidence = link.confidence
         return len(chunks)
+
+    def count_chunk_security_links(self) -> int:
+        """Return persisted chunk-security link count."""
+        with self._session_factory() as session:
+            return int(
+                session.scalar(select(func.count()).select_from(ChunkSecurityLinkRow))
+                or 0
+            )
+
+    def chunk_has_security_link(self, chunk_id: str, security_id: str) -> bool:
+        """Return whether a chunk is linked to a security through v0.2 links."""
+        with self._session_factory() as session:
+            return (
+                session.scalar(
+                    select(func.count())
+                    .select_from(ChunkSecurityLinkRow)
+                    .where(
+                        ChunkSecurityLinkRow.chunk_id == chunk_id,
+                        ChunkSecurityLinkRow.security_id == security_id,
+                    )
+                )
+                or 0
+            ) > 0
+
+    def count_embeddings(self) -> int:
+        """Return persisted embedding row count."""
+        with self._session_factory() as session:
+            return int(
+                session.scalar(select(func.count()).select_from(ChunkEmbeddingRow)) or 0
+            )
+
+    def upsert_indexed_document(self, document: IndexedDocument) -> None:
+        """Persist parser/chunker/indexing audit for a document."""
+        with self._session_factory.begin() as session:
+            row = session.get(IndexedDocumentRow, document.document_id)
+            if row is None:
+                session.add(
+                    IndexedDocumentRow(
+                        document_id=document.document_id,
+                        event_id=document.event_id,
+                        parser_version=document.parser_version,
+                        input_hash=document.input_hash,
+                        chunk_ids=list(document.chunk_ids),
+                        embedding_keys=list(document.embedding_keys),
+                        created_at=document.created_at,
+                    )
+                )
+            else:
+                row.event_id = document.event_id
+                row.parser_version = document.parser_version
+                row.input_hash = document.input_hash
+                row.chunk_ids = list(document.chunk_ids)
+                row.embedding_keys = list(document.embedding_keys)
+
+    def get_indexed_document(self, document_id: str) -> IndexedDocument | None:
+        """Fetch indexed document audit by document id."""
+        with self._session_factory() as session:
+            row = session.get(IndexedDocumentRow, document_id)
+            if row is None:
+                return None
+            return IndexedDocument(
+                document_id=row.document_id,
+                event_id=row.event_id,
+                parser_version=row.parser_version,
+                input_hash=row.input_hash,
+                chunk_ids=tuple(row.chunk_ids),
+                embedding_keys=tuple(row.embedding_keys),
+                created_at=row.created_at,
+            )
 
     def upsert_embeddings(
         self,
@@ -130,6 +228,7 @@ class VectorRepository:
         *,
         top_k: int = 10,
         symbol: str | None = None,
+        security_ids: tuple[str, ...] | None = None,
         decision_at: datetime | None = None,
         doc_types: tuple[str, ...] | None = None,
     ) -> list[tuple[Chunk, float]]:
@@ -162,7 +261,13 @@ class VectorRepository:
                 ChunkEmbeddingRow,
                 ChunkEmbeddingRow.chunk_id == ChunkRow.chunk_id,
             )
-            if symbol:
+            statement = statement.where(ChunkRow.is_active.is_(True))
+            if security_ids:
+                statement = statement.join(
+                    ChunkSecurityLinkRow,
+                    ChunkSecurityLinkRow.chunk_id == ChunkRow.chunk_id,
+                ).where(ChunkSecurityLinkRow.security_id.in_(security_ids))
+            elif symbol:
                 statement = statement.where(ChunkRow.symbol == symbol)
             if decision_at:
                 statement = statement.where(ChunkRow.available_at <= decision_at)
@@ -194,12 +299,22 @@ class VectorRepository:
         self,
         *,
         symbol: str | None = None,
+        security_ids: tuple[str, ...] | None = None,
         doc_types: tuple[str, ...] | None = None,
+        decision_at: datetime | None = None,
     ) -> list[Chunk]:
         """Return persisted chunks for keyword fallback retrieval."""
         statement = select(ChunkRow)
-        if symbol:
+        statement = statement.where(ChunkRow.is_active.is_(True))
+        if security_ids:
+            statement = statement.join(
+                ChunkSecurityLinkRow,
+                ChunkSecurityLinkRow.chunk_id == ChunkRow.chunk_id,
+            ).where(ChunkSecurityLinkRow.security_id.in_(security_ids))
+        elif symbol:
             statement = statement.where(ChunkRow.symbol == symbol)
+        if decision_at:
+            statement = statement.where(ChunkRow.available_at <= decision_at)
         if doc_types:
             statement = statement.where(ChunkRow.doc_type.in_(doc_types))
         statement = statement.order_by(
@@ -373,6 +488,9 @@ def _chunk_to_row(chunk: Chunk) -> ChunkRow:
         table_id=chunk.table_id,
         row_id=chunk.row_id,
         quote_span=list(chunk.quote_span) if chunk.quote_span else None,
+        locator=chunk.locator.model_dump(mode="json", exclude_none=True),
+        trust_level=chunk.trust_level.value,
+        is_active=chunk.is_active,
         keywords=list(chunk.keywords),
         chunk_index=chunk.chunk_index,
         total_chunks=chunk.total_chunks,
@@ -423,6 +541,9 @@ def _chunk_from_row(row: ChunkRow) -> Chunk:
         table_id=row.table_id,
         row_id=row.row_id,
         quote_span=tuple(row.quote_span) if row.quote_span else None,
+        locator=SourceLocator(**(row.locator or {})),
+        trust_level=TrustLevel(row.trust_level),
+        is_active=row.is_active,
         keywords=tuple(row.keywords),
         chunk_index=row.chunk_index,
         total_chunks=row.total_chunks,

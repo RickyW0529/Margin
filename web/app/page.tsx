@@ -1,49 +1,58 @@
 /**
  * @fileoverview Home page for the Margin workspace.
- * Aggregates portfolio, research, and provider status into a high-level dashboard.
+ * Aggregates research runs, candidate status, and provider health.
  */
 
 import Link from "next/link";
 
 import { ProviderStatusPanel } from "@/components/provider-status-panel";
 import {
-  fetchPortfolioDashboard,
+  fetchProviderConfigs,
   fetchProviderStatus,
-  fetchResearchHome,
-  fetchResearchRuns,
-  type PortfolioDashboard,
+  fetchResearchCandidates,
+  type ProviderConfigSummary,
   type ProviderStatus,
-  type ResearchHomeSummary,
-  type ResearchRun,
+  type ResearchCandidateListResponse,
 } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
-
-const DEFAULT_PORTFOLIO_ID = process.env.MARGIN_DEFAULT_PORTFOLIO_ID ?? "demo";
 
 /**
  * Workspace home page that fetches summary data from multiple APIs in parallel.
  * @returns The rendered home page with metrics, navigation, and provider status.
  */
 export default async function HomePage() {
-  const [dashboardResult, researchResult, runsResult, providersResult] =
+  const [
+    candidatesResult,
+    providersResult,
+    providerConfigsResult,
+  ] =
     await Promise.allSettled([
-      fetchPortfolioDashboard(DEFAULT_PORTFOLIO_ID),
-      fetchResearchHome(),
-      fetchResearchRuns(),
+      fetchResearchCandidates({
+        limit: 8,
+        scope_version_id: "scope-current",
+        universe: "ALL_A",
+      }),
       fetchProviderStatus(),
+      fetchProviderConfigs(),
     ]);
 
-  const dashboard = fulfilledValue<PortfolioDashboard>(dashboardResult);
-  const research = fulfilledValue<ResearchHomeSummary>(researchResult);
-  const runs = fulfilledValue<ResearchRun[]>(runsResult) ?? [];
+  const candidates = fulfilledValue<ResearchCandidateListResponse>(candidatesResult);
   const providers = fulfilledValue<ProviderStatus[]>(providersResult) ?? [];
+  const providerConfigs =
+    fulfilledValue<ProviderConfigSummary[]>(providerConfigsResult) ?? [];
   const errors = [
-    dashboardResult,
-    researchResult,
-    runsResult,
+    candidatesResult,
     providersResult,
+    providerConfigsResult,
   ].filter((result) => result.status === "rejected").length;
+  const candidateItems = candidates?.items ?? [];
+  const reviewRequiredCount = candidateItems.filter(
+    (item) => item.review_required,
+  ).length;
+  const riskFlagCount = candidateItems.filter(
+    (item) => item.risk_flags.length > 0,
+  ).length;
 
   return (
     <main className="workspace-shell">
@@ -53,7 +62,7 @@ export default async function HomePage() {
           <h1 id="home-title">Margin 工作台</h1>
         </div>
         <div className="status-strip">
-          <span>默认组合 {DEFAULT_PORTFOLIO_ID}</span>
+          <span>公司池估值发现</span>
           <span>{errors === 0 ? "API 已连接" : `${errors} 个接口异常`}</span>
         </div>
       </section>
@@ -66,24 +75,24 @@ export default async function HomePage() {
 
       <section className="metric-grid" aria-label="产品入口指标">
         <Metric
-          label="组合"
-          value={dashboard?.portfolio.name ?? "不可用"}
-          helper={`${dashboard?.overview.position_count ?? 0} 个持仓`}
+          label="今日候选"
+          value={`${candidateItems.length}`}
+          helper="v0.2 candidate BFF"
         />
         <Metric
-          label="总资产"
-          value={money(dashboard?.overview.total_assets)}
-          helper={`现金 ${money(dashboard?.overview.cash)}`}
+          label="最新刷新"
+          value={candidates ? formatDate(candidates.as_of) : "暂无"}
+          helper={candidates?.scope_version_id ?? "scope-current"}
         />
         <Metric
-          label="研究运行"
-          value={`${runs.length}`}
-          helper={research?.run_status ?? "暂无最新运行"}
+          label="需复核"
+          value={`${reviewRequiredCount}`}
+          helper="AI/人工复核队列"
         />
         <Metric
           label="高风险候选"
-          value={`${research?.high_priority_risks.length ?? 0}`}
-          helper={`待复盘 ${research?.position_reviews.length ?? 0}`}
+          value={`${riskFlagCount}`}
+          helper="需要进一步阅读证据"
         />
       </section>
 
@@ -94,35 +103,46 @@ export default async function HomePage() {
             <span>真实 API-backed</span>
           </div>
           <div className="action-grid">
-            <Link
-              className="primary-button link-button"
-              href={`/portfolios/${DEFAULT_PORTFOLIO_ID}`}
-            >
-              打开组合看板
-            </Link>
             <Link className="primary-button link-button" href="/research">
               进入研究面板
             </Link>
-            {research?.run_id ? (
-              <Link
-                className="secondary-link"
-                href={`/research/runs/${research.run_id}`}
-              >
-                查看最新研究运行
-              </Link>
-            ) : (
-              <span className="helper-text">暂无最新研究运行</span>
-            )}
+            <Link className="secondary-link" href="/settings/scope">
+              配置研究作用域
+            </Link>
+            <span className="helper-text">
+              运行进度从估值发现 run 页面查看，候选结果从 Dashboard projection 查看。
+            </span>
           </div>
         </div>
         <ProviderStatusPanel providers={providers} />
       </section>
+      {providerConfigs.length === 0 ? (
+        <div className="notice-panel">
+          <span>尚未激活版本化 Provider 配置。</span>
+          <Link className="secondary-link" href="/settings/providers">
+            前往设置
+          </Link>
+        </div>
+      ) : null}
     </main>
   );
 }
 
 function fulfilledValue<T>(result: PromiseSettledResult<T>): T | null {
   return result.status === "fulfilled" ? result.value : null;
+}
+
+function formatDate(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed);
 }
 
 function Metric({
@@ -141,15 +161,4 @@ function Metric({
       <span>{helper}</span>
     </div>
   );
-}
-
-function money(value: number | null | undefined): string {
-  if (value == null) {
-    return "--";
-  }
-  return new Intl.NumberFormat("zh-CN", {
-    style: "currency",
-    currency: "CNY",
-    maximumFractionDigits: 0,
-  }).format(value);
 }

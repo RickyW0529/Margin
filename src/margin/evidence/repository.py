@@ -10,16 +10,28 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from margin.evidence.db_models import (
+    ClaimEvidenceLinkRow,
     EvidenceClaimRow,
+    EvidenceConflictRow,
+    EvidencePackageItemRow,
+    EvidencePackageRow,
     EvidenceRecordRow,
     EvidenceValidationAuditRow,
+    NewsContextEvidenceRow,
     ResearchEvidenceRow,
 )
 from margin.evidence.models import (
     Claim,
+    ClaimEvidenceLink,
+    ClaimEvidenceRole,
+    ClaimStatus,
     ClaimType,
     ConflictRecord,
+    ConflictSeverity,
     Evidence,
+    EvidenceConflict,
+    EvidencePackage,
+    EvidencePackageQualityStatus,
     FactOrInference,
 )
 from margin.evidence.validator import (
@@ -47,6 +59,16 @@ class ResearchEvidenceLink(BaseModel):
     evidence_id: str
     role: str
     rank: int
+    created_at: datetime
+
+    model_config = {"frozen": True}
+
+
+class NewsContextEvidenceLink(BaseModel):
+    """Persisted link between a news context bundle and evidence."""
+
+    bundle_id: str
+    evidence_id: str
     created_at: datetime
 
     model_config = {"frozen": True}
@@ -222,6 +244,227 @@ class EvidenceRepository:
             ).all()
             return [_research_evidence_from_row(row) for row in rows]
 
+    def add_evidence_package(self, package: EvidencePackage) -> None:
+        """Persist a frozen evidence package version append-only."""
+        key = (package.package_id, package.version)
+        with self._session_factory.begin() as session:
+            row = session.get(EvidencePackageRow, key)
+            if row is None:
+                session.add(_package_to_row(package))
+                session.flush()
+                for item in _package_item_rows(package):
+                    session.add(item)
+                return
+            if _package_from_row(row) != package:
+                raise ValueError(
+                    f"evidence package '{package.package_id}/{package.version}' is immutable"
+                )
+
+    def get_evidence_package(
+        self,
+        package_id: str,
+        version: int,
+    ) -> EvidencePackage | None:
+        """Fetch a frozen evidence package version by composite key."""
+        with self._session_factory() as session:
+            row = session.get(EvidencePackageRow, (package_id, version))
+            return _package_from_row(row) if row is not None else None
+
+    def create_package_revision(
+        self,
+        parent_package_id: str,
+        added_evidence_ids: tuple[str, ...],
+        *,
+        retrieval_audit_id: str | None = None,
+        coverage: float | None = None,
+        quality_status: EvidencePackageQualityStatus | None = None,
+    ) -> EvidencePackage:
+        """Create the next immutable version of an evidence package.
+
+        Revisions retain the package identity and increment ``version``. The
+        first version row is locked before reading the latest version so
+        concurrent supplementation attempts serialize on PostgreSQL.
+        """
+        requested_ids = tuple(dict.fromkeys(added_evidence_ids))
+        if not requested_ids:
+            raise ValueError("package revision requires at least one evidence ID")
+
+        with self._session_factory.begin() as session:
+            root_row = session.scalar(
+                select(EvidencePackageRow)
+                .where(EvidencePackageRow.package_id == parent_package_id)
+                .order_by(EvidencePackageRow.version)
+                .limit(1)
+                .with_for_update()
+            )
+            if root_row is None:
+                raise KeyError(f"evidence package '{parent_package_id}' not found")
+
+            parent_row = session.scalar(
+                select(EvidencePackageRow)
+                .where(EvidencePackageRow.package_id == parent_package_id)
+                .order_by(EvidencePackageRow.version.desc())
+                .limit(1)
+            )
+            assert parent_row is not None
+            parent = _package_from_row(parent_row)
+
+            new_ids = tuple(
+                evidence_id
+                for evidence_id in requested_ids
+                if evidence_id not in parent.evidence_ids
+            )
+            if not new_ids:
+                raise ValueError("package revision contains no new evidence IDs")
+
+            evidence_rows = {
+                row.evidence_id: row
+                for row in session.scalars(
+                    select(EvidenceRecordRow).where(
+                        EvidenceRecordRow.evidence_id.in_(new_ids)
+                    )
+                ).all()
+            }
+            missing_ids = [
+                evidence_id
+                for evidence_id in new_ids
+                if evidence_id not in evidence_rows
+            ]
+            if missing_ids:
+                raise KeyError(
+                    "package revision references unknown evidence IDs: "
+                    + ",".join(missing_ids)
+                )
+
+            merged_max_available_at = max(
+                (
+                    timestamp
+                    for timestamp in (
+                        parent.max_available_at,
+                        *(evidence_rows[evidence_id].available_at for evidence_id in new_ids),
+                    )
+                    if timestamp is not None
+                ),
+                default=None,
+            )
+            revision = parent.model_copy(
+                update={
+                    "version": parent.version + 1,
+                    "evidence_ids": parent.evidence_ids + new_ids,
+                    "coverage": parent.coverage if coverage is None else coverage,
+                    "quality_status": (
+                        parent.quality_status
+                        if quality_status is None
+                        else quality_status
+                    ),
+                    "max_available_at": merged_max_available_at,
+                    "retrieval_audit_id": (
+                        retrieval_audit_id
+                        if retrieval_audit_id is not None
+                        else parent.retrieval_audit_id
+                    ),
+                    "parent_package_id": parent.package_id,
+                    "added_evidence_ids": new_ids,
+                }
+            )
+            session.add(_package_to_row(revision))
+            session.flush()
+            session.add_all(_package_item_rows(revision))
+            return revision
+
+    def link_news_context_evidence(self, bundle_id: str, evidence_id: str) -> None:
+        """Persist an immutable news-context to evidence link idempotently."""
+        with self._session_factory.begin() as session:
+            row = session.get(NewsContextEvidenceRow, (bundle_id, evidence_id))
+            if row is None:
+                session.add(
+                    NewsContextEvidenceRow(
+                        bundle_id=bundle_id,
+                        evidence_id=evidence_id,
+                        created_at=utc_now(),
+                    )
+                )
+
+    def list_news_context_evidence(
+        self,
+        bundle_id: str,
+    ) -> list[NewsContextEvidenceLink]:
+        """List evidence links for a news context bundle."""
+        with self._session_factory() as session:
+            rows = session.scalars(
+                select(NewsContextEvidenceRow)
+                .where(NewsContextEvidenceRow.bundle_id == bundle_id)
+                .order_by(NewsContextEvidenceRow.created_at, NewsContextEvidenceRow.evidence_id)
+            ).all()
+            return [_news_context_evidence_from_row(row) for row in rows]
+
+    def link_claim_evidence(
+        self,
+        claim_id: str,
+        evidence_id: str,
+        *,
+        role: ClaimEvidenceRole,
+        rank: int = 0,
+    ) -> None:
+        """Persist an immutable claim-evidence role link idempotently."""
+        role_value = role.value if isinstance(role, ClaimEvidenceRole) else str(role)
+        key = (claim_id, evidence_id, role_value)
+        with self._session_factory.begin() as session:
+            row = session.get(ClaimEvidenceLinkRow, key)
+            if row is None:
+                session.add(
+                    ClaimEvidenceLinkRow(
+                        claim_id=claim_id,
+                        evidence_id=evidence_id,
+                        role=role_value,
+                        rank=rank,
+                        created_at=utc_now(),
+                    )
+                )
+                return
+            if row.rank != rank:
+                raise ValueError(
+                    "claim evidence link is immutable: "
+                    f"{claim_id}/{evidence_id}/{role_value}"
+                )
+
+    def list_claim_evidence(self, claim_id: str) -> list[ClaimEvidenceLink]:
+        """List claim-evidence role links ordered by rank."""
+        with self._session_factory() as session:
+            rows = session.scalars(
+                select(ClaimEvidenceLinkRow)
+                .where(ClaimEvidenceLinkRow.claim_id == claim_id)
+                .order_by(ClaimEvidenceLinkRow.rank, ClaimEvidenceLinkRow.created_at)
+            ).all()
+            return [_claim_evidence_link_from_row(row) for row in rows]
+
+    def add_evidence_conflict(self, conflict: EvidenceConflict) -> None:
+        """Persist an immutable evidence conflict."""
+        with self._session_factory.begin() as session:
+            row = session.get(EvidenceConflictRow, conflict.conflict_id)
+            if row is None:
+                session.add(_evidence_conflict_to_row(conflict))
+                return
+            if _evidence_conflict_from_row(row) != conflict:
+                raise ValueError(f"evidence conflict '{conflict.conflict_id}' is immutable")
+
+    def list_evidence_conflicts(
+        self,
+        package_id: str,
+        version: int,
+    ) -> list[EvidenceConflict]:
+        """List conflicts recorded for an evidence package version."""
+        with self._session_factory() as session:
+            rows = session.scalars(
+                select(EvidenceConflictRow)
+                .where(
+                    EvidenceConflictRow.package_id == package_id,
+                    EvidenceConflictRow.version == version,
+                )
+                .order_by(EvidenceConflictRow.created_at, EvidenceConflictRow.conflict_id)
+            ).all()
+            return [_evidence_conflict_from_row(row) for row in rows]
+
 
 def _evidence_to_row(evidence: Evidence) -> EvidenceRecordRow:
     """Convert an Evidence domain model to a database row."""
@@ -241,10 +484,13 @@ def _evidence_to_row(evidence: Evidence) -> EvidenceRecordRow:
         available_at=evidence.available_at,
         retrieved_at=evidence.retrieved_at,
         page=evidence.page,
+        bbox=list(evidence.bbox) if evidence.bbox else None,
         section=evidence.section,
         paragraph_index=evidence.paragraph_index,
+        dom_path=evidence.dom_path,
         table_id=evidence.table_id,
         row_id=evidence.row_id,
+        column_id=evidence.column_id,
         quote_span=list(evidence.quote_span) if evidence.quote_span else None,
         snapshot_id=evidence.snapshot_id,
         snapshot_hash=evidence.snapshot_hash,
@@ -270,10 +516,13 @@ def _evidence_from_row(row: EvidenceRecordRow) -> Evidence:
         available_at=row.available_at,
         retrieved_at=row.retrieved_at,
         page=row.page,
+        bbox=tuple(row.bbox) if row.bbox else None,
         section=row.section,
         paragraph_index=row.paragraph_index,
+        dom_path=row.dom_path,
         table_id=row.table_id,
         row_id=row.row_id,
+        column_id=row.column_id,
         quote_span=tuple(row.quote_span) if row.quote_span else None,
         snapshot_id=row.snapshot_id,
         snapshot_hash=row.snapshot_hash,
@@ -286,6 +535,7 @@ def _claim_to_row(claim: Claim) -> EvidenceClaimRow:
         claim_id=claim.claim_id,
         claim_type=claim.claim_type.value,
         statement=claim.statement,
+        status=claim.status.value,
         fact_or_inference=claim.fact_or_inference.value,
         evidence_ids=list(claim.evidence_ids),
         confidence=claim.confidence,
@@ -303,6 +553,7 @@ def _claim_from_row(row: EvidenceClaimRow) -> Claim:
         claim_id=row.claim_id,
         claim_type=ClaimType(row.claim_type),
         statement=row.statement,
+        status=ClaimStatus(row.status),
         fact_or_inference=FactOrInference(row.fact_or_inference),
         evidence_ids=list(row.evidence_ids),
         confidence=row.confidence,
@@ -358,5 +609,122 @@ def _research_evidence_from_row(row: ResearchEvidenceRow) -> ResearchEvidenceLin
         evidence_id=row.evidence_id,
         role=row.role,
         rank=row.rank,
+        created_at=row.created_at,
+    )
+
+
+def _package_to_row(package: EvidencePackage) -> EvidencePackageRow:
+    """Convert an EvidencePackage model to a database row."""
+    return EvidencePackageRow(
+        package_id=package.package_id,
+        version=package.version,
+        security_id=package.security_id,
+        decision_at=package.decision_at,
+        scope_hash=package.scope_hash,
+        questions=list(package.questions),
+        evidence_ids=list(package.evidence_ids),
+        claim_ids=list(package.claim_ids),
+        conflict_ids=list(package.conflict_ids),
+        coverage=package.coverage,
+        quality_status=package.quality_status.value,
+        max_available_at=package.max_available_at,
+        retrieval_audit_id=package.retrieval_audit_id,
+        parent_package_id=package.parent_package_id,
+        added_evidence_ids=list(package.added_evidence_ids),
+        created_at=utc_now(),
+    )
+
+
+def _package_from_row(row: EvidencePackageRow) -> EvidencePackage:
+    """Convert an EvidencePackageRow to an EvidencePackage model."""
+    return EvidencePackage(
+        package_id=row.package_id,
+        version=row.version,
+        security_id=row.security_id,
+        decision_at=row.decision_at,
+        scope_hash=row.scope_hash,
+        questions=tuple(row.questions),
+        evidence_ids=tuple(row.evidence_ids),
+        claim_ids=tuple(row.claim_ids),
+        conflict_ids=tuple(row.conflict_ids),
+        coverage=row.coverage,
+        quality_status=EvidencePackageQualityStatus(row.quality_status),
+        max_available_at=row.max_available_at,
+        retrieval_audit_id=row.retrieval_audit_id,
+        parent_package_id=row.parent_package_id,
+        added_evidence_ids=tuple(row.added_evidence_ids),
+    )
+
+
+def _package_item_rows(package: EvidencePackage) -> list[EvidencePackageItemRow]:
+    """Materialize package membership rows for package replay and search."""
+    rows: list[EvidencePackageItemRow] = []
+    for item_type, item_ids in (
+        ("evidence", package.evidence_ids),
+        ("claim", package.claim_ids),
+        ("conflict", package.conflict_ids),
+    ):
+        rows.extend(
+            EvidencePackageItemRow(
+                package_id=package.package_id,
+                version=package.version,
+                item_type=item_type,
+                item_id=item_id,
+                rank=index + 1,
+                created_at=utc_now(),
+            )
+            for index, item_id in enumerate(item_ids)
+        )
+    return rows
+
+
+def _news_context_evidence_from_row(
+    row: NewsContextEvidenceRow,
+) -> NewsContextEvidenceLink:
+    """Convert a NewsContextEvidenceRow to a domain link."""
+    return NewsContextEvidenceLink(
+        bundle_id=row.bundle_id,
+        evidence_id=row.evidence_id,
+        created_at=row.created_at,
+    )
+
+
+def _claim_evidence_link_from_row(row: ClaimEvidenceLinkRow) -> ClaimEvidenceLink:
+    """Convert a ClaimEvidenceLinkRow to a domain link."""
+    return ClaimEvidenceLink(
+        claim_id=row.claim_id,
+        evidence_id=row.evidence_id,
+        role=ClaimEvidenceRole(row.role),
+        rank=row.rank,
+        created_at=row.created_at,
+    )
+
+
+def _evidence_conflict_to_row(conflict: EvidenceConflict) -> EvidenceConflictRow:
+    """Convert an EvidenceConflict domain model to a database row."""
+    return EvidenceConflictRow(
+        conflict_id=conflict.conflict_id,
+        package_id=conflict.package_id,
+        version=conflict.version,
+        security_id=conflict.security_id,
+        evidence_id=conflict.evidence_id,
+        conflicting_evidence_id=conflict.conflicting_evidence_id,
+        reason=conflict.reason,
+        severity=conflict.severity.value,
+        created_at=conflict.created_at,
+    )
+
+
+def _evidence_conflict_from_row(row: EvidenceConflictRow) -> EvidenceConflict:
+    """Convert an EvidenceConflictRow to a domain model."""
+    return EvidenceConflict(
+        conflict_id=row.conflict_id,
+        package_id=row.package_id,
+        version=row.version,
+        security_id=row.security_id,
+        evidence_id=row.evidence_id,
+        conflicting_evidence_id=row.conflicting_evidence_id,
+        reason=row.reason,
+        severity=ConflictSeverity(row.severity),
         created_at=row.created_at,
     )

@@ -27,10 +27,13 @@ It implements the acquisition, web search, deduplication, and source-leveling bo
 | --- | --- |
 | Source management | Register sources, assign default trust levels, and bind connectors that fetch raw content. |
 | Incremental discovery | Discover URLs/API records from exchange announcement connectors and resume safely using persisted cursors. |
+| v0.2 target queue | Persist the complete daily quant-selected research target set before external calls; batch size limits throughput only, not company coverage. |
+| v0.2 refresh runs | Track target completeness, priority, claim, retry/backoff, partial/final failures, and reconciliation in `news_refresh_runs` / `news_refresh_targets`. |
 | Download & snapshot | Download original content through connectors and persist immutable raw snapshots with content hashes. |
 | Format detection & parsing | Detect content type (PDF, HTML, JSON, CSV, XML, text) and extract title, body text, and structured blocks. |
 | Security mapping | Extract security symbols from titles and body text using exchange code patterns. |
 | Web search | Execute user-configured web searches, persist query audit records, and verify accessible original content. |
+| Materiality & context bundles | Score deterministic relevance/materiality/novelty and expose incomplete-target semantics to downstream RAG/AI. |
 | Compliance enforcement | Respect robots.txt, reject paywalled or blocked content, and refuse to bypass login walls or anti-scraping mechanisms. |
 | Deduplication | Detect duplicates by URL, content hash, title/date, SimHash, vector similarity, and repost-chain detection. |
 | Quality scoring | Score events on authority, completeness, timeliness, and uniqueness. |
@@ -57,19 +60,28 @@ It implements the acquisition, web search, deduplication, and source-leveling bo
 | --- | --- |
 | `src/margin/news/__init__.py` | Package exports. Re-exports public classes and functions from acquisition, deduplication, models, and web search modules. |
 | `src/margin/news/acquirer.py` | Source registry, connectors, downloader, snapshot store, document parser, security mapper, and the `FilingAcquirer` integration class. |
+| `src/margin/news/target_queue.py` | v0.2 target queue: complete enqueue, idempotent target keys, batch claim, retry/backoff, terminal reconciliation. |
+| `src/margin/news/query_templates.py` | v0.2 query templates with template hash and target dedupe lineage. |
+| `src/margin/news/refresh_service.py` | v0.2 target-driven WebSearch orchestration: persist all targets first, then call providers; rate limits move runs to waiting state. |
+| `src/margin/news/official_sync.py` | v0.2 official filing sync: source-level cursors advance only after durable `DocumentEvent` persistence. |
+| `src/margin/news/materiality.py` | Deterministic materiality scoring for penalties, trading-status changes, major contracts, litigation, and control changes. |
+| `src/margin/news/context_bundle.py` | Builds ranked news context bundles and carries target completion semantics. |
+| `src/margin/news/service.py` | v0.2 application service for starting refreshes and reading run reconciliation. |
 | `src/margin/news/connectors.py` | Fixture-testable adapters for SSE and SZSE announcement discovery. |
-| `src/margin/news/db_models.py` | SQLAlchemy ORM models for cursors, snapshots, document events, outbox, search records, dedup records, and repost edges. |
+| `src/margin/news/db_models.py` | SQLAlchemy ORM models for cursors, snapshots, document events, outbox, search records, dedup records, repost edges, v0.2 refresh targets, materiality, and context bundles. |
 | `src/margin/news/dedup.py` | Multi-layer deduplication (URL, hash, title/date, SimHash, vector similarity, repost chains) and L1-L5 quality scoring. |
 | `src/margin/news/discovery.py` | `DiscoveredDocument` model and `DiscoveryConnector` protocol for incremental source discovery. |
-| `src/margin/news/models.py` | Core domain models: `SourceLevel`, `DocumentStatus`, `RawSnapshot`, `DocumentEvent`, `SourceDescriptor`, and factory helpers. |
+| `src/margin/news/models.py` | Core domain models: `SourceLevel`, `DocumentStatus`, `RawSnapshot`, `DocumentEvent`, `SourceDescriptor`, v0.2 refresh target/context DTOs, and factory helpers. |
 | `src/margin/news/outbox.py` | `DocumentEventPublisher` and `OutboxConsumer` facades over repository persistence. |
 | `src/margin/news/parsed.py` | Block-oriented parsed document models and `StructuredDocumentParser` for HTML, CSV, JSON, PDF, and text. |
 | `src/margin/news/providers/__init__.py` | Provider package docstring; third-party adapters live under this package. |
-| `src/margin/news/providers/tavily.py` | `TavilySearchAdapter`, a concrete HTTP adapter for the Tavily search API. |
+| `src/margin/news/providers/tavily.py` | `TavilySearchAdapter` plus token-safe `TavilyProviderError` and stable error codes. |
 | `src/margin/news/repository.py` | `NewsRepository` and domain record models for PostgreSQL-backed persistence. |
 | `src/margin/news/robots.py` | `RobotsChecker` and `RobotsRules` for robots.txt longest-prefix Allow/Disallow compliance. |
 | `src/margin/news/scheduler.py` | `IncrementalAcquisitionRunner` and `AcquisitionRunResult` for restart-safe incremental acquisition. |
 | `src/margin/news/websearch.py` | Web search models, `WebSearchProvider`, `ComplianceChecker`, `OriginalContentVerifier`, and `WebSearchService`. |
+| `src/margin/api/routes/news.py` | v0.2 News API: `POST /api/v1/news/refresh`, `GET /api/v1/news/runs/{run_id}`. |
+| `scripts/smoke_news_websearch.py` | Real Tavily smoke that prints status, result count, query ID, and snapshot count only. |
 
 ---
 

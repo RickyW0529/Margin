@@ -6,9 +6,10 @@
 - [2. File-Level Summaries](#2-file-level-summaries)
 - [3. Domain Models](#3-domain-models)
   - [3.1 `Chunk`](#31-chunk)
-  - [3.2 `RetrievalResult`](#32-retrievalresult)
-  - [3.3 `DocType`](#33-doctype)
-  - [3.4 Factory Functions](#34-factory-functions)
+  - [3.2 v0.2 Indexing Models](#32-v02-indexing-models)
+  - [3.3 `RetrievalResult`](#33-retrievalresult)
+  - [3.4 `DocType`](#34-doctype)
+  - [3.5 Factory Functions](#35-factory-functions)
 - [4. Chunkers](#4-chunkers)
   - [4.1 `BaseChunker`](#41-basechunker)
   - [4.2 `ReportChunker`](#42-reportchunker)
@@ -18,6 +19,7 @@
   - [4.6 `UserNoteChunker`](#46-usernotechunker)
   - [4.7 `Chunker`](#47-chunker)
   - [4.8 `infer_doc_type`](#48-infer_doc_type)
+  - [4.9 v0.2 Structured Parsers and `StructuredChunker`](#49-v02-structured-parsers-and-structuredchunker)
 - [5. Embedding Pipeline](#5-embedding-pipeline)
   - [5.1 `EmbeddingProvider`](#51-embeddingprovider)
   - [5.2 `VectorStore`](#52-vectorstore)
@@ -27,6 +29,7 @@
   - [5.6 `OpenAIEmbeddingProvider`](#56-openaiembeddingprovider)
 - [6. Persistent Pipeline](#6-persistent-pipeline)
   - [6.1 `PersistentEmbeddingPipeline`](#61-persistentembeddingpipeline)
+  - [6.2 `PersistentIndexingPipeline`](#62-persistentindexingpipeline)
 - [7. Retrieval](#7-retrieval)
   - [7.1 `SearchConstraints`](#71-searchconstraints)
   - [7.2 `HybridWeights`](#72-hybridweights)
@@ -36,9 +39,11 @@
   - [7.6 `HTTPRerankProvider`](#76-httprerankprovider)
 - [8. Indexing Runner](#8-indexing-runner)
   - [8.1 `DocumentIndexingRunner`](#81-documentindexingrunner)
+  - [8.2 `IndexingRunner`](#82-indexingrunner)
 - [9. Repository](#9-repository)
   - [9.1 `VectorRepository`](#91-vectorrepository)
 - [10. Cross-Module Usage Notes](#10-cross-module-usage-notes)
+  - [10.1 Real Smoke](#101-real-smoke)
 
 ---
 
@@ -48,10 +53,13 @@ The `04-text_indexing` module (implemented under `src/margin/vector/`) is respon
 
 Key responsibilities:
 
+- **Recoverable outbox ingestion**: consume module 03 document outbox messages with lease/retry semantics.
+- **Structured parsing**: parse HTML, PDF, CSV, JSON, and plain text into locatable blocks.
 - **Document chunking**: split documents by type (annual reports, filings, news, IR records, industry reports, user notes) into semantically meaningful, locatable chunks.
+- **Multi-security linking**: persist chunk/security relationships in `chunk_security_links`; chunk identity is no longer tied to a single symbol.
 - **Embedding generation**: produce dense vector embeddings for chunks using pluggable providers.
 - **Vector and keyword indexing**: store embeddings in a vector store (in-memory or PostgreSQL/pgvector) and keyword statistics in a BM25 index.
-- **Hybrid retrieval**: combine dense vector similarity, BM25 keyword scoring, recency decay, source quality, and entity match into a fused relevance score.
+- **PIT hybrid retrieval**: combine dense vector similarity, BM25 keyword scoring, recency decay, source quality, and entity match while enforcing `available_at <= decision_at`.
 - **Reranking**: optionally rerank retrieval results using a cross-encoder or HTTP reranking provider.
 - **Auditing and replay**: record indexing operations and retrieval results for debugging, evaluation, and replay.
 - **Cross-module integration**: consume document events from the module 03 outbox and expose retrieval tools to the multi-agent research layer.
@@ -63,9 +71,10 @@ Key responsibilities:
 | File | Purpose |
 |------|---------|
 | `src/margin/vector/__init__.py` | Public package exports. Re-exports chunkers, embedding classes, models, and retrieval classes. |
-| `src/margin/vector/models.py` | Domain models: `DocType`, `Chunk`, `RetrievalResult`, plus helper functions `compute_chunk_hash` and `make_chunk`. |
-| `src/margin/vector/db_models.py` | SQLAlchemy ORM definitions for `ChunkRow`, `ChunkEmbeddingRow`, `IndexAuditRecordRow`, and `RetrievalAuditRecordRow`. |
+| `src/margin/vector/models.py` | Domain models: `DocType`, `Chunk`, `SourceLocator`, `ChunkSecurityLink`, `IndexedDocument`, `EmbeddingKey`, `RetrievalResult`, plus helper functions. |
+| `src/margin/vector/db_models.py` | SQLAlchemy ORM definitions for `ChunkRow`, `ChunkEmbeddingRow`, `ChunkSecurityLinkRow`, `IndexedDocumentRow`, `IndexAuditRecordRow`, and `RetrievalAuditRecordRow`. |
 | `src/margin/vector/chunker.py` | Document-type-aware chunking logic, including `Chunker`, `BaseChunker`, and specializations such as `ReportChunker` and `NewsChunker`. |
+| `src/margin/vector/parsers/` | HTML/PDF/CSV/JSON/Text parsers that emit structured blocks with `SourceLocator`. |
 | `src/margin/vector/embedding.py` | In-memory embedding pipeline: `EmbeddingProvider`, `VectorStore`, `BM25Index`, `IndexAuditor`, and `EmbeddingPipeline`. |
 | `src/margin/vector/providers/openai_embedding.py` | `OpenAIEmbeddingProvider`, an HTTP adapter for OpenAI-compatible `/embeddings` endpoints. |
 | `src/margin/vector/providers/rerank.py` | `HTTPRerankProvider`, an HTTP adapter for Cohere-style or OpenAI-compatible `/rerank` endpoints. |
@@ -74,6 +83,7 @@ Key responsibilities:
 | `src/margin/vector/retrieval.py` | Hybrid retrieval and reranking: `HybridRetriever`, `Reranker`, `RetrievalTool`, `SearchConstraints`, and `HybridWeights`. |
 | `src/margin/vector/indexing_runner.py` | `DocumentIndexingRunner`, a worker that consumes document outbox events and persists chunks/embeddings. |
 | `src/margin/vector/repository.py` | `VectorRepository`, the PostgreSQL persistence boundary for chunks, embeddings, audits, and replay. |
+| `scripts/smoke_text_indexing.py` | Token-safe real embedding/indexing smoke script for module 04. |
 
 ---
 
@@ -87,7 +97,7 @@ Defined in `src/margin/vector/models.py`.
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| `chunk_id` | `str` | Stable identifier derived from the document and chunk index. |
+| `chunk_id` | `str` | Stable identifier. v0.2 structured indexing uses `sha256(document_id, content_hash, parser_version, chunk_index)` and does not depend on symbol. |
 | `document_id` | `str` | Identifier of the parent document. |
 | `content` | `str` | Plain-text chunk content. |
 | `content_hash` | `str` | SHA-256 hash of the content used for integrity checks. |
@@ -106,6 +116,9 @@ Defined in `src/margin/vector/models.py`.
 | `table_id` | `str \| None` | Table identifier. |
 | `row_id` | `str \| None` | Table row identifier. |
 | `quote_span` | `tuple[int, int] \| None` | Character span for direct quoting. |
+| `locator` | `SourceLocator` | Unified v0.2 locator for page, bbox, DOM path, paragraph, table, row/column, and quote span. |
+| `trust_level` | `TrustLevel` | Prompt-safety trust label. WebSearch/news content is treated as untrusted source content. |
+| `is_active` | `bool` | Whether the chunk is active. Persistent retrieval filters inactive chunks. |
 | `embedding` | `tuple[float, ...] \| None` | Optional dense vector embedding. |
 | `keywords` | `tuple[str, ...]` | Optional BM25/keyword terms. |
 | `chunk_index` | `int` | Zero-based position within the document. |
@@ -114,9 +127,21 @@ Defined in `src/margin/vector/models.py`.
 | Method / Property | Signature | Description |
 |-------------------|-----------|-------------|
 | `normalize_timestamp` | `@field_validator("published_at", "available_at")` `classmethod` | Normalizes timestamp fields to UTC. |
-| `has_locator` | `property` | Returns `True` when the chunk has a `source_url` and at least one structural locator (`page`, `section`, `paragraph_index`, `table_id`, `row_id`, or `quote_span`). |
+| `has_locator` | `property` | Returns `True` when the chunk has a `source_url` and a precise `SourceLocator` or compatible legacy locator fields. |
 
-### 3.2 `RetrievalResult`
+### 3.2 v0.2 Indexing Models
+
+| Model | Description |
+|-------|-------------|
+| `SourceLocator` | Unified locator with `page`, `bbox`, `section`, `dom_path`, `paragraph_index`, `table_id`, `row_id`, `column_id`, and `quote_span`. `has_precise_anchor` indicates whether evidence can be replayed to source. |
+| `TrustLevel` | `trusted_official_content`, `trusted_structured_data`, `untrusted_source_content`, or `user_supplied_content`. |
+| `IndexingRequest` | Immutable indexing request that requires `available_at` for PIT-safe indexing. |
+| `ChunkSecurityLink` | Many-to-many link between `chunk_id` and `security_id`, with `link_type` and confidence. |
+| `IndexedDocument` | Document-level parser/chunker/embedding audit with `parser_version`, `input_hash`, `chunk_ids`, and `embedding_keys`. |
+| `EmbeddingKey` | Deterministic `sha256(chunk_id, provider_name, model_name, model_version)` audit key. |
+| `make_stable_chunk_id` | Symbol-independent chunk ID helper. |
+
+### 3.3 `RetrievalResult`
 
 Defined in `src/margin/vector/models.py`.
 
@@ -133,7 +158,7 @@ A scored retrieval candidate returned by a search operation.
 | `entity_match` | `float` | Entity match score. |
 | `rank` | `int` | Final rank after reranking. |
 
-### 3.3 `DocType`
+### 3.4 `DocType`
 
 Defined in `src/margin/vector/models.py`.
 
@@ -150,7 +175,7 @@ Defined in `src/margin/vector/models.py`.
 | `USER_NOTE` | `"user_note"` | User-authored note. |
 | `UNKNOWN` | `"unknown"` | Document type could not be determined. |
 
-### 3.4 Factory Functions
+### 3.5 Factory Functions
 
 Defined in `src/margin/vector/models.py`.
 
@@ -158,6 +183,7 @@ Defined in `src/margin/vector/models.py`.
 |----------|-----------|-------------|
 | `compute_chunk_hash` | `(content: str) -> str` | Computes a deterministic `sha256:`-prefixed hash of the chunk content. |
 | `make_chunk` | `(document_id: str, content: str, chunk_index: int = 0, total_chunks: int = 1, **kwargs: Any) -> Chunk` | Creates a `Chunk` with an auto-generated `chunk_id` and `content_hash`. Converts `embedding` and `keywords` to tuples. |
+| `make_stable_chunk_id` | `(*, document_id, content_hash, parser_version, chunk_index) -> str` | v0.2 symbol-independent structured indexing ID helper. |
 
 ---
 
@@ -240,6 +266,25 @@ Entry point dispatcher that selects a chunking strategy based on inferred docume
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `infer_doc_type` | `(event: DocumentEvent) -> DocType` | Infers the document type from `event.doc_type` and `event.title` using explicit mappings and keyword heuristics. |
+
+### 4.9 v0.2 Structured Parsers and `StructuredChunker`
+
+The `src/margin/vector/parsers/` package emits structured `ParsedBlock` objects:
+
+| Parser | Input | Locator support |
+|--------|-------|-----------------|
+| `HtmlParser` | HTML bytes | Headings, paragraphs, tables, DOM paths, paragraph indexes, table rows/columns. |
+| `PdfParser` | PDF bytes | Page-level text blocks; raises `ParserUnavailable` when PDF dependencies are unavailable. |
+| `CsvParser` | CSV bytes | Table id, row id, and column id. |
+| `JsonParser` | JSON bytes | Flattened scalar paths as locators. |
+| `PlainTextParser` | text bytes | Paragraph indexes and half-open `quote_span`. |
+
+`StructuredChunker` consumes those blocks and returns `ChunkingResult(chunks, links)`:
+
+- Chunk IDs use `make_stable_chunk_id(document_id, content_hash, parser_version, chunk_index)`.
+- Table and text boundaries are not crossed.
+- Security associations are emitted as `ChunkSecurityLink` rows.
+- External WebSearch/news chunks should use `TrustLevel.UNTRUSTED_SOURCE_CONTENT`.
 
 ---
 
@@ -371,6 +416,17 @@ Exposes persistent chunks and embeddings through the same retrieval pipeline API
 | `vector_search` | `(query_text: str, top_k: int = 10, filters: dict[str, Any] \| None = None) -> list[tuple[Chunk, float]]` | Embeds the query and delegates vector search to `VectorRepository.search_vector`. |
 | `keyword_search` | `(query: str, top_k: int = 10, filters: dict[str, Any] \| None = None) -> list[tuple[Chunk, float]]` | Retrieves candidate chunks from the repository and scores them by token overlap. |
 
+### 6.2 `PersistentIndexingPipeline`
+
+`PersistentIndexingPipeline` performs the production embedding write path.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `__init__` | `(*, repository, embedding_provider, embedding_dimension, batch_size=64)` | Injects the repository, real embedding provider, expected dimension, and batch size. |
+| `embed_and_persist` | `(chunks: list[Chunk]) -> list[str]` | Embeds chunks and validates the whole batch before writing vectors. A dimension mismatch writes no partial vectors. |
+
+Embedding audit keys are generated with `EmbeddingKey(chunk_id, provider_name, model_name, model_version)`.
+
 ---
 
 ## 7. Retrieval
@@ -383,7 +439,8 @@ Constraints applied during retrieval.
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| `symbol` | `str \| None` | Stock symbol to filter by. Required for retrieval. |
+| `symbol` | `str \| None` | Legacy single-symbol filter. Required only when `security_ids` are not provided. |
+| `security_ids` | `tuple[str, ...] \| None` | v0.2 preferred multi-security filter. Persistent retrieval joins `chunk_security_links`. |
 | `decision_at` | `datetime \| None` | Point-in-time filter; only chunks with `available_at <= decision_at` are returned. |
 | `doc_types` | `tuple[str, ...] \| None` | Optional tuple of document types to include. |
 | `prefer_official` | `bool` | Whether to boost official evidence sources. Defaults to `True`. |
@@ -423,8 +480,8 @@ Score = w_v * VectorScore + w_k * BM25 + w_t * TimeDecay
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `__init__` | `(pipeline: EmbeddingPipeline, weights: HybridWeights \| None = None, time_decay_days: float = 90.0) -> None` | Initializes the retriever with an embedding pipeline, weights, and decay scale. |
-| `search` | `(query: str, top_k: int = 10, constraints: SearchConstraints \| None = None) -> list[RetrievalResult]` | Executes hybrid retrieval and returns a fused, ranked result list. Raises `ValueError` if `symbol` or `decision_at` is missing. |
+| `__init__` | `(pipeline: EmbeddingPipeline \| VectorRepository, embedding_provider: Any \| None = None, weights: HybridWeights \| None = None, time_decay_days: float = 90.0) -> None` | Initializes the retriever. Passing a `VectorRepository` plus provider wraps it in a persistent pipeline. |
+| `search` | `(query: str, top_k: int = 10, constraints: SearchConstraints \| None = None, security_ids: tuple[str, ...] \| None = None, decision_at: datetime \| None = None) -> list[RetrievalResult]` | Executes hybrid retrieval. Requires `symbol` or `security_ids`, and `decision_at`. |
 | `_build_filters` | `(constraints: SearchConstraints) -> dict[str, Any]` | Builds metadata filters for the underlying search pipeline. |
 | `_merge_and_score` | `(query: str, vector_results: list[tuple[Chunk, float]], keyword_results: list[tuple[Chunk, float]], constraints: SearchConstraints) -> list[RetrievalResult]` | Merges vector and keyword results, filters by `available_at` and locator requirements, and computes fused scores. |
 | `_time_decay` | `(chunk: Chunk, decision_at: datetime) -> float` | Computes the exponential time decay score based on age relative to `decision_at`. |
@@ -487,6 +544,18 @@ Worker that consumes document outbox events from module 03 and persists chunks/e
 | `_provider_name` | `(provider: Any) -> str` | Resolves the provider name from `provider.name` or `provider.descriptor.name`. |
 | `_provider_version` | `(provider: Any) -> str` | Resolves the provider version from `provider.version` or `provider.descriptor.version`. |
 
+### 8.2 `IndexingRunner`
+
+v0.2 adds `IndexingRunner` for recoverable document-indexing outbox consumption.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `__init__` | `(*, news_repository, vector_repository, embedding_provider, parser, chunker, lease_owner, lease_seconds=300)` | Injects the news repository, vector repository, parser, structured chunker, embedding provider, and lease owner. |
+| `claim_next` | `(*, now=None) -> OutboxMessage \| None` | Claims a pending or expired `document_indexing` message. |
+| `process_one` | `(*, event_id, now=None) -> bool` | Processes one outbox event. Parser success plus embedding failure is marked retryable instead of final. |
+
+Outbox state is persisted through `NewsRepository.claim_outbox_with_lease`, `mark_outbox_succeeded`, `mark_outbox_retryable`, and `mark_outbox_failed_final`.
+
 ---
 
 ## 9. Repository
@@ -500,11 +569,15 @@ PostgreSQL/pgvector persistence boundary for chunks, embeddings, indexing audits
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `__init__` | `(session_factory: Callable[[], Session], *, dimension: int) -> None` | Initializes the repository with a SQLAlchemy session factory and expected vector dimension. |
-| `upsert_chunks` | `(chunks: list[Chunk]) -> int` | Persists chunk metadata idempotently by `chunk_id`. |
+| `upsert_chunks` | `(chunks: list[Chunk], *, links: list[ChunkSecurityLink] \| None = None) -> int` | Persists chunk metadata idempotently and can write `chunk_security_links` in the same transaction. |
+| `count_chunk_security_links` | `() -> int` | Returns the number of persisted chunk/security links. |
+| `count_embeddings` | `() -> int` | Returns the number of persisted embedding rows. |
+| `upsert_indexed_document` | `(document: IndexedDocument) -> None` | Persists document-level parser/chunker/embedding audit. |
+| `get_indexed_document` | `(document_id: str) -> IndexedDocument \| None` | Reads document-level indexing audit. |
 | `upsert_embeddings` | `(items: list[tuple[str, list[float]]], *, provider_name: str, model_name: str, model_version: str) -> int` | Persists model-versioned embeddings idempotently. Raises `ValueError` on dimension mismatch. |
-| `search_vector` | `(query_vector: list[float], *, top_k: int = 10, symbol: str \| None = None, decision_at: datetime \| None = None, doc_types: tuple[str, ...] \| None = None) -> list[tuple[Chunk, float]]` | Computes cosine similarity against stored embeddings and returns top-k results with optional filters. |
+| `search_vector` | `(query_vector: list[float], *, top_k=10, symbol=None, security_ids=None, decision_at=None, doc_types=None) -> list[tuple[Chunk, float]]` | Computes cosine similarity and filters by link-table security, PIT, and document type. |
 | `get_chunk` | `(chunk_id: str) -> Chunk \| None` | Fetches a chunk by its stable identifier. |
-| `list_chunks` | `(*, symbol: str \| None = None, doc_types: tuple[str, ...] \| None = None) -> list[Chunk]` | Returns persisted chunks ordered by `available_at` descending, for keyword fallback retrieval. |
+| `list_chunks` | `(*, symbol=None, security_ids=None, decision_at=None, doc_types=None) -> list[Chunk]` | Lists active chunks ordered by `available_at`; supports `available_at <= decision_at` and link-table security filtering. |
 | `record_index_audit` | `(*, operation: str, provider_name: str, model_name: str, model_version: str, chunk_count: int, vector_count: int, keyword_count: int, degraded: bool, error: str \| None = None) -> int` | Persists an indexing audit record and returns the generated `audit_id`. |
 | `record_retrieval_audit` | `(*, query: str, constraints: dict, results: list[RetrievalResult]) -> int` | Persists replayable retrieval candidates and component scores, returning the generated `audit_id`. |
 | `replay_retrieval` | `(audit_id: int) -> list[RetrievalResult]` | Replays a retrieval audit by looking up recorded chunk IDs. Raises `KeyError` if the audit or a referenced chunk is missing. |
@@ -520,11 +593,30 @@ PostgreSQL/pgvector persistence boundary for chunks, embeddings, indexing audits
 
 ## 10. Cross-Module Usage Notes
 
-- **Module 03 (news/document ingestion)**: `DocumentIndexingRunner` polls the `NewsRepository` outbox with topic `vector_index`. It loads `DocumentEvent` objects, chunks them with `Chunker`, and persists the results through `VectorRepository`.
-- **Module 06 (multi-agent research)**: `RetrievalTool` exposes a simple `search(...)` interface that agents can call. It enforces symbol, point-in-time, document-type, deduplication, and locator constraints.
+- **Module 03 (news/document ingestion)**: v0.2 uses `IndexingRunner` to consume document outbox messages, parse raw snapshots, and write `chunks`, `chunk_security_links`, `chunk_embeddings`, and `indexed_documents`.
+- **Module 06 (multi-agent research)**: `RetrievalTool` / `HybridRetriever` expose PIT-safe evidence retrieval with `source_url`, `snapshot_id`, `SourceLocator`, `source_level`, and `trust_level`.
+- **PIT retrieval**: callers must pass `decision_at`; repository queries enforce `ChunkRow.available_at <= decision_at`.
 - **Provider registry**: `EmbeddingProvider` and `OpenAIEmbeddingProvider` implement provider descriptors compatible with `margin.core.provider`. `configure_secrets` allows credential injection from a central registry.
 - **Persistence layers**: Two pipeline implementations coexist:
   - `EmbeddingPipeline` is fully in-memory and useful for tests and early development.
-  - `PersistentEmbeddingPipeline` delegates storage and search to `VectorRepository`, which maps to PostgreSQL tables defined in `db_models.py`.
+  - `PersistentIndexingPipeline` and `PersistentEmbeddingPipeline` delegate writes/search to `VectorRepository`, which maps to PostgreSQL tables defined in `db_models.py`.
 - **Audit and replay**: Both `IndexAuditor` (in-memory) and `VectorRepository.record_index_audit` (persistent) capture indexing health. `VectorRepository.record_retrieval_audit` and `replay_retrieval` support reproducible retrieval evaluation.
-- **Source locators**: Every `Chunk` can carry `page`, `section`, `paragraph_index`, `table_id`, `row_id`, and `quote_span`. `RetrievalTool` defaults to `require_locator=True`, ensuring returned evidence can be traced back to the original source.
+- **Source locators**: Every `Chunk` can carry a unified `SourceLocator` plus legacy locator fields. `RetrievalTool` defaults to `require_locator=True`, ensuring returned evidence can be traced back to the original source.
+
+### 10.1 Real Smoke
+
+Run module 04 real smoke with:
+
+```bash
+python scripts/smoke_text_indexing.py
+```
+
+Required runtime configuration:
+
+- `MARGIN_DATABASE_URL`
+- `MARGIN_EMBEDDING_API_KEY`
+- `MARGIN_EMBEDDING_BASE_URL`
+- `MARGIN_EMBEDDING_MODEL`
+- `MARGIN_EMBEDDING_DIMENSION`
+
+Missing embedding configuration returns exit code `2` with `external_blocker=missing_embedding_config`. With complete configuration, the script writes a synthetic smoke chunk, generates a real embedding, persists `indexed_documents` and `chunk_embeddings`, and performs PIT retrieval by `security_id + decision_at`. Output includes only provider/model metadata, dimensions, counts, and chunk IDs; it does not print secrets or source text.

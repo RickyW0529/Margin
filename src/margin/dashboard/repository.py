@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+import json
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Protocol
 
 from sqlalchemy import select
@@ -14,7 +17,13 @@ from margin.dashboard.db_models import (
     DashboardRunRow,
 )
 from margin.dashboard.models import (
+    DashboardFilters,
+    DashboardPageInfo,
+    DashboardSort,
     FeedbackRecord,
+    ItemStatus,
+    ResearchCandidateListItemV2,
+    ResearchCandidateListResponse,
     ResearchItem,
     ResearchRun,
 )
@@ -44,7 +53,6 @@ class DashboardRepository(Protocol):
         self,
         *,
         strategy_id: str | None = None,
-        portfolio_id: str | None = None,
         status: str | None = None,
         limit: int = 100,
     ) -> list[ResearchRun]:
@@ -52,7 +60,6 @@ class DashboardRepository(Protocol):
 
         Args:
             strategy_id: Optional strategy filter.
-            portfolio_id: Optional portfolio filter.
             status: Optional status filter.
             limit: Maximum number of runs to return.
 
@@ -104,6 +111,18 @@ class DashboardRepository(Protocol):
             A list of feedback records for the item.
         """
 
+    def list_research_candidates_v2(
+        self,
+        *,
+        scope_version_id: str,
+        universe_code: str,
+        filters: DashboardFilters,
+        sort: DashboardSort,
+        cursor: str | None,
+        limit: int,
+    ) -> ResearchCandidateListResponse:
+        """Return one cursor page of v0.2 research candidate list items."""
+
 
 class MemoryDashboardRepository:
     """In-memory dashboard repository for tests and local usage."""
@@ -137,7 +156,6 @@ class MemoryDashboardRepository:
         self,
         *,
         strategy_id: str | None = None,
-        portfolio_id: str | None = None,
         status: str | None = None,
         limit: int = 100,
     ) -> list[ResearchRun]:
@@ -145,7 +163,6 @@ class MemoryDashboardRepository:
 
         Args:
             strategy_id: Optional strategy filter.
-            portfolio_id: Optional portfolio filter.
             status: Optional status filter.
             limit: Maximum number of runs to return.
 
@@ -155,8 +172,6 @@ class MemoryDashboardRepository:
         runs = list(self._runs.values())
         if strategy_id:
             runs = [run for run in runs if run.strategy_id == strategy_id]
-        if portfolio_id:
-            runs = [run for run in runs if run.portfolio_id == portfolio_id]
         if status:
             runs = [run for run in runs if run.status.value == status]
         runs.sort(key=lambda run: run.created_at, reverse=True)
@@ -214,6 +229,36 @@ class MemoryDashboardRepository:
         """
         return list(self._feedback.get(item_id, []))
 
+    def list_research_candidates_v2(
+        self,
+        *,
+        scope_version_id: str,
+        universe_code: str,
+        filters: DashboardFilters,
+        sort: DashboardSort,
+        cursor: str | None,
+        limit: int,
+    ) -> ResearchCandidateListResponse:
+        """Return one cursor page of v0.2 research candidate list items."""
+        del universe_code
+        runs = [
+            run for run in self._runs.values() if run.version_id == scope_version_id
+        ]
+        run_by_id = {run.run_id: run for run in runs}
+        candidates = [
+            _candidate_from_item(item, run_by_id[item.run_id])
+            for item in self._items.values()
+            if item.run_id in run_by_id
+        ]
+        return _candidate_page(
+            candidates,
+            scope_version_id=scope_version_id,
+            filters=filters,
+            sort=sort,
+            cursor=cursor,
+            limit=limit,
+        )
+
 
 class SQLAlchemyDashboardRepository:
     """PostgreSQL-backed dashboard repository."""
@@ -252,7 +297,6 @@ class SQLAlchemyDashboardRepository:
         self,
         *,
         strategy_id: str | None = None,
-        portfolio_id: str | None = None,
         status: str | None = None,
         limit: int = 100,
     ) -> list[ResearchRun]:
@@ -260,7 +304,6 @@ class SQLAlchemyDashboardRepository:
 
         Args:
             strategy_id: Optional strategy filter.
-            portfolio_id: Optional portfolio filter.
             status: Optional status filter.
             limit: Maximum number of runs to return.
 
@@ -271,8 +314,6 @@ class SQLAlchemyDashboardRepository:
             statement = select(DashboardRunRow)
             if strategy_id:
                 statement = statement.where(DashboardRunRow.strategy_id == strategy_id)
-            if portfolio_id:
-                statement = statement.where(DashboardRunRow.portfolio_id == portfolio_id)
             if status:
                 statement = statement.where(DashboardRunRow.status == status)
             rows = session.scalars(
@@ -363,14 +404,59 @@ class SQLAlchemyDashboardRepository:
                 for row in rows
             ]
 
+    def list_research_candidates_v2(
+        self,
+        *,
+        scope_version_id: str,
+        universe_code: str,
+        filters: DashboardFilters,
+        sort: DashboardSort,
+        cursor: str | None,
+        limit: int,
+    ) -> ResearchCandidateListResponse:
+        """Return one cursor page of v0.2 research candidate list items."""
+        del universe_code
+        with self._session_factory() as session:
+            run_rows = session.scalars(
+                select(DashboardRunRow).where(
+                    DashboardRunRow.version_id == scope_version_id
+                )
+            ).all()
+            run_by_id = {row.run_id: _run_from_row(row) for row in run_rows}
+            if not run_by_id:
+                return ResearchCandidateListResponse(
+                    items=(),
+                    page_info=DashboardPageInfo(page_size=limit),
+                    facets={},
+                    as_of=datetime.now(UTC),
+                    scope_version_id=scope_version_id,
+                )
+            item_rows = session.scalars(
+                select(DashboardItemRow).where(
+                    DashboardItemRow.run_id.in_(tuple(run_by_id))
+                )
+            ).all()
+        candidates = [
+            _candidate_from_item(_item_from_row(row), run_by_id[row.run_id])
+            for row in item_rows
+        ]
+        return _candidate_page(
+            candidates,
+            scope_version_id=scope_version_id,
+            filters=filters,
+            sort=sort,
+            cursor=cursor,
+            limit=limit,
+        )
+
 
 def _run_to_row(run: ResearchRun) -> DashboardRunRow:
+    """run to row."""
     return DashboardRunRow(
         run_id=run.run_id,
         decision_at=run.decision_at,
         strategy_id=run.strategy_id,
         version_id=run.version_id,
-        portfolio_id=run.portfolio_id,
         universe=list(run.universe),
         status=run.status.value,
         summary=run.summary,
@@ -383,6 +469,7 @@ def _run_to_row(run: ResearchRun) -> DashboardRunRow:
 
 
 def _item_to_row(item: ResearchItem) -> DashboardItemRow:
+    """item to row."""
     return DashboardItemRow(
         item_id=item.item_id,
         run_id=item.run_id,
@@ -399,18 +486,17 @@ def _item_to_row(item: ResearchItem) -> DashboardItemRow:
         claim_ids=list(item.claim_ids),
         risk_score=item.risk_score,
         counter_arguments=list(item.counter_arguments),
-        portfolio_constraint_violations=list(item.portfolio_constraint_violations),
         created_at=item.created_at,
     )
 
 
 def _run_from_row(row: DashboardRunRow) -> ResearchRun:
+    """run from row."""
     return ResearchRun(
         run_id=row.run_id,
         decision_at=row.decision_at,
         strategy_id=row.strategy_id,
         version_id=row.version_id,
-        portfolio_id=row.portfolio_id,
         universe=list(row.universe),
         status=row.status,
         summary=row.summary,
@@ -423,6 +509,7 @@ def _run_from_row(row: DashboardRunRow) -> ResearchRun:
 
 
 def _item_from_row(row: DashboardItemRow) -> ResearchItem:
+    """item from row."""
     return ResearchItem(
         item_id=row.item_id,
         run_id=row.run_id,
@@ -439,6 +526,254 @@ def _item_from_row(row: DashboardItemRow) -> ResearchItem:
         claim_ids=list(row.claim_ids),
         risk_score=row.risk_score,
         counter_arguments=list(row.counter_arguments),
-        portfolio_constraint_violations=list(row.portfolio_constraint_violations),
         created_at=row.created_at,
     )
+
+
+def _candidate_from_item(
+    item: ResearchItem,
+    run: ResearchRun,
+) -> ResearchCandidateListItemV2:
+    """_candidate_from_item.
+
+    Args:
+        item (ResearchItem): Description.
+        run (ResearchRun): Description.
+
+    Returns:
+        ResearchCandidateListItemV2: Description.
+    """
+    screening_status = "pass" if item.status == ItemStatus.PUBLISHED else item.status.value
+    data_status = "complete" if item.status == ItemStatus.PUBLISHED else "partial"
+    return ResearchCandidateListItemV2(
+        item_id=item.item_id,
+        security_id=item.symbol,
+        symbol=item.symbol.split(".")[0],
+        name=item.symbol,
+        scope_version_id=run.version_id,
+        screening_status=screening_status,
+        data_status=data_status,
+        risk_flags=tuple(item.rejection_reasons),
+        review_required=item.status != ItemStatus.PUBLISHED,
+        research_guardrail=(
+            "allow_research"
+            if item.status == ItemStatus.PUBLISHED
+            else "review_required"
+        ),
+        current_review_outcome=(
+            "update_assessment"
+            if item.status == ItemStatus.PUBLISHED
+            else "abstain"
+        ),
+        effective_assessment_id=item.snapshot_id,
+        assessment_freshness="current" if item.status == ItemStatus.PUBLISHED else "stale",
+        stale_reason=item.abstain_reason,
+        final_score=round(item.confidence * 100, 4),
+        discount_rate=None,
+        confidence=item.confidence,
+        last_checked_at=item.created_at,
+    )
+
+
+def _candidate_page(
+    candidates: list[ResearchCandidateListItemV2],
+    *,
+    scope_version_id: str,
+    filters: DashboardFilters,
+    sort: DashboardSort,
+    cursor: str | None,
+    limit: int,
+) -> ResearchCandidateListResponse:
+    """_candidate_page.
+
+    Args:
+        candidates (list[ResearchCandidateListItemV2]): Description.
+
+    Returns:
+        ResearchCandidateListResponse: Description.
+    """
+    page_size = max(1, min(limit, 200))
+    filtered = _apply_filters(candidates, filters)
+    ordered = _sort_candidates(filtered, sort)
+    start = _cursor_offset(ordered, cursor)
+    page = ordered[start : start + page_size + 1]
+    visible = tuple(page[:page_size])
+    has_next = len(page) > page_size
+    next_cursor = _encode_cursor(visible[-1], sort) if has_next and visible else None
+    return ResearchCandidateListResponse(
+        items=visible,
+        page_info=DashboardPageInfo(
+            next_cursor=next_cursor,
+            has_next_page=has_next,
+            page_size=page_size,
+        ),
+        facets=_facets(filtered),
+        as_of=datetime.now(UTC),
+        scope_version_id=scope_version_id,
+    )
+
+
+def _apply_filters(
+    candidates: list[ResearchCandidateListItemV2],
+    filters: DashboardFilters,
+) -> list[ResearchCandidateListItemV2]:
+    """_apply_filters.
+
+    Args:
+        candidates (list[ResearchCandidateListItemV2]): Description.
+        filters (DashboardFilters): Description.
+
+    Returns:
+        list[ResearchCandidateListItemV2]: Description.
+    """
+    result = candidates
+    if filters.screening_status:
+        result = [
+            item for item in result if item.screening_status == filters.screening_status
+        ]
+    if filters.data_status:
+        result = [item for item in result if item.data_status == filters.data_status]
+    if filters.review_required is not None:
+        result = [
+            item for item in result if item.review_required == filters.review_required
+        ]
+    if filters.assessment_freshness:
+        result = [
+            item
+            for item in result
+            if item.assessment_freshness == filters.assessment_freshness
+        ]
+    if filters.query:
+        query = filters.query.lower()
+        result = [
+            item
+            for item in result
+            if query in item.symbol.lower()
+            or query in item.security_id.lower()
+            or query in item.name.lower()
+        ]
+    return result
+
+
+def _sort_candidates(
+    candidates: list[ResearchCandidateListItemV2],
+    sort: DashboardSort,
+) -> list[ResearchCandidateListItemV2]:
+    """_sort_candidates.
+
+    Args:
+        candidates (list[ResearchCandidateListItemV2]): Description.
+        sort (DashboardSort): Description.
+
+    Returns:
+        list[ResearchCandidateListItemV2]: Description.
+    """
+    reverse = sort.direction == "desc"
+
+    def key(item: ResearchCandidateListItemV2):
+        """key.
+
+        Args:
+        item (ResearchCandidateListItemV2): Description.
+        """
+        value = getattr(item, sort.field)
+        if value is None:
+            value = -1 if reverse else float("inf")
+        return (value, item.item_id)
+
+    return sorted(candidates, key=key, reverse=reverse)
+
+
+def _cursor_offset(
+    ordered: list[ResearchCandidateListItemV2],
+    cursor: str | None,
+) -> int:
+    """_cursor_offset.
+
+    Args:
+        ordered (list[ResearchCandidateListItemV2]): Description.
+        cursor (str | None): Description.
+
+    Returns:
+        int: Description.
+    """
+    if not cursor:
+        return 0
+    decoded = _decode_cursor(cursor)
+    item_id = decoded.get("item_id")
+    for index, item in enumerate(ordered):
+        if item.item_id == item_id:
+            return index + 1
+    return 0
+
+
+def _encode_cursor(item: ResearchCandidateListItemV2, sort: DashboardSort) -> str:
+    """_encode_cursor.
+
+    Args:
+        item (ResearchCandidateListItemV2): Description.
+        sort (DashboardSort): Description.
+
+    Returns:
+        str: Description.
+    """
+    payload = {
+        "item_id": item.item_id,
+        "sort_field": sort.field,
+        "sort_direction": sort.direction,
+        "sort_value": getattr(item, sort.field),
+    }
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _decode_cursor(cursor: str) -> dict[str, object]:
+    """_decode_cursor.
+
+    Args:
+        cursor (str): Description.
+
+    Returns:
+        dict[str, object]: Description.
+    """
+    padded = cursor + "=" * (-len(cursor) % 4)
+    try:
+        decoded = base64.urlsafe_b64decode(padded.encode("ascii"))
+        payload = json.loads(decoded)
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _facets(
+    candidates: list[ResearchCandidateListItemV2],
+) -> dict[str, dict[str, int]]:
+    """_facets.
+
+    Args:
+        candidates (list[ResearchCandidateListItemV2]): Description.
+
+    Returns:
+        dict[str, dict[str, int]]: Description.
+    """
+    facets: dict[str, dict[str, int]] = {
+        "screening_status": {},
+        "data_status": {},
+        "assessment_freshness": {},
+    }
+    for item in candidates:
+        _increment(facets["screening_status"], item.screening_status)
+        _increment(facets["data_status"], item.data_status)
+        if item.assessment_freshness:
+            _increment(facets["assessment_freshness"], item.assessment_freshness)
+    return facets
+
+
+def _increment(values: dict[str, int], key: str) -> None:
+    """_increment.
+
+    Args:
+        values (dict[str, int]): Description.
+        key (str): Description.
+    """
+    values[key] = values.get(key, 0) + 1

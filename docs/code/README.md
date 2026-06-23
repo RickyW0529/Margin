@@ -11,15 +11,14 @@ docs/code/
 ├── README.md                         本文件，模块索引与使用说明
 ├── 00-shared.md                      共享与核心横切组件
 ├── 01-data_provider.md               数据 Provider 模块
-├── 02-holdings.md                    持仓模块
 ├── 03-filing_websearch.md            公告与 WebSearch 模块
 ├── 04-text_indexing.md               文本索引模块
 ├── 05-rag_evidence.md                RAG 证据模块
 ├── 06-multi_agent_research.md        多 Agent 研究流程模块
 ├── 07-strategy_config.md             策略配置模块
 ├── 08-research_candidate_dashboard.md 研究候选面板模块
-├── 09-holdings_monitoring.md         持仓监控模块
-└── 10-deployment_audit.md            部署与审计模块
+├── 10-deployment_audit.md            部署与审计模块
+└── 11-valuation_discovery.md         公司池与估值发现模块
 ```
 
 ## 模块索引
@@ -28,15 +27,14 @@ docs/code/
 |------|-------------------|--------|--------------|--------------|
 | 00 | shared | 共享与核心横切组件 | [00-shared.md](./00-shared.md) | `src/margin/settings.py`、`src/margin/worker.py`、`src/margin/storage/`、`src/margin/api/`、`src/margin/core/provider.py`、`src/margin/core/registry.py`、`src/margin/core/resilience.py`、`src/margin/core/secret.py` |
 | 01 | data_provider | 数据 Provider 模块 | [01-data_provider.md](./01-data_provider.md) | `src/margin/data/`、`src/margin/core/provider.py`、`src/margin/core/registry.py` |
-| 02 | holdings | 持仓模块 | [02-holdings.md](./02-holdings.md) | `src/margin/portfolio/`、`src/margin/api/routes/portfolios.py`、`web/app/portfolios/`、`web/components/portfolio-workspace.tsx` |
 | 03 | filing_websearch | 公告与 WebSearch 模块 | [03-filing_websearch.md](./03-filing_websearch.md) | `src/margin/news/` |
 | 04 | text_indexing | 文本索引模块 | [04-text_indexing.md](./04-text_indexing.md) | `src/margin/vector/` |
 | 05 | rag_evidence | RAG 证据模块 | [05-rag_evidence.md](./05-rag_evidence.md) | `src/margin/evidence/` |
-| 06 | multi_agent_research | 多 Agent 研究流程模块 | [06-multi_agent_research.md](./06-multi_agent_research.md) | `src/margin/research/`、`src/margin/api/routes/research.py` |
-| 07 | strategy_config | 策略配置模块 | [07-strategy_config.md](./07-strategy_config.md) | `src/margin/strategy/`、`src/margin/api/routes/strategy.py` |
-| 08 | research_candidate_dashboard | 研究候选面板模块 | [08-research_candidate_dashboard.md](./08-research_candidate_dashboard.md) | `src/margin/dashboard/`、`src/margin/api/routes/dashboard.py`、`web/app/research/`、`web/components/candidate-*.tsx`、`web/components/evidence-panel.tsx`、`web/components/report-panel.tsx`、`web/components/valuation-panel.tsx`、`web/components/home-summary.tsx` |
-| 09 | holdings_monitoring | 持仓监控模块 | [09-holdings_monitoring.md](./09-holdings_monitoring.md) | `src/margin/holdings_monitoring/`、`src/margin/api/routes/monitoring.py`、`web/app/positions/`、`web/components/position-detail.tsx`、`web/components/position-review-badge.tsx` |
-| 10 | deployment_audit | 部署与审计模块 | [10-deployment_audit.md](./10-deployment_audit.md) | `src/margin/core/`（audit、snapshot、degradation、logging、metrics）、`src/margin/api/middleware.py`、`src/margin/api/metrics.py`、`src/margin/api/routes/health.py`、`Dockerfile`、`web/Dockerfile`、`docker-compose.yml`、`.github/workflows/ci.yml`、`scripts/`、`docker/prometheus.yml` |
+| 06 | multi_agent_research | 多 Agent 研究流程模块 | [06-multi_agent_research.md](./06-multi_agent_research.md) | `src/margin/research/` |
+| 07 | strategy_config | 策略配置模块 | [07-strategy_config.md](./07-strategy_config.md) | `src/margin/strategy/`、`src/margin/core/secret_store.py`、`src/margin/api/routes/strategy.py`、`src/margin/api/routes/strategy_config.py`、`web/components/provider-settings-panel.tsx` |
+| 08 | research_candidate_dashboard | 研究候选面板模块 | [08-research_candidate_dashboard.md](./08-research_candidate_dashboard.md) | `src/margin/dashboard/`、`src/margin/api/routes/dashboard.py`、`src/margin/api/routes/valuation_discovery.py`、`web/app/research/`、`web/app/settings/`、`web/components/research-*.tsx`、`web/components/current-vs-effective-panel.tsx`、`web/components/evidence-locator-list.tsx`、`web/components/read-only-copilot-panel.tsx`、`web/components/provider-settings-panel.tsx` |
+| 10 | deployment_audit | 部署与审计模块 | [10-deployment_audit.md](./10-deployment_audit.md) | `src/margin/core/`（audit、snapshot、degradation、logging、metrics、run_states、orchestration、capacity、outbox）、`src/margin/api/middleware.py`、`src/margin/api/metrics.py`、`src/margin/api/routes/health.py`、`Dockerfile`、`web/Dockerfile`、`docker-compose.yml`、`.github/workflows/ci.yml`、`scripts/`（migration/worker/smoke）、`docker/prometheus.yml`、`docker/grafana/` |
+| 11 | valuation_discovery | 公司池与估值发现模块 | [11-valuation_discovery.md](./11-valuation_discovery.md) | `src/margin/valuation_discovery/`、`src/margin/api/routes/valuation_discovery.py`、`scripts/smoke_valuation_discovery_p0.py`、`scripts/smoke_valuation_discovery_p1.py` |
 
 ## 文档约定
 
@@ -56,7 +54,8 @@ docs/code/
 - `docs/code/` 不按产品版本建立子目录，始终描述当前仓库代码。
 - 每次功能代码完成后，应在同一变更中更新本目录中的对应模块文档。
 - 产品设计历史由 `docs/design/<version>/` 承担，代码实现历史由 Git 承担。
+- 模块编号 02 与 09 保留用于历史审计；其实现已在 v0.2 中删除，因此没有当前代码文档。
 
 ---
 
-*本索引由代码自动生成脚本基于当前源码整理，未修改源码。*
+*本索引描述当前源码状态；02 与 09 为历史编号，当前实现已删除。*

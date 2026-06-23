@@ -7,6 +7,7 @@ retrieval candidates.
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
@@ -42,6 +43,129 @@ class DocType(StrEnum):
     INDUSTRY_REPORT = "industry_report"
     USER_NOTE = "user_note"
     UNKNOWN = "unknown"
+
+
+class TrustLevel(StrEnum):
+    """Prompt-safety trust label attached to indexed chunks."""
+
+    TRUSTED_OFFICIAL_CONTENT = "trusted_official_content"
+    TRUSTED_STRUCTURED_DATA = "trusted_structured_data"
+    UNTRUSTED_SOURCE_CONTENT = "untrusted_source_content"
+    USER_SUPPLIED_CONTENT = "user_supplied_content"
+
+
+class SourceLocator(BaseModel):
+    """Source locator capable of replaying evidence to the original document."""
+
+    page: int | None = None
+    bbox: tuple[float, float, float, float] | None = None
+    section: str | None = None
+    dom_path: str | None = None
+    paragraph_index: int | None = None
+    table_id: str | None = None
+    row_id: str | None = None
+    column_id: str | None = None
+    quote_span: tuple[int, int] | None = None
+
+    @property
+    def has_precise_anchor(self) -> bool:
+        """Return whether this locator can point back to a precise source region."""
+        return any(
+            value is not None
+            for value in (
+                self.page,
+                self.bbox,
+                self.dom_path,
+                self.paragraph_index,
+                self.table_id,
+                self.row_id,
+                self.quote_span,
+            )
+        )
+
+    model_config = {"frozen": True}
+
+
+class IndexingRequest(BaseModel):
+    """Immutable request to index one persisted document event."""
+
+    event_id: str
+    snapshot_id: str
+    content_hash: str
+    document_type: str
+    published_at: datetime | None
+    available_at: datetime
+    source_level: str
+
+    @field_validator("published_at", "available_at")
+    @classmethod
+    def normalize_indexing_timestamp(cls, value: datetime | None) -> datetime | None:
+        """Normalize indexing request timestamps to UTC."""
+        return ensure_utc(value) if value is not None else None
+
+    model_config = {"frozen": True}
+
+
+class IndexedDocument(BaseModel):
+    """Audit record for parser/chunker/embedding output of one document."""
+
+    document_id: str
+    event_id: str
+    parser_version: str
+    chunk_ids: tuple[str, ...]
+    embedding_keys: tuple[str, ...]
+    input_hash: str
+    created_at: datetime = Field(default_factory=utc_now)
+
+    @field_validator("created_at")
+    @classmethod
+    def normalize_indexed_document_created_at(cls, value: datetime) -> datetime:
+        """Normalize audit timestamp to UTC."""
+        return ensure_utc(value)
+
+    model_config = {"frozen": True}
+
+
+class EmbeddingKey(BaseModel):
+    """Model-versioned embedding key for audit and replay."""
+
+    chunk_id: str
+    provider_name: str
+    model_name: str
+    model_version: str
+
+    @property
+    def key_hash(self) -> str:
+        """Return deterministic embedding key hash."""
+        payload = "|".join(
+            [self.chunk_id, self.provider_name, self.model_name, self.model_version]
+        )
+        return "emb_" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
+
+    model_config = {"frozen": True}
+
+
+class ChunkSecurityLink(BaseModel):
+    """Many-to-many relation between a chunk and a security."""
+
+    chunk_id: str
+    security_id: str
+    link_type: str
+    confidence: float = Field(ge=0.0, le=1.0)
+
+    model_config = {"frozen": True}
+
+
+def make_stable_chunk_id(
+    *,
+    document_id: str,
+    content_hash: str,
+    parser_version: str,
+    chunk_index: int,
+) -> str:
+    """Create a symbol-independent stable chunk identifier."""
+    payload = "|".join([document_id, content_hash, parser_version, str(chunk_index)])
+    return "chk_" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
 
 
 # ---------------------------------------------------------------------------
@@ -102,6 +226,9 @@ class Chunk(BaseModel):
     table_id: str | None = None
     row_id: str | None = None
     quote_span: tuple[int, int] | None = None
+    locator: SourceLocator = Field(default_factory=SourceLocator)
+    trust_level: TrustLevel = TrustLevel.TRUSTED_OFFICIAL_CONTENT
+    is_active: bool = True
     embedding: tuple[float, ...] | None = None
     keywords: tuple[str, ...] = Field(default_factory=tuple)
     chunk_index: int = 0
@@ -136,7 +263,8 @@ class Chunk(BaseModel):
             original source, otherwise ``False``.
         """
         structural_locator = (
-            self.page is not None
+            self.locator.has_precise_anchor
+            or self.page is not None
             or bool(self.section)
             or self.paragraph_index is not None
             or bool(self.table_id)

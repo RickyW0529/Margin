@@ -19,19 +19,24 @@
 
 `04-text_indexing` 对应代码包 `margin.vector`，负责把原始文档转换为可检索的向量与关键词索引。它是文档解析（module 03）与多智能体研究（module 06）之间的桥梁：
 
+- 接收 module 03 的 `DocumentEvent`/文档 Outbox，并通过 lease/retry 机制做可恢复索引；
 - 接收 `DocumentEvent`，按文档类型拆分 Chunk；
+- 解析 HTML/PDF/CSV/JSON/Text 并保留页码、DOM、表格、段落与引用区间定位；
 - 调用嵌入模型生成稠密向量；
+- 将 `Chunk` 与证券代码的关系持久化在 `chunk_security_links`，不再把 chunk 身份绑定到单个 symbol；
 - 维护向量索引与 BM25 关键词索引；
-- 支持混合检索、重排、来源定位与审计回放。
+- 支持 `available_at <= decision_at` 的 PIT 混合检索、重排、来源定位与审计回放。
 
 数据流：
 
 ```text
-DocumentEvent → Chunker → Chunk → EmbeddingProvider → VectorStore
-                                          ↓
-                                       BM25Index
-                                          ↓
-                              HybridRetriever / RetrievalTool
+DocumentEvent / Raw Snapshot
+  → Parser
+  → StructuredChunker / Chunker
+  → Chunk + ChunkSecurityLink
+  → OpenAI-compatible EmbeddingProvider
+  → PostgreSQL chunks / chunk_embeddings / chunk_security_links
+  → HybridRetriever / RetrievalTool
 ```
 
 ---
@@ -41,17 +46,19 @@ DocumentEvent → Chunker → Chunk → EmbeddingProvider → VectorStore
 | 文件 | 路径 | 职责 |
 |------|------|------|
 | `__init__.py` | `src/margin/vector/__init__.py` | 聚合导出模块公共 API。 |
-| `models.py` | `src/margin/vector/models.py` | 定义 `Chunk`、`RetrievalResult`、`DocType` 等核心领域模型。 |
-| `db_models.py` | `src/margin/vector/db_models.py` | SQLAlchemy ORM 表：`ChunkRow`、`ChunkEmbeddingRow`、`IndexAuditRecordRow`、`RetrievalAuditRecordRow`。 |
+| `models.py` | `src/margin/vector/models.py` | 定义 `Chunk`、`SourceLocator`、`ChunkSecurityLink`、`IndexedDocument`、`EmbeddingKey`、`RetrievalResult`、`DocType` 等核心领域模型。 |
+| `db_models.py` | `src/margin/vector/db_models.py` | SQLAlchemy ORM 表：`ChunkRow`、`ChunkEmbeddingRow`、`ChunkSecurityLinkRow`、`IndexedDocumentRow`、`IndexAuditRecordRow`、`RetrievalAuditRecordRow`。 |
 | `chunker.py` | `src/margin/vector/chunker.py` | 文档分块策略与分块器工厂。 |
 | `embedding.py` | `src/margin/vector/embedding.py` | 嵌入 Provider、内存向量存储、BM25 索引、索引审计与 `EmbeddingPipeline`。 |
 | `persistent_pipeline.py` | `src/margin/vector/persistent_pipeline.py` | 基于 PostgreSQL/pgvector 的持久化检索流水线封装。 |
 | `retrieval.py` | `src/margin/vector/retrieval.py` | 混合检索、重排、检索约束与 `RetrievalTool`。 |
 | `repository.py` | `src/margin/vector/repository.py` | `VectorRepository`，负责 Chunk、Embedding、审计记录的持久化与检索。 |
 | `indexing_runner.py` | `src/margin/vector/indexing_runner.py` | 消费文档 Outbox，完成 Chunk 与 Embedding 的持久化索引。 |
+| `parsers/*.py` | `src/margin/vector/parsers/` | HTML/PDF/CSV/JSON/Text 解析器，输出带 `SourceLocator` 的结构化 block。 |
 | `providers/__init__.py` | `src/margin/vector/providers/__init__.py` | Provider 子包说明。 |
 | `providers/openai_embedding.py` | `src/margin/vector/providers/openai_embedding.py` | OpenAI 兼容 `/embeddings` 嵌入 Provider。 |
 | `providers/rerank.py` | `src/margin/vector/providers/rerank.py` | HTTP 重排 Provider，兼容 Cohere/OpenAI 风格 `/rerank`。 |
+| `smoke_text_indexing.py` | `scripts/smoke_text_indexing.py` | token-safe 真实 embedding/indexing smoke。 |
 
 ---
 
@@ -76,7 +83,7 @@ DocumentEvent → Chunker → Chunk → EmbeddingProvider → VectorStore
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `chunk_id` | `str` | 稳定 ID，由 `document_id`、`chunk_index`、`symbol` 哈希生成。 |
+| `chunk_id` | `str` | 稳定 ID。v0.2 结构化索引使用 `sha256(document_id, content_hash, parser_version, chunk_index)`，不依赖 symbol。 |
 | `document_id` | `str` | 父文档 ID。 |
 | `content` | `str` | 文本内容。 |
 | `content_hash` | `str` | 内容 SHA-256 哈希。 |
@@ -95,6 +102,9 @@ DocumentEvent → Chunker → Chunk → EmbeddingProvider → VectorStore
 | `table_id` | `str \| None` | 表格 ID。 |
 | `row_id` | `str \| None` | 表格行 ID。 |
 | `quote_span` | `tuple[int, int] \| None` | 引用字符区间。 |
+| `locator` | `SourceLocator` | v0.2 统一定位对象，覆盖页码、bbox、DOM、段落、表格与引用区间。 |
+| `trust_level` | `TrustLevel` | Prompt 安全信任等级；新闻/WebSearch 文本默认为非可信来源内容。 |
+| `is_active` | `bool` | 是否为当前有效 chunk；检索默认只返回 active chunk。 |
 | `embedding` | `tuple[float, ...] \| None` | 稠密向量。 |
 | `keywords` | `tuple[str, ...]` | 关键词/BM25 词项。 |
 | `chunk_index` | `int` | 文档内分块序号。 |
@@ -104,9 +114,21 @@ DocumentEvent → Chunker → Chunk → EmbeddingProvider → VectorStore
 
 | 方法 | 说明 |
 |------|------|
-| `has_locator`（property） | 当存在 `source_url` 且至少具备 page/section/paragraph_index/table_id/row_id/quote_span 之一时返回 `True`。 |
+| `has_locator`（property） | 当存在 `source_url` 且具备 `SourceLocator` 或兼容旧字段中的结构化定位时返回 `True`。 |
 
-### 3.3 `RetrievalResult`
+### 3.3 v0.2 新增索引模型
+
+| 模型 | 说明 |
+|------|------|
+| `SourceLocator` | 统一来源定位：`page`、`bbox`、`section`、`dom_path`、`paragraph_index`、`table_id`、`row_id`、`column_id`、`quote_span`。`has_precise_anchor` 用于判断是否可回放到原文位置。 |
+| `TrustLevel` | `trusted_official_content`、`trusted_structured_data`、`untrusted_source_content`、`user_supplied_content`。 |
+| `IndexingRequest` | 单个文档索引请求，强制包含 `available_at`，用于 PIT。 |
+| `ChunkSecurityLink` | `chunk_id` 与 `security_id` 的多对多关系，包含 `link_type` 与 `confidence`。 |
+| `IndexedDocument` | 文档级 parser/chunker/embedding 审计，保存 `parser_version`、`input_hash`、`chunk_ids`、`embedding_keys`。 |
+| `EmbeddingKey` | `sha256(chunk_id, provider_name, model_name, model_version)`，用于向量版本审计与 replay。 |
+| `make_stable_chunk_id` | 生成 symbol-independent chunk ID，避免同一文本因公司池变化产生不同 chunk。 |
+
+### 3.4 `RetrievalResult`
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -119,12 +141,13 @@ DocumentEvent → Chunker → Chunk → EmbeddingProvider → VectorStore
 | `entity_match` | `float` | 实体匹配得分。 |
 | `rank` | `int` | 最终排序名次。 |
 
-### 3.4 工厂函数
+### 3.5 工厂函数
 
 | 函数 | 签名 | 说明 |
 |------|------|------|
 | `compute_chunk_hash` | `(content: str) -> str` | 计算内容 SHA-256 哈希，前缀 `sha256:`。 |
 | `make_chunk` | `(document_id, content, chunk_index=0, total_chunks=1, **kwargs) -> Chunk` | 自动生成 `chunk_id` 与 `content_hash`，构造 `Chunk`。 |
+| `make_stable_chunk_id` | `(*, document_id, content_hash, parser_version, chunk_index) -> str` | v0.2 结构化索引 ID 生成函数。 |
 
 ---
 
@@ -206,6 +229,25 @@ DocumentEvent → Chunker → Chunk → EmbeddingProvider → VectorStore
 | `chunk_batch` | `(events: list[DocumentEvent]) -> list[Chunk]` | 批量分块，单个失败跳过。 |
 | `chunk_parsed` | `(parsed: ParsedDocument, event: DocumentEvent) -> list[Chunk]` | 对结构化 `ParsedDocument` 分块，保留 `quote_span` 等定位信息。 |
 | `_split_block_text` | `(block: ParsedBlock) -> list[tuple[str, tuple[int, int] \| None]]` | 切分 `ParsedBlock` 文本并重新分配引用区间。 |
+
+### 4.9 v0.2 结构化解析器与 `StructuredChunker`
+
+`src/margin/vector/parsers/` 提供面向索引层的轻量解析器，输出统一 `ParsedBlock`：
+
+| 解析器 | 输入 | 定位能力 |
+|--------|------|----------|
+| `HtmlParser` | HTML bytes | heading/paragraph/table block、DOM path、段落序号、表格行列。 |
+| `PdfParser` | PDF bytes | 页码、页内文本 block；缺少 PDF 依赖时抛出 `ParserUnavailable`。 |
+| `CsvParser` | CSV bytes | 表格行列、`table_id`、`row_id`、`column_id`。 |
+| `JsonParser` | JSON bytes | 扁平化标量字段路径，字段路径写入 locator。 |
+| `PlainTextParser` | text bytes | 段落序号与 half-open `quote_span`。 |
+
+`StructuredChunker` 直接消费上述 `ParsedBlock`，按结构边界合并文本：
+
+- chunk ID 使用 `make_stable_chunk_id(document_id, content_hash, parser_version, chunk_index)`；
+- 不跨表格/text 边界合并；
+- 输出 `ChunkingResult(chunks, links)`，证券关联写入 `ChunkSecurityLink`；
+- 外部 WebSearch/news 内容应标记为 `TrustLevel.UNTRUSTED_SOURCE_CONTENT`。
 
 ---
 
@@ -300,6 +342,17 @@ DocumentEvent → Chunker → Chunk → EmbeddingProvider → VectorStore
 |------|------|
 | `_tokenize(text)` | 中文单字/英文单词/数字分词。 |
 
+### 6.2 `PersistentIndexingPipeline`
+
+`PersistentIndexingPipeline` 负责真实索引写入的 embedding 阶段：
+
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `__init__` | `(*, repository, embedding_provider, embedding_dimension, batch_size=64)` | 注入仓库、真实 embedding provider、期望维度与批大小。 |
+| `embed_and_persist` | `(chunks: list[Chunk]) -> list[str]` | 先对整批向量做维度校验，全部合法后才写 `chunk_embeddings`；任一维度不匹配时不写部分结果。 |
+
+写入的 embedding key 使用 `EmbeddingKey(chunk_id, provider_name, model_name, model_version)`，用于后续重跑和审计。
+
 ---
 
 ## 7. 检索
@@ -311,6 +364,7 @@ DocumentEvent → Chunker → Chunk → EmbeddingProvider → VectorStore
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `symbol` | `str \| None` | `None` | 证券代码。 |
+| `security_ids` | `tuple[str, ...] \| None` | `None` | v0.2 推荐的多证券过滤条件，底层走 `chunk_security_links`。 |
 | `decision_at` | `datetime \| None` | `None` | 决策时间点。 |
 | `doc_types` | `tuple[str, ...] \| None` | `None` | 文档类型过滤。 |
 | `prefer_official` | `bool` | `True` | 是否优先官方来源。 |
@@ -335,8 +389,8 @@ DocumentEvent → Chunker → Chunk → EmbeddingProvider → VectorStore
 
 | 方法 | 签名 | 说明 |
 |------|------|------|
-| `__init__` | `(pipeline: EmbeddingPipeline, weights=None, time_decay_days=90.0)` | 初始化。 |
-| `search` | `(query: str, top_k=10, constraints=None) -> list[RetrievalResult]` | 执行混合检索，要求 `symbol` 与 `decision_at`。 |
+| `__init__` | `(pipeline: EmbeddingPipeline \| VectorRepository, embedding_provider=None, weights=None, time_decay_days=90.0)` | 初始化；当传入 `VectorRepository` 和 provider 时自动包装为持久化检索 pipeline。 |
+| `search` | `(query: str, top_k=10, constraints=None, security_ids=None, decision_at=None) -> list[RetrievalResult]` | 执行混合检索，要求 `symbol` 或 `security_ids` 与 `decision_at`。 |
 | `_build_filters` | `(constraints) -> dict` | 构造底层 pipeline 过滤器。 |
 | `_merge_and_score` | `(query, vector_results, keyword_results, constraints) -> list[RetrievalResult]` | 合并两种检索结果并计算融合分。 |
 | `_time_decay` | `(chunk, decision_at) -> float` | 基于 `published_at` 的指数衰减。 |
@@ -386,6 +440,18 @@ DocumentEvent → Chunker → Chunk → EmbeddingProvider → VectorStore
 | `_provider_name(provider)` | 取 Provider 名称，优先 `name` 属性，否则 `descriptor.name`。 |
 | `_provider_version(provider)` | 取 Provider 版本，优先 `version` 属性，否则 `descriptor.version`。 |
 
+### 8.2 `IndexingRunner`
+
+v0.2 新增 `IndexingRunner` 用于可恢复的文档索引 outbox 消费：
+
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `__init__` | `(*, news_repository, vector_repository, embedding_provider, parser, chunker, lease_owner, lease_seconds=300)` | 注入新闻仓库、向量仓库、解析器、结构化 chunker、embedding provider 与 lease owner。 |
+| `claim_next` | `(*, now=None) -> OutboxMessage \| None` | 领取一条可处理或 lease 过期的 `document_indexing` 消息。 |
+| `process_one` | `(*, event_id, now=None) -> bool` | 处理单个 outbox 事件；parser 成功但 embedding 失败时标记 retryable，保留 parser/chunk 重跑能力。 |
+
+Outbox 状态通过 `NewsRepository` 的 `claim_outbox_with_lease`、`mark_outbox_succeeded`、`mark_outbox_retryable` 和 `mark_outbox_failed_final` 持久化，避免 worker 崩溃后永久卡住。
+
 ---
 
 ## 9. 仓库
@@ -397,11 +463,15 @@ PostgreSQL/pgvector 持久化边界，负责 Chunk、Embedding、审计记录的
 | 方法 | 签名 | 说明 |
 |------|------|------|
 | `__init__` | `(session_factory: Callable[[], Session], *, dimension: int)` | 初始化会话工厂与期望向量维度。 |
-| `upsert_chunks` | `(chunks: list[Chunk]) -> int` | 幂等写入 Chunk 元数据。 |
+| `upsert_chunks` | `(chunks: list[Chunk], *, links: list[ChunkSecurityLink] \| None = None) -> int` | 幂等写入 Chunk 元数据，并可在同一事务写入 `chunk_security_links`。 |
+| `count_chunk_security_links` | `() -> int` | 返回 chunk-security link 数。 |
+| `count_embeddings` | `() -> int` | 返回 embedding 行数。 |
+| `upsert_indexed_document` | `(document: IndexedDocument) -> None` | 幂等写入文档级 parser/chunker/embedding 审计。 |
+| `get_indexed_document` | `(document_id: str) -> IndexedDocument \| None` | 读取文档级索引审计。 |
 | `upsert_embeddings` | `(items: list[tuple[str, list[float]]], *, provider_name, model_name, model_version) -> int` | 按 `chunk_id`+Provider+模型版本 幂等写入向量。 |
-| `search_vector` | `(query_vector, *, top_k=10, symbol=None, decision_at=None, doc_types=None) -> list[tuple[Chunk, float]]` | 全量余弦相似度计算并过滤 symbol/时间点/文档类型。 |
+| `search_vector` | `(query_vector, *, top_k=10, symbol=None, security_ids=None, decision_at=None, doc_types=None) -> list[tuple[Chunk, float]]` | 全量余弦相似度计算并过滤证券/时间点/文档类型；有 `security_ids` 时 join `chunk_security_links`。 |
 | `get_chunk` | `(chunk_id: str) -> Chunk \| None` | 按 ID 查询 Chunk。 |
-| `list_chunks` | `(*, symbol=None, doc_types=None) -> list[Chunk]` | 列出 Chunk，按 `available_at` 倒序。 |
+| `list_chunks` | `(*, symbol=None, security_ids=None, decision_at=None, doc_types=None) -> list[Chunk]` | 列出 Chunk，默认仅 active；支持 `available_at <= decision_at` 与 link-table 证券过滤。 |
 | `record_index_audit` | `(*, operation, provider_name, model_name, model_version, chunk_count, vector_count, keyword_count, degraded, error=None) -> int` | 持久化索引审计记录，返回 `audit_id`。 |
 | `record_retrieval_audit` | `(*, query, constraints, results: list[RetrievalResult]) -> int` | 持久化可回放检索结果，返回 `audit_id`。 |
 | `replay_retrieval` | `(audit_id: int) -> list[RetrievalResult]` | 按审计记录重建检索结果。 |
@@ -420,7 +490,27 @@ PostgreSQL/pgvector 持久化边界，负责 Chunk、Embedding、审计记录的
 ## 10. 跨模块使用说明
 
 - **与 module 03（news）的衔接**：`Chunker.chunk` 接收 `DocumentEvent`，`DocumentIndexingRunner` 消费 `NewsRepository` 的 Outbox，完成文档到索引的转换。
-- **与 module 06（research）的衔接**：`RetrievalTool` 是研究智能体获取证据的统一入口，返回带 `source_url`/`page`/`quote_span` 的 `RetrievalResult`，支持引用溯源。
-- **持久化切换**：MVP 中 `EmbeddingPipeline` 使用内存 `VectorStore` 与 `BM25Index`；生产环境可替换为 `PersistentEmbeddingPipeline` + `VectorRepository`，配合 `OpenAIEmbeddingProvider` 与 `HTTPRerankProvider`。
+- **与 module 03（news）的衔接**：v0.2 推荐 `IndexingRunner` 消费文档 outbox，解析原文快照并写入 `chunks`、`chunk_security_links`、`chunk_embeddings` 和 `indexed_documents`。
+- **与 module 06（research）的衔接**：`RetrievalTool`/`HybridRetriever` 是研究智能体获取证据的统一入口，返回带 `source_url`、`snapshot_id`、`SourceLocator`、`source_level` 与 `trust_level` 的 `RetrievalResult`，支持引用溯源与 prompt 安全策略。
+- **PIT 检索**：调用方必须传 `decision_at`；仓库层通过 `ChunkRow.available_at <= decision_at` 防止未来新闻/公告进入历史决策。
+- **持久化切换**：测试可继续使用内存 `EmbeddingPipeline`；生产路径使用 `PersistentIndexingPipeline` / `PersistentEmbeddingPipeline` + `VectorRepository`，配合 `OpenAIEmbeddingProvider` 与 `HTTPRerankProvider`。
 - **Provider 注入**：通过 `EmbeddingProvider.set_embed_func` 与 `Reranker.set_rerank_func` 可在不修改代码的情况下接入真实模型。
 - **审计与回放**：`VectorRepository.record_retrieval_audit` / `replay_retrieval` 支持检索结果的事后审计与可复现分析。
+
+### 10.1 真实 smoke
+
+模块 04 的真实 smoke 脚本为：
+
+```bash
+python scripts/smoke_text_indexing.py
+```
+
+需要以下运行时配置：
+
+- `MARGIN_DATABASE_URL`
+- `MARGIN_EMBEDDING_API_KEY`
+- `MARGIN_EMBEDDING_BASE_URL`
+- `MARGIN_EMBEDDING_MODEL`
+- `MARGIN_EMBEDDING_DIMENSION`
+
+缺少 embedding 配置时脚本返回 exit code `2`，输出 `external_blocker=missing_embedding_config`。配置完整时脚本写入一条合成 smoke chunk，生成真实 embedding，持久化 `indexed_documents` 与 `chunk_embeddings`，再按 `security_id + decision_at` 做 PIT 检索。输出只包含 provider/model、维度、计数与 chunk ID，不打印密钥或原文。

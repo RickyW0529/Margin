@@ -33,7 +33,8 @@ Complete function-level documentation for the the current Margin implementation 
    - 7.2 [Anti-Lookahead Checks](#72-anti-lookahead-checks)
    - 7.3 [Data Quality Checks](#73-data-quality-checks)
    - 7.4 [Quality Events](#74-quality-events)
-8. [Cross-Module Usage Notes](#8-cross-module-usage-notes)
+8. [v0.2 PIT Warehouse and Sync Pipeline](#8-v02-pit-warehouse-and-sync-pipeline)
+9. [Cross-Module Usage Notes](#9-cross-module-usage-notes)
 
 ---
 
@@ -51,6 +52,8 @@ Key responsibilities:
 - **Time standardization**: Produce the five point-in-time (PIT) fields (`event_at`, `published_at`, `available_at`, `fetched_at`, `revised_at`) required for downstream simulation.
 - **Data quality**: Validate required fields, detect outliers, stale data, revisions, duplicates, and future-data leakage.
 - **Quality events**: Emit structured events that can suppress high-confidence research signals when critical issues are detected.
+- **PIT warehouse**: v0.2 adds raw snapshots, provider facts, canonical values, bitemporal industry membership, corporate actions, adjusted prices, freshness state, and retention audit.
+- **Incremental sync orchestration**: v0.2 adds endpoint registry, sync run/work items, exclusive claim, retry-safe cursors, freshness calculation, and an ingestion stack from provider payloads to canonical values.
 
 ---
 
@@ -62,10 +65,22 @@ Key responsibilities:
 | `src/margin/data/providers/__init__.py` | Public exports for concrete provider implementations. |
 | `src/margin/data/providers/akshare_provider.py` | `AKShareProvider` implementation for A-share quotes, fundamentals, indices, and announcement metadata. |
 | `src/margin/data/providers/tushare_provider.py` | `TushareProvider` implementation backed by the Tushare Pro API. |
+| `src/margin/data/db_models.py` | v0.2 PIT warehouse ORM for endpoints, sync runs, raw snapshots, schema fields, facts, canonical values, industry, corporate actions, freshness, and retention audit. |
+| `src/margin/data/endpoints.py` | Provider endpoint descriptors, backfill policy, rate-limit policy, and default AKShare/Tushare endpoint registry. |
+| `src/margin/data/sync_models.py` | `DataSyncRequest`, `DataSyncRun`, `EndpointWorkItem`, `EndpointSyncResult`, and sync status enum. |
+| `src/margin/data/sync_service.py` | DB-backed run/work-item creation, exclusive claim, retry-safe cursor semantics, and endpoint execution. |
+| `src/margin/data/ingestion.py` | Provider payload → compressed raw snapshot → schema observation → standardized facts → canonical values. |
+| `src/margin/data/freshness.py` | Domain-aware expected-as-of and freshness status calculation. |
+| `src/margin/data/warehouse_repository.py` | Downstream PIT-safe repository for canonical values, industry, adjusted prices, freshness, and quality events. |
+| `src/margin/data/retention.py` | Reference-aware retention deletion and immutable audit. |
+| `src/margin/data/schema_discovery.py` | Source-field lifecycle, missing-field, and type-change tracking. |
+| `src/margin/data/facts.py`, `src/margin/data/canonical.py`, `src/margin/data/indicator_catalog.py` | Standardized provider facts, canonical resolver, and indicator catalog/mappings. |
+| `src/margin/data/security_master.py`, `src/margin/data/industry.py`, `src/margin/data/corporate_actions.py` | Security master, bitemporal industry membership, and PIT-safe corporate actions/adjusted prices. |
 | `src/margin/data/standardize.py` | Symbol normalization, field mapping, unit/currency conversion, time standardization, and `StandardDataEvent` creation. |
 | `src/margin/data/quality.py` | Point-in-time field validation, anti-lookahead checks, data quality inspection, and quality event emission. |
 | `src/margin/core/provider.py` | Core provider abstractions: enums, descriptors, health results, call results, and business protocols. |
 | `src/margin/core/registry.py` | `ProviderRegistry` for registration, discovery, secret injection, health checks, and resilient call dispatch. |
+| `scripts/smoke_data_provider.py` | Real AKShare/Tushare smoke entrypoint. It prints provider status, counts, and snapshot IDs, never token values. |
 
 ---
 
@@ -779,7 +794,74 @@ Generates and tracks `DataQualityEvent` instances.
 
 ---
 
-## 8. Cross-Module Usage Notes
+## 8. v0.2 PIT Warehouse and Sync Pipeline
+
+### 8.1 Database and migration
+
+Alembic revision `20260622_0010_data_warehouse.py` adds the v0.2 warehouse tables:
+
+- `provider_endpoints`, `data_sync_runs`, `data_sync_work_items`: endpoint configuration, sync runs, and endpoint work items;
+- `raw_data_snapshots`: content-addressed zstd snapshot metadata for raw provider responses;
+- `source_schema_fields`: source-field first/last seen, inferred type, type changes, and consecutive missing counts;
+- `standardized_indicator_facts`: append-only provider facts after standardization;
+- `canonical_indicator_values`: canonical selections at a `decision_at`, preserving candidate fact IDs;
+- `securities`, `security_provider_identifiers`, `security_industry_memberships`: security master and bitemporal identifier/industry mappings;
+- `corporate_actions`, `adjusted_price_series`: corporate-action facts and as-of adjusted prices;
+- `data_quality_events`, `data_freshness_states`, `retention_deletion_audits`: quality, freshness, and retention audit.
+
+### 8.2 Sync and ingestion flow
+
+`DataWarehouseIngestionStack.sync_daily_bars()` currently implements the daily-bar end-to-end path:
+
+```text
+Provider.get_bars
+  → DataSyncRun / EndpointWorkItem
+  → CompressedSnapshotStore.write_json
+  → raw_data_snapshots
+  → source_schema_fields
+  → Standardizer.standardize_bars
+  → standardized_indicator_facts
+  → CanonicalResolver
+  → canonical_indicator_values
+  → SQLAlchemyWarehouseRepository.canonical_values
+```
+
+Key behavior:
+
+- work items are persisted before external provider calls;
+- endpoint claim uses database locking semantics to avoid duplicate worker execution;
+- provider failures do not advance cursors and are recorded as `failed_retryable`;
+- canonical queries require an explicit `decision_at`; otherwise `PITQueryError` is raised;
+- retention checks references from `standardized_indicator_facts` and `corporate_actions`; referenced raw snapshots receive a protected audit and are not deleted.
+
+### 8.3 Freshness and production wiring
+
+`FreshnessCalculator` calculates expected-as-of by domain:
+
+- market / valuation: trading calendar plus provider availability time;
+- financial: disclosure lag window;
+- filing / news: natural-day freshness.
+
+`MarginSettings` now includes:
+
+- `MARGIN_DATA_SNAPSHOT_ROOT`: compressed raw snapshot root;
+- `MARGIN_DATA_SYNC_ON_STARTUP`: whether the worker enables a data-sync job;
+- `MARGIN_DATA_FRESHNESS_TIMEZONE`: freshness timezone;
+- `MARGIN_DATA_SMOKE_SYMBOLS`: symbols used by real smoke checks;
+- `MARGIN_TUSHARE_TOKEN`: Tushare token stored as `SecretStr` and masked in representations.
+- `MARGIN_TUSHARE_HTTP_URL`: optional Tushare-compatible API URL, for example a user-owned proxy or TeaJoin service.
+
+`margin.api.dependencies.build_data_warehouse_stack()` and `margin.worker.build_data_ingestion_stack()` build the DB-backed ingestion stack from centralized settings.
+
+### 8.4 Verification entrypoints
+
+- Unit/integration tests: `pytest tests/data/warehouse -v`
+- Real provider smoke: `python scripts/smoke_data_provider.py --providers akshare,tushare`
+- Dry-run config check: `python scripts/smoke_data_provider.py --providers tushare --dry-run`
+
+The real smoke prints JSON with provider name, status, snapshot IDs, fact/canonical counts, and sanitized error messages only.
+
+## 9. Cross-Module Usage Notes
 
 ### Typical data flow
 

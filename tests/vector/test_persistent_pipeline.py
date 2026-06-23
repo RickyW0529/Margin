@@ -10,25 +10,32 @@ from margin.vector.persistent_pipeline import PersistentEmbeddingPipeline
 
 
 class FakeEmbeddingProvider:
+    """FakeEmbeddingProvider."""
     def embed(self, text: str) -> list[float]:
+        """embed."""
         del text
         return [1.0, 0.0]
 
 
 class FakeVectorRepository:
+    """FakeVectorRepository."""
     def __init__(self, chunk) -> None:
+        """Initialize the instance."""
         self.chunk = chunk
 
     def search_vector(self, query_vector, **kwargs):
+        """search vector."""
         del query_vector, kwargs
         return [(self.chunk, 0.9)]
 
     def list_chunks(self, **kwargs):
+        """list chunks."""
         del kwargs
         return [self.chunk]
 
 
 def test_persistent_pipeline_combines_database_vector_and_keyword_results():
+    """persistent pipeline combines database vector and keyword results."""
     chunk = make_chunk(
         document_id="doc_1",
         content="经营现金流改善",

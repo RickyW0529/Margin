@@ -1,0 +1,8 @@
+# Provisions v0.2 operational dashboards from checked-in JSON files.
+apiVersion: 1
+providers:
+  - name: "margin-v02"
+    folder: "Margin v0.2"
+    type: file
+    options:
+      path: /etc/grafana/provisioning/dashboards

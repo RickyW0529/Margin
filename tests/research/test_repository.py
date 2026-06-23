@@ -10,6 +10,7 @@ from margin.research.snapshot import ResearchSnapshotBuilder
 
 
 def test_memory_repository_persists_terminal_snapshot() -> None:
+    """memory repository persists terminal snapshot."""
     repository = MemoryResearchRepository()
     snapshot = (
         ResearchSnapshotBuilder()
@@ -26,6 +27,7 @@ def test_memory_repository_persists_terminal_snapshot() -> None:
 
 
 def test_memory_repository_rejects_snapshot_mutation() -> None:
+    """memory repository rejects snapshot mutation."""
     repository = MemoryResearchRepository()
     snapshot = (
         ResearchSnapshotBuilder()

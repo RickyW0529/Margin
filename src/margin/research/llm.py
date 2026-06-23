@@ -35,7 +35,6 @@ class TaskType(StrEnum):
     VALUATION = "valuation"
     RISK = "risk"
     REFLECT = "reflect"
-    PORTFOLIO = "portfolio"
     SIGNAL = "signal"
     EXTRACTION = "extraction"
     VALIDATION = "validation"
@@ -350,7 +349,6 @@ class ModelRouter:
         TaskType.VALUATION: "rule",
         TaskType.RISK: "cheap-llm",
         TaskType.REFLECT: "capable-llm",
-        TaskType.PORTFOLIO: "rule",
         TaskType.SIGNAL: "cheap-llm",
         TaskType.EXTRACTION: "cheap-llm",
         TaskType.VALIDATION: "cheap-llm",

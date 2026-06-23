@@ -7,6 +7,7 @@ from margin.strategy.validator import StrategyValidator
 
 
 def test_validator_accepts_valid_config():
+    """validator accepts valid config."""
     validator = StrategyValidator()
     config = StrategyConfig()
     ok, errors = validator.validate(config)
@@ -15,6 +16,7 @@ def test_validator_accepts_valid_config():
 
 
 def test_merge_with_guardrails_adds_system_prohibited_outputs():
+    """merge with guardrails adds system prohibited outputs."""
     validator = StrategyValidator()
     config = StrategyConfig(
         decision=DecisionConfig(
@@ -28,6 +30,7 @@ def test_merge_with_guardrails_adds_system_prohibited_outputs():
 
 
 def test_validator_rejects_missing_required_prohibited_outputs_after_merge():
+    """validator rejects missing required prohibited outputs after merge."""
     validator = StrategyValidator()
     config = StrategyConfig(
         decision=DecisionConfig(
@@ -42,6 +45,7 @@ def test_validator_rejects_missing_required_prohibited_outputs_after_merge():
 
 
 def test_validator_rejects_empty_universe():
+    """validator rejects empty universe."""
     validator = StrategyValidator()
     config = StrategyConfig(universe=[])
     ok, errors = validator.validate(config)

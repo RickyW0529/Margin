@@ -8,13 +8,16 @@ immutability by rejecting duplicate ``record_id`` values.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Protocol
+from typing import Any, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from margin.core.audit import SecretRedactingProcessor
 from margin.core.db_audit import AuditLogRecordRow
 from margin.core.models import AuditLogRecord
+
+AuditRedactor = Callable[[object, str, dict[str, Any]], dict[str, Any]]
 
 
 class AuditRepository(Protocol):
@@ -56,9 +59,10 @@ class MemoryAuditRepository:
         _records: Mapping from record id to immutable audit record.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, redactor: AuditRedactor | None = None) -> None:
         """Initialize an empty in-memory repository."""
         self._records: dict[str, AuditLogRecord] = {}
+        self._redactor = redactor or SecretRedactingProcessor()
 
     def record(self, record: AuditLogRecord) -> None:
         """Append an audit record, rejecting duplicate ids.
@@ -70,9 +74,10 @@ class MemoryAuditRepository:
             ValueError: When a record with the same ``record_id`` already exists.
         """
         # Reject duplicates to preserve the append-only / immutable contract in memory.
-        if record.record_id in self._records:
+        sanitized = _sanitize_record(record, self._redactor)
+        if sanitized.record_id in self._records:
             raise ValueError(f"audit record '{record.record_id}' already exists")
-        self._records[record.record_id] = record
+        self._records[sanitized.record_id] = sanitized
 
     def list_records(
         self,
@@ -111,13 +116,18 @@ class SQLAlchemyAuditRepository:
         _session_factory: Callable that returns a new SQLAlchemy session.
     """
 
-    def __init__(self, session_factory: Callable[[], Session]) -> None:
+    def __init__(
+        self,
+        session_factory: Callable[[], Session],
+        redactor: AuditRedactor | None = None,
+    ) -> None:
         """Initialize the repository.
 
         Args:
             session_factory: Callable that returns a new SQLAlchemy session.
         """
         self._session_factory = session_factory
+        self._redactor = redactor or SecretRedactingProcessor()
 
     def record(self, record: AuditLogRecord) -> None:
         """Persist an audit record to PostgreSQL.
@@ -126,8 +136,9 @@ class SQLAlchemyAuditRepository:
             record: The immutable audit record to store.
         """
         # ``begin()`` commits on success and rolls back on exception automatically.
+        sanitized = _sanitize_record(record, self._redactor)
         with self._session_factory.begin() as session:
-            session.add(_record_to_row(record))
+            session.add(_record_to_row(sanitized))
 
     def list_records(
         self,
@@ -171,6 +182,15 @@ def _record_to_row(record: AuditLogRecord) -> AuditLogRecordRow:
         payload_json=record.payload_json,
         recorded_at=record.recorded_at,
         service_version=record.service_version,
+    )
+
+
+def _sanitize_record(record: AuditLogRecord, redactor: AuditRedactor) -> AuditLogRecord:
+    """Return a copy whose structured payload has been recursively redacted."""
+    if record.payload_json is None:
+        return record
+    return record.model_copy(
+        update={"payload_json": redactor(None, "audit", dict(record.payload_json))}
     )
 
 

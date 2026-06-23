@@ -21,6 +21,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    """upgrade."""
     op.create_table(
         "audit_records",
         Column("record_id", String(64), primary_key=True),
@@ -40,4 +41,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """downgrade."""
     op.drop_table("audit_records")

@@ -12,7 +12,8 @@ rate limits.
 
 from __future__ import annotations
 
-from datetime import datetime, time, timedelta
+import math
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from margin.core.provider import (
@@ -49,6 +50,227 @@ def _tushare_symbol(symbol: str) -> str:
         The same symbol in Tushare format.
     """
     return symbol
+
+
+def _optional_float(value: Any) -> float | None:
+    """Return a finite numeric provider value or ``None`` when unavailable."""
+    if value is None or value == "":
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    return numeric if math.isfinite(numeric) else None
+
+
+def _ratio(value: Any) -> float | None:
+    """Normalize Tushare percentage fields to decimal ratios."""
+    numeric = _optional_float(value)
+    if numeric is None:
+        return None
+    return numeric / 100.0 if abs(numeric) > 1 else numeric
+
+
+def _calendar_days(start: datetime, end: datetime) -> list[datetime]:
+    """Return inclusive calendar days for bounded cross-section requests."""
+    if end < start:
+        return []
+    days = (end.date() - start.date()).days
+    return [
+        datetime.combine(start.date() + timedelta(days=offset), time.min)
+        for offset in range(days + 1)
+    ]
+
+
+def _map_bar_row(
+    row: Any,
+    *,
+    ts_code: str,
+    fetched_at: datetime,
+    frequency: str,
+) -> dict[str, Any]:
+    """Map one Tushare ``daily`` row to the canonical market-bar contract."""
+    trade_date = datetime.strptime(str(row["trade_date"]), "%Y%m%d")
+    return {
+        "symbol": ts_code,
+        "date": trade_date,
+        "open": float(row["open"]),
+        "close": float(row["close"]),
+        "high": float(row["high"]),
+        "low": float(row["low"]),
+        "volume": float(row["vol"]) * 100.0,
+        "amount": float(row["amount"]) * 1000.0,
+        "frequency": frequency,
+        "fetched_at": fetched_at,
+        "available_at": _market_bar_available_at(trade_date),
+        "source": "tushare",
+    }
+
+
+def _map_adjustment_row(
+    row: Any,
+    *,
+    ts_code: str,
+    fetched_at: datetime,
+) -> dict[str, Any]:
+    """Map one Tushare ``adj_factor`` row."""
+    trade_date = datetime.strptime(str(row["trade_date"]), "%Y%m%d")
+    return {
+        "symbol": ts_code,
+        "date": trade_date,
+        "adj_factor": float(row["adj_factor"]),
+        "fetched_at": fetched_at,
+        "available_at": _market_bar_available_at(trade_date),
+        "source": "tushare",
+    }
+
+
+def _map_financial_row(
+    row: Any,
+    *,
+    ts_code: str,
+    fetched_at: datetime,
+) -> dict[str, Any]:
+    """Map one Tushare ``fina_indicator`` row to canonical factor names."""
+    ann_date_value = row.get("ann_date") or row.get("end_date")
+    ann_date = (
+        datetime.strptime(str(ann_date_value), "%Y%m%d")
+        if ann_date_value
+        else fetched_at
+    )
+    report_date_value = row.get("end_date") or ann_date_value
+    report_date = (
+        datetime.strptime(str(report_date_value), "%Y%m%d")
+        if report_date_value
+        else ann_date
+    )
+    gross_margin = row.get("grossprofit_margin")
+    if gross_margin is None:
+        gross_margin = row.get("gross_profit_margin")
+    roe = _ratio(row.get("roe"))
+    gross_margin_ratio = _ratio(gross_margin)
+    return {
+        "symbol": ts_code,
+        "report_date": report_date,
+        "ann_date": ann_date,
+        "roe": roe,
+        "roe_ttm": roe,
+        "eps": _optional_float(row.get("eps")),
+        "gross_profit_margin": gross_margin_ratio,
+        "gross_margin_ttm": gross_margin_ratio,
+        "net_margin_ttm": _ratio(row.get("netprofit_margin")),
+        "liability_ratio": _ratio(row.get("debt_to_assets")),
+        "revenue_yoy": _ratio(row.get("tr_yoy")),
+        "profit_yoy": _ratio(row.get("netprofit_yoy")),
+        "fetched_at": fetched_at,
+        "available_at": _next_market_open_after(ann_date),
+        "source": "tushare",
+    }
+
+
+def _parse_tushare_date(value: Any) -> date | None:
+    """Parse an optional Tushare YYYYMMDD value."""
+    if value is None or value == "":
+        return None
+    try:
+        return datetime.strptime(str(value), "%Y%m%d").date()
+    except ValueError:
+        return None
+
+
+def _derive_income_metrics(
+    rows: list[Any],
+) -> dict[tuple[str, str], dict[str, float | None]]:
+    """Derive PIT-safe TTM and prior annual profit from cumulative income rows."""
+    latest_by_period: dict[tuple[str, date], tuple[date, float]] = {}
+    for row in rows:
+        ts_code = str(row.get("ts_code", ""))
+        end_date = _parse_tushare_date(row.get("end_date"))
+        profit = _optional_float(row.get("n_income_attr_p"))
+        if not ts_code or end_date is None or profit is None:
+            continue
+        announced = (
+            _parse_tushare_date(row.get("f_ann_date"))
+            or _parse_tushare_date(row.get("ann_date"))
+            or end_date
+        )
+        key = (ts_code, end_date)
+        current = latest_by_period.get(key)
+        if current is None or announced >= current[0]:
+            latest_by_period[key] = (announced, profit)
+
+    periods_by_symbol: dict[str, dict[date, float]] = {}
+    for (ts_code, end_date), (_, profit) in latest_by_period.items():
+        periods_by_symbol.setdefault(ts_code, {})[end_date] = profit
+
+    derived: dict[tuple[str, str], dict[str, float | None]] = {}
+    for ts_code, periods in periods_by_symbol.items():
+        annuals = sorted(
+            (
+                (period_end, profit)
+                for period_end, profit in periods.items()
+                if (period_end.month, period_end.day) == (12, 31)
+            ),
+            reverse=True,
+        )
+        for period_end, current_profit in periods.items():
+            if (period_end.month, period_end.day) == (12, 31):
+                ttm_profit: float | None = current_profit
+            else:
+                prior_annual = periods.get(date(period_end.year - 1, 12, 31))
+                prior_same_period = periods.get(
+                    date(
+                        period_end.year - 1,
+                        period_end.month,
+                        period_end.day,
+                    )
+                )
+                ttm_profit = (
+                    prior_annual + current_profit - prior_same_period
+                    if prior_annual is not None and prior_same_period is not None
+                    else None
+                )
+            prior_annual_values = [
+                profit
+                for annual_end, profit in annuals
+                if annual_end <= period_end
+            ]
+            derived[(ts_code, period_end.strftime("%Y%m%d"))] = {
+                "net_profit_ttm": ttm_profit,
+                "net_profit_y1": (
+                    prior_annual_values[0] if prior_annual_values else None
+                ),
+                "net_profit_y2": (
+                    prior_annual_values[1]
+                    if len(prior_annual_values) > 1
+                    else None
+                ),
+            }
+    return derived
+
+
+def _map_valuation_row(
+    row: Any,
+    *,
+    ts_code: str,
+    fetched_at: datetime,
+) -> dict[str, Any]:
+    """Map one Tushare ``daily_basic`` row."""
+    trade_date = datetime.strptime(str(row["trade_date"]), "%Y%m%d")
+    total_mv = _optional_float(row.get("total_mv"))
+    return {
+        "symbol": ts_code,
+        "trade_date": trade_date,
+        "pe_ttm": _optional_float(row.get("pe_ttm")),
+        "pb": _optional_float(row.get("pb")),
+        "ps": _optional_float(row.get("ps_ttm")),
+        "dividend_yield": _ratio(row.get("dv_ttm")),
+        "turnover_rate": _ratio(row.get("turnover_rate")),
+        "market_cap": total_mv * 1000.0 if total_mv is not None else None,
+        "fetched_at": fetched_at,
+        "available_at": _market_bar_available_at(trade_date),
+        "source": "tushare",
+    }
 
 
 def _market_bar_available_at(trade_date: datetime) -> datetime:
@@ -95,15 +317,18 @@ class TushareProvider(BaseProvider):
         _descriptor: Provider metadata and capabilities descriptor.
     """
 
-    def __init__(self, token: str | None = None) -> None:
+    def __init__(self, token: str | None = None, http_url: str | None = None) -> None:
         """Initialize a new ``TushareProvider`` instance.
 
         Args:
             token: Optional Tushare API token. When omitted, the token
                 must be injected later via :meth:`set_token` or
                 :meth:`configure_secrets`.
+            http_url: Optional Tushare-compatible API endpoint URL. This is
+                useful for licensed proxies such as TeaJoin.
         """
         self._token = token
+        self._http_url = http_url
         self._pro = None
         self._descriptor = ProviderDescriptor(
             name="tushare",
@@ -114,6 +339,7 @@ class TushareProvider(BaseProvider):
                 "get_bars",
                 "get_adjustment_factors",
                 "get_financials",
+                "get_valuations",
                 "get_index_members",
             ],
             secret_refs=["tushare_token"],
@@ -149,6 +375,8 @@ class TushareProvider(BaseProvider):
         import tushare as ts
 
         self._pro = ts.pro_api(token=self._token or "")
+        if self._http_url:
+            self._pro._DataApi__http_url = self._http_url
         return self._pro
 
     def set_token(self, token: str) -> None:
@@ -265,6 +493,23 @@ class TushareProvider(BaseProvider):
         pro = self._ensure_pro()
         fetched_at = datetime.now()
         result: list[dict[str, Any]] = []
+        if len(symbols) > 20:
+            allowed = {_tushare_symbol(symbol) for symbol in symbols}
+            for trade_day in _calendar_days(start, end):
+                df = pro.daily(trade_date=_fmt_date(trade_day))
+                for _, row in df.iterrows():
+                    ts_code = str(row.get("ts_code", ""))
+                    if ts_code not in allowed:
+                        continue
+                    result.append(
+                        _map_bar_row(
+                            row,
+                            ts_code=ts_code,
+                            fetched_at=fetched_at,
+                            frequency=frequency,
+                        )
+                    )
+            return result
         for symbol in symbols:
             ts_code = _tushare_symbol(symbol)
             df = pro.daily(
@@ -273,23 +518,13 @@ class TushareProvider(BaseProvider):
                 end_date=_fmt_date(end),
             )
             for _, row in df.iterrows():
-                trade_date_str = str(row["trade_date"])
-                trade_date = datetime.strptime(trade_date_str, "%Y%m%d")
                 result.append(
-                    {
-                        "symbol": ts_code,
-                        "date": trade_date,
-                        "open": float(row["open"]),
-                        "close": float(row["close"]),
-                        "high": float(row["high"]),
-                        "low": float(row["low"]),
-                        "volume": float(row["vol"]) * 100.0,
-                        "amount": float(row["amount"]) * 1000.0,
-                        "frequency": frequency,
-                        "fetched_at": fetched_at,
-                        "available_at": _market_bar_available_at(trade_date),
-                        "source": "tushare",
-                    }
+                    _map_bar_row(
+                        row,
+                        ts_code=ts_code,
+                        fetched_at=fetched_at,
+                        frequency=frequency,
+                    )
                 )
         return result
 
@@ -317,6 +552,22 @@ class TushareProvider(BaseProvider):
         pro = self._ensure_pro()
         fetched_at = datetime.now()
         result: list[dict[str, Any]] = []
+        if len(symbols) > 20:
+            allowed = {_tushare_symbol(symbol) for symbol in symbols}
+            for trade_day in _calendar_days(start, end):
+                df = pro.adj_factor(trade_date=_fmt_date(trade_day))
+                for _, row in df.iterrows():
+                    ts_code = str(row.get("ts_code", ""))
+                    if ts_code not in allowed:
+                        continue
+                    result.append(
+                        _map_adjustment_row(
+                            row,
+                            ts_code=ts_code,
+                            fetched_at=fetched_at,
+                        )
+                    )
+            return result
         for symbol in symbols:
             ts_code = _tushare_symbol(symbol)
             df = pro.adj_factor(
@@ -325,17 +576,12 @@ class TushareProvider(BaseProvider):
                 end_date=_fmt_date(end),
             )
             for _, row in df.iterrows():
-                trade_date_str = str(row["trade_date"])
-                trade_date = datetime.strptime(trade_date_str, "%Y%m%d")
                 result.append(
-                    {
-                        "symbol": ts_code,
-                        "date": trade_date,
-                        "adj_factor": float(row["adj_factor"]),
-                        "fetched_at": fetched_at,
-                        "available_at": _market_bar_available_at(trade_date),
-                        "source": "tushare",
-                    }
+                    _map_adjustment_row(
+                        row,
+                        ts_code=ts_code,
+                        fetched_at=fetched_at,
+                    )
                 )
         return result
 
@@ -366,39 +612,150 @@ class TushareProvider(BaseProvider):
         """
         pro = self._ensure_pro()
         fetched_at = datetime.now()
+        indicator_rows: list[Any] = []
+        income_rows: list[Any] = []
+        indicator_fields = (
+            "ts_code,ann_date,end_date,roe,eps,grossprofit_margin,"
+            "netprofit_margin,debt_to_assets,tr_yoy,netprofit_yoy"
+        )
+        income_fields = (
+            "ts_code,ann_date,f_ann_date,end_date,report_type,"
+            "n_income_attr_p"
+        )
+        if len(symbols) > 20:
+            allowed = {_tushare_symbol(symbol) for symbol in symbols}
+            offset = 0
+            limit = 5000
+            while True:
+                df = pro.fina_indicator(
+                    start_date=_fmt_date(start),
+                    end_date=_fmt_date(end),
+                    offset=offset,
+                    limit=limit,
+                    fields=indicator_fields,
+                )
+                rows = list(df.iterrows())
+                for _, row in rows:
+                    ts_code = str(row.get("ts_code", ""))
+                    if ts_code in allowed:
+                        indicator_rows.append(row)
+                if len(rows) < limit:
+                    break
+                offset += limit
+            offset = 0
+            while True:
+                df = pro.income(
+                    start_date=_fmt_date(start),
+                    end_date=_fmt_date(end),
+                    offset=offset,
+                    limit=limit,
+                    fields=income_fields,
+                )
+                rows = list(df.iterrows())
+                income_rows.extend(
+                    row
+                    for _, row in rows
+                    if str(row.get("ts_code", "")) in allowed
+                )
+                if len(rows) < limit:
+                    break
+                offset += limit
+        else:
+            for symbol in symbols:
+                ts_code = _tushare_symbol(symbol)
+                df = pro.fina_indicator(
+                    ts_code=ts_code,
+                    start_date=_fmt_date(start),
+                    end_date=_fmt_date(end),
+                )
+                for _, row in df.iterrows():
+                    if not row.get("ts_code"):
+                        row = dict(row)
+                        row["ts_code"] = ts_code
+                    indicator_rows.append(row)
+                income_df = pro.income(
+                    ts_code=ts_code,
+                    start_date=_fmt_date(start),
+                    end_date=_fmt_date(end),
+                    fields=income_fields,
+                )
+                for _, row in income_df.iterrows():
+                    if not row.get("ts_code"):
+                        row = dict(row)
+                        row["ts_code"] = ts_code
+                    income_rows.append(row)
+
+        income_metrics = _derive_income_metrics(income_rows)
         result: list[dict[str, Any]] = []
+        for row in indicator_rows:
+            ts_code = str(row.get("ts_code", ""))
+            mapped = _map_financial_row(
+                row,
+                ts_code=ts_code,
+                fetched_at=fetched_at,
+            )
+            period_key = str(row.get("end_date") or "")
+            mapped.update(
+                {
+                    key: value
+                    for key, value in income_metrics.get(
+                        (ts_code, period_key),
+                        {},
+                    ).items()
+                    if value is not None
+                }
+            )
+            result.append(mapped)
+        return result
+
+    def get_valuations(
+        self,
+        symbols: list[str],
+        start: datetime,
+        end: datetime,
+    ) -> list[dict[str, Any]]:
+        """Fetch PIT-safe daily valuation metrics from ``daily_basic``."""
+        pro = self._ensure_pro()
+        fetched_at = datetime.now()
+        result: list[dict[str, Any]] = []
+        fields = (
+            "ts_code,trade_date,turnover_rate,pe_ttm,pb,ps_ttm,"
+            "dv_ttm,total_mv"
+        )
+        if len(symbols) > 20:
+            allowed = {_tushare_symbol(symbol) for symbol in symbols}
+            for trade_day in _calendar_days(start, end):
+                df = pro.daily_basic(
+                    trade_date=_fmt_date(trade_day),
+                    fields=fields,
+                )
+                for _, row in df.iterrows():
+                    ts_code = str(row.get("ts_code", ""))
+                    if ts_code not in allowed:
+                        continue
+                    result.append(
+                        _map_valuation_row(
+                            row,
+                            ts_code=ts_code,
+                            fetched_at=fetched_at,
+                        )
+                    )
+            return result
         for symbol in symbols:
             ts_code = _tushare_symbol(symbol)
-            df = pro.fina_indicator(
+            df = pro.daily_basic(
                 ts_code=ts_code,
                 start_date=_fmt_date(start),
                 end_date=_fmt_date(end),
+                fields=fields,
             )
             for _, row in df.iterrows():
-                ann_date_str = str(row.get("ann_date", row.get("end_date", "")))
-                if ann_date_str:
-                    ann_date = datetime.strptime(ann_date_str, "%Y%m%d")
-                else:
-                    ann_date = fetched_at
-                end_date_str = str(row.get("end_date", ann_date_str))
-                if end_date_str:
-                    report_date = datetime.strptime(end_date_str, "%Y%m%d")
-                else:
-                    report_date = ann_date
                 result.append(
-                    {
-                        "symbol": ts_code,
-                        "report_date": report_date,
-                        "ann_date": ann_date,
-                        "roe": float(row.get("roe", 0) or 0),
-                        "eps": float(row.get("eps", 0) or 0),
-                        "gross_profit_margin": float(
-                            row.get("gross_profit_margin", 0) or 0
-                        ),
-                        "fetched_at": fetched_at,
-                        "available_at": _next_market_open_after(ann_date),
-                        "source": "tushare",
-                    }
+                    _map_valuation_row(
+                        row,
+                        ts_code=ts_code,
+                        fetched_at=fetched_at,
+                    )
                 )
         return result
 

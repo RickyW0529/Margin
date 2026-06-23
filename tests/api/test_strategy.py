@@ -9,11 +9,13 @@ from margin.strategy.service import StrategyService
 
 
 def _client() -> TestClient:
+    """client."""
     app = create_app(strategy_service=StrategyService())
     return TestClient(app)
 
 
 def test_create_strategy_endpoint():
+    """create strategy endpoint."""
     client = _client()
     response = client.post(
         "/strategies",
@@ -26,6 +28,7 @@ def test_create_strategy_endpoint():
 
 
 def test_list_templates_endpoint():
+    """list templates endpoint."""
     client = _client()
     response = client.get("/strategies/templates")
     assert response.status_code == 200
@@ -33,6 +36,7 @@ def test_list_templates_endpoint():
 
 
 def test_get_strategy_endpoint():
+    """get strategy endpoint."""
     client = _client()
     create_resp = client.post(
         "/strategies",
@@ -45,6 +49,7 @@ def test_get_strategy_endpoint():
 
 
 def test_update_strategy_endpoint():
+    """update strategy endpoint."""
     client = _client()
     create_resp = client.post(
         "/strategies",
@@ -60,6 +65,7 @@ def test_update_strategy_endpoint():
 
 
 def test_activate_version_endpoint():
+    """activate version endpoint."""
     client = _client()
     create_resp = client.post(
         "/strategies",
@@ -78,6 +84,7 @@ def test_activate_version_endpoint():
 
 
 def test_get_prompt_endpoint():
+    """get prompt endpoint."""
     client = _client()
     create_resp = client.post(
         "/strategies",

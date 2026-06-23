@@ -10,8 +10,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision: str = "20260618_0002_news"
 down_revision: str | None = "20260618_0001"
@@ -68,7 +69,11 @@ def upgrade() -> None:
         sa.Column("processing_error", sa.Text(), nullable=True),
         sa.Column("is_original", sa.Boolean(), nullable=False),
         sa.Column("duplicate_of", sa.String(length=64), nullable=True),
-        sa.ForeignKeyConstraint(["snapshot_id"], ["raw_snapshots.snapshot_id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(
+            ["snapshot_id"],
+            ["raw_snapshots.snapshot_id"],
+            ondelete="SET NULL",
+        ),
         sa.PrimaryKeyConstraint("event_id"),
     )
     op.create_index(

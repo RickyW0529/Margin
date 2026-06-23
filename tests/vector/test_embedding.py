@@ -83,6 +83,7 @@ class TestEmbeddingProvider:
     def test_custom_embed_func(self):
         """Verify a custom embedding function overrides the default behavior."""
         def custom(text):
+            """custom."""
             return [0.1] * 16
 
         provider = EmbeddingProvider(dim=16, embed_func=custom)
@@ -260,6 +261,7 @@ class TestEmbeddingPipeline:
     def test_degraded_to_keyword_on_vector_failure(self):
         """Verify vector embedding failures degrade gracefully to keyword-only indexing."""
         def fail_embedding(text):
+            """fail embedding."""
             raise RuntimeError("embedding unavailable")
 
         pipeline = EmbeddingPipeline(

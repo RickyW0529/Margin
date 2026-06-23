@@ -38,7 +38,7 @@ def _value_quality() -> StrategyTemplate:
             horizon=180,
             valuation=ValuationConfig(method="pe", eps=1.0, pe=15.0),
             quality=QualityConfig(min_source_level="L2", require_primary_source=True),
-            risk=RiskConfig(max_position_weight=0.1, max_sector_weight=0.25),
+            risk=RiskConfig(risk_score_threshold=0.7),
             ai=AIConfig(
                 system_prompt_template="value_quality",
                 custom_instructions="重点关注 ROE、经营现金流和自由现金流。",
@@ -46,7 +46,6 @@ def _value_quality() -> StrategyTemplate:
             evidence=EvidenceConfig(required_levels=["L1", "L2"], min_evidence_count=3),
             decision=DecisionConfig(
                 research_states=["research_candidate", "watch", "abstained"],
-                position_review_states=["hold", "review", "close"],
                 prohibited_outputs=[],
             ),
         ),
@@ -67,7 +66,7 @@ def _undervalued_recovery() -> StrategyTemplate:
             horizon=90,
             valuation=ValuationConfig(method="pe", eps=1.0, pe=12.0),
             quality=QualityConfig(min_source_level="L2", require_primary_source=True),
-            risk=RiskConfig(max_position_weight=0.08, max_sector_weight=0.2),
+            risk=RiskConfig(risk_score_threshold=0.72),
             ai=AIConfig(
                 system_prompt_template="undervalued_recovery",
                 custom_instructions="关注利空是否已充分定价、资产负债表修复能力。",
@@ -75,7 +74,6 @@ def _undervalued_recovery() -> StrategyTemplate:
             evidence=EvidenceConfig(required_levels=["L1", "L2", "L3"], min_evidence_count=4),
             decision=DecisionConfig(
                 research_states=["research_candidate", "watch", "abstained"],
-                position_review_states=["hold", "review", "close"],
                 prohibited_outputs=[],
             ),
         ),
@@ -96,7 +94,7 @@ def _high_dividend() -> StrategyTemplate:
             horizon=365,
             valuation=ValuationConfig(method="dividend_yield", eps=1.0, pe=10.0),
             quality=QualityConfig(min_source_level="L2", require_primary_source=True),
-            risk=RiskConfig(max_position_weight=0.12, max_sector_weight=0.3),
+            risk=RiskConfig(risk_score_threshold=0.75),
             ai=AIConfig(
                 system_prompt_template="high_dividend",
                 custom_instructions="重点分析分红持续性、派息率与自由现金流覆盖。",
@@ -104,7 +102,6 @@ def _high_dividend() -> StrategyTemplate:
             evidence=EvidenceConfig(required_levels=["L1", "L2"], min_evidence_count=3),
             decision=DecisionConfig(
                 research_states=["research_candidate", "watch", "abstained"],
-                position_review_states=["hold", "review", "close"],
                 prohibited_outputs=[],
             ),
         ),
@@ -125,7 +122,7 @@ def _growth_at_reasonable_price() -> StrategyTemplate:
             horizon=120,
             valuation=ValuationConfig(method="peg", eps=1.0, pe=25.0),
             quality=QualityConfig(min_source_level="L2", require_primary_source=True),
-            risk=RiskConfig(max_position_weight=0.08, max_sector_weight=0.2),
+            risk=RiskConfig(risk_score_threshold=0.68),
             ai=AIConfig(
                 system_prompt_template="growth_at_reasonable_price",
                 custom_instructions="关注收入增长质量、利润率趋势与资本回报率。",
@@ -133,7 +130,6 @@ def _growth_at_reasonable_price() -> StrategyTemplate:
             evidence=EvidenceConfig(required_levels=["L1", "L2"], min_evidence_count=4),
             decision=DecisionConfig(
                 research_states=["research_candidate", "watch", "abstained"],
-                position_review_states=["hold", "review", "close"],
                 prohibited_outputs=[],
             ),
         ),
@@ -154,7 +150,7 @@ def _cyclical_reversal() -> StrategyTemplate:
             horizon=180,
             valuation=ValuationConfig(method="pb", eps=1.0, pe=8.0),
             quality=QualityConfig(min_source_level="L2", require_primary_source=True),
-            risk=RiskConfig(max_position_weight=0.06, max_sector_weight=0.15),
+            risk=RiskConfig(risk_score_threshold=0.78),
             ai=AIConfig(
                 system_prompt_template="cyclical_reversal",
                 custom_instructions="重点分析产能利用率、库存周期与价格弹性。",
@@ -162,7 +158,6 @@ def _cyclical_reversal() -> StrategyTemplate:
             evidence=EvidenceConfig(required_levels=["L1", "L2", "L3"], min_evidence_count=5),
             decision=DecisionConfig(
                 research_states=["research_candidate", "watch", "abstained"],
-                position_review_states=["hold", "review", "close"],
                 prohibited_outputs=[],
             ),
         ),

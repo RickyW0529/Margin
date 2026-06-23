@@ -3,24 +3,13 @@
  * Displays evidence, valuation, audit trace, report, and feedback for a research item.
  */
 
-import { EvidencePanel } from "@/components/evidence-panel";
-import { ReportPanel } from "@/components/report-panel";
+import { CurrentVsEffectivePanel } from "@/components/current-vs-effective-panel";
+import { EvidenceLocatorList } from "@/components/evidence-locator-list";
 import { ResearchFeedbackForm } from "@/components/research-feedback-form";
 import { ResearchStatusBadge } from "@/components/research-status-badge";
-import { ValuationPanel } from "@/components/valuation-panel";
 import {
-  fetchResearchItem,
-  fetchResearchItemAudit,
-  fetchResearchItemEvidence,
-  fetchResearchItemExport,
-  fetchResearchItemReport,
-  fetchResearchItemValuation,
-  type AuditView,
-  type EvidenceView,
-  type ReportExport,
-  type ResearchReport,
-  type ResearchItem,
-  type ValuationView,
+  fetchResearchItemDetailV2,
+  type ResearchItemDetailV2,
 } from "@/lib/api";
 
 import { createResearchFeedbackAction } from "./actions";
@@ -39,24 +28,14 @@ type ResearchItemPageProps = {
  */
 export default async function ResearchItemPage({ params }: ResearchItemPageProps) {
   const { itemId } = await params;
-  let item: ResearchItem | null = null;
-  let evidence: EvidenceView | null = null;
-  let valuation: ValuationView | null = null;
-  let audit: AuditView | null = null;
-  let report: ResearchReport | null = null;
-  let exported: ReportExport | null = null;
+  let detail: ResearchItemDetailV2 | null = null;
   let error: string | null = null;
 
-  try {
-    [item, evidence, valuation, audit, report, exported] = await Promise.all([
-      fetchResearchItem(itemId),
-      fetchResearchItemEvidence(itemId),
-      fetchResearchItemValuation(itemId),
-      fetchResearchItemAudit(itemId),
-      fetchResearchItemReport(itemId),
-      fetchResearchItemExport(itemId, "json"),
-    ]);
-  } catch {
+  const detailResult = await Promise.allSettled([fetchResearchItemDetailV2(itemId)]);
+
+  if (detailResult[0].status === "fulfilled") {
+    detail = detailResult[0].value;
+  } else {
     error = "研究详情暂时不可用";
   }
 
@@ -65,9 +44,9 @@ export default async function ResearchItemPage({ params }: ResearchItemPageProps
       <section className="workspace-header">
         <div>
           <p className="eyebrow">Research Item</p>
-          <h1>{item?.symbol ?? itemId}</h1>
+          <h1>{detail?.item.symbol ?? itemId}</h1>
         </div>
-        {item ? <ResearchStatusBadge status={item.status} /> : null}
+        {detail ? <ResearchStatusBadge status={detail.item.screening_status} /> : null}
       </section>
 
       {error ? (
@@ -77,18 +56,25 @@ export default async function ResearchItemPage({ params }: ResearchItemPageProps
           <section className="panel thesis-block">
             <div className="panel-heading">
               <h2>研究结论</h2>
-              <span>{item ? `${(item.confidence * 100).toFixed(0)}%` : "--"}</span>
+              <span>
+                {detail?.item.confidence == null
+                  ? "--"
+                  : `${(detail.item.confidence * 100).toFixed(0)}%`}
+              </span>
             </div>
-            <p>{item?.statement ?? "暂无结论"}</p>
+            <p>{safeText(detail?.thesis.statement) ?? "暂无结论"}</p>
             <div className="risk-line">
-              <span>run {item?.run_id}</span>
-              <span>snapshot {item?.snapshot_id ?? "--"}</span>
-              <span>trace {audit?.trace_count ?? 0}</span>
+              <span>run {detail?.versions.run_id ?? "--"}</span>
+              <span>snapshot {detail?.versions.snapshot_id ?? "--"}</span>
+              <span>workflow {detail?.versions.workflow_run_id ?? "--"}</span>
             </div>
           </section>
-          <ValuationPanel valuation={valuation} />
-          <EvidencePanel evidence={evidence} />
-          <ReportPanel report={report} exported={exported} />
+          <CurrentVsEffectivePanel
+            currentReview={detail?.current_review ?? null}
+            effectiveAssessment={detail?.effective_assessment ?? null}
+          />
+          {detail ? <FactorSnapshotPanel detail={detail} /> : null}
+          <EvidenceLocatorList evidence={detail?.evidence ?? []} />
           <ResearchFeedbackForm
             action={createResearchFeedbackAction.bind(null, itemId)}
           />
@@ -96,4 +82,51 @@ export default async function ResearchItemPage({ params }: ResearchItemPageProps
       )}
     </main>
   );
+}
+
+function safeText(value: unknown): string | null {
+  return typeof value === "string" && value ? value : null;
+}
+
+function FactorSnapshotPanel({ detail }: { detail: ResearchItemDetailV2 }) {
+  return (
+    <section className="panel" aria-labelledby="factor-snapshot-title">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Quant snapshot</p>
+          <h2 id="factor-snapshot-title">量化与风险快照</h2>
+        </div>
+        <span>{detail.item.research_guardrail}</span>
+      </div>
+      <dl className="fact-list">
+        <span>筛选状态</span>
+        <strong>{detail.item.screening_status}</strong>
+        <span>数据状态</span>
+        <strong>{detail.item.data_status}</strong>
+        <span>最终分数</span>
+        <strong>{numberText(detail.item.final_score)}</strong>
+        <span>折价率</span>
+        <strong>{percentText(detail.item.discount_rate)}</strong>
+        <span>风险标记</span>
+        <strong>{detail.item.risk_flags.join(" / ") || "无"}</strong>
+      </dl>
+      <p className="helper-text">{safeJson(detail.factors)}</p>
+    </section>
+  );
+}
+
+function numberText(value: number | null): string {
+  return value == null ? "--" : value.toFixed(2);
+}
+
+function percentText(value: number | null): string {
+  return value == null ? "--" : `${(value * 100).toFixed(0)}%`;
+}
+
+function safeJson(value: Record<string, unknown>): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "{}";
+  }
 }

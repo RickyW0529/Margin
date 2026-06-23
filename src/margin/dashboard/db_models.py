@@ -20,7 +20,6 @@ class DashboardRunRow(Base):
     decision_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     strategy_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     version_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    portfolio_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     universe: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     summary: Mapped[str] = mapped_column(String(4096), nullable=False, default="")
@@ -62,11 +61,6 @@ class DashboardItemRow(Base):
     claim_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     risk_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     counter_arguments: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
-    portfolio_constraint_violations: Mapped[list[str]] = mapped_column(
-        JSONB,
-        nullable=False,
-        default=list,
-    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     run: Mapped[DashboardRunRow] = relationship(

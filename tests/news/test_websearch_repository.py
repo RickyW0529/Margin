@@ -13,6 +13,9 @@ import pytest
 
 from margin.news.acquirer import BaseConnector, SnapshotStore, SourceDescriptor, SourceRegistry
 from margin.news.db_models import (
+    DocumentEventRow,
+    DocumentOutboxRow,
+    RawSnapshotRow,
     SearchQueryRow,
     SearchResultRow,
 )
@@ -37,10 +40,12 @@ def news_repository(database_url):
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
     with session_factory.begin() as session:
+        session.query(DocumentOutboxRow).delete()
+        session.query(DocumentEventRow).delete()
+        session.query(RawSnapshotRow).delete()
         session.query(SearchResultRow).delete()
         session.query(SearchQueryRow).delete()
     yield NewsRepository(session_factory)
-    Base.metadata.drop_all(engine)
     engine.dispose()
 
 
@@ -121,3 +126,55 @@ def test_search_results_are_persisted_before_original_verification(
     assert stored is not None
     assert stored.results[0].url == "https://paywall.example/article"
     assert stored.results[0].has_accessible_original is False
+
+
+def test_verified_original_persists_snapshot_event_and_index_outbox(
+    tmp_path,
+    news_repository,
+) -> None:
+    """Verified content becomes a durable indexable document event."""
+
+    class PublicConnector(BaseConnector):
+        """Return one compliant public document."""
+
+        @property
+        def source_name(self) -> str:
+            return "websearch"
+
+        def fetch(self, url, **kwargs) -> tuple[bytes, str, int]:
+            del url, kwargs
+            return "公司收入增长 20%".encode(), "text/plain", 200
+
+    registry = SourceRegistry()
+    registry.register(
+        SourceDescriptor(
+            name="websearch",
+            source_type="websearch",
+            default_level=SourceLevel.L4,
+        ),
+        connector=PublicConnector(),
+    )
+    service = WebSearchService(
+        WebSearchProvider(
+            search_func=lambda _query, max_results=10: [
+                {
+                    "url": "https://example.com/public",
+                    "title": "公开新闻",
+                    "snippet": "摘要",
+                }
+            ][:max_results]
+        ),
+        registry,
+        SnapshotStore(base_dir=tmp_path),
+        repository=news_repository,
+    )
+
+    _, events = service.search_and_acquire("公开新闻", max_results=1)
+
+    assert len(events) == 1
+    assert news_repository.get_document_event(events[0].event_id) == events[0]
+    assert news_repository.get_snapshot(events[0].snapshot_id or "") is not None
+    assert news_repository.get_outbox_by_event(
+        events[0].event_id,
+        "vector_index",
+    ) is not None

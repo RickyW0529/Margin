@@ -21,11 +21,23 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from pydantic import BaseModel, Field
+
 from margin.news.models import DocumentEvent, DocumentStatus
-from margin.vector.models import Chunk, DocType, make_chunk
+from margin.vector.models import (
+    Chunk,
+    ChunkSecurityLink,
+    DocType,
+    SourceLocator,
+    TrustLevel,
+    compute_chunk_hash,
+    make_chunk,
+    make_stable_chunk_id,
+)
 
 if TYPE_CHECKING:
     from margin.news.parsed import ParsedBlock, ParsedDocument
+    from margin.vector.parsers.base import ParsedBlock as VectorParsedBlock
 
 # ---------------------------------------------------------------------------
 # Parsing exceptions
@@ -34,6 +46,15 @@ if TYPE_CHECKING:
 
 class ChunkingError(Exception):
     """Raised when document chunking fails."""
+
+
+class ChunkingResult(BaseModel):
+    """Structured chunking output with chunk/security links separated."""
+
+    chunks: tuple[Chunk, ...]
+    links: tuple[ChunkSecurityLink, ...] = Field(default_factory=tuple)
+
+    model_config = {"frozen": True}
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +359,133 @@ class ReportChunker(BaseChunker):
                 sections.append((label, section_text))
 
         return sections
+
+
+class StructuredChunker:
+    """v0.2 locator-preserving chunker with symbol-independent chunk IDs."""
+
+    def __init__(self, parser_version: str, max_chars: int = 1_000) -> None:
+        """Initialize the instance."""
+        if max_chars <= 0:
+            raise ValueError("max_chars must be positive")
+        self.parser_version = parser_version
+        self.max_chars = max_chars
+
+    def chunk(
+        self,
+        *,
+        document_id: str,
+        content_hash: str,
+        blocks: list[VectorParsedBlock],
+        security_ids: tuple[str, ...],
+        trust_level: TrustLevel,
+        source_level=None,  # noqa: ANN001
+        doc_type: DocType = DocType.UNKNOWN,
+        **metadata,  # noqa: ANN003
+    ) -> ChunkingResult:
+        """Chunk parsed blocks without crossing unrecoverable structural boundaries."""
+        from margin.news.models import SourceLevel
+
+        resolved_source_level = source_level or SourceLevel.L4
+        groups = self._group_blocks(blocks)
+        chunks: list[Chunk] = []
+        links: list[ChunkSecurityLink] = []
+        total = len(groups)
+        for index, group in enumerate(groups):
+            text = "\n".join(block.text for block in group).strip()
+            locator = self._merged_locator(group)
+            chunk_id = make_stable_chunk_id(
+                document_id=document_id,
+                content_hash=content_hash,
+                parser_version=self.parser_version,
+                chunk_index=index,
+            )
+            chunk = Chunk(
+                chunk_id=chunk_id,
+                document_id=document_id,
+                content=text,
+                content_hash=compute_chunk_hash(text),
+                source_level=resolved_source_level,
+                doc_type=doc_type,
+                locator=locator,
+                trust_level=trust_level,
+                page=locator.page,
+                section=locator.section,
+                paragraph_index=locator.paragraph_index,
+                table_id=locator.table_id,
+                row_id=locator.row_id,
+                quote_span=locator.quote_span,
+                symbol=security_ids[0] if security_ids else None,
+                chunk_index=index,
+                total_chunks=total,
+                **metadata,
+            )
+            chunks.append(chunk)
+            for security_id in security_ids:
+                links.append(
+                    ChunkSecurityLink(
+                        chunk_id=chunk_id,
+                        security_id=security_id,
+                        link_type="mentioned",
+                        confidence=1.0,
+                    )
+                )
+        return ChunkingResult(chunks=tuple(chunks), links=tuple(links))
+
+    def _group_blocks(
+        self,
+        blocks: list[VectorParsedBlock],
+    ) -> list[list[VectorParsedBlock]]:
+        """group blocks."""
+        groups: list[list[VectorParsedBlock]] = []
+        current: list[VectorParsedBlock] = []
+        current_key: tuple[str | None, int | None, str | None] | None = None
+        current_len = 0
+        for block in blocks:
+            key = self._boundary_key(block)
+            block_len = len(block.text)
+            crosses_boundary = current_key is not None and key != current_key
+            exceeds = current and current_len + block_len > self.max_chars
+            if crosses_boundary or exceeds:
+                groups.append(current)
+                current = []
+                current_len = 0
+            current.append(block)
+            current_key = key
+            current_len += block_len
+        if current:
+            groups.append(current)
+        return groups
+
+    @staticmethod
+    def _boundary_key(block: VectorParsedBlock) -> tuple[str | None, int | None, str | None]:
+        """boundary key."""
+        locator = block.locator
+        structural_type = "table" if block.block_type == "table_row" else "text"
+        return (structural_type, locator.page, locator.table_id or locator.section)
+
+    @staticmethod
+    def _merged_locator(blocks: list[VectorParsedBlock]) -> SourceLocator:
+        """merged locator."""
+        first = blocks[0].locator
+        if len(blocks) == 1:
+            return first
+        quote_spans = [block.locator.quote_span for block in blocks if block.locator.quote_span]
+        quote_span = None
+        if quote_spans:
+            quote_span = (
+                min(span[0] for span in quote_spans),
+                max(span[1] for span in quote_spans),
+            )
+        return SourceLocator(
+            page=first.page,
+            section=first.section,
+            dom_path=first.dom_path,
+            paragraph_index=first.paragraph_index,
+            table_id=first.table_id,
+            row_id=first.row_id,
+            quote_span=quote_span,
+        )
 
 
 class FilingChunker(BaseChunker):

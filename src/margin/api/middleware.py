@@ -30,6 +30,7 @@ class TraceIdMiddleware(BaseHTTPMiddleware):
     """Populate trace_id from header or generate a new one."""
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        """dispatch."""
         settings = get_settings()
         # Prefer the incoming header so distributed callers can correlate requests.
         trace_id = request.headers.get(settings.trace_id_header) or f"t-{uuid.uuid4().hex[:12]}"
@@ -43,6 +44,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
     """Record HTTP request counts and durations."""
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        """dispatch."""
         start = time.perf_counter()
         status_code = 500  # Default used if call_next raises an unhandled exception.
         try:

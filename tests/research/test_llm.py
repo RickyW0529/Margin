@@ -7,24 +7,31 @@ from margin.research.llm import DeterministicLLMProvider, LLMProvider, ModelRout
 
 
 class _FakeResponse:
+    """FakeResponse."""
     def __init__(self, payload: dict, status_code: int = 200) -> None:
+        """Initialize the instance."""
         self._payload = payload
         self.status_code = status_code
 
     def raise_for_status(self) -> None:
+        """raise for status."""
         if self.status_code >= 400:
             raise RuntimeError(f"HTTP {self.status_code}")
 
     def json(self) -> dict:
+        """json."""
         return self._payload
 
 
 class _FakeClient:
+    """FakeClient."""
     def __init__(self, response: _FakeResponse | Exception) -> None:
+        """Initialize the instance."""
         self.response = response
         self.calls: list[dict] = []
 
     def post(self, *args, **kwargs):
+        """post."""
         self.calls.append({"args": args, "kwargs": kwargs})
         if isinstance(self.response, Exception):
             raise self.response
@@ -32,6 +39,7 @@ class _FakeClient:
 
 
 def test_deterministic_provider_returns_injected_output():
+    """deterministic provider returns injected output."""
     provider = DeterministicLLMProvider(name="mock", response={"answer": "ok"})
     result = provider.complete("hi", response_schema={"answer": {"type": "string"}})
     assert result.output == {"answer": "ok"}
@@ -39,6 +47,7 @@ def test_deterministic_provider_returns_injected_output():
 
 
 def test_deterministic_provider_can_fail():
+    """deterministic provider can fail."""
     provider = DeterministicLLMProvider(fail=True, error="injected failure")
     result = provider.complete("hi")
     assert result.success is False
@@ -46,6 +55,7 @@ def test_deterministic_provider_can_fail():
 
 
 def test_llm_provider_direct_default_model_is_deepseek_pro(monkeypatch):
+    """llm provider direct default model is deepseek pro."""
     monkeypatch.delenv("MARGIN_LLM_MODEL", raising=False)
     provider = LLMProvider(api_key=None, base_url=None)
 
@@ -53,17 +63,20 @@ def test_llm_provider_direct_default_model_is_deepseek_pro(monkeypatch):
 
 
 def test_model_router_selects_cheap_model_for_extraction():
+    """model router selects cheap model for extraction."""
     router = ModelRouter({TaskType.EXTRACTION: "cheap-model"})
     model = router.select(TaskType.EXTRACTION)
     assert model == "cheap-model"
 
 
 def test_model_router_falls_back_to_default():
+    """model router falls back to default."""
     router = ModelRouter()
     assert router.select(TaskType.REFLECT) == "capable-llm"
 
 
 def test_guardrail_validates_required_fields():
+    """guardrail validates required fields."""
     from margin.research.llm import StructuredOutputGuardrail
 
     guardrail = StructuredOutputGuardrail({"required": ["x"]})
@@ -73,6 +86,7 @@ def test_guardrail_validates_required_fields():
 
 
 def test_model_router_uses_registered_fallback_provider():
+    """model router uses registered fallback provider."""
     primary = DeterministicLLMProvider(name="primary", fail=True)
     fallback = DeterministicLLMProvider(
         name="fallback",
@@ -97,6 +111,7 @@ def test_model_router_uses_registered_fallback_provider():
 
 
 def test_llm_healthcheck_performs_real_completion_request():
+    """llm healthcheck performs real completion request."""
     client = _FakeClient(
         _FakeResponse(
             {
@@ -126,6 +141,7 @@ def test_llm_healthcheck_performs_real_completion_request():
 
 
 def test_llm_healthcheck_reports_unhealthy_when_completion_fails():
+    """llm healthcheck reports unhealthy when completion fails."""
     provider = LLMProvider(
         api_key="test-key",
         base_url="https://llm.example.com",

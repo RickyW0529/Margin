@@ -6,16 +6,19 @@ from margin.strategy.templates import BUILTIN_TEMPLATES, list_templates
 
 
 def test_value_quality_template_has_universe():
+    """value quality template has universe."""
     template = BUILTIN_TEMPLATES["value_quality"]
     assert "000001.SZ" in template.config.universe
 
 
 def test_custom_template_is_minimal():
+    """custom template is minimal."""
     template = BUILTIN_TEMPLATES["custom"]
     assert template.config.horizon >= 1
 
 
 def test_list_templates_returns_six_entries():
+    """list templates returns six entries."""
     metas = list_templates()
     assert len(metas) == 6
     ids = {m.template_id for m in metas}

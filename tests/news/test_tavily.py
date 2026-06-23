@@ -9,7 +9,11 @@ from __future__ import annotations
 
 import pytest
 
-from margin.news.providers.tavily import TavilySearchAdapter
+from margin.news.providers.tavily import (
+    TavilyErrorCode,
+    TavilyProviderError,
+    TavilySearchAdapter,
+)
 
 
 class FakeResponse:
@@ -128,6 +132,30 @@ def test_tavily_adapter_reports_rate_limit():
 
     with pytest.raises(RuntimeError, match="rate limit"):
         adapter.search("query")
+
+
+@pytest.mark.parametrize(
+    ("status_code", "error_code"),
+    [
+        (432, TavilyErrorCode.BUDGET_EXCEEDED),
+        (433, TavilyErrorCode.PAYGO_LIMIT_EXCEEDED),
+    ],
+)
+def test_tavily_adapter_reports_account_budget_limits(
+    status_code: int,
+    error_code: TavilyErrorCode,
+) -> None:
+    """Plan and PayGo limits are non-retryable budget states, not bad responses."""
+    adapter = TavilySearchAdapter(
+        api_key="secret",
+        client=FakeClient(FakeResponse(status_code, {"detail": {"error": "limit"}})),
+    )
+
+    with pytest.raises(TavilyProviderError) as captured:
+        adapter.search("query")
+
+    assert captured.value.code is error_code
+    assert captured.value.retryable is False
 
 
 def test_tavily_adapter_rejects_malformed_payload():

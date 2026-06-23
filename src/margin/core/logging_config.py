@@ -12,20 +12,30 @@ import sys
 
 import structlog
 
+from margin.core.audit import SecretRedactingProcessor
 
-def configure_logging(*, log_level: str = "INFO", log_format: str = "json") -> None:
+
+def configure_logging(
+    *,
+    log_level: str = "INFO",
+    log_format: str = "json",
+    secret_values: tuple[str, ...] = (),
+) -> None:
     """Configure structlog and stdlib logging for Margin.
 
     Args:
         log_level: Minimum log level (e.g. ``INFO``, ``DEBUG``).
         log_format: Output format, either ``json`` or ``console``.
+        secret_values: Runtime secret values that must be removed from strings.
     """
+    redactor = SecretRedactingProcessor(secret_values=secret_values)
     # Shared processors run for both stdlib logging and structlog bound loggers.
     shared_processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.stdlib.ExtraAdder(),
+        redactor,
     ]
 
     if log_format == "json":
@@ -33,13 +43,14 @@ def configure_logging(*, log_level: str = "INFO", log_format: str = "json") -> N
             foreign_pre_chain=shared_processors,
             processors=[
                 structlog.processors.dict_tracebacks,
+                redactor,
                 structlog.processors.JSONRenderer(),
             ],
         )
     else:
         formatter = structlog.stdlib.ProcessorFormatter(
             foreign_pre_chain=shared_processors,
-            processors=[structlog.dev.ConsoleRenderer()],
+            processors=[redactor, structlog.dev.ConsoleRenderer()],
         )
 
     handler = logging.StreamHandler(sys.stdout)

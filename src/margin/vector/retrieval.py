@@ -35,6 +35,7 @@ from pydantic import BaseModel, field_validator
 from margin.news.models import SourceLevel, ensure_utc
 from margin.vector.embedding import EmbeddingPipeline
 from margin.vector.models import Chunk, RetrievalResult
+from margin.vector.persistent_pipeline import PersistentEmbeddingPipeline
 
 # ---------------------------------------------------------------------------
 # Retrieval constraints
@@ -55,6 +56,7 @@ class SearchConstraints(BaseModel):
     """
 
     symbol: str | None = None
+    security_ids: tuple[str, ...] | None = None
     decision_at: datetime | None = None
     doc_types: tuple[str, ...] | None = None
     prefer_official: bool = True
@@ -146,6 +148,7 @@ class HybridRetriever:
     def __init__(
         self,
         pipeline: EmbeddingPipeline,
+        embedding_provider: Any | None = None,
         weights: HybridWeights | None = None,
         time_decay_days: float = 90.0,
     ) -> None:
@@ -156,7 +159,13 @@ class HybridRetriever:
             weights: Optional fusion weights. Defaults to HybridWeights() when omitted.
             time_decay_days: Scale for the exponential time decay. Defaults to 90 days.
         """
-        self._pipeline = pipeline
+        if embedding_provider is not None and hasattr(pipeline, "search_vector"):
+            self._pipeline = PersistentEmbeddingPipeline(
+                embedding_provider=embedding_provider,
+                repository=pipeline,
+            )
+        else:
+            self._pipeline = pipeline
         self._weights = weights or HybridWeights()
         self._time_decay_days = time_decay_days
 
@@ -165,6 +174,8 @@ class HybridRetriever:
         query: str,
         top_k: int = 10,
         constraints: SearchConstraints | None = None,
+        security_ids: tuple[str, ...] | None = None,
+        decision_at: datetime | None = None,
     ) -> list[RetrievalResult]:
         """Execute hybrid retrieval and return a fused, ranked result list.
 
@@ -181,7 +192,19 @@ class HybridRetriever:
             ValueError: If constraints.decision_at is None.
         """
         constraints = constraints or SearchConstraints()
-        if not constraints.symbol:
+        if security_ids is not None or decision_at is not None:
+            resolved_security_ids = security_ids or constraints.security_ids
+            resolved_symbol = (
+                resolved_security_ids or (constraints.symbol,)
+            )[0]
+            constraints = constraints.model_copy(
+                update={
+                    "security_ids": resolved_security_ids,
+                    "symbol": resolved_symbol,
+                    "decision_at": decision_at or constraints.decision_at,
+                }
+            )
+        if not constraints.symbol and not constraints.security_ids:
             raise ValueError("symbol is required for retrieval")
         if constraints.decision_at is None:
             raise ValueError("decision_at is required for retrieval")
@@ -222,6 +245,10 @@ class HybridRetriever:
         filters: dict[str, Any] = {}
         if constraints.symbol:
             filters["symbol"] = constraints.symbol
+        if constraints.security_ids:
+            filters["security_ids"] = constraints.security_ids
+        if constraints.decision_at:
+            filters["decision_at"] = constraints.decision_at
         if constraints.doc_types:
             filters["doc_type"] = constraints.doc_types
         return filters

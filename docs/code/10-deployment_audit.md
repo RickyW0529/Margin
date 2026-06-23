@@ -24,7 +24,7 @@
 
 `10-deployment_audit` 是 Margin 系统的基础设施与横切能力层，负责：
 
-- **一键本地部署**：通过 `docker-compose.yml` 编排 PostgreSQL + pgvector、后端 API、Next.js 前端、后台 Worker、Prometheus、Grafana、一次性 migrate/seed 服务。
+- **一键本地部署**：通过 `docker-compose.yml` 编排 PostgreSQL + pgvector、后端 API、Next.js 前端、后台 Worker、Prometheus、Grafana、一次性 migrate/bootstrap 服务。
 - **不可变审计**：记录每一次 Provider 调用、关键业务对象变更，以及研究信号的输入/输出哈希，保证审计日志 append-only、不可修改。
 - **本地快照存储**：以内容寻址（SHA-256）方式保存研究信号、文档、报告等对象的不可变 JSON 快照，支持按对象类型/ID 查询历史版本。
 - **故障降级**：当主 Provider 调用失败时，自动切换到 fallback，并标记结果为降级，避免虚假高置信输出。
@@ -41,6 +41,12 @@
 |---|---|
 | `src/margin/core/audit.py` | Provider 调用审计：不可变 `AuditRecord`、SHA-256 哈希、JSON Lines 本地日志写入与读取。 |
 | `src/margin/core/audit_repository.py` | 业务审计记录持久化契约 `AuditRepository`，含内存实现与 SQLAlchemy/PostgreSQL 实现。 |
+| `src/margin/core/run_states.py` | v0.2 durable orchestration 的 Run/Step 状态、append-only attempt/event 模型、输入哈希与状态转换语义。 |
+| `src/margin/core/db_orchestration.py` | v0.2 orchestration、capacity、transactional outbox、idempotency、smoke audit 的 SQLAlchemy ORM 表。 |
+| `src/margin/core/orchestration_repository.py` | 内存/PostgreSQL orchestration repository，支持 latest-step 查询、lease claim、retry append 与 `FOR UPDATE SKIP LOCKED`。 |
+| `src/margin/core/orchestration.py` | `DBStepWorker` 与 `StepClaim`，负责从数据库安全领取可执行 step。 |
+| `src/margin/core/capacity.py` | 版本化容量治理：provider RPM、LLM token/cost、并发窗口与 typed waiting 结果。 |
+| `src/margin/core/outbox.py` | Transactional Outbox：同事务 enqueue、幂等去重、lease claim、ack/retry/deliver。 |
 | `src/margin/core/db_audit.py` | 审计记录的 SQLAlchemy ORM 模型 `AuditLogRecordRow` 与索引定义。 |
 | `src/margin/core/models.py` | 共享领域模型，包括业务审计记录 `AuditLogRecord`。 |
 | `src/margin/core/snapshot_store.py` | 本地 append-only 快照存储 `FileSnapshotStore` 与 `SnapshotEntry`。 |
@@ -55,12 +61,157 @@
 | `docker-compose.yml` | 本地全栈服务编排。 |
 | `.github/workflows/ci.yml` | GitHub Actions 持续集成工作流。 |
 | `docker/prometheus.yml` | Prometheus 抓取配置。 |
+| `docker/grafana/dashboards/margin-v02.json` | v0.2 orchestration/capacity/outbox/provider/data/LLM/Grafana dashboard。 |
+| `docker/grafana/provisioning/dashboards/margin.yml` | Grafana dashboard provisioning 配置。 |
 | `scripts/migrate.py` | 容器内执行 Alembic 迁移的一次性脚本。 |
-| `scripts/seed_demo.py` | 初始化示例组合与示例公告数据。 |
+| `scripts/verify_migrations.py` | 从 clean database 验证 Alembic 全链路升级、head、表、索引和 pgvector 扩展。 |
+| `scripts/worker_health_check.py` | Worker 容器健康检查，验证数据库 migration head 后再允许 worker 进入 healthy。 |
+| `scripts/smoke_full_v02.py` | v0.2 全链路 smoke harness，支持真实 Provider 强制模式、结构化 blocker 和脱敏输出。 |
+| `scripts/bootstrap_config.py` | 一次性版本化配置 bootstrap：写入默认 Provider/Scope/策略配置，并把环境变量密钥导入 Secret Store。 |
 | `scripts/health_check.py` | 容器就绪探针脚本。 |
 | `scripts/snapshot_store.py` | 快照存储 CLI 工具。 |
 
 ---
+
+## 2.1 v0.2 生产级 orchestration / deployment audit 增量
+
+### Run / Step 状态
+
+`src/margin/core/run_states.py` 定义 v0.2 运行状态：
+
+- `pending`
+- `running`
+- `waiting_rate_limit`
+- `waiting_budget`
+- `succeeded`
+- `succeeded_with_degradation`
+- `failed_retryable`
+- `failed_final`
+- `skipped`
+- `cancelled`
+
+`StepAttempt` 是 append-only 事件模型：
+
+| 字段 | 说明 |
+|---|---|
+| `event_id` | 单条 step 状态事件 ID。 |
+| `run_id` / `step_id` | 所属 run 与 step。 |
+| `attempt_no` | 真实重试次数；只有重新执行时递增。 |
+| `state_seq` | 同一次 attempt 内的状态事件序号。 |
+| `previous_event_id` | 前一状态事件，用于审计链。 |
+| `input_hash` / `input_ref` | 输入 payload 的 SHA-256 与可选外部引用；不把大 payload 写入日志。 |
+| `output_ref` | 输出对象引用，通常指向 snapshot、warehouse row 或报告对象。 |
+| `lease_owner` / `lease_expires_at` | worker claim lease，支持崩溃恢复。 |
+| `retry_after` | rate limit、budget 或 retryable failure 的下次可执行时间。 |
+
+PostgreSQL 表 `orchestration_step_attempts` 保留所有状态事件，不 destructive update 历史行；latest state 由 repository 查询派生。
+
+### Worker claim / lease / retry
+
+`DBStepWorker` 只从 repository 领取已到期、可执行的 step：
+
+- 可 claim 的状态包括 `pending`、到期的 `failed_retryable`、lease 过期的 `running`；
+- PostgreSQL 路径使用 `FOR UPDATE SKIP LOCKED` 避免多 worker 重复领取；
+- retry 会追加新的 `attempt_no`，旧 attempt 保留；
+- lease 过期后可被其他 worker 重新领取；
+- 核心 worker 不执行未知 step handler，具体业务 step 由后续模块注册。
+
+### Capacity Governor
+
+`src/margin/core/capacity.py` 提供版本化容量治理：
+
+| 能力 | 说明 |
+|---|---|
+| `CapacityLimit` | 定义 `limit_key`、窗口、`max_count`、版本和 outcome。 |
+| `CapacityGovernor.try_acquire` | 消费 provider RPM、并发窗口、任务队列等计数型额度。 |
+| `CapacityGovernor.try_acquire_budget` | 检查 LLM 日预算、token/cost 预算等金额型额度。 |
+| `CapacityOutcome.WAITING_RATE_LIMIT` | 映射到 step 状态 `waiting_rate_limit`。 |
+| `CapacityOutcome.WAITING_BUDGET` | 映射到 step 状态 `waiting_budget`。 |
+
+PostgreSQL counter 按 `(limit_key, window_start, version)` 隔离，避免新旧容量版本互相污染。
+
+### Transactional Outbox
+
+`src/margin/core/outbox.py` 实现同事务 outbox：
+
+| 状态 | 说明 |
+|---|---|
+| `pending` | 业务事务已提交，等待发布。 |
+| `claimed` | outbox worker 已领取并持有 lease。 |
+| `delivered` | 下游确认成功后才标记完成。 |
+| `failed_retryable` | 可重试失败，等待 `retry_after`。 |
+| `failed_final` | 达到最大重试或不可恢复失败。 |
+
+`enqueue_once` / `enqueue_once_in_session` 使用 `(topic, idempotency_key)` 去重。`enqueue_once_in_session` 可复用调用方 SQLAlchemy session，使业务状态与 outbox row 在同一事务提交或回滚。
+
+### Secret redaction
+
+当前 redaction 覆盖：
+
+- Provider 调用审计参数；
+- `AuditRepository.payload_json` 入库前；
+- structlog event dictionary；
+- traceback / exception string；
+- HTTP header/body/cookie 形态字段；
+- smoke harness stage detail 与 stdout summary。
+
+敏感键包含 `token`、`api_key`、`authorization`、`password`、`secret`、`cookie`。已知 secret value 会被替换为 `[REDACTED]` 或 `***REDACTED***`，不允许出现在日志、测试输出、smoke summary、正式文档或 Git 产物。
+
+### v0.2 Metrics / Grafana
+
+`src/margin/core/metrics.py` 新增 bounded-label 指标族：
+
+- run / step duration；
+- queue age；
+- retry / failure counts；
+- provider request total / latency；
+- data freshness / schema drift / quality；
+- LLM token / cost；
+- graph path / reflection / revision；
+- checkpoint recovery / outbox lag；
+- DB pool / statement timeout。
+
+指标避免以全市场 `symbol` 作为 label，防止 Prometheus 高基数。Grafana dashboard 位于 `docker/grafana/dashboards/margin-v02.json`，通过 `docker/grafana/provisioning/dashboards/margin.yml` 自动加载。
+
+### Health / migration / smoke
+
+| 脚本或端点 | 当前语义 |
+|---|---|
+| `/health` | 进程存活检查。 |
+| `/health/ready` | 检查 database、migration head、outbox、provider config、worker readiness；失败返回 503，不暴露原始 secret 或 DB 连接串。 |
+| `/health/degraded` | 聚合 provider degraded、waiting budget/rate-limit、retry queue/outbox pending 等可恢复状态。 |
+| `scripts/verify_migrations.py` | 在隔离 clean DB 中执行 Alembic 到 head，验证当前 head、目标表、索引和 pgvector。 |
+| `scripts/worker_health_check.py` | Worker 容器启动前验证数据库可连接且 migration head 正确。 |
+| `scripts/smoke_full_v02.py` | 运行 Compose/migration/health/DB/provider/downstream 注册 stage；stdout 只打印 stage/status/blocker summary，完整脱敏 detail 可写入 `--output-json`。 |
+| `scripts/smoke_dashboard_e2e.py` | 通过 HTTP 验证 Next.js 关键页面、只读数据流和 secret-safe HTML；本地 URL 显式 bypass system proxy。 |
+| `scripts/smoke_valuation_discovery_p1.py` | 通过本地 API 触发 valuation-discovery refresh；本地 URL 显式 bypass system proxy，Provider 未 active 时返回结构化 `service_not_configured`。 |
+
+`scripts/smoke_full_v02.py --require-real-providers` 的失败分类：
+
+| blocker | 含义 |
+|---|---|
+| `missing_secret` | 缺少所需 API key/base URL/model 等配置。 |
+| `network` | DNS、proxy、timeout、connection reset 等外部网络问题。 |
+| `auth` | 401/403 或明确认证失败。 |
+| `rate_limit` | 429 或 provider 限流。 |
+| `provider` | Provider 返回业务错误或不健康，但无法归入以上外部类别。 |
+
+非 `--require-real-providers` 模式下 Provider stage 会标记为 `skipped: real_provider_not_required`，不会冒充真实通过。尚未由后续模块注册的 P0/P1/P2 业务 smoke stage 标记为 `skipped: stage_registered_by_downstream_module`。
+
+### Compose 顺序
+
+`docker-compose.yml` 的启动顺序：
+
+1. `postgres` health；
+2. `migrate` 一次性升级；
+3. `bootstrap` 一次性版本化配置与 Secret Store 导入；
+4. `api` readiness；
+5. `worker` migration-head healthcheck；
+6. `web`；
+7. `prometheus`；
+8. `grafana`。
+
+API 与 Worker 都不会在 migration 成功前进入 healthy。Compose 验证时应使用 `docker compose config --quiet` 或 `--no-interpolate`，避免展开本地真实 Provider secret。
 
 ## 3. 审计（Audit）
 
@@ -429,6 +580,8 @@
 | `ENV PYTHONDONTWRITEBYTECODE=1` | 禁止生成 `.pyc`。 |
 | `ENV PYTHONUNBUFFERED=1` | 标准输出无缓冲，适合容器环境。 |
 | `ENV PIP_NO_CACHE_DIR=1` | pip 不缓存，减小镜像体积。 |
+| `ENV PIP_DEFAULT_TIMEOUT=300` | 拉取数据依赖时提高 pip 默认超时，降低慢网络下的构建误失败。 |
+| `ENV PIP_RETRIES=10` | 拉取数据依赖时增加 pip 重试次数。 |
 | `WORKDIR /app` | 工作目录。 |
 | `COPY pyproject.toml README.md ./` | 先复制依赖元数据。 |
 | `COPY src/margin/__init__.py ./src/margin/__init__.py` | 使 `pip install -e ".[data]"` 可识别包。 |
@@ -471,9 +624,9 @@
 |---|---|---|---|---|
 | `postgres` | `pgvector/pgvector:pg16` | `5432:5432` | 无 | 主数据库，带 pgvector 扩展；通过 `pg_isready` 做健康检查。 |
 | `migrate` | 后端 Dockerfile | - | postgres healthy | 一次性 Alembic 迁移服务。 |
-| `seed` | 后端 Dockerfile | - | migrate completed | 一次性示例数据填充。 |
-| `api` | 后端 Dockerfile | `8000:8000` | seed completed | 主 API 服务；挂载审计与快照卷；使用 `scripts/health_check.py` 做健康检查。 |
-| `worker` | 后端 Dockerfile | - | seed completed | 后台任务 Worker。 |
+| `bootstrap` | 后端 Dockerfile | - | migrate completed | 一次性版本化配置 bootstrap；导入默认 Provider/Scope/策略配置与环境变量密钥。 |
+| `api` | 后端 Dockerfile | `8000:8000` | bootstrap completed | 主 API 服务；挂载审计与快照卷；使用 `scripts/health_check.py` 做健康检查。 |
+| `worker` | 后端 Dockerfile | - | bootstrap completed | 后台任务 Worker。 |
 | `web` | 前端 Dockerfile | `3000:3000` | api healthy | Next.js 前端；`MARGIN_API_BASE_URL=http://api:8000`。 |
 | `prometheus` | `prom/prometheus:v3.12.0` | `9090:9090` | api healthy | 抓取 API `/metrics`。 |
 | `grafana` | `grafana/grafana:13.0.2` | `${GRAFANA_PORT:-3002}:3000` | prometheus started | 可视化监控；默认管理员密码 `margin`。 |
@@ -511,8 +664,13 @@
 | 脚本 | 路径 | 功能 |
 |---|---|---|
 | `migrate.py` | `scripts/migrate.py` | 容器内执行 `alembic upgrade head`，作为 `migrate` 服务入口。 |
-| `seed_demo.py` | `scripts/seed_demo.py` | 创建示例组合、示例交易、示例公告事件；幂等跳过已存在数据。 |
+| `bootstrap_config.py` | `scripts/bootstrap_config.py` | 初始化默认 Provider/Scope/策略配置，将 env 中的 Provider 密钥写入 Secret Store；幂等跳过已存在版本。 |
 | `health_check.py` | `scripts/health_check.py` | 访问 `http://localhost:8000/health/ready`，HTTP 200 退出码 0，否则退出码 1。 |
+| `worker_health_check.py` | `scripts/worker_health_check.py` | Worker 容器健康探针，验证数据库可连通且 Alembic head 正确。 |
+| `verify_migrations.py` | `scripts/verify_migrations.py` | 从隔离 clean DB 验证 Alembic 全链路升级、pgvector、表与索引。 |
+| `smoke_full_v02.py` | `scripts/smoke_full_v02.py` | v0.2 smoke harness；支持 `--require-real-providers`、`--skip-compose`、`--base-url`、`--web-url`、`--database-url`、`--output-json`。 |
+| `smoke_dashboard_e2e.py` | `scripts/smoke_dashboard_e2e.py` | 验证 Web 关键页面、Provider 设置、research dashboard 与 secret-safe 输出；本地 URL 不走系统代理。 |
+| `smoke_valuation_discovery_p1.py` | `scripts/smoke_valuation_discovery_p1.py` | 验证本地 API refresh trigger、admin/csrf/idempotency 与结构化 external blocker；本地 URL 不走系统代理。 |
 | `snapshot_store.py` | `scripts/snapshot_store.py` | 快照 CLI，支持 `write`、`read`、`list` 子命令，操作与核心库兼容的 `FileSnapshotStore`。 |
 
 ---

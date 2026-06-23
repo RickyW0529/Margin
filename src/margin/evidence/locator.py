@@ -24,6 +24,10 @@ Requirements:
 
 from __future__ import annotations
 
+import csv
+import html
+import io
+import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -93,10 +97,13 @@ class CitationLocator(BaseModel):
     available_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     retrieved_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     page: int | None = None
+    bbox: tuple[float, float, float, float] | None = None
     section: str | None = None
     paragraph_index: int | None = None
+    dom_path: str | None = None
     table_id: str | None = None
     row_id: str | None = None
+    column_id: str | None = None
     quote_span: tuple[int, int] | None = None
     snapshot_id: str | None = None
     snapshot_hash: str | None = None
@@ -127,10 +134,13 @@ class CitationLocator(BaseModel):
         """
         has_structural = (
             self.page is not None
+            or self.bbox is not None
             or bool(self.section)
             or self.paragraph_index is not None
+            or bool(self.dom_path)
             or bool(self.table_id)
             or bool(self.row_id)
+            or bool(self.column_id)
             or self.quote_span is not None
         )
         return bool(self.source_url) and has_structural
@@ -170,10 +180,13 @@ class CitationLocator(BaseModel):
             available_at=evidence.available_at,
             retrieved_at=evidence.retrieved_at,
             page=evidence.page,
+            bbox=evidence.bbox,
             section=evidence.section,
             paragraph_index=evidence.paragraph_index,
+            dom_path=evidence.dom_path,
             table_id=evidence.table_id,
             row_id=evidence.row_id,
+            column_id=evidence.column_id,
             quote_span=evidence.quote_span,
             snapshot_id=evidence.snapshot_id,
             snapshot_hash=evidence.snapshot_hash,
@@ -305,6 +318,217 @@ class WebSearchVerificationResult(BaseModel):
     reason: str = ""
 
     model_config = {"frozen": True}
+
+
+class LocatorReplayResult(BaseModel):
+    """Result of replaying a locator against stored snapshot content."""
+
+    valid: bool
+    reason_code: str
+    located_text: str | None = None
+
+    model_config = {"frozen": True}
+
+
+class LocatorValidator:
+    """Replay locators against persisted snapshot content."""
+
+    def __init__(self, snapshot_resolver: SnapshotResolver | object) -> None:
+        """Initialize with a callable or object that can resolve snapshots."""
+        self._snapshot_resolver = snapshot_resolver
+
+    def validate(
+        self,
+        *,
+        snapshot_id: str,
+        snapshot_hash: str,
+        locator: CitationLocator,
+        expected_text: str,
+    ) -> LocatorReplayResult:
+        """Validate snapshot hash, locator anchor, and located text."""
+        snapshot = self._resolve_snapshot(snapshot_id)
+        if snapshot is None:
+            return LocatorReplayResult(valid=False, reason_code="snapshot_not_found")
+        if getattr(snapshot, "content_hash", None) != snapshot_hash:
+            return LocatorReplayResult(
+                valid=False,
+                reason_code="snapshot_hash_mismatch",
+            )
+        content = _snapshot_content(snapshot)
+        if content is None:
+            return LocatorReplayResult(valid=False, reason_code="snapshot_not_found")
+        located = _locate_text(content, getattr(snapshot, "content_type", ""), locator)
+        if isinstance(located, LocatorReplayResult):
+            return located
+        if expected_text and expected_text not in located:
+            return LocatorReplayResult(
+                valid=False,
+                reason_code="quote_text_mismatch",
+                located_text=located,
+            )
+        return LocatorReplayResult(
+            valid=True,
+            reason_code="ok",
+            located_text=located,
+        )
+
+    def _resolve_snapshot(self, snapshot_id: str) -> object | None:
+        """resolve snapshot."""
+        resolver = self._snapshot_resolver
+        if callable(resolver):
+            return resolver(snapshot_id)
+        get_snapshot = getattr(resolver, "get_snapshot", None)
+        if callable(get_snapshot):
+            return get_snapshot(snapshot_id)
+        get = getattr(resolver, "get", None)
+        if callable(get):
+            return get(snapshot_id)
+        return None
+
+
+def _snapshot_content(snapshot: object) -> str | bytes | None:
+    """snapshot content."""
+    for attr in ("content", "text", "raw_content", "body"):
+        value = getattr(snapshot, attr, None)
+        if value is None and isinstance(snapshot, dict):
+            value = snapshot.get(attr)
+        if isinstance(value, (bytes, str)):
+            return value
+    return None
+
+
+def _locate_text(
+    content: str | bytes,
+    content_type: str,
+    locator: CitationLocator,
+) -> str | LocatorReplayResult:
+    """locate text."""
+    normalized_content_type = content_type.lower()
+    if locator.page is not None and (
+        "pdf" in normalized_content_type
+        or isinstance(content, bytes)
+        and content.startswith(b"%PDF")
+    ):
+        located = _locate_pdf_page(content, locator.page)
+        if isinstance(located, LocatorReplayResult):
+            return located
+        return _apply_quote_span(located, locator)
+    if locator.table_id and locator.row_id:
+        located = _locate_table_cell(content, normalized_content_type, locator)
+        if located is None:
+            return LocatorReplayResult(valid=False, reason_code="table_cell_not_found")
+        return _apply_quote_span(located, locator)
+
+    text_content = (
+        content.decode("utf-8", errors="replace")
+        if isinstance(content, bytes)
+        else content
+    )
+    if locator.dom_path:
+        if "html" not in normalized_content_type and "<" not in text_content:
+            return LocatorReplayResult(valid=False, reason_code="dom_path_not_found")
+        located = _locate_dom_path(text_content, locator.dom_path)
+        if located is None:
+            return LocatorReplayResult(valid=False, reason_code="dom_path_not_found")
+        return _apply_quote_span(located, locator)
+    if locator.quote_span:
+        return _apply_quote_span(text_content, locator)
+    if locator.page is not None:
+        return LocatorReplayResult(valid=False, reason_code="pdf_page_not_found")
+    return LocatorReplayResult(valid=False, reason_code="locator_missing")
+
+
+def _locate_pdf_page(
+    content: str | bytes,
+    page_number: int,
+) -> str | LocatorReplayResult:
+    """locate pdf page."""
+    if not isinstance(content, bytes):
+        return LocatorReplayResult(valid=False, reason_code="pdf_page_not_found")
+    try:
+        import fitz  # type: ignore[import-untyped]
+    except Exception:  # noqa: BLE001
+        return LocatorReplayResult(valid=False, reason_code="pdf_parser_unavailable")
+    try:
+        document = fitz.open(stream=content, filetype="pdf")
+        try:
+            page_index = page_number - 1
+            if page_index < 0 or page_index >= document.page_count:
+                return LocatorReplayResult(
+                    valid=False,
+                    reason_code="pdf_page_not_found",
+                )
+            return document.load_page(page_index).get_text("text").strip()
+        finally:
+            document.close()
+    except Exception:  # noqa: BLE001
+        return LocatorReplayResult(valid=False, reason_code="pdf_page_not_found")
+
+
+def _locate_table_cell(
+    content: str | bytes,
+    content_type: str,
+    locator: CitationLocator,
+) -> str | None:
+    """locate table cell."""
+    if locator.table_id != "table-1":
+        return None
+    row_match = re.fullmatch(r"row-(\d+)", locator.row_id or "")
+    if row_match is None:
+        return None
+    row_index = int(row_match.group(1)) - 1
+    if row_index < 0:
+        return None
+
+    text_content = (
+        content.decode("utf-8-sig", errors="replace")
+        if isinstance(content, bytes)
+        else content
+    )
+    if "csv" not in content_type and "," not in text_content.partition("\n")[0]:
+        return None
+    rows = list(csv.DictReader(io.StringIO(text_content)))
+    if row_index >= len(rows):
+        return None
+    row = rows[row_index]
+    if locator.column_id:
+        value = row.get(locator.column_id)
+        return str(value) if value is not None else None
+    return "; ".join(f"{key}={value}" for key, value in row.items())
+
+
+def _locate_dom_path(content: str, dom_path: str) -> str | None:
+    """locate dom path."""
+    match = re.search(r"/([A-Za-z0-9]+)\[(\d+)\]$", dom_path)
+    if match is None:
+        return None
+    tag = match.group(1)
+    index = int(match.group(2)) - 1
+    matches = re.findall(
+        rf"<{tag}\b[^>]*>(.*?)</{tag}>",
+        content,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if index < 0 or index >= len(matches):
+        return None
+    text = re.sub(r"<[^>]+>", "", matches[index])
+    return html.unescape(text).strip()
+
+
+def _apply_quote_span(
+    content: str,
+    locator: CitationLocator,
+) -> str | LocatorReplayResult:
+    """apply quote span."""
+    if locator.quote_span is None:
+        return content
+    start, end = locator.quote_span
+    if start < 0 or end < start or end > len(content):
+        return LocatorReplayResult(
+            valid=False,
+            reason_code="quote_span_out_of_range",
+        )
+    return content[start:end]
 
 
 def verify_websearch_original(

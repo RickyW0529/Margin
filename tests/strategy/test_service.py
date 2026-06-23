@@ -10,10 +10,12 @@ from margin.strategy.service import StrategyService
 
 
 def _service() -> StrategyService:
+    """service."""
     return StrategyService(repository=MemoryStrategyRepository())
 
 
 def test_service_creates_strategy_from_template():
+    """service creates strategy from template."""
     service = _service()
     profile = service.create_from_template("user_1", "value_quality")
     assert profile.active_version_id == ""
@@ -22,6 +24,7 @@ def test_service_creates_strategy_from_template():
 
 
 def test_service_creates_custom_strategy():
+    """service creates custom strategy."""
     service = _service()
     config = StrategyConfig(universe=["000001.SZ"])
     profile = service.create_custom("user_1", config, "My Strategy")
@@ -30,6 +33,7 @@ def test_service_creates_custom_strategy():
 
 
 def test_service_update_creates_new_version():
+    """service update creates new version."""
     service = _service()
     profile = service.create_from_template("user_1", "value_quality")
     updated = service.update_strategy(
@@ -40,20 +44,22 @@ def test_service_update_creates_new_version():
 
 
 def test_service_update_deep_merges_nested_config_delta():
+    """service update deep merges nested config delta."""
     service = _service()
     profile = service.create_from_template("user_1", "value_quality")
 
     updated = service.update_strategy(
         profile.strategy_id,
-        config_delta={"risk": {"max_position_weight": 0.05}},
+        config_delta={"risk": {"risk_score_threshold": 0.75}},
     )
 
     risk = updated.versions[-1].config.risk
-    assert risk.max_position_weight == 0.05
-    assert risk.max_sector_weight == profile.versions[0].config.risk.max_sector_weight
+    assert risk.risk_score_threshold == 0.75
+    assert risk.max_drawdown == profile.versions[0].config.risk.max_drawdown
 
 
 def test_service_validate_version_transitions_to_validating():
+    """service validate version transitions to validating."""
     service = _service()
     profile = service.create_from_template("user_1", "value_quality")
     version = profile.versions[0]
@@ -62,6 +68,7 @@ def test_service_validate_version_transitions_to_validating():
 
 
 def test_service_activate_version_sets_active():
+    """service activate version sets active."""
     service = _service()
     profile = service.create_from_template("user_1", "value_quality")
     version = profile.versions[0]
@@ -76,6 +83,7 @@ def test_service_activate_version_sets_active():
 
 
 def test_service_get_prompt_returns_string():
+    """service get prompt returns string."""
     service = _service()
     profile = service.create_from_template("user_1", "value_quality")
     prompt = service.get_prompt(profile.strategy_id, profile.versions[0].version_id)
@@ -84,12 +92,14 @@ def test_service_get_prompt_returns_string():
 
 
 def test_service_list_templates():
+    """service list templates."""
     service = _service()
     templates = service.list_templates()
     assert len(templates) == 6
 
 
 def test_service_missing_strategy_raises():
+    """service missing strategy raises."""
     service = _service()
     with pytest.raises(KeyError):
         service.get_profile("missing")

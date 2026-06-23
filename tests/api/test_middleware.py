@@ -14,10 +14,12 @@ from margin.api.middleware import _get_trace_id
 
 
 def test_trace_id_header_propagates():
+    """trace id header propagates."""
     app = create_app()
 
     @app.get("/echo-trace")
     def echo_trace(request: Request):
+        """echo trace."""
         return {"trace_id": _get_trace_id(request)}
 
     client = TestClient(app)

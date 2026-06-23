@@ -17,10 +17,12 @@ from margin.storage.database import DatabaseSettings, create_database_engine, cr
 from margin.vector.db_models import (
     ChunkEmbeddingRow,
     ChunkRow,
+    ChunkSecurityLinkRow,
     IndexAuditRecordRow,
+    IndexedDocumentRow,
     RetrievalAuditRecordRow,
 )
-from margin.vector.models import DocType, RetrievalResult, make_chunk
+from margin.vector.models import ChunkSecurityLink, DocType, RetrievalResult, make_chunk
 from margin.vector.repository import VectorRepository
 
 
@@ -43,6 +45,8 @@ def vector_repository(database_url):
         for row in (
             RetrievalAuditRecordRow,
             IndexAuditRecordRow,
+            IndexedDocumentRow,
+            ChunkSecurityLinkRow,
             ChunkEmbeddingRow,
             ChunkRow,
         ):
@@ -128,3 +132,24 @@ def test_vector_repository_upserts_chunks_vectors_filters_and_replays(vector_rep
     replayed = vector_repository.replay_retrieval(audit_id)
     assert replayed[0].chunk.chunk_id == early.chunk_id
     assert replayed[0].score == 0.9
+
+
+def test_vector_repository_persists_chunk_security_links(vector_repository):
+    """vector repository persists chunk security links."""
+    chunk = _chunk("chk_linked", "000001.SZ", datetime(2026, 6, 1, tzinfo=UTC))
+
+    vector_repository.upsert_chunks(
+        [chunk],
+        links=[
+            ChunkSecurityLink(
+                chunk_id=chunk.chunk_id,
+                security_id="000001.SZ",
+                link_type="mentioned",
+                confidence=0.95,
+            )
+        ],
+    )
+
+    assert vector_repository.count_chunk_security_links() == 1
+    assert vector_repository.chunk_has_security_link(chunk.chunk_id, "000001.SZ") is True
+    assert vector_repository.chunk_has_security_link(chunk.chunk_id, "600000.SH") is False

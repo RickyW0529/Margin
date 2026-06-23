@@ -11,7 +11,8 @@
   - [4.1 `build_scheduler()`](#41-build_scheduler)
   - [4.2 `build_monitoring_runner()`](#42-build_monitoring_runner)
   - [4.3 `build_document_indexing_runner()`](#43-build_document_indexing_runner)
-  - [4.4 `main()`](#44-main)
+  - [4.4 `build_data_ingestion_stack()`](#44-build_data_ingestion_stack)
+  - [4.5 `main()`](#45-main)
 - [5. 存储基础设施](#5-存储基础设施)
   - [5.1 `Base`](#51-base)
   - [5.2 `DatabaseSettings`](#52-databasesettings)
@@ -118,6 +119,18 @@
 |  | `rerank_api_key` | `SecretStr \| None` | `None` | Rerank API 密钥。 |
 |  | `rerank_model` | `str` | `""` | 默认 Rerank 模型。 |
 | WebSearch | `websearch_api_key` | `SecretStr \| None` | `None` | Tavily WebSearch API 密钥。 |
+| Admin/Secret Store | `admin_api_token` | `SecretStr \| None` | `None` | v0.2 配置写接口 local-admin Bearer；缺失时 fail closed。 |
+|  | `csrf_token` | `SecretStr \| None` | `None` | v0.2 配置写接口 CSRF token。 |
+|  | `secret_master_key` | `SecretStr \| None` | `None` | AES-GCM-256 Secret Store master key，要求 32-byte 或等价 base64。 |
+|  | `secret_key_version` | `str` | `local-v1` | 写入密文 associated data 的 key version。 |
+|  | `allow_local_provider_urls` | `bool` | `False` | 是否允许本地开发 Provider URL。 |
+|  | `resolve_provider_dns` | `bool` | `True` | SSRF guard 是否解析 DNS 并检查目标 IP。 |
+| Data Provider | `tushare_token` | `SecretStr \| None` | `None` | Tushare token。会在 repr 中掩码，不应写入日志。 |
+|  | `tushare_http_url` | `str \| None` | `None` | 可选 Tushare 兼容 API 地址。 |
+|  | `data_snapshot_root` | `Path` | `.margin/snapshots/data` | v0.2 compressed raw snapshot 根目录。 |
+|  | `data_sync_on_startup` | `bool` | `True` | Worker 是否启用 data provider sync job。 |
+|  | `data_freshness_timezone` | `str` | `Asia/Shanghai` | data freshness 判断时区。 |
+|  | `data_smoke_symbols` | `str` | `000001.SZ` | 真实 data provider smoke 使用的股票代码列表。 |
 | 可观测性 | `log_level` | `str` | `INFO` | 日志级别。 |
 |  | `log_format` | `Literal["json", "console"]` | `json` | 日志格式。 |
 |  | `metrics_enabled` | `bool` | `True` | 是否启用指标。 |
@@ -151,15 +164,16 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| **签名** | `def build_scheduler(monitoring_job: Callable[[], None], *, interval_seconds: int, indexing_job: Callable[[], None] \| None = None) -> BlockingScheduler` |
+| **签名** | `def build_scheduler(monitoring_job: Callable[[], None], *, interval_seconds: int, indexing_job: Callable[[], None] \| None = None, data_sync_job: Callable[[], None] \| None = None) -> BlockingScheduler` |
 | **位置** | `src/margin/worker.py` |
-| **说明** | 构造 APScheduler 调度器，配置持仓监控任务，可选地同时配置文档索引任务。 |
+| **说明** | 构造 APScheduler 调度器，配置持仓监控任务，可选地同时配置文档索引任务和 data provider sync job。 |
 
 | 参数 | 类型 | 说明 |
 | --- | --- | --- |
 | `monitoring_job` | `Callable[[], None]` | 持仓监控任务函数。 |
 | `interval_seconds` | `int` | 任务执行间隔秒数。 |
 | `indexing_job` | `Callable[[], None] \| None` | 文档索引任务函数，可选。 |
+| `data_sync_job` | `Callable[[], None] \| None` | data provider sync job，可选。 |
 
 | 返回值 | 说明 |
 | --- | --- |
@@ -183,7 +197,16 @@
 | **说明** | 根据全局设置构建文档索引 Runner。若 Embedding 配置完整则使用 `OpenAIEmbeddingProvider`，否则使用无网络能力的占位 `EmbeddingProvider`。 |
 | **返回值** | 配置好的 `DocumentIndexingRunner` 实例。 |
 
-### 4.4 `main()`
+### 4.4 `build_data_ingestion_stack()`
+
+| 项目 | 内容 |
+| --- | --- |
+| **签名** | `def build_data_ingestion_stack(settings: MarginSettings \| None = None) -> DataWarehouseIngestionStack` |
+| **位置** | `src/margin/worker.py` |
+| **说明** | 根据全局设置或显式传入设置构建 v0.2 data warehouse ingestion stack，包括数据库 session factory 和 compressed raw snapshot 根目录。 |
+| **返回值** | 配置好的 `DataWarehouseIngestionStack` 实例。 |
+
+### 4.5 `main()`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -358,7 +381,23 @@
 | **说明** | 构建仪表盘状态端点展示的所有 Provider。缺失配置时返回对应的 `MissingConfiguredProvider` 降级占位。 |
 | **返回值** | LLM、Embedding、WebSearch、Rerank Provider 或占位对象列表。 |
 
-#### 6.4.7 `get_portfolio_service()`
+#### 6.4.7 `build_data_warehouse_stack()`
+
+| 项目 | 内容 |
+| --- | --- |
+| **签名** | `def build_data_warehouse_stack(settings: MarginSettings) -> DataWarehouseIngestionStack` |
+| **说明** | 根据集中配置构建 DB-backed data warehouse ingestion stack，供 API 或测试注入。 |
+| **返回值** | `DataWarehouseIngestionStack` 实例。 |
+
+#### 6.4.8 `get_data_warehouse_stack()`
+
+| 项目 | 内容 |
+| --- | --- |
+| **签名** | `@lru_cache def get_data_warehouse_stack() -> DataWarehouseIngestionStack` |
+| **说明** | 返回生产 data warehouse ingestion stack 的进程级缓存实例。 |
+| **返回值** | 缓存的 `DataWarehouseIngestionStack` 实例。 |
+
+#### 6.4.9 `get_portfolio_service()`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -366,7 +405,7 @@
 | **说明** | 返回基于 PostgreSQL 的 PortfolioService，供 Portfolio 路由注入。 |
 | **返回值** | 缓存的 `PortfolioService` 实例。 |
 
-#### 6.4.8 `get_research_service()`
+#### 6.4.10 `get_research_service()`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -374,7 +413,7 @@
 | **说明** | 返回基于 PostgreSQL 与配置化 LLM/Embedding 的 ResearchService。 |
 | **返回值** | 缓存的 `ResearchService` 实例。 |
 
-#### 6.4.9 `get_strategy_service()`
+#### 6.4.11 `get_strategy_service()`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -382,7 +421,7 @@
 | **说明** | 返回基于 PostgreSQL 的策略配置服务。 |
 | **返回值** | 缓存的 `StrategyService` 实例。 |
 
-#### 6.4.10 `get_dashboard_services()`
+#### 6.4.12 `get_dashboard_services()`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -390,7 +429,7 @@
 | **说明** | 返回 Dashboard 模块所需的服务包，聚合 Dashboard Repository、Research Repository、ResearchService 与 Provider 状态列表。 |
 | **返回值** | 缓存的 `DashboardServiceBundle` 实例。 |
 
-#### 6.4.11 `get_monitoring_services()`
+#### 6.4.13 `get_monitoring_services()`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -716,6 +755,12 @@
 ### 11.3 `SecretRefInfo`
 
 - **说明**：用于展示的 Secret 引用元数据模型，不包含真实值。
+
+### 11.4 v0.2 `SecretStore`
+
+- **位置**：`src/margin/core/secret_store.py`
+- **说明**：AES-GCM-256 版本化 Provider Secret Store。`create_or_replace` 写入随机 nonce 密文并停用旧 active secret；`metadata` 只返回 configured、last four、version/status/time；`resolve` 仅向受信 Provider adapter 返回 masked `SecretValue`。
+- `get_secret_store()` 从 `MARGIN_SECRET_MASTER_KEY` 构建生产实例；缺失 master key 时拒绝启动 secret API，不生成临时 key。
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |

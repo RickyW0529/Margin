@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field, field_validator
 from margin.evidence.locator import (
     CitationLocator,
     LocatorValidationResult,
+    LocatorValidator,
     SnapshotResolver,
     validate_locator,
 )
@@ -373,6 +374,7 @@ class CitationValidator:
         conflict_cap: float = 0.5,
         high_conflict_cap: float = 0.3,
         high_confidence_threshold: float = 0.7,
+        l4_only_status: ValidationStatus = ValidationStatus.FAIL,
         snapshot_resolver: SnapshotResolver | None = None,
     ) -> None:
         """Initialize the validator with configurable thresholds.
@@ -384,6 +386,8 @@ class CitationValidator:
             high_conflict_cap: Confidence cap applied when a high-severity conflict
                 exists.
             high_confidence_threshold: Confidence level considered high-confidence.
+            l4_only_status: Validation status for L4-only evidence. Defaults to FAIL
+                for backward compatibility; v0.2 workflows can set ABSTAINED.
             snapshot_resolver: Optional callable that resolves snapshot IDs to
                 RawSnapshot instances.
         """
@@ -391,6 +395,7 @@ class CitationValidator:
         self._conflict_cap = conflict_cap
         self._high_conflict_cap = high_conflict_cap
         self._high_conf_threshold = high_confidence_threshold
+        self._l4_only_status = l4_only_status
         self._snapshot_resolver = snapshot_resolver
 
     def validate_claim(
@@ -439,6 +444,12 @@ class CitationValidator:
             e for e in found_evidences if e.source_level <= SourceLevel.L3
         ]
         if l4_evidences and not l1_l3_evidences:
+            if self._l4_only_status == ValidationStatus.ABSTAINED:
+                return self._abstain_with_reason(
+                    claim,
+                    FailReason.L4_NO_CROSS_VALIDATION,
+                    "L4 evidence requires cross-validation with L1-L3",
+                )
             return self._fail(
                 claim, FailReason.L4_NO_CROSS_VALIDATION,
                 "L4 evidence requires cross-validation with L1-L3",
@@ -453,6 +464,15 @@ class CitationValidator:
                 snapshot_resolver=self._snapshot_resolver,
             )
             if loc_result.all_passed:
+                replay_result = self._replay_locator(locator, ev)
+                if replay_result is not None and not replay_result.valid:
+                    return self._fail(
+                        claim,
+                        FailReason.NOT_LOCATABLE,
+                        replay_result.reason_code,
+                        evidences_checked=len(found_evidences),
+                        evidences_passed=len(passed_evidences),
+                    )
                 passed_evidences.append(ev)
             else:
                 return self._fail(
@@ -535,6 +555,21 @@ class CitationValidator:
             abstained=abstained,
         )
 
+    def _replay_locator(self, locator: CitationLocator, evidence: Evidence):
+        """Replay locator against snapshot content when available."""
+        if self._snapshot_resolver is None:
+            return None
+        if not evidence.snapshot_id or not evidence.snapshot_hash:
+            return None
+        if not evidence.content:
+            return None
+        return LocatorValidator(self._snapshot_resolver).validate(
+            snapshot_id=evidence.snapshot_id,
+            snapshot_hash=evidence.snapshot_hash,
+            locator=locator,
+            expected_text=evidence.content,
+        )
+
     def _fail(
         self,
         claim: Claim,
@@ -582,6 +617,22 @@ class CitationValidator:
             status=ValidationStatus.ABSTAINED,
             reason=message,
             fail_reason=FailReason.INSUFFICIENT_EVIDENCE,
+            original_confidence=claim.confidence,
+            capped_confidence=0.0,
+        )
+
+    def _abstain_with_reason(
+        self,
+        claim: Claim,
+        reason: FailReason,
+        message: str,
+    ) -> ValidationResult:
+        """Return an ABSTAINED result with an explicit categorized reason."""
+        return ValidationResult(
+            claim_id=claim.claim_id,
+            status=ValidationStatus.ABSTAINED,
+            reason=message,
+            fail_reason=reason,
             original_confidence=claim.confidence,
             capped_confidence=0.0,
         )

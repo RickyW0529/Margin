@@ -38,6 +38,7 @@ def test_database_settings_reads_environment(monkeypatch):
 
 
 def test_database_settings_can_be_built_from_margin_settings():
+    """database settings can be built from margin settings."""
     margin_settings = MarginSettings(
         _env_file=None,
         database_url="postgresql+psycopg://margin:margin@localhost:5432/margin",

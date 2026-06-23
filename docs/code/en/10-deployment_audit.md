@@ -45,6 +45,12 @@ Responsibilities:
 |------|----------------|
 | `src/margin/core/audit.py` | Append-only JSONL audit logger for Provider calls with parameter redaction and response hashing. |
 | `src/margin/core/audit_repository.py` | Protocol and in-memory/SQLAlchemy implementations for business audit record persistence. |
+| `src/margin/core/run_states.py` | v0.2 durable run/step states, append-only attempt/event model, input hashing, and transition semantics. |
+| `src/margin/core/db_orchestration.py` | SQLAlchemy ORM rows for orchestration, capacity, transactional outbox, idempotency, and smoke audit tables. |
+| `src/margin/core/orchestration_repository.py` | In-memory/PostgreSQL orchestration repositories with latest-step lookup, lease claim, retry append, and `FOR UPDATE SKIP LOCKED`. |
+| `src/margin/core/orchestration.py` | `DBStepWorker` and `StepClaim` for safe database-backed step claiming. |
+| `src/margin/core/capacity.py` | Versioned capacity governance for provider RPM, LLM token/cost, concurrency windows, and typed waiting decisions. |
+| `src/margin/core/outbox.py` | Transactional outbox with same-transaction enqueue, idempotency, lease claim, ack, retry, and delivery states. |
 | `src/margin/core/db_audit.py` | SQLAlchemy ORM model for immutable audit records in PostgreSQL. |
 | `src/margin/core/degradation.py` | Fallback wrapper for Provider calls with Prometheus instrumentation. |
 | `src/margin/core/logging_config.py` | Structured logging configuration using `structlog`. |
@@ -57,13 +63,146 @@ Responsibilities:
 | `src/margin/api/routes/health.py` | `/health`, `/health/ready`, and `/health/degraded` endpoints. |
 | `Dockerfile` | Backend API container image. |
 | `web/Dockerfile` | Next.js frontend container image. |
-| `docker-compose.yml` | Full local stack including Postgres, migrate, seed, API, worker, web, Prometheus, and Grafana. |
+| `docker-compose.yml` | Full local stack including Postgres, migrate, bootstrap, API, worker, web, Prometheus, and Grafana. |
 | `.github/workflows/ci.yml` | GitHub Actions CI pipeline for backend, frontend, and Docker validation. |
 | `docker/prometheus.yml` | Prometheus scrape configuration for the Margin API. |
+| `docker/grafana/dashboards/margin-v02.json` | v0.2 Grafana dashboard for orchestration, capacity, outbox, provider, data, and LLM metrics. |
+| `docker/grafana/provisioning/dashboards/margin.yml` | Grafana dashboard provisioning configuration. |
 | `scripts/migrate.py` | One-shot migration entry point used by Compose. |
-| `scripts/seed_demo.py` | One-shot demo data seed script used by Compose. |
+| `scripts/verify_migrations.py` | Clean-database Alembic verifier for head, tables, indexes, and pgvector. |
+| `scripts/worker_health_check.py` | Worker health check that verifies database connectivity and migration head. |
+| `scripts/smoke_full_v02.py` | v0.2 smoke harness with real-provider enforcement, structured blockers, and redacted output. |
+| `scripts/bootstrap_config.py` | One-shot versioned configuration bootstrap used by Compose; imports provider secrets from env into Secret Store. |
 | `scripts/health_check.py` | Container readiness probe used by Docker healthcheck. |
 | `scripts/snapshot_store.py` | CLI for writing, reading, and listing snapshots. |
+
+## v0.2 Durable Orchestration and Deployment Audit Additions
+
+### Run / Step States
+
+`src/margin/core/run_states.py` defines the v0.2 orchestration states:
+
+- `pending`
+- `running`
+- `waiting_rate_limit`
+- `waiting_budget`
+- `succeeded`
+- `succeeded_with_degradation`
+- `failed_retryable`
+- `failed_final`
+- `skipped`
+- `cancelled`
+
+`StepAttempt` is append-only. It stores `event_id`, `run_id`, `step_id`,
+`attempt_no`, `state_seq`, `previous_event_id`, `input_hash`, optional
+`input_ref`, `output_ref`, lease fields, `retry_after`, and timestamps. A real
+retry increments `attempt_no`; lifecycle events inside the same execution
+increment `state_seq`. Latest state is derived by repository queries rather
+than by mutating old rows.
+
+### Worker Claim, Lease, and Retry
+
+`DBStepWorker` claims only executable step events:
+
+- `pending`;
+- due `failed_retryable`;
+- `running` with an expired lease.
+
+The PostgreSQL path uses `FOR UPDATE SKIP LOCKED` so multiple workers cannot
+claim the same step concurrently. Retry appends a new attempt and keeps prior
+attempts immutable. Unknown step handlers are not executed by the core worker;
+business modules register concrete handlers later.
+
+### Capacity Governor
+
+`src/margin/core/capacity.py` implements versioned capacity controls:
+
+| Capability | Description |
+|---|---|
+| `CapacityLimit` | Defines `limit_key`, time window, `max_count`, version, and outcome. |
+| `try_acquire` | Consumes count-based capacity such as provider RPM or concurrency. |
+| `try_acquire_budget` | Checks amount-based limits such as LLM token/cost budgets. |
+| `WAITING_RATE_LIMIT` | Maps to step state `waiting_rate_limit`. |
+| `WAITING_BUDGET` | Maps to step state `waiting_budget`. |
+
+PostgreSQL counters are isolated by `(limit_key, window_start, version)` so old
+and new capacity versions do not contaminate each other.
+
+### Transactional Outbox
+
+`src/margin/core/outbox.py` provides same-transaction publication safety:
+
+| State | Description |
+|---|---|
+| `pending` | Business transaction committed and waiting for publication. |
+| `claimed` | Outbox worker holds a lease. |
+| `delivered` | Downstream acknowledged delivery. |
+| `failed_retryable` | Retryable failure waiting for `retry_after`. |
+| `failed_final` | Final non-retryable failure. |
+
+`enqueue_once` / `enqueue_once_in_session` deduplicate by
+`(topic, idempotency_key)`. The in-session variant shares the caller's
+SQLAlchemy transaction so business state and outbox rows commit or roll back
+together.
+
+### Redaction, Metrics, and Grafana
+
+Redaction covers provider audit parameters, `AuditRepository.payload_json`,
+structlog event dictionaries, traceback/exception strings, HTTP-like
+header/body/cookie fields, smoke stage detail, and smoke stdout summaries.
+Sensitive keys include `token`, `api_key`, `authorization`, `password`,
+`secret`, and `cookie`.
+
+`src/margin/core/metrics.py` exposes bounded-label v0.2 metrics for run/step
+duration, queue age, retries/failures, provider calls/latency, data freshness,
+schema drift, quality, LLM token/cost, graph path/reflection, checkpoint
+recovery, outbox lag, and database pool/timeout issues. Metrics avoid raw
+full-market symbols as labels. Grafana loads
+`docker/grafana/dashboards/margin-v02.json` through provisioning.
+
+### Health, Migration, and Smoke
+
+| Artifact | Current behavior |
+|---|---|
+| `/health` | Process liveness. |
+| `/health/ready` | Checks database, migration head, outbox, provider config, and worker readiness; returns 503 on failure without leaking secrets. |
+| `/health/degraded` | Reports degraded providers, waiting budget/rate-limit, retry queues, and outbox pending state. |
+| `scripts/verify_migrations.py` | Upgrades an isolated clean database to Alembic head and verifies pgvector, tables, indexes, and current head. |
+| `scripts/worker_health_check.py` | Verifies worker database connectivity and migration head. |
+| `scripts/smoke_full_v02.py` | Runs Compose/migration/health/DB/provider/downstream-registered stages; stdout prints only stage/status/blocker summary, while full detail can be written to `--output-json`. |
+
+With `--require-real-providers`, the smoke harness fails rather than silently
+passing when credentials or network access are unavailable:
+
+| Blocker | Meaning |
+|---|---|
+| `missing_secret` | Required key/base URL/model is not configured. |
+| `network` | DNS, proxy, timeout, connection reset, or equivalent network problem. |
+| `auth` | 401/403 or explicit authentication failure. |
+| `rate_limit` | 429 or provider rate limit. |
+| `provider` | Provider-specific unhealthy response not covered above. |
+
+Without `--require-real-providers`, provider stages are marked
+`skipped: real_provider_not_required`; they are not counted as real smoke
+passes. Downstream P0/P1/P2 stages not yet registered by later modules are
+marked `skipped: stage_registered_by_downstream_module`.
+
+### Compose Ordering
+
+`docker-compose.yml` starts services in this order:
+
+1. `postgres` health;
+2. one-shot `migrate`;
+3. one-shot `bootstrap`;
+4. `api` readiness;
+5. `worker` migration-head health;
+6. `web`;
+7. `prometheus`;
+8. `grafana`.
+
+Use `docker compose config --quiet` or `docker compose config --no-interpolate`
+for validation so local real provider secrets are not expanded into command
+output.
 
 ## Audit
 
@@ -411,7 +550,7 @@ Backend API image.
 | Stage/Step | Description |
 |------------|-------------|
 | Base image | `python:3.12-slim` |
-| Environment | `PYTHONDONTWRITEBYTECODE=1`, `PYTHONUNBUFFERED=1`, `PIP_NO_CACHE_DIR=1` |
+| Environment | `PYTHONDONTWRITEBYTECODE=1`, `PYTHONUNBUFFERED=1`, `PIP_NO_CACHE_DIR=1`, `PIP_DEFAULT_TIMEOUT=300`, `PIP_RETRIES=10` |
 | Dependency install | Copies `pyproject.toml`, `README.md`, and `src/margin/__init__.py`, then runs `pip install -e ".[data]"` to maximize layer caching. |
 | Source copy | Copies `src`, `scripts`, `alembic`, and `alembic.ini`. |
 | User setup | Creates `margin` user with UID `10001`, prepares project-relative `.margin/audit` and `.margin/snapshots` under `WORKDIR /app`, and changes ownership. |
@@ -438,9 +577,9 @@ Defined in `docker-compose.yml`.
 |---------|---------|-------------------|
 | `postgres` | PostgreSQL with pgvector | Image `pgvector/pgvector:pg16`; exposes `5432`; healthcheck with `pg_isready`. |
 | `migrate` | One-shot Alembic migration | Builds backend image; depends on `postgres` being healthy; runs `scripts/migrate.py`. |
-| `seed` | One-shot demo data seed | Builds backend image; depends on `migrate` completing successfully; runs `scripts/seed_demo.py`. |
-| `api` | Main REST API | Builds backend image; exposes `8000`; depends on `seed`; mounts `margin-audit` and `margin-snapshots` volumes; healthcheck via `scripts/health_check.py`. |
-| `worker` | Background worker | Builds backend image; depends on `seed`; mounts the same persistent volumes as `api`; runs `python -m margin.worker`. |
+| `bootstrap` | One-shot versioned config bootstrap | Builds backend image; depends on `migrate` completing successfully; runs `scripts/bootstrap_config.py`. |
+| `api` | Main REST API | Builds backend image; exposes `8000`; depends on `bootstrap`; mounts `margin-audit` and `margin-snapshots` volumes; healthcheck via `scripts/health_check.py`. |
+| `worker` | Background worker | Builds backend image; depends on `bootstrap`; mounts the same persistent volumes as `api`; runs `python -m margin.worker`. |
 | `web` | Next.js frontend | Builds frontend image; exposes `3000`; depends on `api` being healthy; sets `MARGIN_API_BASE_URL`. |
 | `prometheus` | Metrics scraper | Image `prom/prometheus:v3.12.0`; mounts `docker/prometheus.yml`; exposes `9090`; depends on `api`. |
 | `grafana` | Metrics dashboards | Image `grafana/grafana:13.0.2`; mounts provisioning; exposes `3002` (configurable via `GRAFANA_PORT`); depends on `prometheus`. |
@@ -480,8 +619,13 @@ Defined in `docker/prometheus.yml`.
 | Script | Purpose |
 |--------|---------|
 | `scripts/migrate.py` | Runs `alembic upgrade head` as the migration service entry point in Compose. |
-| `scripts/seed_demo.py` | Populates a demo portfolio, trades, and a demo filing event after migrations finish. |
+| `scripts/bootstrap_config.py` | Initializes default Provider/Scope/strategy versions and imports env provider secrets into Secret Store idempotently. |
 | `scripts/health_check.py` | HTTP readiness probe; exits `0` only when `GET http://localhost:8000/health/ready` returns HTTP 200. |
+| `scripts/worker_health_check.py` | Worker readiness probe; validates database connectivity and Alembic head. |
+| `scripts/verify_migrations.py` | Verifies full Alembic upgrade, pgvector, tables, and indexes from a clean database. |
+| `scripts/smoke_full_v02.py` | v0.2 smoke harness with real-provider enforcement, structured blockers, and redacted output. |
+| `scripts/smoke_dashboard_e2e.py` | Verifies key Web pages, Provider settings, research dashboard, and secret-safe HTML; local URLs bypass system proxies. |
+| `scripts/smoke_valuation_discovery_p1.py` | Verifies local API refresh trigger, admin/csrf/idempotency, and structured external blockers; local URLs bypass system proxies. |
 | `scripts/snapshot_store.py` | CLI for the snapshot store supporting `write`, `read`, and `list` commands. |
 
 ## Cross-Module Usage Notes
@@ -495,4 +639,4 @@ Defined in `docker/prometheus.yml`.
 - `TraceIdMiddleware` is added before `MetricsMiddleware` in `create_app()` so the trace id is available for the entire request lifecycle.
 - `MetricsMiddleware` and the `/metrics` router expose HTTP and Provider metrics to Prometheus.
 - `health`, `ready`, and `degraded` routes are registered in `create_app()` and used by Docker healthchecks and Kubernetes probes.
-- The `docker-compose.yml` `backend-environment` YAML anchor is reused across `migrate`, `seed`, `api`, and `worker` to keep environment variables consistent.
+- The `docker-compose.yml` `backend-environment` YAML anchor is reused across `migrate`, `bootstrap`, `api`, and `worker` to keep environment variables consistent.

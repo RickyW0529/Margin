@@ -7,7 +7,7 @@ plans 0102.1, 0102.3 and 0102.4.
 
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import date, datetime, time
 from typing import Any
 
 from margin.core.provider import (
@@ -55,7 +55,7 @@ def _fmt_date(d: datetime) -> str:
     return d.strftime("%Y%m%d")
 
 
-def _market_bar_available_at(trade_date: datetime) -> datetime:
+def _market_bar_available_at(trade_date: date | datetime) -> datetime:
     """Return the availability timestamp for a daily market bar.
 
     Daily OHLCV bars are considered available after the market closes at 15:00
@@ -67,7 +67,8 @@ def _market_bar_available_at(trade_date: datetime) -> datetime:
     Returns:
         A datetime combining the trade date and 15:00 local time.
     """
-    return datetime.combine(trade_date.date(), time(hour=15))
+    calendar_date = trade_date.date() if isinstance(trade_date, datetime) else trade_date
+    return datetime.combine(calendar_date, time(hour=15))
 
 
 def _parse_optional_date(value: Any) -> datetime | None:
@@ -96,6 +97,16 @@ def _parse_optional_date(value: Any) -> datetime | None:
     return None
 
 
+def _optional_float(value: Any) -> float | None:
+    """Return a numeric provider value or ``None`` when unavailable."""
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 class AKShareProvider(BaseProvider):
     """A-share market data provider backed by AKShare.
 
@@ -119,6 +130,7 @@ class AKShareProvider(BaseProvider):
                 "get_bars",
                 "get_adjustment_factors",
                 "get_financials",
+                "get_valuations",
                 "get_index_members",
             ],
             secret_refs=[],
@@ -364,6 +376,49 @@ class AKShareProvider(BaseProvider):
                             "source": "akshare",
                         }
                     )
+        return result
+
+    def get_valuations(
+        self,
+        symbols: list[str],
+        start: datetime,
+        end: datetime,
+    ) -> list[dict[str, Any]]:
+        """Fetch daily valuation history from EastMoney through AKShare."""
+        import akshare as ak
+
+        fetched_at = datetime.now()
+        result: list[dict[str, Any]] = []
+        for symbol in symbols:
+            raw_code = symbol.split(".")[0]
+            df = ak.stock_value_em(symbol=raw_code)
+            for _, row in df.iterrows():
+                trade_date = (
+                    _parse_optional_date(row.get("数据日期"))
+                    or _parse_optional_date(row.get("trade_date"))
+                )
+                if trade_date is None or not start <= trade_date <= end:
+                    continue
+                result.append(
+                    {
+                        "symbol": symbol,
+                        "trade_date": trade_date,
+                        "pe_ttm": _optional_float(
+                            row.get("PE(TTM)", row.get("pe_ttm"))
+                        ),
+                        "pb": _optional_float(row.get("市净率", row.get("pb"))),
+                        "ps": _optional_float(row.get("市销率", row.get("ps_ttm"))),
+                        "dividend_yield": _optional_float(
+                            row.get("股息率", row.get("dv_ttm"))
+                        ),
+                        "market_cap": _optional_float(
+                            row.get("总市值", row.get("total_mv"))
+                        ),
+                        "fetched_at": fetched_at,
+                        "available_at": _market_bar_available_at(trade_date),
+                        "source": "akshare",
+                    }
+                )
         return result
 
     def get_index_members(self, index_code: str, as_of: datetime) -> list[dict[str, Any]]:

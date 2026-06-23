@@ -1,8 +1,11 @@
 """RAG evidence package: claims, citation locators, validation, and persistence."""
 
+from margin.evidence.conflicts import EvidenceConflictClassifier
 from margin.evidence.locator import (
     CitationLocator,
+    LocatorReplayResult,
     LocatorValidationResult,
+    LocatorValidator,
     PointInTimeCheckResult,
     SnapshotResolver,
     SourceType,
@@ -17,10 +20,16 @@ from margin.evidence.locator import (
 )
 from margin.evidence.models import (
     Claim,
+    ClaimEvidenceLink,
+    ClaimEvidenceRole,
+    ClaimStatus,
     ClaimType,
     ConflictRecord,
     ConflictSeverity,
     Evidence,
+    EvidenceConflict,
+    EvidencePackage,
+    EvidencePackageQualityStatus,
     FactOrInference,
     check_l5_restriction,
     detect_conflicts,
@@ -28,7 +37,12 @@ from margin.evidence.models import (
     make_conflict,
     quality_score_for_level,
 )
-from margin.evidence.repository import EvidenceRepository, ResearchEvidenceLink
+from margin.evidence.package_builder import EvidencePackageBuilder
+from margin.evidence.repository import (
+    EvidenceRepository,
+    NewsContextEvidenceLink,
+    ResearchEvidenceLink,
+)
 from margin.evidence.validator import (
     CitationValidator,
     FailReason,
@@ -44,14 +58,25 @@ __all__ = [
     "CitationLocator",
     "CitationValidator",
     "Claim",
+    "ClaimEvidenceLink",
+    "ClaimEvidenceRole",
+    "ClaimStatus",
     "ClaimType",
     "ConflictRecord",
     "ConflictSeverity",
     "Evidence",
+    "EvidenceConflict",
+    "EvidenceConflictClassifier",
+    "EvidencePackage",
+    "EvidencePackageBuilder",
+    "EvidencePackageQualityStatus",
     "EvidenceRepository",
     "FactOrInference",
     "FailReason",
+    "LocatorReplayResult",
     "LocatorValidationResult",
+    "LocatorValidator",
+    "NewsContextEvidenceLink",
     "PointInTimeCheckResult",
     "ResearchEvidenceLink",
     "SnapshotResolver",

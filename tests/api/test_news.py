@@ -1,0 +1,103 @@
+"""News refresh API tests."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import UTC, datetime
+
+import pytest
+from fastapi.testclient import TestClient
+
+from margin.api.main import create_app
+from margin.news.models import NewsRefreshRun, NewsRefreshStatus
+from margin.news.service import NewsRunStatus
+from margin.settings import get_settings
+
+
+def test_news_refresh_status_returns_reconciliation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """news refresh status returns reconciliation."""
+    monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin-test-token")
+    monkeypatch.setenv("MARGIN_CSRF_TOKEN", "valid")
+    get_settings.cache_clear()
+    client = TestClient(create_app(news_service=_FakeNewsService()))
+
+    response = client.get("/api/v1/news/runs/run-1")
+
+    assert response.status_code == 200
+    assert response.json()["run_id"] == "run-1"
+    assert response.json()["target_count"] == 1
+    assert response.json()["failed_final_count"] == 0
+
+
+def test_news_refresh_submit_returns_accepted_run_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """news refresh submit returns accepted run id."""
+    monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin-test-token")
+    monkeypatch.setenv("MARGIN_CSRF_TOKEN", "valid")
+    get_settings.cache_clear()
+    service = _FakeNewsService()
+    client = TestClient(create_app(news_service=service))
+
+    response = client.post(
+        "/api/v1/news/refresh",
+        json={
+            "scope_version_id": "scope-1",
+            "quant_run_id": "quant-1",
+            "decision_at": "2026-06-22T00:00:00Z",
+            "targets": [
+                {
+                    "security_id": "000001.SZ",
+                    "symbol": "000001",
+                    "name": "平安银行",
+                    "trigger_type": "new_pass",
+                    "priority": 40,
+                }
+            ],
+        },
+        headers={
+            "Authorization": "Bearer admin-test-token",
+            "X-CSRF-Token": "valid",
+            "Idempotency-Key": "news-refresh-1",
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json()["run_id"] == "run-1"
+    assert service.received_target_count == 1
+
+
+@dataclass
+class _FakeNewsService:
+    """FakeNewsService."""
+    received_target_count: int = 0
+
+    def start_refresh(self, **kwargs: object) -> NewsRefreshRun:
+        """start refresh."""
+        targets = kwargs["targets"]
+        self.received_target_count = len(targets)  # type: ignore[arg-type]
+        return NewsRefreshRun(
+            run_id="run-1",
+            scope_version_id="scope-1",
+            quant_run_id="quant-1",
+            decision_at=datetime(2026, 6, 22, tzinfo=UTC),
+            status=NewsRefreshStatus.COMPLETED,
+            target_count=self.received_target_count,
+            completed_count=self.received_target_count,
+        )
+
+    def get_run_status(self, run_id: str) -> NewsRunStatus:
+        """get run status."""
+        return NewsRunStatus(
+            run_id=run_id,
+            status="completed",
+            target_count=1,
+            pending_count=0,
+            claimed_count=0,
+            retry_count=0,
+            completed_count=1,
+            failed_final_count=0,
+            error_summary={},
+        )

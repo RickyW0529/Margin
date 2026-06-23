@@ -34,6 +34,33 @@ Responsibilities:
 - Persist strategy profiles and versions in memory or in PostgreSQL.
 - Expose REST endpoints for strategy creation, updates, validation, activation, and prompt retrieval.
 
+### Implemented v0.2 configuration boundary
+
+The current code also implements an independent v0.2 versioned configuration boundary:
+
+- `ProviderConfigVersion` stores non-sensitive provider settings and a versioned secret reference.
+- `UniverseDefinitionVersion` freezes universe rules and members.
+- `IndicatorViewVersion` controls user/AI visibility only.
+- `QuantFeatureSetVersion` independently defines required/optional quant inputs.
+- `QuantStrategyVersion` stores factor weights, thresholds, and calibration evidence.
+- `UserStylePromptVersion` and `ToolPolicyVersionRef` freeze style and tool permissions.
+- `ResearchScopeVersion` freezes all referenced version IDs and computes a deterministic SHA-256 `scope_hash`.
+
+The lifecycle is `draft -> review -> active -> deprecated`. Repository transactions and PostgreSQL partial unique indexes enforce one active version per configuration family. Quant strategies require a calibration report before activation, and Research Scope activation rejects missing, inactive, or deprecated references.
+
+`IndicatorViewVersion` and `QuantFeatureSetVersion` are intentionally orthogonal: hiding `pb` in the UI does not remove `pb` from required quant inputs or the full underlying data layer.
+
+### Secret Store and authorization boundary
+
+- Provider secrets use AES-GCM-256 with a random 96-bit nonce and associated data containing provider, secret name, version ID, and key version.
+- Persistence stores ciphertext and safe metadata only. APIs never return plaintext, ciphertext, nonce, or key material.
+- Active provider configs are immutable; secret rotation requires a new provider config version.
+- Mutating v0.2 APIs require local-admin Bearer authentication, CSRF, and `Idempotency-Key`, and fail closed when security configuration is absent.
+- Every v0.2 create/activate mutation writes an append-only `strategy_config_audits` event; a partial unique index on actor/action/idempotency key prevents concurrent replay duplication.
+- Provider Settings clears password inputs after save/test and renders only `•••• last_four`. Local admin credentials live only in tab-scoped `sessionStorage`.
+- Health checks use frozen config/secret versions and invoke real lightweight Tushare, AKShare, Tavily, LLM, Embedding, or Rerank adapter health checks with secret redaction.
+- Provider URLs enforce scheme, DNS/IP forbidden-range checks, and provider host allowlists. Custom public hosts require explicit opt-in and cannot bypass loopback/private/link-local rejection.
+
 ## File-Level Summaries
 
 | File | Responsibility |
@@ -48,7 +75,12 @@ Responsibilities:
 | `src/margin/strategy/prompt.py` | Layered prompt builder for research runs. |
 | `src/margin/strategy/repository.py` | Persistence protocol and in-memory/PostgreSQL implementations. |
 | `src/margin/strategy/service.py` | High-level service orchestrating creation, validation, and lifecycle. |
+| `src/margin/strategy/scope.py` | Resolves active config versions into a frozen Research Scope. |
+| `src/margin/strategy/provider_config.py` | Provider health checks, SSRF guard, and safe health results. |
+| `src/margin/core/secret_store.py` | AES-GCM versioned Secret Store and redaction. |
 | `src/margin/api/routes/strategy.py` | FastAPI routes for strategy management. |
+| `src/margin/api/routes/strategy_config.py` | v0.2 configuration API under `/api/v1`. |
+| `web/components/provider-settings-panel.tsx` | Write-only provider secret settings and real connection tests. |
 
 ## Domain Models
 
@@ -478,6 +510,35 @@ All routes are defined in `src/margin/api/routes/strategy.py` under the `/strate
 | `POST` | `/strategies/{strategy_id}/archive` | Archive active version | Path: `strategy_id` | `dict[str, Any]` |
 | `GET` | `/strategies/{strategy_id}/versions/{version_id}/prompt` | Get merged prompt | Query: `task: str = ""` | `PromptResponse` |
 
+### v0.2 configuration API
+
+`src/margin/api/routes/strategy_config.py` exposes:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET/POST` | `/api/v1/provider-configs` | List safe provider summaries/create provider versions |
+| `PUT` | `/api/v1/provider-configs/{id}/secret` | Encrypt a secret and return last-four metadata only |
+| `POST` | `/api/v1/provider-configs/{id}/test` | Run a real read-only health check |
+| `POST` | `/api/v1/provider-configs/{id}/activate` | Activate a provider config |
+| `GET/POST` | `/api/v1/universe-configs` | Universe versions |
+| `POST` | `/api/v1/universe-configs/{id}/activate` | Activate a universe version |
+| `GET/POST` | `/api/v1/indicator-views` | User-visible indicator versions |
+| `POST` | `/api/v1/indicator-views/{id}/activate` | Activate an indicator view |
+| `GET/POST` | `/api/v1/quant-feature-sets` | Quant input feature-set versions |
+| `POST` | `/api/v1/quant-feature-sets/{id}/activate` | Activate a quant feature set |
+| `GET/POST` | `/api/v1/quant-strategies` | Quant strategy versions |
+| `POST` | `/api/v1/quant-strategies/{id}/activate` | Activate a calibrated quant strategy |
+| `GET/POST` | `/api/v1/style-prompts` | User style prompt versions |
+| `POST` | `/api/v1/style-prompts/{id}/activate` | Validate protected boundaries and activate a style prompt |
+| `GET/POST` | `/api/v1/research-scopes` | Frozen Research Scope versions |
+| `POST` | `/api/v1/research-scopes/{id}/activate` | Validate references and activate a scope |
+
+All mutating v0.2 endpoints require local-admin Bearer auth, CSRF, and an `Idempotency-Key`. Production requires `MARGIN_ADMIN_API_TOKEN`, `MARGIN_CSRF_TOKEN`, and a 32-byte/base64 `MARGIN_SECRET_MASTER_KEY`.
+
+### Real provider smoke
+
+Real smoke is not replaced by unit tests. Configure Tushare, Tavily, LLM, Embedding, and Rerank credentials locally, then call `POST /api/v1/provider-configs/{id}/test`. Tushare, AKShare, Tavily, LLM, Embedding, and Rerank execute their existing lightweight health checks. Logs and responses may contain provider/status/latency/error code and redacted errors only; headers, tokens, ciphertext, and raw responses must not be emitted. External network, quota, proxy, or provider failures remain explicit real-smoke failures rather than mock successes.
+
 Request schemas:
 
 - `CreateStrategyRequest`: `owner_id`, `template`, `name`, `description`.
@@ -497,6 +558,7 @@ Error handling:
 
 - `margin.news.models.ensure_utc` and `utc_now` are reused for timestamp normalization.
 - `margin.api.dependencies.get_strategy_service` provides the shared `StrategyService` instance to API routes.
+- Data, quant, news, and AI run creation must persist `ResearchScopeVersion.version_id` and `scope_hash`; retries and restarts must not re-resolve the current active configuration.
 - Strategy configuration drives downstream research modules: the `universe`, `evidence`, `decision`, `valuation`, `quality`, `risk`, and `ai` fields are consumed when building research prompts and evaluating candidates.
 - The prompt layer order is fixed by architecture section 15.2; only `user_custom` and `task_context` layers are editable.
 - `ProhibitedOutput` values are enforced by `StrategyValidator.merge_with_guardrails` and cannot be removed by users.

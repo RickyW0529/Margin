@@ -54,18 +54,23 @@ class FakeProvider(BaseProvider):
         )
 
     def get_securities(self, as_of):
+        """get securities."""
         return [{"symbol": "000001.SZ"}]
 
     def get_bars(self, symbols, start, end, frequency="1d"):
+        """get bars."""
         return [{"symbol": s, "close": 100.0} for s in symbols]
 
     def get_adjustment_factors(self, symbols, start, end):
+        """get adjustment factors."""
         return [{"symbol": s, "factor": 1.0} for s in symbols]
 
     def get_financials(self, symbols, start, end):
+        """get financials."""
         return [{"symbol": s, "revenue": 1e8} for s in symbols]
 
     def get_index_members(self, index_code, as_of):
+        """get index members."""
         return [{"symbol": "000001.SZ", "index": index_code}]
 
 
@@ -116,13 +121,17 @@ class TestBaseProvider:
     def test_non_market_data_provider_fails_protocol(self):
         """An incomplete provider does not satisfy the ``MarketDataProvider`` protocol."""
         class NonMarketProvider(BaseProvider):
+            """A provider that does not satisfy the MarketDataProvider protocol."""
+
             @property
             def descriptor(self):
+                """Return the provider descriptor."""
                 return ProviderDescriptor(
                     name="x", version="1", provider_type=ProviderType.LLM
                 )
 
             def healthcheck(self):
+                """Return a health check result."""
                 pass
 
         p = NonMarketProvider()

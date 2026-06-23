@@ -11,10 +11,13 @@ from margin.core.provider import CallResult
 
 
 def test_degradation_returns_fallback_on_failure():
+    """degradation returns fallback on failure."""
     def failing(**_):
+        """failing."""
         raise RuntimeError("provider down")
 
     def fallback(**_):
+        """fallback."""
         return CallResult(provider_name="x", provider_version="1", success=True, data="fallback")
 
     result = call_with_fallback(failing, fallback, trace_id="t1", metrics_label="x")
@@ -23,10 +26,13 @@ def test_degradation_returns_fallback_on_failure():
 
 
 def test_degradation_returns_primary_when_successful():
+    """degradation returns primary when successful."""
     def primary(**_):
+        """primary."""
         return CallResult(provider_name="x", provider_version="1", success=True, data="primary")
 
     def fallback(**_):
+        """fallback."""
         return CallResult(provider_name="x", provider_version="1", success=True, data="fallback")
 
     result = call_with_fallback(primary, fallback, trace_id="t1", metrics_label="x")
@@ -35,10 +41,13 @@ def test_degradation_returns_primary_when_successful():
 
 
 def test_degradation_returns_failure_when_fallback_also_fails():
+    """degradation returns failure when fallback also fails."""
     def failing(**_):
+        """failing."""
         raise RuntimeError("provider down")
 
     def fallback(**_):
+        """fallback."""
         raise RuntimeError("fallback down")
 
     result = call_with_fallback(failing, fallback, trace_id="t1", metrics_label="x")

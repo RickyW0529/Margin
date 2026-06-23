@@ -10,11 +10,81 @@ import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
 
 from margin.core.provider import CallResult
+
+
+class SecretRedactingProcessor:
+    """Recursively redact sensitive fields and known secret values.
+
+    The callable signature is compatible with structlog processors, while the
+    implementation is also reusable for audit payloads and structured errors.
+    """
+
+    sensitive_fragments: ClassVar[tuple[str, ...]] = (
+        "token",
+        "api_key",
+        "authorization",
+        "password",
+        "secret",
+        "cookie",
+    )
+
+    def __init__(self, secret_values: tuple[str, ...] = ()) -> None:
+        """init  ."""
+        self._secret_values = tuple(
+            sorted(
+                {value for value in secret_values if value},
+                key=len,
+                reverse=True,
+            )
+        )
+
+    def __call__(
+        self,
+        logger: object,
+        method_name: str,
+        event_dict: dict[str, Any],
+    ) -> dict[str, Any]:
+        """call  ."""
+        del logger, method_name
+        return self._redact_mapping(event_dict)
+
+    def _redact_mapping(self, value: dict[Any, Any]) -> dict[str, Any]:
+        """redact mapping."""
+        redacted: dict[str, Any] = {}
+        for raw_key, raw_value in value.items():
+            key = str(raw_key)
+            normalized = key.lower().replace("-", "_")
+            if any(fragment in normalized for fragment in self.sensitive_fragments):
+                redacted[key] = "[REDACTED]"
+            else:
+                redacted[key] = self._redact_value(raw_value)
+        return redacted
+
+    def _redact_value(self, value: Any) -> Any:
+        """redact value."""
+        if isinstance(value, dict):
+            return self._redact_mapping(value)
+        if isinstance(value, list):
+            return [self._redact_value(item) for item in value]
+        if isinstance(value, tuple):
+            return tuple(self._redact_value(item) for item in value)
+        if isinstance(value, BaseException):
+            return self._redact_string(f"{type(value).__name__}: {value}")
+        if isinstance(value, str):
+            return self._redact_string(value)
+        return value
+
+    def _redact_string(self, value: str) -> str:
+        """redact string."""
+        redacted = value
+        for secret in self._secret_values:
+            redacted = redacted.replace(secret, "[REDACTED]")
+        return redacted
 
 
 class AuditRecord(BaseModel):
@@ -173,10 +243,10 @@ def _summarize_params(params: dict[str, Any]) -> dict[str, Any]:
     Returns:
         A sanitized copy suitable for persistent audit logs.
     """
-    sensitive_keys = {"token", "api_key", "password", "secret"}
+    redacted_params = SecretRedactingProcessor()(None, "audit", params)
     summary: dict[str, Any] = {}
-    for key, value in params.items():
-        if key.lower() in sensitive_keys:
+    for key, value in redacted_params.items():
+        if value == "[REDACTED]":
             summary[key] = "***REDACTED***"
         elif isinstance(value, (list, tuple)) and len(value) > 10:
             summary[key] = f"{type(value).__name__}[len={len(value)}]"

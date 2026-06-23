@@ -51,6 +51,7 @@ class TestWebSearchProvider:
         """Search must return a record containing the query and parsed results."""
 
         def mock_search(query, max_results=10):
+            """mock search."""
             return [
                 {"url": "https://a.com", "title": "A", "snippet": "snippet A"},
                 {"url": "https://b.com", "title": "B", "snippet": "snippet B"},
@@ -69,6 +70,7 @@ class TestWebSearchProvider:
         """Search must cap returned results to the requested max_results."""
 
         def mock_search(query, max_results=10):
+            """mock search."""
             return [
                 {"url": f"https://{i}.com", "title": str(i), "snippet": ""}
                 for i in range(20)
@@ -88,6 +90,7 @@ class TestWebSearchProvider:
         """Search records must be immutable after creation."""
 
         def mock_search(query, max_results=10):
+            """mock search."""
             return [{"url": "https://a.com", "title": "A", "snippet": ""}]
 
         provider = WebSearchProvider(search_func=mock_search)
@@ -190,6 +193,7 @@ class TestOriginalContentVerifier:
 
             @property
             def source_name(self):
+                """source name."""
                 return "websearch"
 
             def fetch(self, url, **kwargs):
@@ -231,6 +235,7 @@ class TestOriginalContentVerifier:
 
             @property
             def source_name(self):
+                """source name."""
                 return "websearch"
 
             def fetch(self, url, **kwargs):
@@ -265,6 +270,7 @@ class TestOriginalContentVerifier:
 
             @property
             def source_name(self):
+                """source name."""
                 return "websearch"
 
             def fetch(self, url, **kwargs):
@@ -298,6 +304,7 @@ class TestOriginalContentVerifier:
 
             @property
             def source_name(self):
+                """source name."""
                 return "websearch"
 
             def fetch(self, url, **kwargs):
@@ -339,6 +346,7 @@ class TestWebSearchService:
 
             @property
             def source_name(self):
+                """source name."""
                 return "websearch"
 
             def fetch(self, url, **kwargs):
@@ -354,6 +362,7 @@ class TestWebSearchService:
                 return "<html><body>公开新闻内容</body></html>".encode(), "text/html", 200
 
         def mock_search(query, max_results=10):
+            """mock search."""
             return [
                 {"url": "https://a.com/news", "title": "News A", "snippet": "A"},
                 {"url": "https://b.com/news", "title": "News B", "snippet": "B"},
@@ -397,6 +406,7 @@ class TestWebSearchService:
 
             @property
             def source_name(self):
+                """source name."""
                 return "websearch"
 
             def fetch(self, url, **kwargs):
@@ -412,6 +422,7 @@ class TestWebSearchService:
                 return b"subscribe to read full article", "text/html", 200
 
         def mock_search(query, max_results=10):
+            """mock search."""
             return [
                 {"url": "https://pay.com", "title": "Paywalled", "snippet": "s"},
             ]

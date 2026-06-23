@@ -23,6 +23,7 @@ from margin.storage.database import (
 
 
 def _run(run_id: str = "dr_repo") -> ResearchRun:
+    """run."""
     return ResearchRun(
         run_id=run_id,
         decision_at=datetime(2026, 6, 19, tzinfo=UTC),
@@ -35,6 +36,7 @@ def _run(run_id: str = "dr_repo") -> ResearchRun:
 
 
 def _item(run_id: str = "dr_repo") -> ResearchItem:
+    """item."""
     return ResearchItem(
         item_id="di_repo",
         run_id=run_id,
@@ -51,6 +53,7 @@ def _item(run_id: str = "dr_repo") -> ResearchItem:
 
 
 def test_memory_repository_round_trips_run_items_and_feedback():
+    """memory repository round trips run items and feedback."""
     repo = MemoryDashboardRepository()
     run = _run()
     item = _item(run.run_id)
@@ -72,6 +75,7 @@ def test_memory_repository_round_trips_run_items_and_feedback():
 
 
 def test_sqlalchemy_repository_round_trips_run_items_and_feedback(database_url):
+    """sqlalchemy repository round trips run items and feedback."""
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)

@@ -2,21 +2,38 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from margin.strategy.lifecycle import StrategyLifecycle
 from margin.strategy.models import (
+    IndicatorViewVersion,
+    ProviderConfigVersion,
+    QuantFeatureSetVersion,
+    QuantStrategyVersion,
+    ResearchScopeVersion,
     StrategyConfig,
     StrategyProfile,
     StrategyState,
     StrategyTemplateMeta,
     StrategyVersion,
+    ToolPolicyVersionRef,
+    UniverseDefinitionVersion,
+    UserStylePromptVersion,
 )
 from margin.strategy.prompt import PromptLayerBuilder
 from margin.strategy.repository import MemoryStrategyRepository, StrategyRepository
 from margin.strategy.sandbox import StrategySandbox
 from margin.strategy.templates import BUILTIN_TEMPLATES, list_templates
-from margin.strategy.validator import StrategyValidator
+from margin.strategy.validator import (
+    ActivationError,
+    StrategyActivationValidator,
+    StrategyValidator,
+)
+
+if TYPE_CHECKING:
+    from margin.core.secret_store import SecretMetadata, SecretStore
+    from margin.strategy.provider_config import ProviderConfigHealthService
 
 
 def _deep_merge_config_delta(
@@ -53,6 +70,7 @@ class StrategyService:
         lifecycle: StrategyLifecycle | None = None,
         sandbox: StrategySandbox | None = None,
         prompt_builder: PromptLayerBuilder | None = None,
+        activation_validator: StrategyActivationValidator | None = None,
     ) -> None:
         """Initialize the service with optional collaborators.
 
@@ -73,6 +91,7 @@ class StrategyService:
         self._lifecycle = lifecycle or StrategyLifecycle()
         self._sandbox = sandbox or StrategySandbox(self._validator)
         self._prompt_builder = prompt_builder or PromptLayerBuilder()
+        self._activation_validator = activation_validator or StrategyActivationValidator()
 
     def create_from_template(
         self,
@@ -296,6 +315,630 @@ class StrategyService:
         self._repository.update_profile(updated)
         return updated
 
+    def activate_quant_strategy(
+        self,
+        version_id: str,
+        *,
+        actor_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> QuantStrategyVersion:
+        """Activate a v0.2 quant strategy version after calibration validation."""
+        replay = self._config_mutation_replay(
+            actor_id=actor_id,
+            action="quant_strategy.activate",
+            idempotency_key=idempotency_key,
+            getter=self._repository.get_quant_strategy,
+        )
+        if replay is not None:
+            return replay
+        version = self._repository.get_quant_strategy(version_id)
+        if version is None:
+            raise KeyError(f"quant strategy '{version_id}' not found")
+        self._activation_validator.validate_quant_strategy_activation(version)
+        activated = self._repository.activate_quant_strategy(version_id)
+        self._record_config_mutation(
+            actor_id=actor_id,
+            action="quant_strategy.activate",
+            idempotency_key=idempotency_key,
+            resource_type="quant_strategy",
+            resource_version_id=version_id,
+            details={"lifecycle": activated.lifecycle.value},
+        )
+        return activated
+
+    def activate_provider_config(
+        self,
+        version_id: str,
+        *,
+        health_service: ProviderConfigHealthService,
+        actor_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> ProviderConfigVersion:
+        """Activate a provider config after schema and secret-reference validation."""
+        replay = self._config_mutation_replay(
+            actor_id=actor_id,
+            action="provider_config.activate",
+            idempotency_key=idempotency_key,
+            getter=self._repository.get_provider_config,
+        )
+        if replay is not None:
+            return replay
+        version = self._repository.get_provider_config(version_id)
+        if version is None:
+            raise KeyError(f"provider config '{version_id}' not found")
+        self._activation_validator.validate_provider_config_activation(version)
+        secret_required = bool(
+            version.non_sensitive_config.get("secret_required", True)
+        )
+        if secret_required and not version.secret_version_id:
+            raise ValueError("provider config activation requires an active secret")
+        try:
+            health = health_service.test_connection(version_id)
+        except (KeyError, ValueError) as exc:
+            raise ActivationError(
+                "provider activation health check failed: secret/config invalid"
+            ) from exc
+        if health.status != "ok":
+            raise ActivationError(
+                "provider activation health check must succeed before activation"
+            )
+        activated = self._repository.activate_provider_config(version_id)
+        self._record_config_mutation(
+            actor_id=actor_id,
+            action="provider_config.activate",
+            idempotency_key=idempotency_key,
+            resource_type="provider_config",
+            resource_version_id=version_id,
+            details={
+                "provider_name": activated.provider_name,
+                "health_status": health.status,
+                "lifecycle": activated.lifecycle.value,
+            },
+        )
+        return activated
+
+    def activate_research_scope(
+        self,
+        version_id: str,
+        *,
+        actor_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> ResearchScopeVersion:
+        """Activate a v0.2 research scope after validating frozen references."""
+        replay = self._config_mutation_replay(
+            actor_id=actor_id,
+            action="research_scope.activate",
+            idempotency_key=idempotency_key,
+            getter=self._repository.get_research_scope,
+        )
+        if replay is not None:
+            return replay
+        scope = self._repository.get_research_scope(version_id)
+        if scope is None:
+            raise KeyError(f"research scope '{version_id}' not found")
+        self._activation_validator.validate_research_scope_activation(
+            scope,
+            self._repository,
+        )
+        activated = self._repository.activate_research_scope(version_id)
+        self._record_config_mutation(
+            actor_id=actor_id,
+            action="research_scope.activate",
+            idempotency_key=idempotency_key,
+            resource_type="research_scope",
+            resource_version_id=version_id,
+            details={
+                "scope_hash": activated.scope_hash,
+                "lifecycle": activated.lifecycle.value,
+            },
+        )
+        return activated
+
+    def activate_universe_definition(
+        self,
+        version_id: str,
+        *,
+        actor_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> UniverseDefinitionVersion:
+        """Activate a universe definition version."""
+        replay = self._config_mutation_replay(
+            actor_id=actor_id,
+            action="universe_definition.activate",
+            idempotency_key=idempotency_key,
+            getter=self._repository.get_universe_definition,
+        )
+        if replay is not None:
+            return replay
+        version = self._repository.get_universe_definition(version_id)
+        if version is None:
+            raise KeyError(f"universe '{version_id}' not found")
+        self._activation_validator.validate_simple_activation(
+            version,
+            "universe definition",
+        )
+        activated = self._repository.activate_universe_definition(version_id)
+        self._record_config_mutation(
+            actor_id=actor_id,
+            action="universe_definition.activate",
+            idempotency_key=idempotency_key,
+            resource_type="universe_definition",
+            resource_version_id=version_id,
+            details={
+                "universe_code": activated.universe_code,
+                "lifecycle": activated.lifecycle.value,
+            },
+        )
+        return activated
+
+    def activate_indicator_view(
+        self,
+        version_id: str,
+        *,
+        actor_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> IndicatorViewVersion:
+        """Activate an indicator view version."""
+        replay = self._config_mutation_replay(
+            actor_id=actor_id,
+            action="indicator_view.activate",
+            idempotency_key=idempotency_key,
+            getter=self._repository.get_indicator_view,
+        )
+        if replay is not None:
+            return replay
+        version = self._repository.get_indicator_view(version_id)
+        if version is None:
+            raise KeyError(f"indicator view '{version_id}' not found")
+        self._activation_validator.validate_simple_activation(
+            version,
+            "indicator view",
+        )
+        activated = self._repository.activate_indicator_view(version_id)
+        self._record_config_mutation(
+            actor_id=actor_id,
+            action="indicator_view.activate",
+            idempotency_key=idempotency_key,
+            resource_type="indicator_view",
+            resource_version_id=version_id,
+            details={
+                "mode": activated.mode.value,
+                "lifecycle": activated.lifecycle.value,
+            },
+        )
+        return activated
+
+    def activate_quant_feature_set(
+        self,
+        version_id: str,
+        *,
+        actor_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> QuantFeatureSetVersion:
+        """Activate a quant feature set version."""
+        replay = self._config_mutation_replay(
+            actor_id=actor_id,
+            action="quant_feature_set.activate",
+            idempotency_key=idempotency_key,
+            getter=self._repository.get_quant_feature_set,
+        )
+        if replay is not None:
+            return replay
+        version = self._repository.get_quant_feature_set(version_id)
+        if version is None:
+            raise KeyError(f"quant feature set '{version_id}' not found")
+        self._activation_validator.validate_simple_activation(
+            version,
+            "quant feature set",
+        )
+        activated = self._repository.activate_quant_feature_set(version_id)
+        self._record_config_mutation(
+            actor_id=actor_id,
+            action="quant_feature_set.activate",
+            idempotency_key=idempotency_key,
+            resource_type="quant_feature_set",
+            resource_version_id=version_id,
+            details={
+                "required_indicator_count": len(activated.required_indicators),
+                "lifecycle": activated.lifecycle.value,
+            },
+        )
+        return activated
+
+    def activate_user_style_prompt(
+        self,
+        version_id: str,
+        *,
+        actor_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> UserStylePromptVersion:
+        """Activate a style prompt after protected-boundary validation."""
+        replay = self._config_mutation_replay(
+            actor_id=actor_id,
+            action="style_prompt.activate",
+            idempotency_key=idempotency_key,
+            getter=self._repository.get_user_style_prompt,
+        )
+        if replay is not None:
+            return replay
+        version = self._repository.get_user_style_prompt(version_id)
+        if version is None:
+            raise KeyError(f"style prompt '{version_id}' not found")
+        self._activation_validator.validate_style_prompt_activation(version)
+        activated = self._repository.activate_user_style_prompt(version_id)
+        self._record_config_mutation(
+            actor_id=actor_id,
+            action="style_prompt.activate",
+            idempotency_key=idempotency_key,
+            resource_type="style_prompt",
+            resource_version_id=version_id,
+            details={
+                "prompt_name": activated.prompt_name,
+                "lifecycle": activated.lifecycle.value,
+            },
+        )
+        return activated
+
+    def activate_tool_policy(
+        self,
+        version_id: str,
+        *,
+        actor_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> ToolPolicyVersionRef:
+        """Activate a tool policy after allow/deny compatibility validation."""
+        replay = self._config_mutation_replay(
+            actor_id=actor_id,
+            action="tool_policy.activate",
+            idempotency_key=idempotency_key,
+            getter=self._repository.get_tool_policy,
+        )
+        if replay is not None:
+            return replay
+        version = self._repository.get_tool_policy(version_id)
+        if version is None:
+            raise KeyError(f"tool policy '{version_id}' not found")
+        self._activation_validator.validate_tool_policy_activation(version)
+        activated = self._repository.activate_tool_policy(version_id)
+        self._record_config_mutation(
+            actor_id=actor_id,
+            action="tool_policy.activate",
+            idempotency_key=idempotency_key,
+            resource_type="tool_policy",
+            resource_version_id=version_id,
+            details={
+                "allowed_tool_count": len(activated.allowed_tool_names),
+                "denied_tool_count": len(activated.denied_tool_names),
+                "lifecycle": activated.lifecycle.value,
+            },
+        )
+        return activated
+
+    def create_tool_policy(
+        self,
+        version: ToolPolicyVersionRef,
+        *,
+        actor_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> ToolPolicyVersionRef:
+        """Persist a new append-only tool-policy version."""
+        replay = self._config_mutation_replay(
+            actor_id=actor_id,
+            action="tool_policy.create",
+            idempotency_key=idempotency_key,
+            getter=self._repository.get_tool_policy,
+        )
+        if replay is not None:
+            return replay
+        self._repository.save_tool_policy(version)
+        self._record_config_mutation(
+            actor_id=actor_id,
+            action="tool_policy.create",
+            idempotency_key=idempotency_key,
+            resource_type="tool_policy",
+            resource_version_id=version.version_id,
+            details={
+                "allowed_tool_count": len(version.allowed_tool_names),
+                "denied_tool_count": len(version.denied_tool_names),
+                "lifecycle": version.lifecycle.value,
+            },
+        )
+        return version
+
+    def create_provider_config(
+        self,
+        version: ProviderConfigVersion,
+        *,
+        actor_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> ProviderConfigVersion:
+        """Persist a new provider configuration version."""
+        replay = self._config_mutation_replay(
+            actor_id=actor_id,
+            action="provider_config.create",
+            idempotency_key=idempotency_key,
+            getter=self._repository.get_provider_config,
+        )
+        if replay is not None:
+            return replay
+        self._repository.save_provider_config(version)
+        self._record_config_mutation(
+            actor_id=actor_id,
+            action="provider_config.create",
+            idempotency_key=idempotency_key,
+            resource_type="provider_config",
+            resource_version_id=version.version_id,
+            details={
+                "provider_name": version.provider_name,
+                "provider_type": version.provider_type,
+                "lifecycle": version.lifecycle.value,
+            },
+        )
+        return version
+
+    def list_provider_configs(self, owner_id: str) -> list[ProviderConfigVersion]:
+        """List provider configuration versions for an owner."""
+        return self._repository.list_provider_configs(owner_id)
+
+    def write_provider_secret(
+        self,
+        *,
+        provider_config_version_id: str,
+        secret_name: str,
+        secret_value: str,
+        actor_id: str,
+        idempotency_key: str,
+        secret_store: SecretStore,
+    ) -> SecretMetadata:
+        """Encrypt a provider secret and bind it to a non-active config version."""
+        from margin.core.secret_store import WriteSecretCommand
+
+        config = self._repository.get_provider_config(provider_config_version_id)
+        if config is None:
+            raise KeyError(
+                f"provider config '{provider_config_version_id}' not found"
+            )
+        metadata = secret_store.create_or_replace(
+            WriteSecretCommand(
+                provider_name=config.provider_name,
+                secret_name=secret_name,
+                secret_value=secret_value,
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+            )
+        )
+        self._repository.attach_provider_secret(
+            provider_config_version_id,
+            metadata.version_id,
+        )
+        self._repository.record_config_audit(
+            actor_id=actor_id,
+            resource_type="provider_secret",
+            resource_version_id=metadata.version_id,
+            action="provider_secret.write",
+            idempotency_key=idempotency_key,
+            details={
+                "provider_config_version_id": provider_config_version_id,
+                "provider_name": config.provider_name,
+                "secret_name": secret_name,
+                "secret_version_id": metadata.version_id,
+                "last_four": metadata.last_four,
+                "status": metadata.status,
+            },
+        )
+        return metadata
+
+    def create_universe_definition(
+        self,
+        version: UniverseDefinitionVersion,
+        *,
+        actor_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> UniverseDefinitionVersion:
+        """Persist a new universe definition version."""
+        replay = self._config_mutation_replay(
+            actor_id=actor_id,
+            action="universe_definition.create",
+            idempotency_key=idempotency_key,
+            getter=self._repository.get_universe_definition,
+        )
+        if replay is not None:
+            return replay
+        self._repository.save_universe_definition(version)
+        self._record_config_mutation(
+            actor_id=actor_id,
+            action="universe_definition.create",
+            idempotency_key=idempotency_key,
+            resource_type="universe_definition",
+            resource_version_id=version.version_id,
+            details={
+                "universe_code": version.universe_code,
+                "lifecycle": version.lifecycle.value,
+            },
+        )
+        return version
+
+    def list_universe_definitions(
+        self,
+        owner_id: str,
+    ) -> list[UniverseDefinitionVersion]:
+        """List universe definition versions for an owner."""
+        return self._repository.list_universe_definitions(owner_id)
+
+    def create_indicator_view(
+        self,
+        version: IndicatorViewVersion,
+        *,
+        actor_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> IndicatorViewVersion:
+        """Persist a new indicator view version."""
+        replay = self._config_mutation_replay(
+            actor_id=actor_id,
+            action="indicator_view.create",
+            idempotency_key=idempotency_key,
+            getter=self._repository.get_indicator_view,
+        )
+        if replay is not None:
+            return replay
+        self._repository.save_indicator_view(version)
+        self._record_config_mutation(
+            actor_id=actor_id,
+            action="indicator_view.create",
+            idempotency_key=idempotency_key,
+            resource_type="indicator_view",
+            resource_version_id=version.version_id,
+            details={"mode": version.mode.value, "lifecycle": version.lifecycle.value},
+        )
+        return version
+
+    def list_indicator_views(self, owner_id: str) -> list[IndicatorViewVersion]:
+        """List indicator view versions for an owner."""
+        return self._repository.list_indicator_views(owner_id)
+
+    def create_quant_feature_set(
+        self,
+        version: QuantFeatureSetVersion,
+        *,
+        actor_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> QuantFeatureSetVersion:
+        """Persist a new quant feature set version."""
+        replay = self._config_mutation_replay(
+            actor_id=actor_id,
+            action="quant_feature_set.create",
+            idempotency_key=idempotency_key,
+            getter=self._repository.get_quant_feature_set,
+        )
+        if replay is not None:
+            return replay
+        self._repository.save_quant_feature_set(version)
+        self._record_config_mutation(
+            actor_id=actor_id,
+            action="quant_feature_set.create",
+            idempotency_key=idempotency_key,
+            resource_type="quant_feature_set",
+            resource_version_id=version.version_id,
+            details={
+                "required_indicator_count": len(version.required_indicators),
+                "optional_indicator_count": len(version.optional_indicators),
+                "lifecycle": version.lifecycle.value,
+            },
+        )
+        return version
+
+    def list_quant_feature_sets(self, owner_id: str) -> list[QuantFeatureSetVersion]:
+        """List quant feature set versions for an owner."""
+        return self._repository.list_quant_feature_sets(owner_id)
+
+    def create_quant_strategy(
+        self,
+        version: QuantStrategyVersion,
+        *,
+        actor_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> QuantStrategyVersion:
+        """Persist a new quant strategy version."""
+        replay = self._config_mutation_replay(
+            actor_id=actor_id,
+            action="quant_strategy.create",
+            idempotency_key=idempotency_key,
+            getter=self._repository.get_quant_strategy,
+        )
+        if replay is not None:
+            return replay
+        self._repository.save_quant_strategy(version)
+        self._record_config_mutation(
+            actor_id=actor_id,
+            action="quant_strategy.create",
+            idempotency_key=idempotency_key,
+            resource_type="quant_strategy",
+            resource_version_id=version.version_id,
+            details={
+                "strategy_family": version.strategy_family,
+                "calibration_report_id": version.calibration_report_id,
+                "lifecycle": version.lifecycle.value,
+            },
+        )
+        return version
+
+    def list_quant_strategies(self, owner_id: str) -> list[QuantStrategyVersion]:
+        """List quant strategy versions for an owner."""
+        return self._repository.list_quant_strategies(owner_id)
+
+    def create_user_style_prompt(
+        self,
+        version: UserStylePromptVersion,
+        *,
+        actor_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> UserStylePromptVersion:
+        """Persist a new user style prompt version."""
+        replay = self._config_mutation_replay(
+            actor_id=actor_id,
+            action="style_prompt.create",
+            idempotency_key=idempotency_key,
+            getter=self._repository.get_user_style_prompt,
+        )
+        if replay is not None:
+            return replay
+        self._repository.save_user_style_prompt(version)
+        self._record_config_mutation(
+            actor_id=actor_id,
+            action="style_prompt.create",
+            idempotency_key=idempotency_key,
+            resource_type="style_prompt",
+            resource_version_id=version.version_id,
+            details={
+                "prompt_name": version.prompt_name,
+                "content_length": len(version.content),
+                "lifecycle": version.lifecycle.value,
+            },
+        )
+        return version
+
+    def list_user_style_prompts(
+        self,
+        owner_id: str,
+    ) -> list[UserStylePromptVersion]:
+        """List user style prompt versions for an owner."""
+        return self._repository.list_user_style_prompts(owner_id)
+
+    def create_research_scope(
+        self,
+        version: ResearchScopeVersion,
+        *,
+        actor_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> ResearchScopeVersion:
+        """Persist a new frozen research scope version."""
+        replay = self._config_mutation_replay(
+            actor_id=actor_id,
+            action="research_scope.create",
+            idempotency_key=idempotency_key,
+            getter=self._repository.get_research_scope,
+        )
+        if replay is not None:
+            return replay
+        self._repository.save_research_scope(version)
+        self._record_config_mutation(
+            actor_id=actor_id,
+            action="research_scope.create",
+            idempotency_key=idempotency_key,
+            resource_type="research_scope",
+            resource_version_id=version.version_id,
+            details={
+                "scope_hash": version.scope_hash,
+                "provider_config_count": len(version.provider_config_version_ids),
+                "lifecycle": version.lifecycle.value,
+            },
+        )
+        return version
+
+    def list_research_scopes(self, owner_id: str) -> list[ResearchScopeVersion]:
+        """List research scope versions for an owner."""
+        return self._repository.list_research_scopes(owner_id)
+
     def suspend_version(
         self,
         strategy_id: str,
@@ -409,6 +1052,65 @@ class StrategyService:
             templates.
         """
         return list_templates()
+
+    def _config_mutation_replay(
+        self,
+        *,
+        actor_id: str | None,
+        action: str,
+        idempotency_key: str | None,
+        getter: Callable[[str], Any | None],
+    ) -> Any | None:
+        """Return a prior mutation resource for the same replay key."""
+        if actor_id is None and idempotency_key is None:
+            return None
+        if not actor_id or not idempotency_key:
+            raise ValueError(
+                "actor_id and idempotency_key must be provided together"
+            )
+        audit = self._repository.get_config_audit(
+            actor_id=actor_id,
+            action=action,
+            idempotency_key=idempotency_key,
+        )
+        if audit is None:
+            return None
+        if isinstance(audit, dict):
+            resource_version_id = str(audit["resource_version_id"])
+        else:
+            resource_version_id = str(audit.resource_version_id)
+        resource = getter(resource_version_id)
+        if resource is None:
+            raise RuntimeError(
+                "config audit replay references a missing resource version"
+            )
+        return resource
+
+    def _record_config_mutation(
+        self,
+        *,
+        actor_id: str | None,
+        action: str,
+        idempotency_key: str | None,
+        resource_type: str,
+        resource_version_id: str,
+        details: dict[str, object],
+    ) -> None:
+        """Append a safe mutation audit when called from an authenticated API."""
+        if actor_id is None and idempotency_key is None:
+            return
+        if not actor_id or not idempotency_key:
+            raise ValueError(
+                "actor_id and idempotency_key must be provided together"
+            )
+        self._repository.record_config_audit(
+            actor_id=actor_id,
+            resource_type=resource_type,
+            resource_version_id=resource_version_id,
+            action=action,
+            idempotency_key=idempotency_key,
+            details=details,
+        )
 
     def _create_version(
         self,

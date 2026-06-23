@@ -8,10 +8,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  createPositionReview,
   createResearchItemFeedback,
-  createResearchRun,
-  evaluatePositionMonitoring,
+  fetchResearchCandidates,
+  fetchResearchRunDetailV2,
+  startValuationDiscoveryRefresh,
 } from "./api";
 
 /** Mock for `response.json()` shared across tests. */
@@ -34,80 +34,30 @@ describe("api mutation helpers", () => {
     vi.unstubAllGlobals();
   });
 
-  it("posts a research run creation request to the backend", async () => {
-    json.mockResolvedValueOnce({ run_id: "run_1" });
+  it("posts a valuation-discovery refresh with local admin headers", async () => {
+    json.mockResolvedValueOnce({ run_id: "run_1", status: "pending" });
+    window.localStorage.setItem("margin.adminApiToken", "admin-token");
+    window.localStorage.setItem("margin.csrfToken", "csrf-token");
+    vi.stubGlobal("crypto", { randomUUID: () => "idempotency-1" });
 
-    await createResearchRun({
-      strategy_id: "default",
-      version_id: "v0.1",
-      portfolio_id: "demo",
-      symbols: ["000001.SZ", "600000.SH"],
+    await startValuationDiscoveryRefresh({
+      decision_at: "2026-06-23T08:30:00.000Z",
+      scope_version_id: "scope-1",
     });
 
     expect(fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/v1/research-runs",
+      "http://localhost:8000/api/v1/valuation-discovery/refreshes",
       expect.objectContaining({
         method: "POST",
         cache: "no-store",
-        body: JSON.stringify({
-          strategy_id: "default",
-          version_id: "v0.1",
-          portfolio_id: "demo",
-          symbols: ["000001.SZ", "600000.SH"],
+        headers: expect.objectContaining({
+          Authorization: "Bearer admin-token",
+          "Idempotency-Key": "idempotency-1",
+          "X-CSRF-Token": "csrf-token",
         }),
-      }),
-    );
-  });
-
-  it("posts deterministic position monitoring inputs", async () => {
-    json.mockResolvedValueOnce({ position_id: "pos_1" });
-
-    await evaluatePositionMonitoring("pos_1", {
-      portfolio_id: "demo",
-      current_price: 9.7,
-      evidence_refs: ["ev_1"],
-      model_rank_delta: -0.3,
-      industry_exposure: 0.42,
-      strategy_failure: true,
-    });
-
-    expect(fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/v1/positions/pos_1/monitoring/evaluate",
-      expect.objectContaining({
-        method: "POST",
-        cache: "no-store",
         body: JSON.stringify({
-          portfolio_id: "demo",
-          current_price: 9.7,
-          evidence_refs: ["ev_1"],
-          model_rank_delta: -0.3,
-          industry_exposure: 0.42,
-          strategy_failure: true,
-        }),
-      }),
-    );
-  });
-
-  it("posts a manual position review record", async () => {
-    json.mockResolvedValueOnce({ review_id: "rv_1" });
-
-    await createPositionReview("pos_1", {
-      portfolio_id: "demo",
-      alert_id: "al_1",
-      decision: "reduce",
-      rationale: "触发 P0 后降低仓位",
-    });
-
-    expect(fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/v1/positions/pos_1/reviews",
-      expect.objectContaining({
-        method: "POST",
-        cache: "no-store",
-        body: JSON.stringify({
-          portfolio_id: "demo",
-          alert_id: "al_1",
-          decision: "reduce",
-          rationale: "触发 P0 后降低仓位",
+          decision_at: "2026-06-23T08:30:00.000Z",
+          scope_version_id: "scope-1",
         }),
       }),
     );
@@ -132,5 +82,77 @@ describe("api mutation helpers", () => {
         }),
       }),
     );
+  });
+
+  it("fetches v0.2 research candidates with server-side filters", async () => {
+    json.mockResolvedValueOnce({ items: [], page_info: { has_next_page: false } });
+
+    await fetchResearchCandidates({
+      data_status: "complete",
+      limit: 25,
+      review_required: "true",
+      scope_version_id: "scope-1",
+      screening_status: "pass",
+      universe: "HS300",
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/research?scope_version_id=scope-1&universe=HS300&limit=25&screening_status=pass&data_status=complete&review_required=true",
+      expect.objectContaining({
+        next: { revalidate: 30 },
+      }),
+    );
+  });
+
+  it("maps valuation-discovery run status into research progress detail", async () => {
+    json.mockResolvedValueOnce({
+      run_id: "vdr-1",
+      scope_version_id: "scope-1",
+      state: "running",
+      steps: [
+        {
+          attempt_no: 1,
+          error_code: null,
+          finished_at: "2026-06-23T08:31:00Z",
+          output_ref: "quant_run_1",
+          started_at: "2026-06-23T08:30:00Z",
+          state: "succeeded",
+          step_id: "QUANT_RUN",
+        },
+        {
+          attempt_no: 1,
+          error_code: "provider_budget_exceeded",
+          finished_at: null,
+          output_ref: null,
+          started_at: "2026-06-23T08:32:00Z",
+          state: "waiting_provider",
+          step_id: "NEWS_REFRESH",
+        },
+      ],
+    });
+
+    const detail = await fetchResearchRunDetailV2("vdr-1");
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/valuation-discovery/runs/vdr-1",
+      expect.objectContaining({
+        next: { revalidate: 30 },
+      }),
+    );
+    expect(detail).toMatchObject({
+      completed_count: 1,
+      failed_count: 0,
+      pending_count: 1,
+      run_id: "vdr-1",
+      status: "running",
+      target_count: 2,
+      trace_id: "vdr-1",
+      wait_state: "waiting_provider",
+    });
+    expect(detail.steps[0]).toMatchObject({
+      error_code: null,
+      status: "succeeded",
+      step: "QUANT_RUN",
+    });
   });
 });

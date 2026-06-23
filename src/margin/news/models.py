@@ -16,6 +16,7 @@ helpers used by the news acquisition pipeline. The pipeline flow is:
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime
 from enum import IntEnum, StrEnum
 from typing import Any
@@ -70,6 +71,238 @@ def ensure_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
+
+
+# ---------------------------------------------------------------------------
+# v0.2 news refresh target queue
+# ---------------------------------------------------------------------------
+
+
+class NewsRefreshStatus(StrEnum):
+    """Durable status for a target-driven news refresh run."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    WAITING_RATE_LIMIT = "waiting_rate_limit"
+    WAITING_BUDGET = "waiting_budget"
+    COMPLETED = "completed"
+    PARTIAL = "partial"
+    FAILED = "failed"
+
+    @staticmethod
+    def is_terminal_counts(
+        *,
+        target_count: int,
+        completed_count: int,
+        failed_final_count: int,
+    ) -> bool:
+        """Return whether all persisted targets reached a terminal target state."""
+        return target_count == completed_count + failed_final_count
+
+
+class NewsTargetStatus(StrEnum):
+    """Durable processing state for one research target in a news refresh run."""
+
+    PENDING = "pending"
+    CLAIMED = "claimed"
+    COMPLETED = "completed"
+    RETRY = "retry"
+    FAILED_FINAL = "failed_final"
+
+
+class TargetTriggerType(StrEnum):
+    """Why a security entered the news refresh target set."""
+
+    QUANT_PASS = "quant_pass"
+    MATERIAL_FILING = "material_filing"
+    THESIS_INVALIDATION_RISK = "thesis_invalidation_risk"
+    REVIEW_DUE = "review_due"
+    NEW_PASS = "new_pass"
+    NEAR_THRESHOLD = "near_threshold"
+
+
+class NewsTarget(BaseModel):
+    """One complete target that must be searched before a refresh run can reconcile."""
+
+    scope_version_id: str
+    quant_run_id: str
+    security_id: str
+    symbol: str
+    name: str
+    trigger_type: TargetTriggerType
+    decision_at: datetime
+    priority: int
+    status: NewsTargetStatus = NewsTargetStatus.PENDING
+    attempts: int = 0
+    next_attempt_at: datetime | None = None
+    last_error_code: str | None = None
+    aliases: tuple[str, ...] = Field(default_factory=tuple)
+    industry_terms: tuple[str, ...] = Field(default_factory=tuple)
+
+    @field_validator("decision_at", "next_attempt_at")
+    @classmethod
+    def normalize_target_timestamp(cls, value: datetime | None) -> datetime | None:
+        """Normalize queue timestamps to UTC."""
+        if value is None:
+            return None
+        return ensure_utc(value)
+
+    @property
+    def dedupe_key(self) -> str:
+        """Stable target key independent of worker attempts or batching."""
+        payload = "|".join(
+            [
+                self.scope_version_id,
+                self.quant_run_id,
+                self.security_id,
+                self.trigger_type.value,
+                self.decision_at.date().isoformat(),
+            ]
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+class NewsRefreshRun(BaseModel):
+    """Auditable summary of a target-driven news refresh run."""
+
+    run_id: str
+    scope_version_id: str
+    quant_run_id: str
+    decision_at: datetime
+    status: NewsRefreshStatus = NewsRefreshStatus.PENDING
+    target_count: int = 0
+    completed_count: int = 0
+    failed_final_count: int = 0
+    created_at: datetime = Field(default_factory=utc_now)
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    error_summary: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("decision_at", "created_at", "started_at", "finished_at")
+    @classmethod
+    def normalize_run_timestamp(cls, value: datetime | None) -> datetime | None:
+        """Normalize run timestamps to UTC."""
+        if value is None:
+            return None
+        return ensure_utc(value)
+
+
+class NewsTargetWorkItem(BaseModel):
+    """Claimed target work item returned by the durable queue."""
+
+    target_id: str
+    run_id: str
+    target: NewsTarget
+    claimed_at: datetime
+
+    @field_validator("claimed_at")
+    @classmethod
+    def normalize_claimed_at(cls, value: datetime) -> datetime:
+        """Normalize claim timestamp to UTC."""
+        return ensure_utc(value)
+
+    model_config = {"frozen": True}
+
+
+class TargetReconciliation(BaseModel):
+    """Current target counts for a refresh run."""
+
+    target_count: int
+    pending_count: int
+    claimed_count: int
+    retry_count: int
+    completed_count: int
+    failed_final_count: int
+    is_terminal: bool
+
+    model_config = {"frozen": True}
+
+
+class DocumentSecurityLink(BaseModel):
+    """Structured relation between a document event and a security."""
+
+    event_id: str
+    security_id: str
+    symbol: str
+    relation_type: str = "mentioned"
+    source: str = "deterministic_mapper"
+    created_at: datetime = Field(default_factory=utc_now)
+
+    @field_validator("created_at")
+    @classmethod
+    def normalize_link_created_at(cls, value: datetime) -> datetime:
+        """Normalize link timestamp to UTC."""
+        return ensure_utc(value)
+
+    model_config = {"frozen": True}
+
+
+class DocumentMaterialityScore(BaseModel):
+    """Deterministic materiality score for one event/security pair."""
+
+    event_id: str | None = None
+    security_id: str
+    relevance_score: float
+    materiality_score: float
+    novelty_score: float
+    trigger_type: str
+    risk_polarity: str
+    is_material: bool
+    reason_codes: tuple[str, ...] = Field(default_factory=tuple)
+    scoring_version: str
+    is_untrusted_external_text: bool
+    can_directly_change_research_state: bool
+    created_at: datetime = Field(default_factory=utc_now)
+
+    @field_validator("created_at")
+    @classmethod
+    def normalize_score_created_at(cls, value: datetime) -> datetime:
+        """Normalize score timestamp to UTC."""
+        return ensure_utc(value)
+
+    model_config = {"frozen": True}
+
+
+class NewsContextDocument(BaseModel):
+    """One selected document in a downstream news context bundle."""
+
+    event_id: str
+    title: str
+    source_level: SourceLevel
+    materiality_score: float
+    novelty_score: float
+    published_at: datetime
+    rank: int = 0
+    selection_reason: str = "materiality_rank"
+
+    @field_validator("published_at")
+    @classmethod
+    def normalize_context_document_published_at(cls, value: datetime) -> datetime:
+        """Normalize publication timestamp to UTC."""
+        return ensure_utc(value)
+
+    model_config = {"frozen": True}
+
+
+class NewsContextBundle(BaseModel):
+    """Bundle of news context passed to RAG/AI with target-completion semantics."""
+
+    bundle_id: str
+    run_id: str
+    security_id: str
+    target_completion_state: str
+    can_support_verified_carry_forward: bool
+    incomplete_reason_codes: tuple[str, ...] = Field(default_factory=tuple)
+    documents: tuple[NewsContextDocument, ...] = Field(default_factory=tuple)
+    created_at: datetime = Field(default_factory=utc_now)
+
+    @field_validator("created_at")
+    @classmethod
+    def normalize_bundle_created_at(cls, value: datetime) -> datetime:
+        """Normalize bundle timestamp to UTC."""
+        return ensure_utc(value)
+
+    model_config = {"frozen": True}
 
 
 # ---------------------------------------------------------------------------

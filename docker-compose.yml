@@ -34,19 +34,25 @@ services:
       MARGIN_RERANK_BASE_URL: ${MARGIN_RERANK_BASE_URL:-}
       MARGIN_RERANK_API_KEY: ${MARGIN_RERANK_API_KEY:-}
       MARGIN_RERANK_MODEL: ${MARGIN_RERANK_MODEL:-}
-      MARGIN_SECRET_TUSHARE_TOKEN: ${MARGIN_SECRET_TUSHARE_TOKEN:-}
+      MARGIN_TUSHARE_TOKEN: ${MARGIN_TUSHARE_TOKEN:-}
+      MARGIN_TUSHARE_HTTP_URL: ${MARGIN_TUSHARE_HTTP_URL:-}
+      MARGIN_SECRET_MASTER_KEY: ${MARGIN_SECRET_MASTER_KEY:-dev-only-change-me-32-byte-key!!}
+      MARGIN_SECRET_KEY_VERSION: ${MARGIN_SECRET_KEY_VERSION:-local-v1}
+      MARGIN_ADMIN_API_TOKEN: ${MARGIN_ADMIN_API_TOKEN:-dev-admin-token}
+      MARGIN_CSRF_TOKEN: ${MARGIN_CSRF_TOKEN:-dev-csrf-token}
       MARGIN_LOG_LEVEL: ${MARGIN_LOG_LEVEL:-INFO}
       MARGIN_LOG_FORMAT: ${MARGIN_LOG_FORMAT:-json}
       MARGIN_METRICS_ENABLED: ${MARGIN_METRICS_ENABLED:-true}
       MARGIN_ENVIRONMENT: ${MARGIN_ENVIRONMENT:-development}
+      MARGIN_CAPACITY_LIMIT_VERSION: ${MARGIN_CAPACITY_LIMIT_VERSION:-limits-v0.2.0}
     depends_on:
       postgres:
         condition: service_healthy
     command: ["python", "scripts/migrate.py"]
     restart: "no"
 
-  # One-shot seed service; populates demo data after migrations finish.
-  seed:
+  # One-shot versioned config bootstrap; imports env secrets into Secret Store.
+  bootstrap:
     build:
       context: .
       dockerfile: Dockerfile
@@ -55,7 +61,7 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-    command: ["python", "scripts/seed_demo.py"]
+    command: ["python", "scripts/bootstrap_config.py"]
     restart: "no"
 
   # Main API service exposing REST endpoints and Prometheus metrics.
@@ -68,7 +74,7 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      seed:
+      bootstrap:
         condition: service_completed_successfully
     volumes:
       # Persistent volumes for audit logs and snapshots survive container restarts.
@@ -80,6 +86,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+    restart: unless-stopped
 
   # Background worker (runs scheduled or async tasks).
   worker:
@@ -89,12 +96,18 @@ services:
     environment:
       <<: *backend-environment
     depends_on:
-      seed:
+      bootstrap:
         condition: service_completed_successfully
     volumes:
       - margin-audit:/app/.margin/audit
       - margin-snapshots:/app/.margin/snapshots
     command: ["python", "-m", "margin.worker"]
+    healthcheck:
+      test: ["CMD", "python", "scripts/worker_health_check.py"]
+      interval: 30s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
 
   # Next.js frontend.
   web:
@@ -108,6 +121,7 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    restart: unless-stopped
 
   # Prometheus scrapes the API /metrics endpoint.
   prometheus:
@@ -119,6 +133,7 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    restart: unless-stopped
 
   # Grafana visualizes Prometheus metrics with provisioned dashboards.
   grafana:
@@ -134,6 +149,7 @@ services:
     depends_on:
       prometheus:
         condition: service_started
+    restart: unless-stopped
 
 volumes:
   margin-postgres:

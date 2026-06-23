@@ -46,6 +46,63 @@ class SourceCursorRow(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class NewsRefreshRunRow(Base):
+    """Durable target-driven news refresh run."""
+
+    __tablename__ = "news_refresh_runs"
+
+    run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    scope_version_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    quant_run_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    decision_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    target_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    completed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_final_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_summary: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class NewsRefreshTargetRow(Base):
+    """One persisted research target in a news refresh run."""
+
+    __tablename__ = "news_refresh_targets"
+    __table_args__ = (
+        UniqueConstraint("run_id", "dedupe_key", name="uq_news_target_dedupe"),
+        Index(
+            "ix_news_target_claim",
+            "run_id",
+            "status",
+            "priority",
+            "next_attempt_at",
+        ),
+        Index("ix_news_target_security_run", "security_id", "run_id"),
+    )
+
+    target_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("news_refresh_runs.run_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    dedupe_key: Mapped[str] = mapped_column(String(96), nullable=False)
+    security_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    trigger_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_code: Mapped[str | None] = mapped_column(String(64))
+    last_error_message: Mapped[str | None] = mapped_column(Text)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class RawSnapshotRow(Base):
     """Immutable raw downloaded content snapshot metadata.
 
@@ -288,3 +345,110 @@ class RepostEdgeRow(Base):
     )
     reason: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DocumentSecurityLinkRow(Base):
+    """Many-to-many security relation for a document event."""
+
+    __tablename__ = "document_security_links"
+    __table_args__ = (
+        Index("ix_document_security_links_security", "security_id", "event_id"),
+    )
+
+    event_id: Mapped[str] = mapped_column(
+        ForeignKey("document_events.event_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    security_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False)
+    relation_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DocumentMaterialityScoreRow(Base):
+    """Deterministic materiality score per document/security/scoring version."""
+
+    __tablename__ = "document_materiality_scores"
+    __table_args__ = (
+        UniqueConstraint(
+            "event_id",
+            "security_id",
+            "scoring_version",
+            name="uq_document_materiality_version",
+        ),
+        Index(
+            "ix_document_materiality_security",
+            "security_id",
+            "is_material",
+            "materiality_score",
+        ),
+    )
+
+    score_id: Mapped[int] = mapped_column(
+        BigInteger,
+        primary_key=True,
+        autoincrement=True,
+    )
+    event_id: Mapped[str] = mapped_column(
+        ForeignKey("document_events.event_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    security_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    relevance_score: Mapped[float] = mapped_column(Float, nullable=False)
+    materiality_score: Mapped[float] = mapped_column(Float, nullable=False)
+    novelty_score: Mapped[float] = mapped_column(Float, nullable=False)
+    trigger_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    risk_polarity: Mapped[str] = mapped_column(String(32), nullable=False)
+    is_material: Mapped[bool] = mapped_column(nullable=False)
+    reason_codes: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    scoring_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    is_untrusted_external_text: Mapped[bool] = mapped_column(nullable=False)
+    can_directly_change_research_state: Mapped[bool] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NewsContextBundleRow(Base):
+    """Persisted context bundle handed to RAG/AI modules."""
+
+    __tablename__ = "news_context_bundles"
+
+    bundle_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("news_refresh_runs.run_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    security_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    target_completion_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    can_support_verified_carry_forward: Mapped[bool] = mapped_column(nullable=False)
+    incomplete_reason_codes: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NewsContextDocumentRow(Base):
+    """Ordered document membership for a news context bundle."""
+
+    __tablename__ = "news_context_documents"
+    __table_args__ = (
+        UniqueConstraint(
+            "bundle_id",
+            "event_id",
+            name="uq_news_context_document",
+        ),
+    )
+
+    bundle_id: Mapped[str] = mapped_column(
+        ForeignKey("news_context_bundles.bundle_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    event_id: Mapped[str] = mapped_column(
+        ForeignKey("document_events.event_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    selection_reason: Mapped[str] = mapped_column(Text, nullable=False)

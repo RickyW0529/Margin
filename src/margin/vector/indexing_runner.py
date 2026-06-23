@@ -92,6 +92,54 @@ class DocumentIndexingRunner:
         return indexed
 
 
+class IndexingRunner:
+    """Lease-aware v0.2 runner for durable vector-index outbox recovery."""
+
+    def __init__(
+        self,
+        *,
+        news_repository: NewsRepository,
+        pipeline: Any,
+        lease_seconds: int = 300,
+    ) -> None:
+        """Initialize the instance."""
+        self._news = news_repository
+        self._pipeline = pipeline
+        self._lease_seconds = lease_seconds
+
+    def claim_next(self, *, now=None):  # noqa: ANN001, ANN201
+        """Claim one eligible outbox row."""
+        claimed = self._news.claim_outbox_with_lease(
+            "vector_index",
+            limit=1,
+            now=now,
+            lease_seconds=self._lease_seconds,
+        )
+        return claimed[0] if claimed else None
+
+    def process_one(self, *, event_id: str) -> None:
+        """Process one document event and preserve retryability on provider failure."""
+        row = self._news.get_outbox_by_event(event_id, "vector_index")
+        if row is None:
+            return
+        if row.status != "processing":
+            claimed = self.claim_next()
+            if claimed is None:
+                return
+            row = claimed
+        try:
+            event = self._news.get_document_event(event_id)
+            if event is None:
+                raise KeyError(f"document event '{event_id}' not found")
+            self._pipeline.index_event(event)
+            self._news.mark_outbox_succeeded(row.outbox_id)
+        except Exception as exc:  # noqa: BLE001
+            self._news.mark_outbox_retryable(
+                row.outbox_id,
+                f"{type(exc).__name__}: {exc}",
+            )
+
+
 def _provider_name(provider: Any) -> str:
     """Return the provider's canonical name.
 
