@@ -6,11 +6,29 @@ import uuid
 from collections.abc import Callable, Iterable
 from typing import Protocol, TypeVar
 
-from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from margin.news.models import utc_now
+from margin.sql.strategy_queries import (
+    active_indicator_views_by_owner,
+    active_provider_configs_by_owner,
+    active_provider_configs_by_owner_and_provider,
+    active_quant_feature_sets_by_owner,
+    active_quant_strategies_by_owner_and_family,
+    active_research_scopes_by_owner,
+    active_tool_policies_by_owner,
+    active_universe_definitions_by_owner,
+    active_user_style_prompts_by_owner_and_name,
+    config_audit_by_replay_key,
+    indicator_views_by_owner,
+    insert_config_audit,
+    provider_configs_by_owner,
+    quant_feature_sets_by_owner,
+    quant_strategies_by_owner,
+    research_scopes_by_owner,
+    universe_definitions_by_owner,
+    user_style_prompts_by_owner,
+)
 from margin.strategy.db_models import (
     IndicatorViewVersionRow,
     ProviderConfigVersionRow,
@@ -766,9 +784,7 @@ class SQLAlchemyStrategyRepository:
         """List provider configuration versions for an owner."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(ProviderConfigVersionRow)
-                .where(ProviderConfigVersionRow.owner_id == owner_id)
-                .order_by(ProviderConfigVersionRow.version_id)
+                provider_configs_by_owner(owner_id)
             ).all()
             return [_provider_config_from_row(row) for row in rows]
 
@@ -776,11 +792,9 @@ class SQLAlchemyStrategyRepository:
         """List enabled active provider configuration versions for an owner."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(ProviderConfigVersionRow)
-                .where(ProviderConfigVersionRow.owner_id == owner_id)
-                .where(ProviderConfigVersionRow.lifecycle == ConfigLifecycle.ACTIVE.value)
-                .where(ProviderConfigVersionRow.enabled.is_(True))
-                .order_by(ProviderConfigVersionRow.version_id)
+                active_provider_configs_by_owner(
+                    owner_id, ConfigLifecycle.ACTIVE.value
+                )
             ).all()
             return [_provider_config_from_row(row) for row in rows]
 
@@ -808,10 +822,11 @@ class SQLAlchemyStrategyRepository:
             if row is None:
                 raise KeyError(f"provider config '{version_id}' not found")
             active_rows = session.scalars(
-                select(ProviderConfigVersionRow)
-                .where(ProviderConfigVersionRow.owner_id == row.owner_id)
-                .where(ProviderConfigVersionRow.provider_name == row.provider_name)
-                .where(ProviderConfigVersionRow.lifecycle == ConfigLifecycle.ACTIVE.value)
+                active_provider_configs_by_owner_and_provider(
+                    row.owner_id,
+                    row.provider_name,
+                    ConfigLifecycle.ACTIVE.value,
+                )
             ).all()
             for active in active_rows:
                 if active.version_id != version_id:
@@ -840,25 +855,20 @@ class SQLAlchemyStrategyRepository:
     ) -> list[UniverseDefinitionVersion]:
         """List active universe definitions for an owner."""
         with self._session_factory() as session:
-            query = (
-                select(UniverseDefinitionVersionRow)
-                .where(UniverseDefinitionVersionRow.owner_id == owner_id)
-                .where(UniverseDefinitionVersionRow.lifecycle == ConfigLifecycle.ACTIVE.value)
-            )
-            if universe_code is not None:
-                query = query.where(
-                    UniverseDefinitionVersionRow.universe_code == universe_code
+            rows = session.scalars(
+                active_universe_definitions_by_owner(
+                    owner_id,
+                    ConfigLifecycle.ACTIVE.value,
+                    universe_code=universe_code,
                 )
-            rows = session.scalars(query.order_by(UniverseDefinitionVersionRow.version_id)).all()
+            ).all()
             return [_universe_from_row(row) for row in rows]
 
     def list_universe_definitions(self, owner_id: str) -> list[UniverseDefinitionVersion]:
         """List all universe definition versions for an owner."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(UniverseDefinitionVersionRow)
-                .where(UniverseDefinitionVersionRow.owner_id == owner_id)
-                .order_by(UniverseDefinitionVersionRow.version_id)
+                universe_definitions_by_owner(owner_id)
             ).all()
             return [_universe_from_row(row) for row in rows]
 
@@ -872,15 +882,10 @@ class SQLAlchemyStrategyRepository:
             if row is None:
                 raise KeyError(f"universe '{version_id}' not found")
             active_rows = session.scalars(
-                select(UniverseDefinitionVersionRow)
-                .where(UniverseDefinitionVersionRow.owner_id == row.owner_id)
-                .where(
-                    UniverseDefinitionVersionRow.universe_code
-                    == row.universe_code
-                )
-                .where(
-                    UniverseDefinitionVersionRow.lifecycle
-                    == ConfigLifecycle.ACTIVE.value
+                active_universe_definitions_by_owner(
+                    row.owner_id,
+                    ConfigLifecycle.ACTIVE.value,
+                    universe_code=row.universe_code,
                 )
             ).all()
             for active in active_rows:
@@ -906,10 +911,7 @@ class SQLAlchemyStrategyRepository:
         """Return the active indicator view for an owner."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(IndicatorViewVersionRow)
-                .where(IndicatorViewVersionRow.owner_id == owner_id)
-                .where(IndicatorViewVersionRow.lifecycle == ConfigLifecycle.ACTIVE.value)
-                .order_by(IndicatorViewVersionRow.version_id)
+                active_indicator_views_by_owner(owner_id, ConfigLifecycle.ACTIVE.value)
             ).all()
             return _single_or_none(_indicator_view_from_row(row) for row in rows)
 
@@ -917,9 +919,7 @@ class SQLAlchemyStrategyRepository:
         """List all indicator view versions for an owner."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(IndicatorViewVersionRow)
-                .where(IndicatorViewVersionRow.owner_id == owner_id)
-                .order_by(IndicatorViewVersionRow.version_id)
+                indicator_views_by_owner(owner_id)
             ).all()
             return [_indicator_view_from_row(row) for row in rows]
 
@@ -930,11 +930,8 @@ class SQLAlchemyStrategyRepository:
             if row is None:
                 raise KeyError(f"indicator view '{version_id}' not found")
             active_rows = session.scalars(
-                select(IndicatorViewVersionRow)
-                .where(IndicatorViewVersionRow.owner_id == row.owner_id)
-                .where(
-                    IndicatorViewVersionRow.lifecycle
-                    == ConfigLifecycle.ACTIVE.value
+                active_indicator_views_by_owner(
+                    row.owner_id, ConfigLifecycle.ACTIVE.value
                 )
             ).all()
             for active in active_rows:
@@ -960,10 +957,9 @@ class SQLAlchemyStrategyRepository:
         """Return the active quant feature set for an owner."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(QuantFeatureSetVersionRow)
-                .where(QuantFeatureSetVersionRow.owner_id == owner_id)
-                .where(QuantFeatureSetVersionRow.lifecycle == ConfigLifecycle.ACTIVE.value)
-                .order_by(QuantFeatureSetVersionRow.version_id)
+                active_quant_feature_sets_by_owner(
+                    owner_id, ConfigLifecycle.ACTIVE.value
+                )
             ).all()
             return _single_or_none(_quant_feature_set_from_row(row) for row in rows)
 
@@ -971,9 +967,7 @@ class SQLAlchemyStrategyRepository:
         """List all quant feature set versions for an owner."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(QuantFeatureSetVersionRow)
-                .where(QuantFeatureSetVersionRow.owner_id == owner_id)
-                .order_by(QuantFeatureSetVersionRow.version_id)
+                quant_feature_sets_by_owner(owner_id)
             ).all()
             return [_quant_feature_set_from_row(row) for row in rows]
 
@@ -987,11 +981,8 @@ class SQLAlchemyStrategyRepository:
             if row is None:
                 raise KeyError(f"quant feature set '{version_id}' not found")
             active_rows = session.scalars(
-                select(QuantFeatureSetVersionRow)
-                .where(QuantFeatureSetVersionRow.owner_id == row.owner_id)
-                .where(
-                    QuantFeatureSetVersionRow.lifecycle
-                    == ConfigLifecycle.ACTIVE.value
+                active_quant_feature_sets_by_owner(
+                    row.owner_id, ConfigLifecycle.ACTIVE.value
                 )
             ).all()
             for active in active_rows:
@@ -1022,11 +1013,11 @@ class SQLAlchemyStrategyRepository:
         """Return the active quant strategy for an owner and family."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(QuantStrategyVersionRow)
-                .where(QuantStrategyVersionRow.owner_id == owner_id)
-                .where(QuantStrategyVersionRow.strategy_family == strategy_family)
-                .where(QuantStrategyVersionRow.lifecycle == ConfigLifecycle.ACTIVE.value)
-                .order_by(QuantStrategyVersionRow.version_id)
+                active_quant_strategies_by_owner_and_family(
+                    owner_id,
+                    strategy_family,
+                    ConfigLifecycle.ACTIVE.value,
+                )
             ).all()
             return _single_or_none(_quant_strategy_from_row(row) for row in rows)
 
@@ -1034,9 +1025,7 @@ class SQLAlchemyStrategyRepository:
         """List all quant strategy versions for an owner."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(QuantStrategyVersionRow)
-                .where(QuantStrategyVersionRow.owner_id == owner_id)
-                .order_by(QuantStrategyVersionRow.version_id)
+                quant_strategies_by_owner(owner_id)
             ).all()
             return [_quant_strategy_from_row(row) for row in rows]
 
@@ -1047,10 +1036,11 @@ class SQLAlchemyStrategyRepository:
             if row is None:
                 raise KeyError(f"quant strategy '{version_id}' not found")
             active_rows = session.scalars(
-                select(QuantStrategyVersionRow)
-                .where(QuantStrategyVersionRow.owner_id == row.owner_id)
-                .where(QuantStrategyVersionRow.strategy_family == row.strategy_family)
-                .where(QuantStrategyVersionRow.lifecycle == ConfigLifecycle.ACTIVE.value)
+                active_quant_strategies_by_owner_and_family(
+                    row.owner_id,
+                    row.strategy_family,
+                    ConfigLifecycle.ACTIVE.value,
+                )
             ).all()
             for active in active_rows:
                 if active.version_id != version_id:
@@ -1080,11 +1070,11 @@ class SQLAlchemyStrategyRepository:
         """Return the active user style prompt for an owner and prompt name."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(UserStylePromptVersionRow)
-                .where(UserStylePromptVersionRow.owner_id == owner_id)
-                .where(UserStylePromptVersionRow.prompt_name == prompt_name)
-                .where(UserStylePromptVersionRow.lifecycle == ConfigLifecycle.ACTIVE.value)
-                .order_by(UserStylePromptVersionRow.version_id)
+                active_user_style_prompts_by_owner_and_name(
+                    owner_id,
+                    prompt_name,
+                    ConfigLifecycle.ACTIVE.value,
+                )
             ).all()
             return _single_or_none(_user_style_prompt_from_row(row) for row in rows)
 
@@ -1092,9 +1082,7 @@ class SQLAlchemyStrategyRepository:
         """List all user style prompt versions for an owner."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(UserStylePromptVersionRow)
-                .where(UserStylePromptVersionRow.owner_id == owner_id)
-                .order_by(UserStylePromptVersionRow.version_id)
+                user_style_prompts_by_owner(owner_id)
             ).all()
             return [_user_style_prompt_from_row(row) for row in rows]
 
@@ -1108,12 +1096,10 @@ class SQLAlchemyStrategyRepository:
             if row is None:
                 raise KeyError(f"style prompt '{version_id}' not found")
             active_rows = session.scalars(
-                select(UserStylePromptVersionRow)
-                .where(UserStylePromptVersionRow.owner_id == row.owner_id)
-                .where(UserStylePromptVersionRow.prompt_name == row.prompt_name)
-                .where(
-                    UserStylePromptVersionRow.lifecycle
-                    == ConfigLifecycle.ACTIVE.value
+                active_user_style_prompts_by_owner_and_name(
+                    row.owner_id,
+                    row.prompt_name,
+                    ConfigLifecycle.ACTIVE.value,
                 )
             ).all()
             for active in active_rows:
@@ -1139,10 +1125,7 @@ class SQLAlchemyStrategyRepository:
         """Return the active tool policy for an owner."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(ToolPolicyVersionRow)
-                .where(ToolPolicyVersionRow.owner_id == owner_id)
-                .where(ToolPolicyVersionRow.lifecycle == ConfigLifecycle.ACTIVE.value)
-                .order_by(ToolPolicyVersionRow.version_id)
+                active_tool_policies_by_owner(owner_id, ConfigLifecycle.ACTIVE.value)
             ).all()
             return _single_or_none(_tool_policy_from_row(row) for row in rows)
 
@@ -1153,11 +1136,8 @@ class SQLAlchemyStrategyRepository:
             if row is None:
                 raise KeyError(f"tool policy '{version_id}' not found")
             active_rows = session.scalars(
-                select(ToolPolicyVersionRow)
-                .where(ToolPolicyVersionRow.owner_id == row.owner_id)
-                .where(
-                    ToolPolicyVersionRow.lifecycle
-                    == ConfigLifecycle.ACTIVE.value
+                active_tool_policies_by_owner(
+                    row.owner_id, ConfigLifecycle.ACTIVE.value
                 )
             ).all()
             for active in active_rows:
@@ -1183,10 +1163,9 @@ class SQLAlchemyStrategyRepository:
         """Return the active research scope for an owner."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(ResearchScopeVersionRow)
-                .where(ResearchScopeVersionRow.owner_id == owner_id)
-                .where(ResearchScopeVersionRow.lifecycle == ConfigLifecycle.ACTIVE.value)
-                .order_by(ResearchScopeVersionRow.version_id)
+                active_research_scopes_by_owner(
+                    owner_id, ConfigLifecycle.ACTIVE.value
+                )
             ).all()
             return _single_or_none(_research_scope_from_row(row) for row in rows)
 
@@ -1194,9 +1173,7 @@ class SQLAlchemyStrategyRepository:
         """List all research scope versions for an owner."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(ResearchScopeVersionRow)
-                .where(ResearchScopeVersionRow.owner_id == owner_id)
-                .order_by(ResearchScopeVersionRow.version_id)
+                research_scopes_by_owner(owner_id)
             ).all()
             return [_research_scope_from_row(row) for row in rows]
 
@@ -1207,9 +1184,9 @@ class SQLAlchemyStrategyRepository:
             if row is None:
                 raise KeyError(f"research scope '{version_id}' not found")
             active_rows = session.scalars(
-                select(ResearchScopeVersionRow)
-                .where(ResearchScopeVersionRow.owner_id == row.owner_id)
-                .where(ResearchScopeVersionRow.lifecycle == ConfigLifecycle.ACTIVE.value)
+                active_research_scopes_by_owner(
+                    row.owner_id, ConfigLifecycle.ACTIVE.value
+                )
             ).all()
             for active in active_rows:
                 if active.version_id != version_id:
@@ -1230,31 +1207,19 @@ class SQLAlchemyStrategyRepository:
     ) -> StrategyConfigAuditRow:
         """Append one idempotent config audit event."""
         with self._session_factory.begin() as session:
-            statement = (
-                insert(StrategyConfigAuditRow)
-                .values(
-                    audit_id=f"audit_{uuid.uuid4().hex[:12]}",
-                    actor_id=actor_id,
-                    resource_type=resource_type,
-                    resource_version_id=resource_version_id,
-                    action=action,
-                    idempotency_key=idempotency_key,
-                    details=details,
-                    created_at=utc_now(),
-                )
-                .on_conflict_do_nothing(
-                    index_elements=["actor_id", "action", "idempotency_key"],
-                    index_where=StrategyConfigAuditRow.idempotency_key.is_not(None),
-                )
+            statement = insert_config_audit(
+                audit_id=f"audit_{uuid.uuid4().hex[:12]}",
+                actor_id=actor_id,
+                resource_type=resource_type,
+                resource_version_id=resource_version_id,
+                action=action,
+                idempotency_key=idempotency_key,
+                details=details,
+                created_at=utc_now(),
             )
             session.execute(statement)
             row = session.scalar(
-                select(StrategyConfigAuditRow)
-                .where(StrategyConfigAuditRow.actor_id == actor_id)
-                .where(StrategyConfigAuditRow.action == action)
-                .where(
-                    StrategyConfigAuditRow.idempotency_key == idempotency_key
-                )
+                config_audit_by_replay_key(actor_id, action, idempotency_key)
             )
             if row is None:
                 raise RuntimeError("failed to persist strategy config audit")
@@ -1270,12 +1235,7 @@ class SQLAlchemyStrategyRepository:
         """Return a prior config mutation audit by replay key."""
         with self._session_factory() as session:
             return session.scalar(
-                select(StrategyConfigAuditRow)
-                .where(StrategyConfigAuditRow.actor_id == actor_id)
-                .where(StrategyConfigAuditRow.action == action)
-                .where(
-                    StrategyConfigAuditRow.idempotency_key == idempotency_key
-                )
+                config_audit_by_replay_key(actor_id, action, idempotency_key)
             )
 
 

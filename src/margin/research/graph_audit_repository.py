@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from margin.research.db_models import LLMCallRecordRow, ToolCallRecordRow
 from margin.research.execution.llm_service import LLMCallAuditRecord
 from margin.research.tools.executor import ToolCallAuditRecord
+from margin.sql.research_queries import llm_call_by_billing_key
 
 
 class SQLAlchemyLLMCallAuditRepository:
@@ -23,9 +23,7 @@ class SQLAlchemyLLMCallAuditRepository:
         """Persist one immutable LLM call audit record."""
         with self._session_factory.begin() as session:
             existing = session.scalars(
-                select(LLMCallRecordRow).where(
-                    LLMCallRecordRow.billing_key == record.billing_key
-                )
+                llm_call_by_billing_key(record.billing_key)
             ).first()
             if existing is not None:
                 if _llm_record_from_row(existing) != record:

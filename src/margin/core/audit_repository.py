@@ -10,12 +10,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from margin.core.audit import SecretRedactingProcessor
 from margin.core.db_audit import AuditLogRecordRow
 from margin.core.models import AuditLogRecord
+from margin.sql.core_queries import audit_records
 
 AuditRedactor = Callable[[object, str, dict[str, Any]], dict[str, Any]]
 
@@ -158,14 +158,12 @@ class SQLAlchemyAuditRepository:
         Returns:
             Matching records, most recent first.
         """
-        statement = select(AuditLogRecordRow).order_by(AuditLogRecordRow.recorded_at.desc())
-        if record_type is not None:
-            statement = statement.where(AuditLogRecordRow.record_type == record_type)
-        if object_id is not None:
-            statement = statement.where(AuditLogRecordRow.object_id == object_id)
-        if trace_id is not None:
-            statement = statement.where(AuditLogRecordRow.trace_id == trace_id)
-        statement = statement.limit(limit)
+        statement = audit_records(
+            record_type=record_type,
+            object_id=object_id,
+            trace_id=trace_id,
+            limit=limit,
+        )
         with self._session_factory() as session:
             return [_record_from_row(row) for row in session.scalars(statement).all()]
 

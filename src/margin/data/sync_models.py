@@ -45,10 +45,18 @@ class DataSyncRequest(BaseModel):
     backfill_end: datetime | None = None
     force_full_refresh: bool = False
     idempotency_key: str | None = None
+    data_policy_version_id: str | None = None
+    window_start: datetime | None = None
+    window_end: datetime | None = None
 
     model_config = {"frozen": True}
 
-    @field_validator("backfill_start", "backfill_end")
+    @field_validator(
+        "backfill_start",
+        "backfill_end",
+        "window_start",
+        "window_end",
+    )
     @classmethod
     def normalize_time(cls, value: datetime | None) -> datetime | None:
         """Normalize optional request timestamps to UTC."""

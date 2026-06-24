@@ -10,19 +10,16 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from margin.core.snapshot_store import CompressedSnapshotStore
 from margin.data.canonical import CanonicalResolver
 from margin.data.db_models import (
-    CanonicalIndicatorValueRow,
     RawDataSnapshotRow,
     SecurityIndustryMembershipRow,
     SecurityMasterRow,
     SecurityProviderIdentifierRow,
     SourceSchemaFieldRow,
-    StandardizedIndicatorFactRow,
 )
 from margin.data.endpoints import ProviderEndpoint, ProviderEndpointRegistry
 from margin.data.facts import StandardizedIndicatorFact
@@ -43,6 +40,12 @@ from margin.data.sync_models import (
 from margin.data.sync_service import SQLAlchemyDataSyncRepository, SyncService
 from margin.data.warehouse_repository import SQLAlchemyWarehouseRepository
 from margin.news.models import ensure_utc
+from margin.sql.data_queries import (
+    active_security_ids,
+    insert_canonical_values_batch,
+    insert_facts_batch,
+    raw_snapshot_by_payload_hash,
+)
 
 NUMERIC_MARKET_FIELDS = ("open", "high", "low", "close", "volume", "amount")
 
@@ -350,7 +353,7 @@ class DataWarehouseIngestionStack:
         decision_at: datetime,
         indicator_prefix: str = "",
     ) -> EndpointSyncResult:
-        """Persist arbitrary numeric provider records as PIT indicator facts."""
+        """Persist arbitrary numeric or text provider records as PIT facts."""
         normalized_decision_at = ensure_utc(decision_at)
         snapshot = self._snapshot_store.write_json(
             provider,
@@ -381,6 +384,10 @@ class DataWarehouseIngestionStack:
             symbol = normalize_symbol(str(record.get("symbol", "")))
             if not symbol or "." not in symbol:
                 continue
+            metadata_payload = _indicator_metadata_payload(
+                endpoint_code,
+                record,
+            )
             event_at = (
                 TimeStandardizer.parse_date(record.get("date"))
                 or TimeStandardizer.parse_date(record.get("trade_date"))
@@ -406,10 +413,22 @@ class DataWarehouseIngestionStack:
                     source_field in metadata_fields
                     or value is None
                     or isinstance(value, bool)
-                    or not isinstance(value, (int, float, Decimal))
                 ):
                     continue
+                numeric_value: Decimal | None = None
+                text_value: str | None = None
+                if isinstance(value, (int, float, Decimal)):
+                    numeric_value = Decimal(str(value))
+                elif isinstance(value, str) and value.strip():
+                    text_value = value.strip()
+                else:
+                    continue
                 indicator_id = f"{indicator_prefix}{source_field}"
+                fact_json_value = (
+                    metadata_payload
+                    if metadata_payload and source_field == "index_weight"
+                    else None
+                )
                 fact_id = _fact_id(
                     provider=provider,
                     endpoint_code=endpoint_code,
@@ -431,7 +450,9 @@ class DataWarehouseIngestionStack:
                         published_at=published_at,
                         available_at=available_at,
                         fetched_at=fetched_at,
-                        numeric_value=Decimal(str(value)),
+                        numeric_value=numeric_value,
+                        text_value=text_value,
+                        json_value=fact_json_value,
                         unit=_unit_for_indicator(indicator_id),
                         quality_score=Decimal("0.90000"),
                         mapping_version="mapping-v0.2.0",
@@ -440,6 +461,11 @@ class DataWarehouseIngestionStack:
                             "source": provider,
                             "source_field": source_field,
                             "raw_snapshot_id": snapshot_id,
+                            **(
+                                {"metadata": metadata_payload}
+                                if metadata_payload
+                                else {}
+                            ),
                         },
                     )
                 )
@@ -484,11 +510,7 @@ class DataWarehouseIngestionStack:
         """Return all active A-share security IDs in deterministic order."""
         with self._session_factory() as session:
             return tuple(
-                session.scalars(
-                    select(SecurityMasterRow.security_id)
-                    .where(SecurityMasterRow.system_to.is_(None))
-                    .order_by(SecurityMasterRow.security_id)
-                ).all()
+                session.scalars(active_security_ids()).all()
             )
 
     def _standardize(
@@ -512,6 +534,17 @@ def _provider_name(provider: Any) -> str:
     if descriptor is not None and getattr(descriptor, "name", None):
         return str(descriptor.name).strip().lower()
     return provider.__class__.__name__.strip().lower()
+
+
+def _indicator_metadata_payload(
+    endpoint_code: str,
+    record: dict[str, Any],
+) -> dict[str, Any]:
+    """Return typed metadata that must travel with an indicator fact."""
+    if endpoint_code != "index_weight":
+        return {}
+    index_code = str(record.get("index_code") or "").strip()
+    return {"index_code": index_code} if index_code else {}
 
 
 def _events_to_facts(
@@ -573,11 +606,7 @@ def _upsert_raw_snapshot(
 ) -> None:
     """upsert raw snapshot."""
     existing = session.scalar(
-        select(RawDataSnapshotRow).where(
-            RawDataSnapshotRow.provider == provider,
-            RawDataSnapshotRow.endpoint_code == endpoint_code,
-            RawDataSnapshotRow.payload_hash == snapshot.payload_hash,
-        )
+        raw_snapshot_by_payload_hash(provider, endpoint_code, snapshot.payload_hash)
     )
     if existing is not None:
         return
@@ -642,40 +671,42 @@ def _upsert_schema_fields(
 def _insert_facts(session: Session, facts: list[StandardizedIndicatorFact]) -> int:
     """insert facts."""
     inserted = 0
-    for fact in facts:
-        if session.get(StandardizedIndicatorFactRow, fact.fact_id) is not None:
-            continue
-        session.add(
-            StandardizedIndicatorFactRow(
-                fact_id=fact.fact_id,
-                provider=fact.provider_code,
-                provider_fact_id=fact.provider_fact_id,
-                endpoint_code=fact.endpoint_code,
-                security_id=fact.security_id,
-                indicator_id=fact.indicator_id,
-                indicator_version=fact.indicator_version,
-                event_at=fact.event_at,
-                published_at=fact.published_at,
-                available_at=fact.available_at,
-                fetched_at=fact.fetched_at,
-                revised_at=fact.revised_at,
-                numeric_value=fact.numeric_value,
-                text_value=fact.text_value,
-                json_value=fact.json_value,
-                unit=fact.unit,
-                quality_score=fact.quality_score,
-                mapping_version=fact.mapping_version,
-                raw_snapshot_id=fact.raw_snapshot_id,
-                lineage=fact.lineage,
-            )
+    payloads = [
+        {
+            "fact_id": fact.fact_id,
+            "provider": fact.provider_code,
+            "provider_fact_id": fact.provider_fact_id,
+            "endpoint_code": fact.endpoint_code,
+            "security_id": fact.security_id,
+            "indicator_id": fact.indicator_id,
+            "indicator_version": fact.indicator_version,
+            "event_at": fact.event_at,
+            "published_at": fact.published_at,
+            "available_at": fact.available_at,
+            "fetched_at": fact.fetched_at,
+            "revised_at": fact.revised_at,
+            "numeric_value": fact.numeric_value,
+            "text_value": fact.text_value,
+            "json_value": fact.json_value,
+            "unit": fact.unit,
+            "quality_score": fact.quality_score,
+            "mapping_version": fact.mapping_version,
+            "raw_snapshot_id": fact.raw_snapshot_id,
+            "lineage": fact.lineage,
+        }
+        for fact in facts
+    ]
+    for offset in range(0, len(payloads), 500):
+        result = session.execute(
+            insert_facts_batch(payloads[offset : offset + 500])
         )
-        inserted += 1
+        inserted += len(result.scalars().all())
     return inserted
 
 
 def _insert_canonical_values(session: Session, resolutions) -> int:
     """insert canonical values."""
-    inserted = 0
+    payloads: list[dict[str, Any]] = []
     for resolution in resolutions:
         if resolution.selected is None:
             continue
@@ -685,28 +716,33 @@ def _insert_canonical_values(session: Session, resolutions) -> int:
             decision_at=resolution.decision_at,
             resolver_version=resolution.resolver_version,
         )
-        if session.get(CanonicalIndicatorValueRow, canonical_id) is not None:
-            continue
-        session.add(
-            CanonicalIndicatorValueRow(
-                canonical_id=canonical_id,
-                security_id=resolution.selected.security_id,
-                indicator_id=resolution.selected.indicator_id,
-                indicator_version=resolution.selected.indicator_version,
-                decision_at=resolution.decision_at,
-                selected_fact_id=resolution.selected.fact_id,
-                candidate_fact_ids=[fact.fact_id for fact in resolution.candidates],
-                status=resolution.status,
-                numeric_value=resolution.selected.numeric_value,
-                text_value=resolution.selected.text_value,
-                json_value=resolution.selected.json_value,
-                confidence=resolution.confidence,
-                resolver_version=resolution.resolver_version,
-                resolver_hash=resolution.resolver_hash,
-                created_at=resolution.created_at,
-            )
+        payloads.append(
+            {
+                "canonical_id": canonical_id,
+                "security_id": resolution.selected.security_id,
+                "indicator_id": resolution.selected.indicator_id,
+                "indicator_version": resolution.selected.indicator_version,
+                "decision_at": resolution.decision_at,
+                "selected_fact_id": resolution.selected.fact_id,
+                "candidate_fact_ids": [
+                    fact.fact_id for fact in resolution.candidates
+                ],
+                "status": resolution.status,
+                "numeric_value": resolution.selected.numeric_value,
+                "text_value": resolution.selected.text_value,
+                "json_value": resolution.selected.json_value,
+                "confidence": resolution.confidence,
+                "resolver_version": resolution.resolver_version,
+                "resolver_hash": resolution.resolver_hash,
+                "created_at": resolution.created_at,
+            }
         )
-        inserted += 1
+    inserted = 0
+    for offset in range(0, len(payloads), 500):
+        result = session.execute(
+            insert_canonical_values_batch(payloads[offset : offset + 500])
+        )
+        inserted += len(result.scalars().all())
     return inserted
 
 

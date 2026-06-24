@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -206,8 +207,84 @@ def test_quant_service_assigns_overall_and_industry_ranks() -> None:
     by_security = {result.security_id: result for result in results}
     assert by_security["000001.SZ"].rank_overall == 1
     assert by_security["000001.SZ"].rank_in_industry == 1
+    profile = by_security["000001.SZ"].factor_details["ai_quant_profile"]
+    assert profile["strategy_profile"] == "manual_all_a_no_market_cap_no_top_n"
+    assert profile["execution_boundary"] == "research_only_no_order"
+    assert profile["scores"]["manual_all_a_score"] is not None
     assert by_security["000002.SZ"].rank_overall == 2
     assert by_security["000002.SZ"].rank_in_industry == 2
+
+
+def test_quant_service_final_score_uses_confirmed_theme_hotness() -> None:
+    """Confirmed theme hotness changes real quant score, rank, and status."""
+    theme_only_weights = {
+        "value": 0.0,
+        "dividend": 0.0,
+        "reversal": 0.0,
+        "liquidity": 0.0,
+        "volume_sentiment": 0.0,
+        "momentum": 0.0,
+        "risk_health": 0.0,
+        "theme_hotness": 1.0,
+    }
+    snapshot = QuantInputSnapshot(
+        snapshot_id="qis-theme-hotness",
+        scope_version_id="scope-v1",
+        universe_snapshot_id="univ-snap-1",
+        decision_at=datetime(2026, 6, 22, tzinfo=UTC),
+        known_at=datetime(2026, 6, 22, tzinfo=UTC),
+        security_ids=("theme.SZ", "plain.SZ"),
+        required_indicators=("roe_ttm", "pe_ttm"),
+        quant_feature_set=SimpleNamespace(
+            metadata={
+                "quant_strategy": {
+                    "quant_strategy_version_id": "theme-hotness-v1",
+                    "thresholds": {
+                        "default_universe": "ALL_A",
+                        "presets": {
+                            "ALL_A": {
+                                "buy_threshold": 70.0,
+                                "min_avg_amount_20d": 1.0,
+                                "factor_weights": theme_only_weights,
+                            }
+                        },
+                    },
+                }
+            }
+        ),
+    )
+    themed = _quant_row("theme.SZ", is_st=False)
+    themed.update(
+        {
+            "theme_hot_score": 85.0,
+            "theme_member_confidence": 1.0,
+            "theme_signal_confirmed": True,
+        }
+    )
+    plain = _quant_row("plain.SZ", is_st=False)
+    repository = MemoryQuantRepository()
+    repository.set_cross_section(
+        snapshot.snapshot_id,
+        pd.DataFrame([themed, plain]).set_index("security_id", drop=False),
+    )
+
+    quant_run = QuantService(repository).run(
+        snapshot,
+        decision_at=datetime(2026, 6, 22, tzinfo=UTC),
+    )
+
+    by_security = {
+        result.security_id: result
+        for result in repository.list_results(quant_run.quant_run_id)
+    }
+    assert by_security["theme.SZ"].final_score == pytest.approx(85.0)
+    assert by_security["plain.SZ"].final_score == pytest.approx(0.0)
+    assert by_security["theme.SZ"].rank_overall == 1
+    assert by_security["plain.SZ"].screening_status == ScreeningStatus.REJECT
+    assert by_security["theme.SZ"].screening_status == ScreeningStatus.PASS
+    assert by_security["theme.SZ"].factor_details["scores"][
+        "theme_hotness"
+    ] == pytest.approx(85.0)
 
 
 def _quant_row(security_id: str, *, is_st: bool) -> dict[str, object]:

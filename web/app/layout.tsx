@@ -1,13 +1,13 @@
 /**
  * @fileoverview Root layout for the Margin research workspace.
- * Provides the application shell, left sidebar navigation, top bar with
- * breadcrumbs and the admin unlock gate, plus metadata shared by every route.
+ * Provides the application shell, dark sidebar navigation, top bar with
+ * system guardrails and the admin unlock gate, plus shared metadata.
  */
 
 import type { Metadata } from "next";
-import Link from "next/link";
 
 import { AdminGate } from "@/components/admin-gate";
+import { Sidebar } from "@/components/sidebar";
 
 import "./globals.css";
 
@@ -15,40 +15,6 @@ export const metadata: Metadata = {
   title: "Margin",
   description: "Evidence-driven valuation research workspace",
 };
-
-type NavItem = {
-  href: string;
-  label: string;
-};
-
-type NavGroup = {
-  heading: string;
-  items: NavItem[];
-};
-
-const NAV_GROUPS: NavGroup[] = [
-  {
-    heading: "研究",
-    items: [
-      { href: "/", label: "工作台" },
-      { href: "/research", label: "研究候选" },
-      { href: "/research/universe", label: "公司池" },
-      { href: "/research/runs", label: "运行记录" },
-    ],
-  },
-  {
-    heading: "策略",
-    items: [{ href: "/strategies", label: "策略模板" }],
-  },
-  {
-    heading: "设置",
-    items: [
-      { href: "/settings/providers", label: "Provider 密钥" },
-      { href: "/settings/scope", label: "Scope" },
-      { href: "/settings/strategy", label: "Strategy" },
-    ],
-  },
-];
 
 /**
  * Root layout that wraps the entire application.
@@ -63,39 +29,24 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body>
-        <div className="app-frame">
-          <aside className="app-sidebar" aria-label="主导航">
-            <Link className="brand-mark" href="/">
-              <span className="brand-dot" aria-hidden="true" />
-              <span>
-                <strong>Margin</strong>
-                <small>Evidence Research OS</small>
-              </span>
-            </Link>
-            <nav className="sidebar-nav" aria-label="主导航分组">
-              {NAV_GROUPS.map((group) => (
-                <section className="sidebar-group" key={group.heading}>
-                  <p className="sidebar-heading">{group.heading}</p>
-                  <ul>
-                    {group.items.map((item) => (
-                      <li key={item.href}>
-                        <Link href={item.href}>{item.label}</Link>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ))}
-            </nav>
-            <div className="sidebar-footer">
-              <span>v0.2</span>
-              <span>真实 API</span>
-            </div>
-          </aside>
-          <div className="app-content">
-            <header className="app-topbar">
+        <div className="grid min-h-screen grid-cols-[15rem_minmax(0,1fr)]">
+          <Sidebar />
+          <div className="grid min-h-screen grid-rows-[auto_minmax(0,1fr)]">
+            <header className="sticky top-0 z-20 flex min-h-14 items-center justify-between gap-3 border-b border-border bg-background/80 px-6 py-2.5 backdrop-blur">
+              <div className="flex flex-wrap gap-2">
+                <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                  只读优先
+                </span>
+                <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                  无持仓 / 无交易
+                </span>
+                <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                  Provider fail-closed
+                </span>
+              </div>
               <AdminGate />
             </header>
-            <main className="app-main">{children}</main>
+            <main className="min-h-0">{children}</main>
           </div>
         </div>
       </body>

@@ -20,6 +20,10 @@ from margin.strategy.models import (
 from margin.strategy.provider_config import ProviderConfigHealthService
 from margin.strategy.service import StrategyService
 from margin.strategy.validator import ActivationError
+from margin.valuation_discovery.quant.pool_defaults import (
+    default_factor_weights,
+    default_quant_strategy_thresholds,
+)
 
 OWNER_ID = "local-admin"
 
@@ -203,6 +207,7 @@ class StrategyBootstrapService:
                         "interest_coverage",
                         "pb",
                         "ps",
+                        "market_cap",
                         "fcf_yield",
                         "dividend_yield",
                         "revenue_yoy",
@@ -249,19 +254,9 @@ class StrategyBootstrapService:
                     version_id=version_id,
                     owner_id=OWNER_ID,
                     strategy_family="default",
-                    factor_weights={
-                        "quality": 0.35,
-                        "value": 0.25,
-                        "growth": 0.15,
-                        "momentum": 0.15,
-                        "risk": 0.10,
-                    },
-                    thresholds={
-                        "pass": 80,
-                        "near_threshold": 70,
-                        "watchlist": 60,
-                    },
-                    calibration_report_id="quant-rule-contract-v0.2.0",
+                    factor_weights=default_factor_weights("ALL_A"),
+                    thresholds=default_quant_strategy_thresholds(),
+                    calibration_report_id="three-pool-manual-backtest-20260624",
                     lifecycle=ConfigLifecycle.REVIEW,
                 ),
                 actor_id=OWNER_ID,

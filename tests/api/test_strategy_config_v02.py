@@ -27,7 +27,7 @@ from margin.strategy.models import (
     ProviderConfigVersion,
     ResearchScopeVersion,
 )
-from margin.strategy.repository import SQLAlchemyStrategyRepository
+from margin.strategy.repository import MemoryStrategyRepository, SQLAlchemyStrategyRepository
 from margin.strategy.service import StrategyService
 
 
@@ -187,6 +187,36 @@ def test_list_provider_configs_works_without_secret_master_key(
         }
     ]
     engine.dispose()
+
+
+def test_quant_strategy_defaults_expose_three_pool_manual_presets() -> None:
+    """quant strategy defaults expose the three user-selectable pools."""
+    app = create_app(
+        strategy_service=StrategyService(repository=MemoryStrategyRepository())
+    )
+
+    response = TestClient(app).get("/api/v1/quant-strategy-defaults")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body["presets"]) == {"CSI300", "ALL_A", "CSI500"}
+    assert body["default_universe"] == "ALL_A"
+    assert body["presets"]["ALL_A"]["candidate_policy"]["no_top_n"] is True
+    assert body["presets"]["ALL_A"]["candidate_policy"]["market_cap_filter"] is False
+    assert body["presets"]["ALL_A"]["factor_weights"]["theme_hotness"] == pytest.approx(
+        0.10
+    )
+    assert (
+        body["presets"]["ALL_A"]["candidate_policy"]["theme_tilt"]["entry_score"]
+        == 70.0
+    )
+    assert (
+        body["presets"]["ALL_A"]["candidate_policy"]["manual_rebalance"][
+            "min_holding_months"
+        ]
+        == 2
+    )
+    assert body["presets"]["CSI300"]["rebalance_frequency"] == "monthly"
 
 
 def test_duplicate_secret_write_is_idempotent_and_audited_once(

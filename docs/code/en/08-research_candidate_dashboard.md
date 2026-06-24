@@ -15,6 +15,7 @@ Current responsibilities:
 - Provider health display;
 - frontend form for starting valuation discovery refreshes;
 - Provider key configuration with write-only secret handling.
+- research-flow information architecture: handle Provider/Scope first, then review candidates and evidence, with no holdings or trading entrypoints.
 
 Removed responsibilities:
 
@@ -33,8 +34,9 @@ Removed responsibilities:
 | `src/margin/dashboard/service.py` | `DashboardQueryService`, `FeedbackService`, `ProviderStatusService`, `JobService`, and `DashboardServiceBundle`. |
 | `src/margin/api/routes/dashboard.py` | `/api/v1/research`, `/api/v1/research/items/{item_id}`, `/api/v1/research/copilot`, feedback, provider status, and job endpoints. |
 | `src/margin/api/routes/valuation_discovery.py` | Refresh entrypoints: `POST /api/v1/valuation-discovery/refreshes` and `GET /api/v1/valuation-discovery/runs/{run_id}`. |
-| `web/app/page.tsx` | Home page summary from the v0.2 candidate API. |
-| `web/app/research/page.tsx` | Research workspace with refresh form, filters, table, read-only Copilot, and provider status. |
+| `web/app/layout.tsx` | Global application shell; sidebar exposes only implemented routes: workspace, candidates, universe, refresh runs, strategy templates, and Provider/Scope/Strategy settings. |
+| `web/app/page.tsx` | Research workspace home from the v0.2 candidate API, including candidate snapshot, recommended workflow, and Provider blockers. |
+| `web/app/research/page.tsx` | Research candidate page with summary cards, filters, table, refresh form, provider status, and read-only Copilot. |
 | `web/app/research/runs/[runId]/page.tsx` | Valuation discovery run-progress page. |
 | `web/app/research/items/[itemId]/page.tsx` | Company detail page. |
 | `web/app/research/universe/page.tsx` | Universe configuration explanation page. |
@@ -140,8 +142,8 @@ Removed public endpoints:
 
 | Page | Data source | Role |
 | --- | --- | --- |
-| `/` | `fetchResearchCandidates`, `fetchProviderStatus`, provider configs | Home summary and operational entrypoints. |
-| `/research` | `fetchResearchCandidates`, `startValuationDiscoveryRefresh` | Research workspace and refresh trigger. |
+| `/` | `fetchResearchCandidates`, `fetchProviderStatus`, provider configs | Research workspace home with candidate summary, latest candidate snapshot, recommended workflow, and provider status. |
+| `/research` | `fetchResearchCandidates`, `startValuationDiscoveryRefresh` | Candidate workspace; users filter candidates first, then trigger valuation discovery refreshes and inspect Provider blockers in the right rail. |
 | `/research/runs/[runId]` | `fetchResearchRunDetailV2` → `/api/v1/valuation-discovery/runs/{run_id}` | Run progress page. |
 | `/research/items/[itemId]` | `fetchResearchItemDetailV2` | Company detail page. |
 | `/research/universe` | Static/config data | Universe explanation. |
@@ -153,7 +155,7 @@ Removed public endpoints:
 
 | Component | Role |
 | --- | --- |
-| `ResearchRunForm` | Starts valuation discovery refreshes; no longer creates old research runs. |
+| `ResearchRunForm` | Starts valuation discovery refreshes; no longer creates old research runs; surfaces local-admin, provider/scope, and Tavily activation blockers with actionable messages. |
 | `ResearchFilterBar` | Server-side candidate filters. |
 | `ResearchResultsTable` | Candidate table with score, status, risk, and assessment fields. |
 | `ResearchRunProgress` | Valuation discovery run progress. |
@@ -161,7 +163,7 @@ Removed public endpoints:
 | `EvidenceLocatorList` | Renders evidence ids, source levels, locators, and snapshot ids. |
 | `ReadOnlyCopilotPanel` | Submits read-only questions and displays references. |
 | `ProviderSettingsPanel` | Write-only Provider secret form. |
-| `ProviderStatusPanel` | Provider health list. |
+| `ProviderStatusPanel` | Provider health list with healthy/blocker counts in the header. |
 | `ResearchFeedbackForm` | Append-only feedback form. |
 | `ResearchStatusBadge` | Status badge. |
 
@@ -179,7 +181,9 @@ Backend coverage:
 Frontend coverage:
 
 - home candidate summary;
+- global navigation only exposes implemented routes;
 - `/research` refresh form and candidate table;
+- user-facing refresh blocker messages for Tavily/service-not-configured errors;
 - valuation discovery run progress page;
 - item detail page;
 - provider settings;

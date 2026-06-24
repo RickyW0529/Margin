@@ -2,47 +2,46 @@
  * @fileoverview Form component for submitting feedback on a research item.
  */
 
-/** Props for the ResearchFeedbackForm component. */
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+
 type ResearchFeedbackFormProps = {
-  /** Form submission handler. */
   action: (formData: FormData) => void | Promise<void>;
 };
 
-/**
- * Renders a research feedback form with type and comment fields.
- *
- * @param action Form submission handler.
- * @returns The feedback form element.
- */
+/** Renders a research feedback form with type and comment fields. */
 export function ResearchFeedbackForm({ action }: ResearchFeedbackFormProps) {
   return (
-    <section className="panel" aria-labelledby="feedback-title">
-      <div className="panel-heading">
-        <h2 id="feedback-title">研究反馈</h2>
-        <span>POST /feedback</span>
-      </div>
-      <form action={action} className="action-form">
-        <label className="form-field">
-          <span>反馈类型</span>
-          <select name="feedback_type" defaultValue="comment">
-            <option value="accept">采纳</option>
-            <option value="reject">拒绝</option>
-            <option value="watch">加入观察</option>
-            <option value="comment">备注</option>
-          </select>
-        </label>
-        <label className="form-field">
-          <span>反馈说明</span>
-          <textarea
-            name="comment"
-            placeholder="写入真实 feedback 记录，用于后续审计和策略改进"
-            rows={3}
-          />
-        </label>
-        <button className="primary-button" type="submit">
-          提交研究反馈
-        </button>
-      </form>
-    </section>
+    <Card aria-labelledby="feedback-title">
+      <CardHeader>
+        <CardTitle id="feedback-title">研究反馈</CardTitle>
+        <span className="text-xs text-muted-foreground">POST /feedback</span>
+      </CardHeader>
+      <CardContent>
+        <form action={action} className="grid gap-3">
+          <div className="grid gap-1.5">
+            <Label>反馈类型</Label>
+            <Select name="feedback_type" defaultValue="comment">
+              <option value="accept">采纳</option>
+              <option value="reject">拒绝</option>
+              <option value="watch">加入观察</option>
+              <option value="comment">备注</option>
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label>反馈说明</Label>
+            <Textarea
+              name="comment"
+              placeholder="写入真实 feedback 记录，用于后续审计和策略改进"
+              rows={3}
+            />
+          </div>
+          <Button type="submit">提交研究反馈</Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }

@@ -819,3 +819,75 @@
 - **缓存注意**：`@lru_cache` 装饰的依赖工厂在进程内缓存引擎与 Repository。测试时通过 `create_app(...)` 注入替代服务，或手动清除 `functools.lru_cache` 缓存。
 - **Worker 与 API 共享引擎**：`worker.py` 与 `dependencies.py` 均使用 `create_database_engine()` 与 `create_session_factory()`，但分别在不同进程中创建独立引擎，不共享连接池。
 - **缺失配置降级**：`build_provider_status_providers()` 对未配置的外部服务返回 `MissingConfiguredProvider`，确保仪表盘始终返回完整的 Provider 状态列表，而不是静默省略。
+- **SQL 查询工厂**：所有 SQL 查询（原生 `text()` 字符串与 SQLAlchemy ORM `select()/insert()/update()/delete()` 构造器）集中在 `src/margin/sql/` 包中按业务域分模块定义，Repository 类只负责会话管理与行映射，不内联查询构造。详见 [§14 SQL 查询工厂](#14-sql-查询工厂)。
+
+---
+
+## 14. SQL 查询工厂
+
+源码目录：`src/margin/sql/`
+
+### 14.1 设计原则
+
+- 所有 SQL 查询构造（`text()` 原生字符串、`select()/insert()/update()/delete()` ORM 构造器）集中到 `src/margin/sql/` 包。
+- 按业务域分模块，每个查询一个独立函数，Repository 调用工厂函数获取 ready statement。
+- Repository 只负责 session/transaction 管理 + 行到领域对象的映射，不写查询构造。
+- `session.get(Model, id)` 主键查找不需要提取，保持原样。
+
+### 14.2 模块清单
+
+| 文件 | 查询函数数 | 覆盖的 Repository |
+| --- | --- | --- |
+| `raw_statements.py` | —（TextClause 常量） | health 路由、迁移验证脚本、修复脚本、回测脚本 |
+| `health_queries.py` | 8 | `api/routes/health.py`、`worker_health_check.py`、`verify_migrations.py`、`smoke_full_v02.py` |
+| `data_queries.py` | 36 | `warehouse_repository.py`、`sync_service.py`、`ingestion.py`、`company_pool.py`、`retention.py`、`policy.py`、`tushare_repository.py` |
+| `strategy_queries.py` | 18 | `strategy/repository.py`、`scripts/bootstrap_config.py` |
+| `news_queries.py` | 15 | `news/repository.py` |
+| `evidence_queries.py` | 8 | `evidence/repository.py` |
+| `valuation_queries.py` | 12 | `valuation_discovery/repository.py`、`valuation_discovery/adapters.py` |
+| `research_queries.py` | 6 | `research/repository.py`、`graph_audit_repository.py`、`delta_repository.py`、`checkpoint.py` |
+| `core_queries.py` | 17 | `core/outbox.py`、`capacity.py`、`secret_store.py`、`audit_repository.py`、`orchestration_repository.py` |
+| `vector_queries.py` | 5 | `vector/repository.py` |
+| `dashboard_queries.py` | 5 | `dashboard/repository.py` |
+| `backtest_queries.py` | 8 | `scripts/backtest_three_quant_pools_db.py` |
+| **总计** | **138 函数** | — |
+
+### 14.3 使用模式
+
+**Repository 改造前：**
+```python
+class SQLAlchemyWarehouseRepository:
+    def canonical_values(self, query):
+        with self._session_factory() as session:
+            statement = (
+                select(CanonicalIndicatorValueRow)
+                .where(CanonicalIndicatorValueRow.security_id.in_(query.security_ids))
+                .where(CanonicalIndicatorValueRow.decision_at <= decision_at)
+                .order_by(...)
+            )
+            rows = session.scalars(statement).all()
+```
+
+**Repository 改造后：**
+```python
+from margin.sql.data_queries import canonical_values_by_decision
+
+class SQLAlchemyWarehouseRepository:
+    def canonical_values(self, query):
+        with self._session_factory() as session:
+            statement = canonical_values_by_decision(
+                security_ids=query.security_ids,
+                decision_at=decision_at,
+                indicator_ids=query.indicator_ids or None,
+            )
+            rows = session.scalars(statement).all()
+```
+
+### 14.4 原生 SQL 常量
+
+`raw_statements.py` 存放所有 PostgreSQL 原生 SQL `TextClause` 常量，包括：
+
+- 健康检查查询（alembic 版本、outbox 计数、worker 步骤计数）
+- 迁移验证查询（pg_extension 检查、非系统表列表、数据库连接终止）
+- index_weight 元数据修复 SQL（复杂 CTE + UPDATE）
+- 回测脚本覆盖检查 SQL

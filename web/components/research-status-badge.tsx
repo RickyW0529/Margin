@@ -2,13 +2,12 @@
  * @fileoverview Status badge component for research item lifecycle states.
  */
 
-/** Props for the ResearchStatusBadge component. */
+import { Badge, type BadgeProps } from "@/components/ui/badge";
+
 type ResearchStatusBadgeProps = {
-  /** Research status identifier. */
   status: string;
 };
 
-/** Localized labels mapped by research status. */
 const labels: Record<string, string> = {
   published: "已发布",
   abstained: "已拒绝",
@@ -18,19 +17,20 @@ const labels: Record<string, string> = {
   watch: "观察",
 };
 
-/**
- * Renders a styled badge for a research item status.
- *
- * @param status Research status identifier.
- * @returns The localized status badge element.
- */
-export function ResearchStatusBadge({ status }: ResearchStatusBadgeProps) {
-  const tone =
-    status === "published" || status === "research_candidate"
-      ? "positive"
-      : status === "abstained" || status === "watch"
-        ? "watch"
-        : "data_missing";
+function toneFor(status: string): BadgeProps["tone"] {
+  if (status === "published" || status === "research_candidate") {
+    return "positive";
+  }
+  if (status === "abstained" || status === "watch") {
+    return "caution";
+  }
+  if (status === "data_missing") {
+    return "negative";
+  }
+  return "muted";
+}
 
-  return <span className={`badge ${tone}`}>{labels[status] ?? status}</span>;
+/** Renders a styled badge for a research item status. */
+export function ResearchStatusBadge({ status }: ResearchStatusBadgeProps) {
+  return <Badge tone={toneFor(status)}>{labels[status] ?? status}</Badge>;
 }

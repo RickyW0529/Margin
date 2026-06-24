@@ -18,11 +18,45 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from margin.storage.base import Base
+
+
+class DataAcquisitionPolicyVersionRow(Base):
+    """Append-only rolling-window data acquisition policy."""
+
+    __tablename__ = "data_acquisition_policy_versions"
+    __table_args__ = (
+        Index(
+            "uq_active_data_acquisition_policy",
+            "owner_id",
+            unique=True,
+            postgresql_where=text("lifecycle = 'active'"),
+        ),
+        UniqueConstraint(
+            "created_by",
+            "create_idempotency_key",
+            name="uq_data_policy_create_idempotency",
+        ),
+    )
+
+    version_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    owner_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    rolling_window_months: Mapped[int] = mapped_column(Integer, nullable=False)
+    revision_lookback_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    financial_comparison_years: Mapped[int] = mapped_column(Integer, nullable=False)
+    lifecycle: Mapped[str] = mapped_column(String(32), nullable=False)
+    config_hash: Mapped[str] = mapped_column(String(96), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(64), nullable=False)
+    create_idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    activation_idempotency_key: Mapped[str | None] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deprecated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ProviderEndpointRow(Base):
@@ -198,6 +232,15 @@ class StandardizedIndicatorFactRow(Base):
     __table_args__ = (
         UniqueConstraint("provider", "provider_fact_id", name="uq_standardized_provider_fact"),
         Index("ix_indicator_facts_security_indicator", "security_id", "indicator_id", "event_at"),
+        Index(
+            "ix_indicator_facts_quant_history_cover",
+            "security_id",
+            "indicator_id",
+            "event_at",
+            "available_at",
+            postgresql_include=["fact_id", "numeric_value"],
+            postgresql_where=text("numeric_value IS NOT NULL"),
+        ),
         Index("ix_indicator_facts_available", "available_at"),
     )
 
@@ -276,6 +319,83 @@ class SecurityMasterRow(Base):
     system_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     system_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     raw_lineage_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+
+
+class CompanyPoolSnapshotRow(Base):
+    """Immutable materialization of the non-ST All-A serving view."""
+
+    __tablename__ = "company_pool_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "pool_code",
+            "source_run_id",
+            name="uq_company_pool_source_run",
+        ),
+        Index(
+            "ix_company_pool_latest",
+            "pool_code",
+            "business_at",
+            "created_at",
+        ),
+    )
+
+    snapshot_id: Mapped[str] = mapped_column(String(72), primary_key=True)
+    pool_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_run_id: Mapped[str] = mapped_column(
+        ForeignKey("data_sync_runs.run_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    business_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    known_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    member_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    criteria: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CompanyPoolMemberRow(Base):
+    """One member frozen into a company-pool snapshot."""
+
+    __tablename__ = "company_pool_members"
+    __table_args__ = (
+        UniqueConstraint(
+            "snapshot_id",
+            "security_id",
+            name="uq_company_pool_member",
+        ),
+        Index(
+            "ix_company_pool_members_included",
+            "snapshot_id",
+            "security_id",
+            postgresql_where=text("included = true"),
+        ),
+        Index(
+            "ix_company_pool_members_security",
+            "security_id",
+            "snapshot_id",
+        ),
+    )
+
+    membership_id: Mapped[str] = mapped_column(String(72), primary_key=True)
+    snapshot_id: Mapped[str] = mapped_column(
+        ForeignKey("company_pool_snapshots.snapshot_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    security_id: Mapped[str] = mapped_column(
+        ForeignKey("securities.security_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    exchange: Mapped[str] = mapped_column(String(16), nullable=False)
+    industry_code: Mapped[str | None] = mapped_column(String(64))
+    industry_name: Mapped[str | None] = mapped_column(Text)
+    included: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    exclusion_reasons: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+    )
+    data_status: Mapped[str] = mapped_column(String(32), nullable=False)
 
 
 class SecurityProviderIdentifierRow(Base):

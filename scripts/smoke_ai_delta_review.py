@@ -29,6 +29,10 @@ def _build_real_llm_decision_prompt(state: Any, evidence_ids: list[str]) -> str:
     )
     evidence_lines = "\n".join(f"- {eid}" for eid in evidence_ids)
     return (
+        "Return JSON only.\n"
+        "This is a token-safe smoke contract, not an investment conclusion.\n"
+        "Do not output BUY, SELL, target price, position size, or trading "
+        "instructions.\n"
         "Deterministic decision contract for v0.2 delta review.\n"
         f"Security: {getattr(state, 'security_id', 'unknown')}\n"
         f"Decision at: {getattr(state, 'decision_at', 'unknown')}\n"
@@ -38,7 +42,9 @@ def _build_real_llm_decision_prompt(state: Any, evidence_ids: list[str]) -> str:
         "Admissible evidence:\n"
         f"{evidence_lines}\n"
         "Rule: when any change set flag is True, the outcome must be "
-        "update_assessment; otherwise the outcome must be abstain."
+        "update_assessment; otherwise the outcome must be abstain.\n"
+        "The evidence_ids field must exactly match the admissible evidence "
+        "list, with no additions."
     )
 
 
@@ -172,14 +178,7 @@ class _RealLLMDecisionHandler:
     def __call__(self, state) -> dict[str, Any]:
         self.call_count += 1
         evidence_ids = _evidence_ids_from_state(state)
-        prompt = (
-            "Return JSON only. Decide whether this single-stock research "
-            "assessment should update based on the frozen evidence IDs. "
-            "Do not output trading instructions. "
-            f"security_id={state.security_id}; "
-            f"decision_at={state.decision_at.isoformat()}; "
-            f"evidence_ids={','.join(evidence_ids)}"
-        )
+        prompt = _build_real_llm_decision_prompt(state, evidence_ids)
         response = self._provider.complete(
             prompt,
             response_schema=_DECISION_SCHEMA,

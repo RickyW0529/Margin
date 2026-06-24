@@ -14,11 +14,17 @@ from dataclasses import asdict, dataclass
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.engine import URL, make_url
 
 from alembic import command
 from margin.settings import DEFAULT_DATABASE_URL, get_settings
+from margin.sql.health_queries import (
+    alembic_version,
+    non_system_tables,
+    pgvector_extension,
+)
+from margin.sql.raw_statements import TERMINATE_DATABASE_CONNECTIONS
 
 
 @dataclass(frozen=True)
@@ -67,11 +73,7 @@ def _terminate_database(admin_url: URL, database_name: str) -> None:
     try:
         with engine.connect() as connection:
             connection.execute(
-                text(
-                    "SELECT pg_terminate_backend(pid) "
-                    "FROM pg_stat_activity "
-                    "WHERE datname = :database_name AND pid <> pg_backend_pid()"
-                ),
+                TERMINATE_DATABASE_CONNECTIONS,
                 {"database_name": database_name},
             )
     finally:
@@ -107,7 +109,7 @@ def _install_pgvector(target_url: URL) -> bool:
             connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
             return (
                 connection.execute(
-                    text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
+                    pgvector_extension()
                 ).scalar()
                 == 1
             )
@@ -121,21 +123,22 @@ def _inspect_database(target_url: URL) -> tuple[str | None, tuple[str, ...], boo
     try:
         with engine.connect() as connection:
             current_head = connection.execute(
-                text("SELECT version_num FROM alembic_version")
+                alembic_version()
             ).scalar()
+            table_rows = connection.execute(
+                non_system_tables()
+            ).all()
             tables = tuple(
                 sorted(
-                    connection.execute(
-                        text(
-                            "SELECT tablename FROM pg_tables "
-                            "WHERE schemaname = 'public'"
-                        )
-                    ).scalars()
+                    table_name
+                    if schema_name == "public"
+                    else f"{schema_name}.{table_name}"
+                    for schema_name, table_name in table_rows
                 )
             )
             pgvector_available = (
                 connection.execute(
-                    text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
+                    pgvector_extension()
                 ).scalar()
                 == 1
             )

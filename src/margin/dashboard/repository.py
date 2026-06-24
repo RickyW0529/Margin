@@ -8,7 +8,6 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Protocol
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from margin.dashboard.db_models import (
@@ -26,6 +25,13 @@ from margin.dashboard.models import (
     ResearchCandidateListResponse,
     ResearchItem,
     ResearchRun,
+)
+from margin.sql.dashboard_queries import (
+    dashboard_feedback_by_item,
+    dashboard_items_by_run,
+    dashboard_items_by_run_ids,
+    dashboard_runs,
+    dashboard_runs_by_scope,
 )
 
 
@@ -311,14 +317,12 @@ class SQLAlchemyDashboardRepository:
             A list of matching research runs.
         """
         with self._session_factory() as session:
-            statement = select(DashboardRunRow)
-            if strategy_id:
-                statement = statement.where(DashboardRunRow.strategy_id == strategy_id)
-            if status:
-                statement = statement.where(DashboardRunRow.status == status)
-            rows = session.scalars(
-                statement.order_by(DashboardRunRow.created_at.desc()).limit(limit)
-            ).all()
+            statement = dashboard_runs(
+                strategy_id=strategy_id,
+                status=status,
+                limit=limit,
+            )
+            rows = session.scalars(statement).all()
             return [_run_from_row(row) for row in rows]
 
     def add_items(self, items: list[ResearchItem]) -> None:
@@ -355,9 +359,7 @@ class SQLAlchemyDashboardRepository:
         """
         with self._session_factory() as session:
             rows = session.scalars(
-                select(DashboardItemRow)
-                .where(DashboardItemRow.run_id == run_id)
-                .order_by(DashboardItemRow.created_at)
+                dashboard_items_by_run(run_id)
             ).all()
             return [_item_from_row(row) for row in rows]
 
@@ -389,9 +391,7 @@ class SQLAlchemyDashboardRepository:
         """
         with self._session_factory() as session:
             rows = session.scalars(
-                select(DashboardFeedbackRow)
-                .where(DashboardFeedbackRow.item_id == item_id)
-                .order_by(DashboardFeedbackRow.created_at)
+                dashboard_feedback_by_item(item_id)
             ).all()
             return [
                 FeedbackRecord(
@@ -418,9 +418,7 @@ class SQLAlchemyDashboardRepository:
         del universe_code
         with self._session_factory() as session:
             run_rows = session.scalars(
-                select(DashboardRunRow).where(
-                    DashboardRunRow.version_id == scope_version_id
-                )
+                dashboard_runs_by_scope(scope_version_id)
             ).all()
             run_by_id = {row.run_id: _run_from_row(row) for row in run_rows}
             if not run_by_id:
@@ -432,9 +430,7 @@ class SQLAlchemyDashboardRepository:
                     scope_version_id=scope_version_id,
                 )
             item_rows = session.scalars(
-                select(DashboardItemRow).where(
-                    DashboardItemRow.run_id.in_(tuple(run_by_id))
-                )
+                dashboard_items_by_run_ids(tuple(run_by_id))
             ).all()
         candidates = [
             _candidate_from_item(_item_from_row(row), run_by_id[row.run_id])

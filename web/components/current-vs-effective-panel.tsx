@@ -2,6 +2,9 @@
  * @fileoverview Current review vs effective assessment panel for v0.2 detail.
  */
 
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
 type CurrentReview = {
   outcome?: unknown;
   reason?: unknown;
@@ -32,30 +35,54 @@ export function CurrentVsEffectivePanel({
   const staleReason = text(effectiveAssessment?.stale_reason);
 
   return (
-    <section className="panel" aria-labelledby="current-effective-title">
-      <div className="panel-heading">
+    <Card aria-labelledby="current-effective-title">
+      <CardHeader>
         <div>
-          <p className="eyebrow">Decision state</p>
-          <h2 id="current-effective-title">本轮复核 vs 当前有效结论</h2>
+          <p className="text-xs font-medium uppercase tracking-wider text-accent">
+            Decision state
+          </p>
+          <CardTitle id="current-effective-title" className="mt-1">
+            本轮复核 vs 当前有效结论
+          </CardTitle>
         </div>
-        <span>{freshness}</span>
-      </div>
-      <div className="current-effective-grid">
-        <article>
-          <strong>本轮复核：{outcomeLabel(outcome)}</strong>
-          <span>{reason || "本轮未记录延期或拒绝原因"}</span>
+        <Badge tone={freshnessTone(freshness)}>{freshness}</Badge>
+      </CardHeader>
+      <CardContent className="grid gap-3 md:grid-cols-2">
+        <article className="grid gap-1.5 rounded-md border border-border bg-muted/40 p-4">
+          <strong className="text-sm font-semibold text-foreground">
+            本轮复核：{outcomeLabel(outcome)}
+          </strong>
+          <span className="text-xs text-muted-foreground">
+            {reason || "本轮未记录延期或拒绝原因"}
+          </span>
           {text(currentReview?.workflow_run_id) ? (
-            <span>workflow {text(currentReview?.workflow_run_id)}</span>
+            <span className="text-xs text-muted-foreground">
+              workflow {text(currentReview?.workflow_run_id)}
+            </span>
           ) : null}
         </article>
-        <article>
-          <strong>当前有效结论：{assessmentId}</strong>
-          <span>{freshness}</span>
-          {staleReason ? <span>{staleReason}</span> : null}
+        <article className="grid gap-1.5 rounded-md border border-border bg-muted/40 p-4">
+          <strong className="text-sm font-semibold text-foreground">
+            当前有效结论：{assessmentId}
+          </strong>
+          <span className="text-xs text-muted-foreground">{freshness}</span>
+          {staleReason ? (
+            <span className="text-xs text-muted-foreground">{staleReason}</span>
+          ) : null}
         </article>
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   );
+}
+
+function freshnessTone(freshness: string): "positive" | "caution" | "muted" {
+  if (freshness === "fresh") {
+    return "positive";
+  }
+  if (freshness === "stale" || freshness === "deferred") {
+    return "caution";
+  }
+  return "muted";
 }
 
 function outcomeLabel(outcome: string): string {

@@ -125,9 +125,11 @@ class SQLAlchemyScopeBindingProvider:
     def __init__(
         self,
         strategy_repository: SQLAlchemyStrategyRepository,
+        company_pool_repository: Any | None = None,
     ) -> None:
         """init  ."""
         self._strategy = strategy_repository
+        self._company_pool = company_pool_repository
 
     def get_scope_binding(self, scope_version_id: str) -> ScopeBinding:
         """Return the scope binding for the supplied version ID."""
@@ -141,6 +143,13 @@ class SQLAlchemyScopeBindingProvider:
         if feature_set_version is None:
             raise KeyError(
                 f"quant feature set not found: {scope.quant_feature_set_version_id}"
+            )
+        quant_strategy_version = self._strategy.get_quant_strategy(
+            scope.quant_strategy_version_id
+        )
+        if quant_strategy_version is None:
+            raise KeyError(
+                f"quant strategy not found: {scope.quant_strategy_version_id}"
             )
 
         indicator_view_version = self._strategy.get_indicator_view(
@@ -164,16 +173,45 @@ class SQLAlchemyScopeBindingProvider:
             required_indicators=feature_set_version.required_indicators,
             optional_indicators=feature_set_version.optional_indicators,
             history_days=feature_set_version.history_days,
+            metadata={
+                "quant_strategy": {
+                    "quant_strategy_version_id": quant_strategy_version.version_id,
+                    "strategy_family": quant_strategy_version.strategy_family,
+                    "factor_weights": quant_strategy_version.factor_weights,
+                    "thresholds": quant_strategy_version.thresholds,
+                    "calibration_report_id": quant_strategy_version.calibration_report_id,
+                }
+            },
         )
 
         user_indicator_view = _build_user_indicator_view(indicator_view_version)
 
-        universe_snapshot = UniverseSnapshot(
-            universe_code=universe_version.universe_code,
-            universe_version_id=universe_version.version_id,
-            business_at=datetime.now(UTC),
-            known_at=datetime.now(UTC),
-            security_ids=universe_version.member_security_ids,
+        pool_snapshot = (
+            self._company_pool.latest()
+            if self._company_pool is not None
+            and str(universe_version.universe_code).upper() in {"ALL_A", "ALL_A_NON_ST"}
+            else None
+        )
+        universe_snapshot = (
+            UniverseSnapshot(
+                snapshot_id=pool_snapshot.snapshot_id,
+                universe_code=pool_snapshot.pool_code,
+                universe_version_id=universe_version.version_id,
+                business_at=pool_snapshot.business_at,
+                known_at=pool_snapshot.known_at,
+                security_ids=pool_snapshot.security_ids,
+                membership_ids=pool_snapshot.membership_ids,
+                input_hash=pool_snapshot.input_hash,
+                created_at=pool_snapshot.created_at,
+            )
+            if pool_snapshot is not None
+            else UniverseSnapshot(
+                universe_code=universe_version.universe_code,
+                universe_version_id=universe_version.version_id,
+                business_at=datetime.now(UTC),
+                known_at=datetime.now(UTC),
+                security_ids=universe_version.member_security_ids,
+            )
         )
 
         return ScopeBinding(
@@ -260,6 +298,7 @@ def build_cross_section_loader(
                 start_date=snapshot.market_window_start.date(),
                 end_date=snapshot.market_window_end.date(),
                 decision_at=snapshot.decision_at,
+                max_points_per_indicator=260,
             )
         )
         return _build_quant_cross_section(
@@ -288,9 +327,14 @@ def _pivot_canonical_values(
             value.security_id, {"security_id": value.security_id}
         )
         numeric = value.numeric_value
-        row[value.indicator_id] = (
-            float(numeric) if numeric is not None else None
-        )
+        if numeric is not None:
+            row[value.indicator_id] = float(numeric)
+        elif value.text_value is not None:
+            row[value.indicator_id] = value.text_value
+        elif value.json_value is not None:
+            row[value.indicator_id] = value.json_value
+        else:
+            row[value.indicator_id] = None
     frame = pd.DataFrame.from_dict(records, orient="index")
     frame.index = frame.index.astype(str)
     frame["security_id"] = frame.index.astype(str)

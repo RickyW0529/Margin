@@ -62,4 +62,21 @@ describe("ResearchRunForm", () => {
       "请先在右上角解锁管理员模式",
     );
   });
+
+  it("surfaces service configuration blockers from the API", async () => {
+    const startRefresh = vi
+      .fn()
+      .mockRejectedValue(
+        new Error(
+          'Margin API 503: /api/v1/valuation-discovery/refreshes - {"detail":{"code":"service_not_configured","message":"active provider config not found: tavily"}}',
+        ),
+      );
+
+    render(<ResearchRunForm startRefresh={startRefresh} />);
+    fireEvent.click(screen.getByRole("button", { name: "启动估值发现" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Tavily Provider 未激活",
+    );
+  });
 });

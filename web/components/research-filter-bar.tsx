@@ -2,6 +2,11 @@
  * @fileoverview Server-side GET filter bar for v0.2 research candidates.
  */
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+
 type ResearchFilterValues = {
   scope_version_id?: string;
   universe?: string;
@@ -52,37 +57,41 @@ const FRESHNESS = [
   ["deferred", "deferred"],
 ] as const;
 
-/**
- * Renders non-secret research candidate filters as a progressive-enhancement
- * GET form. The form drives server pagination and keeps filter state in URL
- * query parameters only.
- */
-export function ResearchFilterBar({
-  defaultValues = {},
-}: ResearchFilterBarProps) {
+/** Renders non-secret research filters as a GET form driving URL state. */
+export function ResearchFilterBar({ defaultValues = {} }: ResearchFilterBarProps) {
   return (
-    <section className="panel research-filter-panel" aria-labelledby="research-filters-title">
-      <div className="panel-heading">
+    <section
+      className="rounded-lg border border-border bg-card p-4"
+      aria-labelledby="research-filters-title"
+    >
+      <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <p className="eyebrow">Server filters</p>
-          <h2 id="research-filters-title">研究候选筛选</h2>
+          <p className="text-xs font-medium uppercase tracking-wider text-accent">
+            Server filters
+          </p>
+          <h2
+            id="research-filters-title"
+            className="mt-1 text-sm font-semibold text-foreground"
+          >
+            研究候选筛选
+          </h2>
         </div>
-        <span>URL state</span>
+        <span className="text-xs text-muted-foreground">URL state</span>
       </div>
-      <form action="/research" className="research-filter-form" method="get">
-        <label className="form-field">
-          <span>Scope 版本</span>
-          <input
+      <form action="/research" className="grid grid-cols-2 gap-3 md:grid-cols-4" method="get">
+        <div className="grid gap-1.5">
+          <Label>Scope 版本</Label>
+          <Input
             aria-label="Scope 版本"
             name="scope_version_id"
             required
             type="text"
             defaultValue={defaultValues.scope_version_id ?? "scope-current"}
           />
-        </label>
-        <label className="form-field">
-          <span>公司池</span>
-          <select
+        </div>
+        <div className="grid gap-1.5">
+          <Label>公司池</Label>
+          <Select
             aria-label="公司池"
             name="universe"
             defaultValue={defaultValues.universe ?? "ALL_A"}
@@ -92,11 +101,11 @@ export function ResearchFilterBar({
                 {label}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="form-field">
-          <span>量化状态</span>
-          <select
+          </Select>
+        </div>
+        <div className="grid gap-1.5">
+          <Label>量化状态</Label>
+          <Select
             aria-label="量化状态"
             name="screening_status"
             defaultValue={defaultValues.screening_status ?? ""}
@@ -106,11 +115,11 @@ export function ResearchFilterBar({
                 {label}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="form-field">
-          <span>数据状态</span>
-          <select
+          </Select>
+        </div>
+        <div className="grid gap-1.5">
+          <Label>数据状态</Label>
+          <Select
             aria-label="数据状态"
             name="data_status"
             defaultValue={defaultValues.data_status ?? ""}
@@ -120,11 +129,11 @@ export function ResearchFilterBar({
                 {label}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="form-field">
-          <span>复核要求</span>
-          <select
+          </Select>
+        </div>
+        <div className="grid gap-1.5">
+          <Label>复核要求</Label>
+          <Select
             aria-label="复核要求"
             name="review_required"
             defaultValue={defaultValues.review_required ?? ""}
@@ -134,11 +143,11 @@ export function ResearchFilterBar({
                 {label}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="form-field">
-          <span>结论新鲜度</span>
-          <select
+          </Select>
+        </div>
+        <div className="grid gap-1.5">
+          <Label>结论新鲜度</Label>
+          <Select
             aria-label="结论新鲜度"
             name="assessment_freshness"
             defaultValue={defaultValues.assessment_freshness ?? ""}
@@ -148,25 +157,23 @@ export function ResearchFilterBar({
                 {label}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="form-field research-query-field">
-          <span>搜索</span>
-          <input
+          </Select>
+        </div>
+        <div className="grid gap-1.5 md:col-span-2">
+          <Label>搜索</Label>
+          <Input
             aria-label="搜索"
             name="query"
             placeholder="代码、名称或状态"
             type="search"
             defaultValue={defaultValues.query ?? ""}
           />
-        </label>
-        <div className="research-filter-actions">
-          <button className="primary-button" type="submit">
-            应用筛选
-          </button>
-          <a className="secondary-link" href="/research">
-            清空
-          </a>
+        </div>
+        <div className="col-span-2 flex flex-wrap gap-2 md:col-span-4">
+          <Button type="submit">应用筛选</Button>
+          <Button asChild variant="secondary" type="button">
+            <a href="/research">清空</a>
+          </Button>
         </div>
       </form>
     </section>

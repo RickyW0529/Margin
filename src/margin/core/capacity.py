@@ -12,14 +12,17 @@ from threading import RLock
 from typing import Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import select, update
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from margin.core.db_orchestration import (
     CapacityLimitVersionRow,
-    ProviderCapacityCounterRow,
+)
+from margin.sql.core_queries import (
+    active_capacity_limit,
+    capacity_counter_for_update,
+    deprecate_active_limits,
+    insert_capacity_counter,
 )
 
 
@@ -226,22 +229,12 @@ class SQLAlchemyCapacityRepository:
                         )
                     if existing.lifecycle != "active":
                         session.execute(
-                            update(CapacityLimitVersionRow)
-                            .where(
-                                CapacityLimitVersionRow.limit_key == limit.limit_key,
-                                CapacityLimitVersionRow.lifecycle == "active",
-                            )
-                            .values(lifecycle="deprecated")
+                            deprecate_active_limits(limit.limit_key)
                         )
                         existing.lifecycle = "active"
                     return
                 session.execute(
-                    update(CapacityLimitVersionRow)
-                    .where(
-                        CapacityLimitVersionRow.limit_key == limit.limit_key,
-                        CapacityLimitVersionRow.lifecycle == "active",
-                    )
-                    .values(lifecycle="deprecated")
+                    deprecate_active_limits(limit.limit_key)
                 )
                 session.add(_limit_to_row(limit))
         except IntegrityError as exc:
@@ -251,17 +244,8 @@ class SQLAlchemyCapacityRepository:
 
     def get_active_limit(self, limit_key: str) -> CapacityLimit | None:
         """get active limit."""
-        statement = (
-            select(CapacityLimitVersionRow)
-            .where(
-                CapacityLimitVersionRow.limit_key == limit_key,
-                CapacityLimitVersionRow.lifecycle == "active",
-            )
-            .order_by(CapacityLimitVersionRow.created_at.desc())
-            .limit(1)
-        )
         with self._session_factory() as session:
-            row = session.scalar(statement)
+            row = session.scalar(active_capacity_limit(limit_key))
             return _limit_from_row(row) if row is not None else None
 
     def consume(
@@ -280,34 +264,20 @@ class SQLAlchemyCapacityRepository:
         counter_id = _counter_id(limit.limit_key, limit.version_id, window_started_at)
         with self._session_factory.begin() as session:
             session.execute(
-                insert(ProviderCapacityCounterRow)
-                .values(
+                insert_capacity_counter(
                     counter_id=counter_id,
                     limit_key=limit.limit_key,
                     limit_version_id=limit.version_id,
                     window_started_at=window_started_at,
                     window_ends_at=window_ends_at,
-                    request_count=0,
-                    token_count=0,
-                    cost_amount=Decimal("0"),
-                    updated_at=window_started_at,
-                )
-                .on_conflict_do_nothing(
-                    index_elements=[
-                        ProviderCapacityCounterRow.limit_key,
-                        ProviderCapacityCounterRow.limit_version_id,
-                        ProviderCapacityCounterRow.window_started_at,
-                    ]
                 )
             )
             row = session.scalar(
-                select(ProviderCapacityCounterRow)
-                .where(
-                    ProviderCapacityCounterRow.limit_key == limit.limit_key,
-                    ProviderCapacityCounterRow.limit_version_id == limit.version_id,
-                    ProviderCapacityCounterRow.window_started_at == window_started_at,
+                capacity_counter_for_update(
+                    limit.limit_key,
+                    limit.version_id,
+                    window_started_at,
                 )
-                .with_for_update()
             )
             if row is None:
                 raise RuntimeError("capacity counter could not be created")

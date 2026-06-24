@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import select
-
 from margin.api.dependencies import get_provider_config_health_service
 from margin.core.secret_store import SecretStore, SQLAlchemySecretRepository
-from margin.data.db_models import SecurityMasterRow
 from margin.settings import MarginSettings, get_settings
+from margin.sql.data_queries import active_stock_security_ids
 from margin.storage.database import (
     DatabaseSettings,
     create_database_engine,
@@ -153,10 +151,7 @@ def _active_security_ids(session_factory) -> tuple[str, ...]:  # noqa: ANN001
     """Return currently visible stock security IDs for the ALL_A default."""
     with session_factory() as session:
         values = session.scalars(
-            select(SecurityMasterRow.security_id)
-            .where(SecurityMasterRow.system_to.is_(None))
-            .where(SecurityMasterRow.security_type == "stock")
-            .order_by(SecurityMasterRow.security_id)
+            active_stock_security_ids()
         ).all()
     return tuple(values)
 

@@ -54,6 +54,8 @@ Key responsibilities:
 - **Quality events**: Emit structured events that can suppress high-confidence research signals when critical issues are detected.
 - **PIT warehouse**: v0.2 adds raw snapshots, provider facts, canonical values, bitemporal industry membership, corporate actions, adjusted prices, freshness state, and retention audit.
 - **Incremental sync orchestration**: v0.2 adds endpoint registry, sync run/work items, exclusive claim, retry-safe cursors, freshness calculation, and an ingestion stack from provider payloads to canonical values.
+- **v0.3 quant data-lake/warehouse path**: adds an independent Tushare source system (`source_tushare`), 17 quant-admitted endpoint landing tables, an AKShare independent source-system skeleton (`source_akshare`) with endpoint landing tables, a quant requirement catalog, source-quality decisions, rolling acquisition policy, a Tushare backfill CLI, and a quality-to-warehouse publisher. The active path is `source_tushare.* -> source_quality_decisions -> standardized_indicator_facts/canonical_indicator_values -> company_pool_snapshots -> quant_input_snapshots`.
+- **Quant-only admission**: `requirements.py` links every collected endpoint to an active quant consumer. Endpoints such as `top_list`, `top_inst`, `block_trade`, `margin`, `pledge_detail`, `stk_holdernumber`, and `concept` are cataloged as out-of-scope and are not collected.
 
 ---
 
@@ -72,6 +74,15 @@ Key responsibilities:
 | `src/margin/data/ingestion.py` | Provider payload → compressed raw snapshot → schema observation → standardized facts → canonical values. |
 | `src/margin/data/freshness.py` | Domain-aware expected-as-of and freshness status calculation. |
 | `src/margin/data/warehouse_repository.py` | Downstream PIT-safe repository for canonical values, industry, adjusted prices, freshness, and quality events. |
+| `src/margin/data/policy.py` | Append-only rolling acquisition policy versions for 24-month windows, revision lookback, and financial comparison years. |
+| `src/margin/data/requirements.py` | v0.3 quant requirement closure and Tushare endpoint admission catalog. |
+| `src/margin/data/tushare_source.py` | Tushare landing records, natural keys, revision hashes, and ST/delisting-name detection. |
+| `src/margin/data/tushare_query.py` | Tushare field allowlist and bounded query plans. |
+| `src/margin/data/tushare_quality.py` | Source quality screen excluding ST, future listings, delisting-transition names, out-of-window rows, and missing keys. |
+| `src/margin/data/tushare_repository.py` | Tushare catalog, landing, and quality-decision persistence with batched PostgreSQL writes. |
+| `src/margin/data/tushare_backfill.py` | Rolling backfill service with date, symbol-batch, and monthly index partitioning. |
+| `src/margin/data/tushare_warehouse.py` | Publisher from accepted source rows to the unified warehouse. |
+| `src/margin/data/company_pool.py` | Non-ST, non-delisting, non-future-listed company-pool snapshot materialization. |
 | `src/margin/data/retention.py` | Reference-aware retention deletion and immutable audit. |
 | `src/margin/data/schema_discovery.py` | Source-field lifecycle, missing-field, and type-change tracking. |
 | `src/margin/data/facts.py`, `src/margin/data/canonical.py`, `src/margin/data/indicator_catalog.py` | Standardized provider facts, canonical resolver, and indicator catalog/mappings. |
@@ -81,6 +92,28 @@ Key responsibilities:
 | `src/margin/core/provider.py` | Core provider abstractions: enums, descriptors, health results, call results, and business protocols. |
 | `src/margin/core/registry.py` | `ProviderRegistry` for registration, discovery, secret injection, health checks, and resilient call dispatch. |
 | `scripts/smoke_data_provider.py` | Real AKShare/Tushare smoke entrypoint. It prints provider status, counts, and snapshot IDs, never token values. |
+| `scripts/probe_tushare_quant_endpoints.py` | Real-seat Tushare endpoint probe for the quant closure, with secret-free output. |
+| `scripts/run_tushare_backfill.py` | Quant-only Tushare rolling backfill CLI with date/window/endpoint subset and JSON report options. |
+
+## v0.3 Tushare source-system coverage
+
+Current verified production DB coverage at decision time `2026-06-22T16:00:00Z`:
+
+| Area | Coverage |
+|---|---|
+| Company pool | Current `stock_basic` source landing has 5349 rows and 5313 distinct symbols; the latest non-ST/non-delisting/non-future-listed pool has 5304 companies. |
+| Daily bars | `daily`: 2024-06-24 through 2026-06-22, 483 open trading days, 2,502,953 source rows; `close` and `amount` each publish 2,502,966 warehouse facts. |
+| Adjustment factors | `adj_factor`: same 483 open trading days, 2,501,465 source rows; `adj_factor` published to warehouse. |
+| Suspension | `suspend_d`: 4635 accepted suspension rows, publishing `is_suspended` and `suspend_type`. |
+| Financials | `income`, `balancesheet`, `cashflow`, `fina_indicator`, and `fina_audit` cover the TTM/comparison window from 2020-12-31 to 2026-03-31. |
+| Valuation snapshot | `daily_basic` publishes 2026-06-22 close-time valuation fields including `pe_ttm`, `pb`, `ps_ttm`, `dv_ttm`, `total_mv`, and `turnover_rate`. |
+| Benchmarks | `index_daily` covers 000300/000905/000852 for 483 open days; `index_weight` publishes 41895 weight facts. |
+
+Known degradation: `index_member` returns empty with the current real-seat parameter set, so industry serving falls back to `stock_basic.industry` and warehouse membership data.
+
+Index optimization: `standardized_indicator_facts` adds the partial covering index `ix_indicator_facts_quant_history_cover` (`security_id, indicator_id, event_at, available_at`, only rows with `numeric_value IS NOT NULL`) so quant history reads can use index-only scans instead of full-universe heap scans.
+
+AKShare independent source system: the database now includes `source_akshare` plus five endpoint landing tables: `ak_stock_zh_a_spot_em`, `ak_stock_zh_a_hist`, `ak_stock_balance_sheet_by_report_em`, `ak_stock_value_em`, and `ak_index_stock_cons_csindex`. They use the same audit columns, natural-key hash, revision hash, raw-snapshot link, sync-run link, quality status, and query indexes as the Tushare source tables. Real AKShare backfill remains non-blocking because the current environment can fail through external proxy behavior.
 
 ---
 

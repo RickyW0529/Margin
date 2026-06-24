@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -29,6 +29,7 @@ from margin.strategy.models import (
 )
 from margin.strategy.provider_config import ProviderConfigHealthService, ProviderHealth
 from margin.strategy.service import StrategyService
+from margin.valuation_discovery.quant.pool_defaults import quant_strategy_defaults_payload
 
 router = APIRouter(prefix="/api/v1", tags=["strategy-config-v0.2"])
 T = TypeVar("T")
@@ -329,6 +330,12 @@ def list_quant_strategies(
 ) -> list[QuantStrategyVersion]:
     """List quant strategy versions."""
     return service.list_quant_strategies(owner_id)
+
+
+@router.get("/quant-strategy-defaults")
+def get_quant_strategy_defaults() -> dict[str, Any]:
+    """Return built-in monthly manual strategy presets for supported pools."""
+    return quant_strategy_defaults_payload()
 
 
 @router.post("/quant-strategies")

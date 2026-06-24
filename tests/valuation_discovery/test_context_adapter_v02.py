@@ -63,6 +63,14 @@ def test_context_builder_freezes_quant_news_evidence_and_previous_state(
         data_status=DataStatus.OK,
         review_required=True,
         research_guardrail=ResearchGuardrail.RESEARCH_ALLOWED,
+        factor_details={
+            "ai_quant_profile": {
+                "strategy_profile": "manual_all_a_no_market_cap_no_top_n",
+                "execution_boundary": "research_only_no_order",
+                "scores": {"manual_all_a_score": 78.5},
+                "raw_factors": {"market_cap": 120_000_000_000.0},
+            }
+        },
     )
     target = NewsTarget(
         scope_version_id="scope-1",
@@ -93,6 +101,8 @@ def test_context_builder_freezes_quant_news_evidence_and_previous_state(
     assert payload["news_context_bundle_id"] == "bundle-1"
     assert payload["evidence_package_id"] == "package-1"
     assert payload["evidence_ids"] == ["evidence-1"]
+    assert payload["quant_ai_profile"]["scores"]["manual_all_a_score"] == 78.5
+    assert payload["quant_ai_profile"]["raw_factors"]["market_cap"] == 120_000_000_000.0
     assert payload["material_quant_change"] is True
     assert payload["news_target_complete"] is True
     assert adapter.list_context_snapshot_ids(

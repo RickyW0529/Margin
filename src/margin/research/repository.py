@@ -5,11 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from margin.research.db_models import ResearchSnapshotRow
 from margin.research.models import ResearchSnapshot
+from margin.sql.research_queries import snapshots_by_run_id
 
 
 class ResearchRepository(Protocol):
@@ -158,11 +158,6 @@ class SQLAlchemyResearchRepository:
         """
         with self._session_factory() as session:
             row = session.scalars(
-                select(ResearchSnapshotRow)
-                .where(ResearchSnapshotRow.run_id == run_id)
-                .order_by(
-                    ResearchSnapshotRow.created_at.desc(),
-                    ResearchSnapshotRow.snapshot_id.desc(),
-                )
+                snapshots_by_run_id(run_id)
             ).first()
             return ResearchSnapshot.model_validate(row.payload) if row else None

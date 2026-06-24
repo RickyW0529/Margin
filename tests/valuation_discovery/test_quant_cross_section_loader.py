@@ -37,6 +37,11 @@ class FakeWarehouse:
             _canonical("000001.SZ", "roe_ttm", "0.15"),
             _canonical("000001.SZ", "net_profit_ttm", "100"),
             _canonical("000001.SZ", "pe_ttm", "10"),
+            _canonical_text(
+                "000001.SZ",
+                "audit_opinion",
+                "standard_unqualified",
+            ),
             _canonical("000002.SZ", "roe_ttm", "0.08"),
             _canonical("000002.SZ", "net_profit_ttm", "80"),
             _canonical("000002.SZ", "pe_ttm", "20"),
@@ -108,7 +113,7 @@ def test_loader_builds_pit_metadata_and_market_features() -> None:
         known_at=DECISION_AT,
         security_ids=("000001.SZ", "000002.SZ"),
         required_indicators=("net_profit_ttm", "pe_ttm"),
-        optional_indicators=("roe_ttm",),
+        optional_indicators=("roe_ttm", "audit_opinion"),
         market_window_start=datetime(2025, 1, 1, tzinfo=UTC),
         market_window_end=DECISION_AT,
     )
@@ -116,6 +121,7 @@ def test_loader_builds_pit_metadata_and_market_features() -> None:
     frame = build_cross_section_loader(warehouse)(snapshot)
 
     assert frame.loc["000001.SZ", "roe_ttm"] == 0.15
+    assert frame.loc["000001.SZ", "audit_opinion"] == "standard_unqualified"
     assert frame.loc["000001.SZ", "industry_family"] == "financial"
     assert frame.loc["000001.SZ", "avg_amount_20d"] == 100_000_000
     assert frame.loc["000001.SZ", "return_20d"] > 0
@@ -152,6 +158,22 @@ def _canonical(
         confidence=Decimal("0.9"),
         resolver_version="resolver-v1",
         resolver_hash="sha256:test",
+    )
+
+
+def _canonical_text(
+    security_id: str,
+    indicator_id: str,
+    value: str,
+) -> CanonicalValue:
+    """Build one current canonical text value."""
+    canonical = _canonical(security_id, indicator_id, "0")
+    return CanonicalValue(
+        **{
+            **canonical.__dict__,
+            "numeric_value": None,
+            "text_value": value,
+        }
     )
 
 

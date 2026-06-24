@@ -29,6 +29,8 @@
 - **注册与调用治理**：`ProviderRegistry` 提供注册、发现、健康检查、限流、重试、降级、审计、成本统计等统一入口。
 - **PIT 数据仓库**：v0.2 新增 Raw Snapshot、Provider Fact、Canonical Value、bitemporal 行业、公司行动和 freshness 状态等表，保留全量底层数据。
 - **增量同步编排**：v0.2 新增 endpoint registry、sync run/work item、claim/retry/freshness 和 ingestion stack，支持 provider payload 到 canonical 值的端到端落库。
+- **v0.3 量化数据湖/仓库链路**：新增 Tushare 独立源系统 `source_tushare`、17 个量化准入 endpoint 专用 landing 表、AKShare 独立源系统 `source_akshare` 的 endpoint landing 表骨架、量化需求目录、质量决策表、滚动数据策略、Tushare 回填 CLI 和质量层到统一仓库 publisher。当前 Tushare 主链路为 `source_tushare.* -> source_quality_decisions -> standardized_indicator_facts/canonical_indicator_values -> company_pool_snapshots -> quant_input_snapshots`。
+- **量化准入约束**：`requirements.py` 显式列出每个 endpoint 的消费方；`top_list`、`top_inst`、`block_trade`、`margin`、`pledge_detail`、`stk_holdernumber`、`concept` 因无当前量化消费方被标记为 out-of-scope，不采集。
 
 该模块的产品与架构边界见对应大版本的 `docs/design/`；本文描述当前已实现的数据 Provider 能力。
 
@@ -49,6 +51,15 @@
 | `src/margin/data/ingestion.py` | Provider payload → compressed raw snapshot → schema observation → standardized facts → canonical values 的集成管线。 |
 | `src/margin/data/freshness.py` | 按数据域计算 expected-as-of 与 freshness 状态。 |
 | `src/margin/data/warehouse_repository.py` | 下游读取的 PIT-safe repository：canonical、industry、adjusted price、freshness、quality event。 |
+| `src/margin/data/policy.py` | append-only 数据采集策略版本，支持近两年滚动窗口、修订回看和财务比较年数。 |
+| `src/margin/data/requirements.py` | v0.3 量化需求闭包与 Tushare endpoint 准入目录。 |
+| `src/margin/data/tushare_source.py` | Tushare 独立源系统 landing record、自然键、revision hash、ST/退市名称判定。 |
+| `src/margin/data/tushare_query.py` | Tushare 字段白名单与分片查询计划，限制只取量化消费字段。 |
+| `src/margin/data/tushare_quality.py` | Tushare 源数据质量筛选，排除 ST、未来上市、退市整理、窗口外和缺自然键数据。 |
+| `src/margin/data/tushare_repository.py` | Tushare source schema/catalog/landing/quality 决策持久化，批量写入避免 PostgreSQL 参数上限。 |
+| `src/margin/data/tushare_backfill.py` | 滚动回填服务，按交易日、symbol batch、指数月分片执行，单分片失败不丢已完成进度。 |
+| `src/margin/data/tushare_warehouse.py` | accepted source rows 到统一 warehouse 的 publisher。 |
+| `src/margin/data/company_pool.py` | 非 ST、非退市、非未来上市公司池快照 materialization。 |
 | `src/margin/data/retention.py` | 引用感知的 retention 删除与不可变 audit。 |
 | `src/margin/data/schema_discovery.py` | Source schema 字段生命周期与 missing/type-change 检测。 |
 | `src/margin/data/facts.py`、`src/margin/data/canonical.py`、`src/margin/data/indicator_catalog.py` | 标准化指标事实、canonical resolver 和指标映射目录。 |
@@ -58,6 +69,28 @@
 | `src/margin/core/provider.py` | Provider 类型、状态、描述符、基类与业务协议（市场数据、网页搜索）。 |
 | `src/margin/core/registry.py` | Provider 注册中心，集成健康检查、限流、重试、降级、审计、密钥注入。 |
 | `scripts/smoke_data_provider.py` | 真实 AKShare/Tushare smoke 入口；输出 provider 状态、计数和 snapshot ID，不输出 token。 |
+| `scripts/probe_tushare_quant_endpoints.py` | 真实 Tushare Pro 席位 endpoint 探测脚本，输出无 token 的可用性审计。 |
+| `scripts/run_tushare_backfill.py` | Tushare 量化需求闭包滚动回填 CLI，支持 `--months`、手工日期、endpoint 子集和 JSON 报告。 |
+
+## v0.3 Tushare 独立源系统与真实覆盖
+
+当前数据库已通过 Tushare 主链路完成以下真实落库（决策日 `2026-06-22 16:00 UTC`）：
+
+| 类别 | 覆盖 |
+|---|---|
+| 公司池 | `stock_basic` 当前 source landing 5349 行、5313 个 distinct symbol；最新非 ST/非退市/非未来上市公司池 5304 家。 |
+| 日线行情 | `daily`：2024-06-24 至 2026-06-22，483 个开市日，2,502,953 行 source；warehouse `close`/`amount` 各 2,502,966 条事实。 |
+| 复权因子 | `adj_factor`：同窗口 483 个开市日，2,501,465 行 source；warehouse `adj_factor` 同步发布。 |
+| 停牌 | `suspend_d`：4635 条 accepted 停牌事实，发布 `is_suspended` 与 `suspend_type`。 |
+| 财务 | `income`、`balancesheet`、`cashflow`、`fina_indicator`、`fina_audit` 覆盖 2020-12-31 至 2026-03-31 的 TTM/同比计算窗口。 |
+| 估值 | `daily_basic` 在 2026-06-22 收盘后发布 `pe_ttm`、`pb`、`ps_ttm`、`dv_ttm`、`total_mv`、`turnover_rate`。 |
+| Benchmark | `index_daily` 覆盖 000300/000905/000852 三个指数 483 个开市日；`index_weight` 发布 41895 条权重事实。 |
+
+已知降级：`index_member` 在当前 Tushare 席位/参数组合下返回空，行业当前使用 `stock_basic.industry` 和 warehouse 行业 membership fallback；该项保留在 endpoint 审计中，不阻断量化链路。
+
+索引优化：`standardized_indicator_facts` 追加 `ix_indicator_facts_quant_history_cover` 部分覆盖索引（`security_id, indicator_id, event_at, available_at`，仅 `numeric_value IS NOT NULL`），量化历史读取可走 index-only scan，避免全市场回表扫描。
+
+AKShare 独立源系统：数据库已建立 `source_akshare` schema 和 5 张 endpoint 专用 landing 表：`ak_stock_zh_a_spot_em`、`ak_stock_zh_a_hist`、`ak_stock_balance_sheet_by_report_em`、`ak_stock_value_em`、`ak_index_stock_cons_csindex`。这些表使用与 `source_tushare` 一致的审计列、自然键 hash、revision hash、raw snapshot link、sync run link、质量状态和查询索引；当前 AKShare 实网回填受代理环境影响，不阻断 Tushare 主链路验收。
 
 ---
 

@@ -1,16 +1,32 @@
 /**
  * @fileoverview Valuation discovery run history page.
- * Renders recent refresh runs and links to per-run detail + polling.
  */
 
 import Link from "next/link";
 
+import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   fetchValuationDiscoveryRuns,
   type ValuationDiscoveryRefreshSummary,
 } from "@/lib/api";
+import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
+
+function runTone(state: string): BadgeProps["tone"] {
+  if (state === "succeeded") {
+    return "positive";
+  }
+  if (state === "failed_final" || state === "cancelled") {
+    return "negative";
+  }
+  if (state.startsWith("waiting") || state === "running" || state === "partial") {
+    return "caution";
+  }
+  return "muted";
+}
 
 /** Renders the valuation-discovery run history, newest first. */
 export default async function ResearchRunsPage() {
@@ -25,103 +41,105 @@ export default async function ResearchRunsPage() {
   }
 
   return (
-    <main className="workspace-shell">
-      <section className="workspace-header" aria-labelledby="runs-title">
+    <main className="mx-auto max-w-5xl space-y-6 px-10 py-9">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="eyebrow">Valuation discovery</p>
-          <h1 id="runs-title">运行记录</h1>
+          <p className="text-xs font-medium uppercase tracking-wider text-accent">
+            Valuation discovery
+          </p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
+            运行记录
+          </h1>
         </div>
-        <div className="status-strip">
-          <span>{items.length} 条</span>
-          <Link className="secondary-link" href="/research">
-            返回研究候选
-          </Link>
-        </div>
-      </section>
+        <Button asChild variant="secondary" size="sm">
+          <Link href="/research">返回研究候选</Link>
+        </Button>
+      </header>
+
       {error ? (
-        <div className="notice-panel" role="alert">
-          <span>{error}</span>
+        <div
+          className="flex items-center gap-2 rounded-lg border border-negative-soft bg-negative-soft px-4 py-3 text-sm text-negative"
+          role="alert"
+        >
+          {error}
         </div>
       ) : null}
-      <section className="panel">
-        <div className="panel-heading">
+
+      <Card>
+        <CardHeader>
           <div>
-            <p className="eyebrow">History</p>
-            <h2>最近刷新</h2>
+            <p className="text-xs font-medium uppercase tracking-wider text-accent">
+              History
+            </p>
+            <CardTitle className="mt-1">最近刷新</CardTitle>
           </div>
-          <span>newest first</span>
-        </div>
-        {items.length === 0 ? (
-          <div className="empty-state">暂无运行记录</div>
-        ) : (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Run</th>
-                  <th>状态</th>
-                  <th>Scope</th>
-                  <th>开始</th>
-                  <th>完成</th>
-                  <th aria-label="操作" />
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => (
-                  <tr key={item.run_id}>
-                    <td className="symbol-cell">{item.run_id}</td>
-                    <td>
-                      <span className={`badge ${runBadgeClass(item.state)}`}>
-                        {item.state}
-                      </span>
-                    </td>
-                    <td>{item.scope_version_id || "--"}</td>
-                    <td>{formatDate(item.started_at) || "--"}</td>
-                    <td>{formatDate(item.finished_at) || "--"}</td>
-                    <td>
-                      <Link
-                        className="table-link"
-                        href={`/research/runs/${encodeURIComponent(item.run_id)}`}
-                      >
-                        查看
-                      </Link>
-                    </td>
+          <span className="text-xs text-muted-foreground">newest first</span>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {items.length === 0 ? (
+            <div className="grid place-items-center rounded-md border border-dashed border-border py-10 text-sm text-muted-foreground">
+              暂无运行记录
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full min-w-[720px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-left">
+                    <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                      Run
+                    </th>
+                    <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                      状态
+                    </th>
+                    <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                      Scope
+                    </th>
+                    <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                      开始
+                    </th>
+                    <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                      完成
+                    </th>
+                    <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr
+                      key={item.run_id}
+                      className="border-b border-border transition-colors last:border-b-0 hover:bg-muted/30"
+                    >
+                      <td className="px-3 py-3 font-mono text-xs text-foreground">
+                        {item.run_id}
+                      </td>
+                      <td className="px-3 py-3">
+                        <Badge tone={runTone(item.state)}>{item.state}</Badge>
+                      </td>
+                      <td className="px-3 py-3 text-xs text-muted-foreground">
+                        {item.scope_version_id || "--"}
+                      </td>
+                      <td className="px-3 py-3 text-xs text-muted-foreground">
+                        {formatDate(item.started_at)}
+                      </td>
+                      <td className="px-3 py-3 text-xs text-muted-foreground">
+                        {formatDate(item.finished_at)}
+                      </td>
+                      <td className="px-3 py-3">
+                        <Link
+                          className="text-xs font-medium text-accent no-underline hover:underline"
+                          href={`/research/runs/${encodeURIComponent(item.run_id)}`}
+                        >
+                          查看
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </main>
   );
-}
-
-function formatDate(value: string | null): string {
-  if (!value) {
-    return "";
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(parsed);
-}
-
-function runBadgeClass(state: string): string {
-  if (state === "succeeded") {
-    return "positive";
-  }
-  if (state === "failed_final" || state === "cancelled") {
-    return "invalidated";
-  }
-  if (state.startsWith("waiting")) {
-    return "watch";
-  }
-  return "";
 }

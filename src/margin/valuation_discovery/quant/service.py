@@ -29,9 +29,18 @@ from margin.valuation_discovery.quant.factors.momentum import MomentumFactorCalc
 from margin.valuation_discovery.quant.factors.quality import QualityFactorCalculator
 from margin.valuation_discovery.quant.factors.risk import RiskFactorCalculator
 from margin.valuation_discovery.quant.filters import HardFilterEngine
+from margin.valuation_discovery.quant.manual_all_a import (
+    ManualAllAConfig,
+    build_ai_quant_profile,
+    score_manual_all_a,
+)
 from margin.valuation_discovery.quant.models import SecurityFilterResult
 from margin.valuation_discovery.quant.repository import QuantRepository
-from margin.valuation_discovery.quant.scoring import FactorGroupScores, FactorScorer
+from margin.valuation_discovery.quant.scoring import (
+    CombinedFactorScore,
+    FactorGroupScores,
+    FactorScorer,
+)
 
 
 class QuantService:
@@ -54,6 +63,10 @@ class QuantService:
         self._momentum_calculator = MomentumFactorCalculator()
         self._risk_calculator = RiskFactorCalculator()
         self._scorer = FactorScorer()
+        self._manual_config = ManualAllAConfig(
+            score_threshold=52.0,
+            min_avg_amount_20d=self._config.min_avg_amount_20d,
+        )
 
     def run(self, snapshot: QuantInputSnapshot, *, decision_at: datetime) -> QuantRun:
         """Run quant screening for a frozen input snapshot and persist results."""
@@ -66,11 +79,25 @@ class QuantService:
             decision_at=decision_at,
         )
         filter_result = self._filter_engine.apply(cross_section)
-        scored_by_security = self._score_allowed(cross_section, filter_result)
+        strategy_metadata = _strategy_metadata(snapshot)
+        manual_config = _manual_config_from_strategy_metadata(
+            strategy_metadata,
+            fallback=self._manual_config,
+        )
+        manual_final_enabled = _manual_final_score_enabled(strategy_metadata)
+        scored_by_security = self._score_allowed(
+            cross_section,
+            filter_result,
+            manual_config=manual_config,
+            manual_final_enabled=manual_final_enabled,
+        )
         quant_run = QuantRun(
             input_snapshot_id=snapshot.snapshot_id,
             scope_version_id=snapshot.scope_version_id,
-            strategy_version_id=self._strategy_version_id,
+            strategy_version_id=str(
+                strategy_metadata.get("quant_strategy_version_id")
+                or self._strategy_version_id
+            ),
             decision_at=decision_at,
             config_hash=self._config_hash(),
             status="completed",
@@ -132,6 +159,9 @@ class QuantService:
         self,
         cross_section: pd.DataFrame,
         filter_result: Any,
+        *,
+        manual_config: ManualAllAConfig,
+        manual_final_enabled: bool,
     ) -> dict[str, pd.Series]:
         """score allowed."""
         allowed_ids = [
@@ -147,6 +177,8 @@ class QuantService:
         scored = self._growth_calculator.calculate(scored)
         scored = self._momentum_calculator.calculate(scored)
         scored = self._risk_calculator.calculate(scored)
+        scored = score_manual_all_a(scored, config=manual_config)
+        scored["__use_manual_all_a_final_score"] = manual_final_enabled
         return {
             str(row["security_id"]): row
             for _, row in scored.iterrows()
@@ -179,6 +211,7 @@ class QuantService:
             risk_score=_float(scored_row.get("risk_score")),
         )
         combined = self._scorer.combine(group_scores)
+        combined = _combined_with_manual_final_score(combined, scored_row)
         decision = self._scorer.determine_status(
             combined,
             data_status=filter_result.data_status,
@@ -186,6 +219,8 @@ class QuantService:
             short_term_overheat=_is_short_term_overheated(scored_row),
         )
         merged_review_reasons = _dedupe(decision.review_reasons + review_reasons)
+        ai_quant_profile = build_ai_quant_profile(scored_row)
+        manual_scores = ai_quant_profile["scores"]
         return QuantResult(
             quant_run_id=quant_run.quant_run_id,
             security_id=security_id,
@@ -214,7 +249,10 @@ class QuantService:
                     "momentum": combined.momentum_score,
                     "risk": combined.risk_score,
                     "final": combined.final_score,
+                    "manual_all_a": manual_scores.get("manual_all_a_score"),
+                    "theme_hotness": manual_scores.get("theme_hotness"),
                 },
+                "ai_quant_profile": ai_quant_profile,
             },
         )
 
@@ -278,6 +316,116 @@ def _ordered_security_ids(
     return snapshot_ids + extras
 
 
+def _strategy_metadata(snapshot: QuantInputSnapshot) -> dict[str, Any]:
+    """Return quant strategy metadata embedded in the feature-set binding."""
+    feature_set = snapshot.quant_feature_set
+    metadata = getattr(feature_set, "metadata", None)
+    if isinstance(metadata, dict):
+        strategy = metadata.get("quant_strategy")
+        if isinstance(strategy, dict):
+            return strategy
+    return {}
+
+
+def _manual_config_from_strategy_metadata(
+    metadata: dict[str, Any],
+    *,
+    fallback: ManualAllAConfig,
+) -> ManualAllAConfig:
+    """Build manual strategy config from a versioned strategy payload."""
+    thresholds = metadata.get("thresholds")
+    factor_weights = metadata.get("factor_weights")
+    if not isinstance(thresholds, dict):
+        thresholds = {}
+    if not isinstance(factor_weights, dict):
+        factor_weights = {}
+
+    default_universe = str(thresholds.get("default_universe") or "ALL_A")
+    presets = thresholds.get("presets")
+    preset = (
+        presets.get(default_universe)
+        if isinstance(presets, dict)
+        and isinstance(presets.get(default_universe), dict)
+        else {}
+    )
+    weights = preset.get("factor_weights") if isinstance(preset, dict) else None
+    if not isinstance(weights, dict) or not weights:
+        weights = factor_weights or fallback.weights
+    threshold = _number_or_fallback(
+        preset.get("buy_threshold") if isinstance(preset, dict) else None,
+        fallback.score_threshold,
+    )
+    min_amount = _number_or_fallback(
+        preset.get("min_avg_amount_20d") if isinstance(preset, dict) else None,
+        fallback.min_avg_amount_20d,
+    )
+    return ManualAllAConfig(
+        score_threshold=threshold,
+        min_avg_amount_20d=min_amount,
+        weights={str(key): float(value) for key, value in weights.items()},
+    )
+
+
+def _manual_final_score_enabled(metadata: dict[str, Any]) -> bool:
+    """Return whether versioned strategy metadata should own final score."""
+    thresholds = metadata.get("thresholds")
+    if not isinstance(thresholds, dict):
+        return False
+    presets = thresholds.get("presets")
+    default_universe = str(thresholds.get("default_universe") or "ALL_A")
+    preset = (
+        presets.get(default_universe)
+        if isinstance(presets, dict)
+        and isinstance(presets.get(default_universe), dict)
+        else None
+    )
+    if not isinstance(preset, dict):
+        return False
+    weights = preset.get("factor_weights")
+    return isinstance(weights, dict) and bool(weights)
+
+
+def _combined_with_manual_final_score(
+    combined: CombinedFactorScore,
+    scored_row: pd.Series,
+) -> CombinedFactorScore:
+    """Use manual strategy score as final score when strategy metadata asks for it."""
+    if not _bool_value(scored_row.get("__use_manual_all_a_final_score")):
+        return combined
+    manual_score = _optional_score(scored_row.get("manual_all_a_score"))
+    if manual_score is None:
+        return combined
+    return CombinedFactorScore(
+        security_id=combined.security_id,
+        quality_score=combined.quality_score,
+        value_score=combined.value_score,
+        growth_score=combined.growth_score,
+        momentum_score=combined.momentum_score,
+        risk_score=combined.risk_score,
+        final_score=manual_score,
+    )
+
+
+def _optional_score(value: Any) -> float | None:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if pd.isna(numeric):
+        return None
+    return min(100.0, max(0.0, numeric))
+
+
+def _number_or_fallback(value: Any, fallback: float) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return fallback
+    if pd.isna(numeric):
+        return fallback
+    return numeric
+
+
 def _reason_codes(
     filter_result: SecurityFilterResult,
     *,
@@ -299,6 +447,12 @@ def _float(value: Any) -> float:
     if value is None or bool(pd.isna(value)):
         return 0.0
     return float(value)
+
+
+def _bool_value(value: Any) -> bool:
+    if value is None or bool(pd.isna(value)):
+        return False
+    return bool(value)
 
 
 def _is_short_term_overheated(row: pd.Series) -> bool:

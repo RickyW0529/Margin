@@ -4,7 +4,13 @@
 
 import Link from "next/link";
 
-import { fetchResearchCandidates, type ResearchCandidateListResponse } from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  fetchResearchCandidates,
+  type ResearchCandidateListResponse,
+} from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -30,18 +36,26 @@ export default async function ResearchUniversePage() {
   );
 
   return (
-    <main className="workspace-shell">
-      <section className="workspace-header" aria-labelledby="universe-title">
+    <main className="mx-auto max-w-5xl space-y-6 px-10 py-9">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="eyebrow">Universe</p>
-          <h1 id="universe-title">公司池状态</h1>
+          <p className="text-xs font-medium uppercase tracking-wider text-accent">
+            Universe
+          </p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
+            公司池状态
+          </h1>
         </div>
-        <div className="status-strip">
-          <span>{DEFAULT_SCOPE_VERSION_ID}</span>
-          <span>server paginated</span>
+        <div className="flex gap-2">
+          <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            {DEFAULT_SCOPE_VERSION_ID}
+          </span>
+          <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            server paginated
+          </span>
         </div>
-      </section>
-      <section className="candidate-grid" aria-label="公司池列表">
+      </header>
+      <section className="grid gap-4 md:grid-cols-3">
         {UNIVERSES.map((universe, index) => {
           const result = results[index];
           const response =
@@ -71,34 +85,43 @@ function UniverseCard({
 }) {
   const passCount = response?.facets.screening_status?.pass ?? 0;
   return (
-    <article className="candidate-card">
-      <div className="candidate-card-header">
+    <Card className="grid gap-4">
+      <CardHeader>
         <div>
-          <p className="eyebrow">Company pool</p>
-          <h2>{label}</h2>
+          <p className="text-xs font-medium uppercase tracking-wider text-accent">
+            Company pool
+          </p>
+          <CardTitle className="mt-1">{label}</CardTitle>
         </div>
-        <span className={`badge ${response ? "positive" : "risk"}`}>
+        <Badge tone={response ? "positive" : "negative"}>
           {response ? "ready" : "unavailable"}
-        </span>
-      </div>
-      <dl className="candidate-facts">
-        <div>
-          <dt>样本状态</dt>
-          <dd>{response ? `${response.items.length} loaded` : "--"}</dd>
-        </div>
-        <div>
-          <dt>PASS facet</dt>
-          <dd>{passCount}</dd>
-        </div>
-      </dl>
-      <Link
-        className="secondary-link"
-        href={`/research?scope_version_id=${encodeURIComponent(
-          DEFAULT_SCOPE_VERSION_ID,
-        )}&universe=${encodeURIComponent(code)}`}
-      >
-        查看候选
-      </Link>
-    </article>
+        </Badge>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <dl className="grid grid-cols-2 gap-2">
+          <div className="grid gap-1 rounded-md border border-border bg-muted/40 p-3">
+            <dt className="text-xs text-muted-foreground">样本状态</dt>
+            <dd className="text-sm font-semibold text-foreground">
+              {response ? `${response.items.length} loaded` : "--"}
+            </dd>
+          </div>
+          <div className="grid gap-1 rounded-md border border-border bg-muted/40 p-3">
+            <dt className="text-xs text-muted-foreground">PASS facet</dt>
+            <dd className="tabular text-sm font-semibold text-foreground">
+              {passCount}
+            </dd>
+          </div>
+        </dl>
+        <Button asChild variant="secondary" size="sm">
+          <Link
+            href={`/research?scope_version_id=${encodeURIComponent(
+              DEFAULT_SCOPE_VERSION_ID,
+            )}&universe=${encodeURIComponent(code)}`}
+          >
+            查看候选
+          </Link>
+        </Button>
+      </CardContent>
+    </Card>
   );
 }

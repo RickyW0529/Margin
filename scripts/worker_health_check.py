@@ -12,9 +12,9 @@ import sys
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import text
 
 from margin.settings import get_settings
+from margin.sql.health_queries import alembic_version
 from margin.storage.database import DatabaseSettings, create_database_engine
 
 
@@ -27,7 +27,7 @@ def main() -> int:
     try:
         with engine.connect() as connection:
             current_head = connection.execute(
-                text("SELECT version_num FROM alembic_version")
+                alembic_version()
             ).scalar()
             connection.exec_driver_sql("SELECT 1")
         return 0 if current_head == expected_head else 1

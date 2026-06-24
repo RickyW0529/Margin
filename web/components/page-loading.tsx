@@ -2,47 +2,39 @@
  * @fileoverview Skeleton loading placeholder for workspace pages.
  */
 
-/** Props for the PageLoading component. */
+import { Skeleton } from "@/components/ui/skeleton";
+
 type PageLoadingProps = {
-  /** Main page heading. */
   title: string;
-  /** Eyebrow text shown above the heading. */
   eyebrow: string;
 };
 
-/**
- * Renders a skeleton workspace layout while page data is loading.
- *
- * @param title Main page heading.
- * @param eyebrow Eyebrow text.
- * @returns The skeleton loading element.
- */
+/** Renders a skeleton workspace layout while page data is loading. */
 export function PageLoading({ title, eyebrow }: PageLoadingProps) {
   return (
-    <main className="workspace-shell">
-      <section className="workspace-header">
-        <div>
-          <p className="eyebrow">{eyebrow}</p>
-          <h1>{title}</h1>
-        </div>
-        <div className="status-strip">
-          <span>正在连接后端</span>
-          <span>实时数据</span>
-        </div>
-      </section>
-      <section className="metric-grid" aria-label="加载中">
+    <main className="mx-auto max-w-5xl space-y-6 px-8 py-10">
+      <div className="space-y-1">
+        <p className="text-xs font-medium uppercase tracking-wider text-accent">
+          {eyebrow}
+        </p>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          {title}
+        </h1>
+      </div>
+      <div className="flex gap-2">
+        <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+          正在连接后端
+        </span>
+        <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+          实时数据
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
-          <div className="metric-tile skeleton-tile" key={index}>
-            <span className="skeleton-line short" />
-            <strong className="skeleton-line" />
-            <span className="skeleton-line tiny" />
-          </div>
+          <Skeleton key={index} className="h-24" />
         ))}
-      </section>
-      <section className="workspace-grid">
-        <div className="panel skeleton-panel" />
-        <div className="panel skeleton-panel compact" />
-      </section>
+      </div>
+      <Skeleton className="h-56" />
     </main>
   );
 }

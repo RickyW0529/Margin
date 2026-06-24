@@ -6,7 +6,6 @@ from collections.abc import Callable
 from datetime import datetime
 
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from margin.evidence.db_models import (
@@ -40,6 +39,16 @@ from margin.evidence.validator import (
     ValidationStatus,
 )
 from margin.news.models import SourceLevel, utc_now
+from margin.sql.evidence_queries import (
+    claim_evidence_by_claim,
+    evidence_conflicts_by_package,
+    evidence_package_latest_version,
+    evidence_package_root_for_update,
+    evidence_records_by_ids,
+    news_context_evidence_by_bundle,
+    research_evidence_by_item,
+    validation_audits_by_claim,
+)
 
 
 class ResearchEvidenceLink(BaseModel):
@@ -175,12 +184,7 @@ class EvidenceRepository:
         """
         with self._session_factory() as session:
             rows = session.scalars(
-                select(EvidenceValidationAuditRow)
-                .where(EvidenceValidationAuditRow.claim_id == claim_id)
-                .order_by(
-                    EvidenceValidationAuditRow.checked_at,
-                    EvidenceValidationAuditRow.audit_id,
-                )
+                validation_audits_by_claim(claim_id)
             ).all()
             return [_audit_from_row(row) for row in rows]
 
@@ -238,9 +242,7 @@ class EvidenceRepository:
         """
         with self._session_factory() as session:
             rows = session.scalars(
-                select(ResearchEvidenceRow)
-                .where(ResearchEvidenceRow.research_item_id == research_item_id)
-                .order_by(ResearchEvidenceRow.rank, ResearchEvidenceRow.created_at)
+                research_evidence_by_item(research_item_id)
             ).all()
             return [_research_evidence_from_row(row) for row in rows]
 
@@ -291,20 +293,13 @@ class EvidenceRepository:
 
         with self._session_factory.begin() as session:
             root_row = session.scalar(
-                select(EvidencePackageRow)
-                .where(EvidencePackageRow.package_id == parent_package_id)
-                .order_by(EvidencePackageRow.version)
-                .limit(1)
-                .with_for_update()
+                evidence_package_root_for_update(parent_package_id)
             )
             if root_row is None:
                 raise KeyError(f"evidence package '{parent_package_id}' not found")
 
             parent_row = session.scalar(
-                select(EvidencePackageRow)
-                .where(EvidencePackageRow.package_id == parent_package_id)
-                .order_by(EvidencePackageRow.version.desc())
-                .limit(1)
+                evidence_package_latest_version(parent_package_id)
             )
             assert parent_row is not None
             parent = _package_from_row(parent_row)
@@ -320,9 +315,7 @@ class EvidenceRepository:
             evidence_rows = {
                 row.evidence_id: row
                 for row in session.scalars(
-                    select(EvidenceRecordRow).where(
-                        EvidenceRecordRow.evidence_id.in_(new_ids)
-                    )
+                    evidence_records_by_ids(new_ids)
                 ).all()
             }
             missing_ids = [
@@ -392,9 +385,7 @@ class EvidenceRepository:
         """List evidence links for a news context bundle."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(NewsContextEvidenceRow)
-                .where(NewsContextEvidenceRow.bundle_id == bundle_id)
-                .order_by(NewsContextEvidenceRow.created_at, NewsContextEvidenceRow.evidence_id)
+                news_context_evidence_by_bundle(bundle_id)
             ).all()
             return [_news_context_evidence_from_row(row) for row in rows]
 
@@ -432,9 +423,7 @@ class EvidenceRepository:
         """List claim-evidence role links ordered by rank."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(ClaimEvidenceLinkRow)
-                .where(ClaimEvidenceLinkRow.claim_id == claim_id)
-                .order_by(ClaimEvidenceLinkRow.rank, ClaimEvidenceLinkRow.created_at)
+                claim_evidence_by_claim(claim_id)
             ).all()
             return [_claim_evidence_link_from_row(row) for row in rows]
 
@@ -456,12 +445,7 @@ class EvidenceRepository:
         """List conflicts recorded for an evidence package version."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(EvidenceConflictRow)
-                .where(
-                    EvidenceConflictRow.package_id == package_id,
-                    EvidenceConflictRow.version == version,
-                )
-                .order_by(EvidenceConflictRow.created_at, EvidenceConflictRow.conflict_id)
+                evidence_conflicts_by_package(package_id, version)
             ).all()
             return [_evidence_conflict_from_row(row) for row in rows]
 

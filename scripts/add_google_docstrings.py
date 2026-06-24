@@ -13,7 +13,6 @@ import ast
 import os
 import re
 import sys
-from typing import Any
 
 
 def _get_indent(line: str) -> str:
@@ -74,7 +73,7 @@ def _build_func_docstring(
     """Build Google-style docstring lines for a function/method."""
     name = node.name
     is_dunder = name.startswith("__") and name.endswith("__")
-    
+
     # Build brief summary
     if name == "__init__":
         summary = "Initialize instance."

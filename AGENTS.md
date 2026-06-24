@@ -104,9 +104,9 @@ docs/superpowers/
 
 ## 6. 当前版本
 
-- 当前已实现版本：`v0.1`
-- 当前设计迭代版本：`v0.2`
-- v0.2 设计稿：`docs/design/v0.2/`（由 v0.1 设计复制后增量更新）
+- 当前已实现版本：`v0.3`
+- 当前设计迭代版本：`v0.3`
+- v0.3 设计稿：`docs/design/v0.3/`（由 v0.2 设计复制后增量更新）
 - 当前代码说明：`docs/code/`（无版本目录，随代码持续更新）
 - 正式文档范围：`docs/design/`、`docs/code/`
 - 忽略的过程文档：`docs/superpowers/`
@@ -129,6 +129,74 @@ pytest
 ruff check --fix src tests
 ```
 
+# Frontend Agent Rules
+
+你不是只实现功能的后端程序员，你必须以产品设计师 + 前端工程师的标准改前端。
+
+## 工作顺序
+
+每次改前端之前，必须先做这 4 步：
+
+1. 先理解用户流程：这个页面给谁用、用户第一眼看到什么、核心操作是什么。
+2. 先提出页面结构，不要直接写代码。
+3. 再实现 UI。
+4. 最后自查视觉、交互、状态、错误处理和响应式。
+
+## UI 质量标准
+
+禁止做“裸 HTML + 默认样式”的页面。
+
+必须满足：
+
+- 有清晰的信息层级：标题、说明、主要操作、次要操作分明。
+- 间距统一：优先使用 4/8/12/16/24/32/48 这类 spacing。
+- 页面不要挤在一起，卡片、表单、按钮、列表要有留白。
+- 颜色克制，不要乱用高饱和颜色。
+- 按钮状态完整：hover、disabled、loading。
+- 表单状态完整：空值、错误、提交中、成功、失败。
+- 列表状态完整：loading、empty、error、normal。
+- 移动端不能崩，必须做 responsive。
+
+## 技术约束
+
+如果项目已有组件库，必须复用已有组件，不要临时乱写样式。
+
+如果项目没有组件库，优先使用：
+- Tailwind CSS
+- shadcn/ui 风格组件
+- lucide-react 图标
+- Headless UI / Radix 思路
+
+不要引入大型 UI 框架，除非项目已经在用。
+
+## 逻辑质量标准
+
+前端逻辑不能全塞在组件里。
+
+必须拆分：
+- UI component
+- hooks / state logic
+- API client
+- types
+- utils
+
+禁止：
+- 一个组件超过 250 行还继续堆
+- 复制粘贴相似逻辑
+- 用 any 糊类型
+- 只处理 happy path
+- 没有 loading/error/empty 状态
+
+## 自查清单
+
+完成后必须输出：
+
+1. 改了哪些页面和组件
+2. 用户流程是否更清楚
+3. 哪些状态已处理：loading / empty / error / disabled / success
+4. 是否通过 lint/typecheck/test
+5. 还有哪些视觉或交互风险
+
 - `ruff check` 必须 0 error。
 - `pytest` 必须全绿。
 - 当前已实现子任务：`0101-provider_registry`、`0102-akshare_tushare_access`、`0103-field_standardization`、`0104-point_in_time_and_quality`、`0301-filing_acquisition`、`0302-websearch_provider`、`0303-dedup_and_compliance`、`0401-parse_and_chunk`、`0402-embedding_pipeline`、`0403-hybrid_recall`、`0501-evidence_tiering`、`0502-citation_locator`、`0503-claim_validation`、`0601-provider_and_tools`、`0602-websearch_agent`、`0603-summary_agent`、`0604-reflect_agent`、`0605-citation_validator`、`0606-universe_quant_agent`、`0701-strategy_template`、`0702-custom_prompt`、`0703-version_management`、`0801-candidate_card`、`0802-evidence_expansion`、`0803-rejection_reason`、`1001-docker_compose`、`1002-storage_snapshot`、`1003-logging_observability`、`1004-failure_degradation`。
@@ -147,7 +215,9 @@ ruff check --fix src tests
 - `0601`-`0606` 已补齐多 Agent 研究工作流、工具调用、摘要/反思/校验链路、研究快照与持久化审计；`signal_composer` 正常路径优先真实 LLM，硬性降级或 LLM 失败时使用规则输出；`risk_review` / `reflect_counter_argument` 逐条证据引用属于 v0.2。
 - `0701`-`0703` 已补齐策略模板、自定义 Prompt、版本生命周期、校验/沙箱执行与 API 持久化。
 - v0.2 `01-data_provider` 已补齐 Raw/Fact/Canonical 数据仓库、指标目录、行业与公司行动 PIT、同步/freshness、保留审计和真实 Tushare ingestion smoke；AKShare 实网请求已执行，但当前环境到 EastMoney 的代理连接被外部断开。
+- v0.3 `01-data_provider` 已补齐 Tushare 独立源系统 `source_tushare`、17 个量化准入 endpoint 专用 landing 表、AKShare 独立源系统 `source_akshare` landing 表骨架、质量决策层、滚动采集策略、字段白名单、分片容错回填、warehouse publisher、两年 daily/adj_factor 全交易日覆盖、财务/估值/停牌/benchmark 发布；AKShare 实网回填当前先不阻断 Tushare 主链路。
 - v0.2 `07-strategy_config` 已补齐版本化 Provider/Universe/Indicator/Quant/Prompt/Tool/Scope 配置、AES-GCM Secret Store、write-only 密钥 API、SSRF/host allowlist、真实 Provider health 激活闸门、幂等审计和前端 Provider Settings；真实 Tushare/Tavily/LLM/Embedding health 通过，Rerank 尚缺本地配置。
 - `0801`-`0803` 已补齐研究候选面板 Candidate Card、证据展开、估值/反方/反馈视图、调度入口、Provider 状态、API 与 Next.js 页面；`/api/v1/provider-status` 真实探测 LLM/Embedding，并显式展示 Tavily/Rerank 缺配置 degraded。
 - v0.2 已删除模块 02/09 的源码、API、前端、Worker 调度和数据库表；编号仅用于历史审计。
+- v0.3 `11-valuation_discovery` 已接入数据层公司池快照，排除 ST、`退市*`、未来上市和已退市证券；最新真实量化 run `qr_df48cd92fdf1424d` 基于 `cps_29518c0fec90836c57609b6f1f24` 产出 5304 家结果、3 家 pass、54 家 near_threshold。
 - `1001`-`1004` 已补齐 migrate/seed/web/api/worker/postgres/prometheus/grafana 一键部署、测试库隔离、不可变审计、结构化日志、Trace/指标、Grafana dashboard、Provider 降级与 CI 验证。

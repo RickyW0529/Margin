@@ -19,8 +19,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
-
 from margin.data.freshness import DataDomain, FreshnessStatus
 from margin.data.ingestion import DataWarehouseIngestionStack
 from margin.data.sync_models import DataSyncRequest, DataSyncStatus
@@ -30,10 +28,16 @@ from margin.evidence.repository import EvidenceRepository
 from margin.news.context_bundle import NewsContextBundleBuilder
 from margin.news.models import NewsRefreshRun, NewsRefreshStatus
 from margin.news.refresh_service import NewsRefreshService
-from margin.research.db_models import ResearchDeltaReviewRow
 from margin.research.delta_repository import ResearchDeltaRepository
 from margin.research.graph.state import ReviewOutcome
 from margin.research.service import ResearchContextSnapshot, ResearchService
+from margin.sql.valuation_queries import (
+    context_snapshots_by_scope,
+    latest_delta_review_id_for_context,
+    latest_effective_pointer,
+    previous_quant_result,
+    quant_input_snapshot_id_for_run,
+)
 from margin.storage.database import SessionFactory
 from margin.strategy.models import ConfigLifecycle
 from margin.strategy.validator import StrategyActivationValidator
@@ -42,7 +46,6 @@ from margin.valuation_discovery.db_models import (
     EffectiveAssessmentPointerRow,
     QuantInputSnapshotRow,
     QuantScreenResultRow,
-    QuantScreenRunRow,
     ResearchContextSnapshotRow,
 )
 from margin.valuation_discovery.models import (
@@ -351,6 +354,7 @@ class ResearchContextBuilderAdapter:
                 previous_result,
                 result,
             )
+            quant_factor_details = result.factor_details if result else {}
             payload: dict[str, Any] = {
                 "quant_run_id": quant_run_id,
                 "quant_input_valid": (
@@ -394,6 +398,11 @@ class ResearchContextBuilderAdapter:
                     result.screening_status.value if result else None
                 ),
                 "final_score": result.final_score if result else 0.0,
+                "quant_factor_details": quant_factor_details,
+                "quant_ai_profile": quant_factor_details.get(
+                    "ai_quant_profile",
+                    {},
+                ),
                 "news_target_reason": target.trigger_type.value,
                 "news_context_bundle_id": (
                     news_bundle.bundle_id if news_bundle is not None else None
@@ -475,17 +484,7 @@ class ResearchContextBuilderAdapter:
         """Load the latest effective assessment pointer."""
         with self._session_factory() as session:
             return session.scalar(
-                select(EffectiveAssessmentPointerRow)
-                .where(
-                    EffectiveAssessmentPointerRow.security_id == security_id,
-                    EffectiveAssessmentPointerRow.scope_version_id
-                    == scope_version_id,
-                )
-                .order_by(
-                    EffectiveAssessmentPointerRow.effective_from.desc(),
-                    EffectiveAssessmentPointerRow.created_at.desc(),
-                )
-                .limit(1)
+                latest_effective_pointer(security_id, scope_version_id)
             )
 
     def _evidence_blocks(self, package: Any | None) -> tuple[dict[str, Any], ...]:
@@ -515,9 +514,7 @@ class ResearchContextBuilderAdapter:
         """Resolve the frozen input snapshot behind one quant run."""
         with self._session_factory() as session:
             return session.scalar(
-                select(QuantScreenRunRow.input_snapshot_id).where(
-                    QuantScreenRunRow.quant_run_id == quant_run_id
-                )
+                quant_input_snapshot_id_for_run(quant_run_id)
             )
 
     def _quant_input_is_pit_valid(
@@ -545,22 +542,11 @@ class ResearchContextBuilderAdapter:
         """Load the immediately preceding quant result for delta routing."""
         with self._session_factory() as session:
             return session.scalar(
-                select(QuantScreenResultRow)
-                .join(
-                    QuantScreenRunRow,
-                    QuantScreenRunRow.quant_run_id
-                    == QuantScreenResultRow.quant_run_id,
+                previous_quant_result(
+                    security_id,
+                    scope_version_id,
+                    current_quant_run_id,
                 )
-                .where(
-                    QuantScreenResultRow.security_id == security_id,
-                    QuantScreenRunRow.scope_version_id == scope_version_id,
-                    QuantScreenResultRow.quant_run_id != current_quant_run_id,
-                )
-                .order_by(
-                    QuantScreenRunRow.decision_at.desc(),
-                    QuantScreenResultRow.created_at.desc(),
-                )
-                .limit(1)
             )
 
     def _persist_context_snapshot(
@@ -600,15 +586,7 @@ class ResearchContextBuilderAdapter:
         """Reload context IDs for orchestration recovery."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(ResearchContextSnapshotRow)
-                .where(
-                    ResearchContextSnapshotRow.scope_version_id
-                    == scope_version_id
-                )
-                .order_by(
-                    ResearchContextSnapshotRow.security_id,
-                    ResearchContextSnapshotRow.context_snapshot_id,
-                )
+                context_snapshots_by_scope(scope_version_id)
             ).all()
         return tuple(
             row.context_snapshot_id
@@ -753,13 +731,7 @@ class AIReviewAdapter:
             return None
         with self._session_factory() as session:
             return session.scalar(
-                select(ResearchDeltaReviewRow.review_id)
-                .where(
-                    ResearchDeltaReviewRow.context_snapshot_id
-                    == context_snapshot_id
-                )
-                .order_by(ResearchDeltaReviewRow.created_at.desc())
-                .limit(1)
+                latest_delta_review_id_for_context(context_snapshot_id)
             )
 
 

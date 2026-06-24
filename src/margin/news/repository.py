@@ -12,7 +12,6 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 
 from pydantic import BaseModel
-from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from margin.news.db_models import (
@@ -50,6 +49,23 @@ from margin.news.models import (
     utc_now,
 )
 from margin.news.websearch import SearchQueryRecord, SearchResult
+from margin.sql.news_queries import (
+    claimable_news_targets,
+    delete_search_results_by_query,
+    materiality_score_by_event_security_version,
+    news_context_documents,
+    news_target_count_by_run,
+    news_target_dedupe_keys_by_run,
+    news_target_statuses_by_run_security,
+    news_targets_by_run,
+    outbox_by_event_topic,
+    outbox_claimable_by_topic,
+    outbox_id_by_event_topic,
+    outbox_pending_by_topic,
+    repost_edges_by_parent,
+    search_results_by_query,
+    unique_document_events,
+)
 
 
 class OutboxMessage(BaseModel):
@@ -219,10 +235,7 @@ class NewsRepository:
                 publishable
                 and event.processing_status == DocumentStatus.READY
                 and session.scalar(
-                    select(DocumentOutboxRow.outbox_id).where(
-                        DocumentOutboxRow.event_id == event.event_id,
-                        DocumentOutboxRow.topic == topic,
-                    )
+                    outbox_id_by_event_topic(event.event_id, topic)
                 )
                 is None
             )
@@ -258,12 +271,7 @@ class NewsRepository:
             publication time.
         """
         with self._session_factory() as session:
-            duplicate_ids = select(DedupRecordRow.duplicate_event_id)
-            rows = session.scalars(
-                select(DocumentEventRow)
-                .where(DocumentEventRow.event_id.not_in(duplicate_ids))
-                .order_by(DocumentEventRow.source_level, DocumentEventRow.published_at)
-            ).all()
+            rows = session.scalars(unique_document_events()).all()
             return [_event_from_row(row) for row in rows]
 
     def claim_outbox(self, topic: str, limit: int = 50) -> list[OutboxMessage]:
@@ -278,14 +286,7 @@ class NewsRepository:
         """
         with self._session_factory.begin() as session:
             rows = session.scalars(
-                select(DocumentOutboxRow)
-                .where(
-                    DocumentOutboxRow.topic == topic,
-                    DocumentOutboxRow.status == "pending",
-                )
-                .order_by(DocumentOutboxRow.created_at, DocumentOutboxRow.outbox_id)
-                .limit(limit)
-                .with_for_update(skip_locked=True)
+                outbox_pending_by_topic(topic, limit)
             ).all()
             now = utc_now()
             messages: list[OutboxMessage] = []
@@ -317,10 +318,7 @@ class NewsRepository:
         """Insert or update a document outbox row for worker replay."""
         with self._session_factory.begin() as session:
             existing = session.scalar(
-                select(DocumentOutboxRow).where(
-                    DocumentOutboxRow.event_id == event_id,
-                    DocumentOutboxRow.topic == topic,
-                )
+                outbox_by_event_topic(event_id, topic)
             )
             if existing is not None:
                 existing.status = status
@@ -342,10 +340,7 @@ class NewsRepository:
         """Return one outbox row by event/topic."""
         with self._session_factory() as session:
             row = session.scalar(
-                select(DocumentOutboxRow).where(
-                    DocumentOutboxRow.event_id == event_id,
-                    DocumentOutboxRow.topic == topic,
-                )
+                outbox_by_event_topic(event_id, topic)
             )
             if row is None:
                 return None
@@ -372,22 +367,7 @@ class NewsRepository:
         cutoff = now - timedelta(seconds=lease_seconds)
         with self._session_factory.begin() as session:
             rows = session.scalars(
-                select(DocumentOutboxRow)
-                .where(
-                    DocumentOutboxRow.topic == topic,
-                    (
-                        DocumentOutboxRow.status.in_(
-                            ["pending", "failed_retryable"]
-                        )
-                        | (
-                            (DocumentOutboxRow.status == "processing")
-                            & (DocumentOutboxRow.claimed_at < cutoff)
-                        )
-                    ),
-                )
-                .order_by(DocumentOutboxRow.created_at, DocumentOutboxRow.outbox_id)
-                .limit(limit)
-                .with_for_update(skip_locked=True)
+                outbox_claimable_by_topic(topic, cutoff, limit)
             ).all()
             messages: list[OutboxMessage] = []
             for row in rows:
@@ -472,9 +452,7 @@ class NewsRepository:
                 row.api_provider = record.api_provider
                 row.result_count = record.result_count
                 session.execute(
-                    delete(SearchResultRow).where(
-                        SearchResultRow.query_id == record.query_id
-                    )
+                    delete_search_results_by_query(record.query_id)
                 )
             for index, result in enumerate(record.results):
                 session.add(_search_result_to_row(record.query_id, index, result))
@@ -493,9 +471,7 @@ class NewsRepository:
             if row is None:
                 return None
             results = session.scalars(
-                select(SearchResultRow)
-                .where(SearchResultRow.query_id == query_id)
-                .order_by(SearchResultRow.result_index)
+                search_results_by_query(query_id)
             ).all()
             return SearchQueryRecord(
                 query_id=row.query_id,
@@ -591,9 +567,7 @@ class NewsRepository:
         """
         with self._session_factory() as session:
             rows = session.scalars(
-                select(RepostEdgeRow)
-                .where(RepostEdgeRow.parent_event_id == parent_event_id)
-                .order_by(RepostEdgeRow.created_at, RepostEdgeRow.child_event_id)
+                repost_edges_by_parent(parent_event_id)
             ).all()
             return [_repost_from_row(row) for row in rows]
 
@@ -653,9 +627,7 @@ class NewsRepository:
         with self._session_factory.begin() as session:
             existing_keys = set(
                 session.scalars(
-                    select(NewsRefreshTargetRow.dedupe_key).where(
-                        NewsRefreshTargetRow.run_id == run_id
-                    )
+                    news_target_dedupe_keys_by_run(run_id)
                 ).all()
             )
             now = utc_now()
@@ -685,9 +657,7 @@ class NewsRepository:
             session.flush()
             return int(
                 session.scalar(
-                    select(func.count()).select_from(NewsRefreshTargetRow).where(
-                        NewsRefreshTargetRow.run_id == run_id
-                    )
+                    news_target_count_by_run(run_id)
                 )
                 or 0
             )
@@ -709,27 +679,15 @@ class NewsRepository:
         """Claim eligible pending/retry targets for processing."""
         with self._session_factory.begin() as session:
             rows = session.scalars(
-                select(NewsRefreshTargetRow)
-                .where(
-                    NewsRefreshTargetRow.run_id == run_id,
-                    NewsRefreshTargetRow.status.in_(
-                        [
-                            NewsTargetStatus.PENDING.value,
-                            NewsTargetStatus.RETRY.value,
-                        ]
-                    ),
-                    or_(
-                        NewsRefreshTargetRow.next_attempt_at.is_(None),
-                        NewsRefreshTargetRow.next_attempt_at <= now,
-                    ),
+                claimable_news_targets(
+                    run_id,
+                    [
+                        NewsTargetStatus.PENDING.value,
+                        NewsTargetStatus.RETRY.value,
+                    ],
+                    now,
+                    limit,
                 )
-                .order_by(
-                    NewsRefreshTargetRow.priority.desc(),
-                    NewsRefreshTargetRow.next_attempt_at.asc().nullsfirst(),
-                    NewsRefreshTargetRow.created_at.asc(),
-                )
-                .limit(limit)
-                .with_for_update(skip_locked=True)
             ).all()
             items: list[NewsTargetWorkItem] = []
             for row in rows:
@@ -803,7 +761,7 @@ class NewsRepository:
         """Reconcile target counts and update the run terminal status when possible."""
         with self._session_factory.begin() as session:
             rows = session.scalars(
-                select(NewsRefreshTargetRow).where(NewsRefreshTargetRow.run_id == run_id)
+                news_targets_by_run(run_id)
             ).all()
             counts = {status.value: 0 for status in NewsTargetStatus}
             for row in rows:
@@ -867,11 +825,10 @@ class NewsRepository:
             raise ValueError("event_id is required to persist materiality score")
         with self._session_factory.begin() as session:
             existing = session.scalar(
-                select(DocumentMaterialityScoreRow).where(
-                    DocumentMaterialityScoreRow.event_id == score.event_id,
-                    DocumentMaterialityScoreRow.security_id == score.security_id,
-                    DocumentMaterialityScoreRow.scoring_version
-                    == score.scoring_version,
+                materiality_score_by_event_security_version(
+                    score.event_id,
+                    score.security_id,
+                    score.scoring_version,
                 )
             )
             if existing is None:
@@ -898,27 +855,7 @@ class NewsRepository:
         """List ranked context candidates for a security."""
         with self._session_factory() as session:
             rows = session.execute(
-                select(DocumentEventRow, DocumentMaterialityScoreRow)
-                .join(
-                    DocumentSecurityLinkRow,
-                    DocumentSecurityLinkRow.event_id == DocumentEventRow.event_id,
-                )
-                .join(
-                    DocumentMaterialityScoreRow,
-                    (DocumentMaterialityScoreRow.event_id == DocumentEventRow.event_id)
-                    & (
-                        DocumentMaterialityScoreRow.security_id
-                        == DocumentSecurityLinkRow.security_id
-                    ),
-                )
-                .where(DocumentSecurityLinkRow.security_id == security_id)
-                .order_by(
-                    DocumentEventRow.source_level.asc(),
-                    DocumentMaterialityScoreRow.materiality_score.desc(),
-                    DocumentMaterialityScoreRow.novelty_score.desc(),
-                    DocumentEventRow.published_at.desc(),
-                )
-                .limit(max_documents)
+                news_context_documents(security_id, max_documents)
             ).all()
             documents: list[NewsContextDocument] = []
             for rank, (event, score) in enumerate(rows, start=1):
@@ -944,12 +881,7 @@ class NewsRepository:
         """List target statuses for one security in a refresh run."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(NewsRefreshTargetRow.status)
-                .where(
-                    NewsRefreshTargetRow.run_id == run_id,
-                    NewsRefreshTargetRow.security_id == security_id,
-                )
-                .order_by(NewsRefreshTargetRow.priority.desc())
+                news_target_statuses_by_run_security(run_id, security_id)
             ).all()
             return [NewsTargetStatus(row) for row in rows]
 

@@ -2,15 +2,14 @@
 
 /**
  * @fileoverview Polling client component for a valuation-discovery run.
- *
- * Fetches the run status, refreshes every few seconds while the run is
- * non-terminal, and renders the progress steps plus a back link once done.
  */
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { ResearchRunProgress } from "@/components/research-run-progress";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   fetchResearchRunDetailV2,
   type ResearchRunDetailV2,
@@ -81,40 +80,63 @@ function RunDetailClient({ runId }: RunDetailClientProps) {
   }, [polling, runId]);
 
   return (
-    <main className="workspace-shell">
-      <section className="workspace-header">
+    <main className="mx-auto max-w-4xl space-y-6 px-8 py-8">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="eyebrow">Valuation discovery run</p>
-          <h1>{run?.run_id ?? runId}</h1>
+          <p className="text-xs font-medium uppercase tracking-wider text-accent">
+            Valuation discovery run
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+            {run?.run_id ?? runId}
+          </h1>
         </div>
-        <div className="status-strip">
-          <span>{run?.status ?? "--"}</span>
-          <span>{run?.target_count ?? 0} 个编排步骤</span>
-          {polling ? <span>自动刷新中</span> : null}
+        <div className="flex flex-wrap gap-2">
+          <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            {run?.status ?? "--"}
+          </span>
+          <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            {run?.target_count ?? 0} 个编排步骤
+          </span>
+          {polling ? (
+            <span className="inline-flex items-center rounded-full border border-caution-soft bg-caution-soft px-2.5 py-1 text-xs font-medium text-caution">
+              自动刷新中
+            </span>
+          ) : null}
         </div>
-      </section>
+      </header>
+
       {error ? (
-        <div className="notice-panel" role="alert">
-          <span>{error}</span>
+        <div
+          className="flex items-center gap-2 rounded-lg border border-negative-soft bg-negative-soft px-4 py-3 text-sm text-negative"
+          role="alert"
+        >
+          {error}
         </div>
       ) : null}
-      <div className="side-rail">
+
+      <div className="grid gap-6">
         {run ? <ResearchRunProgress run={run} /> : null}
-        <section className="panel">
-          <div className="panel-heading">
+        <Card>
+          <CardHeader>
             <div>
-              <p className="eyebrow">Dashboard projection</p>
-              <h2>研究候选结果</h2>
+              <p className="text-xs font-medium uppercase tracking-wider text-accent">
+                Dashboard projection
+              </p>
+              <CardTitle className="mt-1">研究候选结果</CardTitle>
             </div>
-            <span>由 effective assessment 指针驱动</span>
-          </div>
-          <p className="helper-text">
-            运行完成后，请在研究候选面板按 scope、公司池、筛选状态和证据状态查看当前可见结果。
-          </p>
-          <Link className="secondary-link" href="/research">
-            返回研究候选面板
-          </Link>
-        </section>
+            <span className="text-xs text-muted-foreground">
+              由 effective assessment 指针驱动
+            </span>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              运行完成后，请在研究候选面板按 scope、公司池、筛选状态和证据状态查看当前可见结果。
+            </p>
+            <Button asChild variant="secondary" size="sm">
+              <Link href="/research">返回研究候选面板</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </main>
   );

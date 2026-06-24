@@ -10,11 +10,15 @@ from typing import Any, Protocol
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import and_, func, or_, select
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from margin.core.db_orchestration import TransactionalOutboxRow
+from margin.sql.core_queries import (
+    insert_outbox_row,
+    outbox_claim_batch,
+    outbox_count_by_topic,
+    outbox_row_by_topic_and_key,
+)
 
 
 def _utc_now() -> datetime:
@@ -346,29 +350,18 @@ class SQLAlchemyOutboxRepository:
         """Enqueue using the caller's business transaction."""
         outbox_id = f"outbox_{uuid4().hex}"
         session.execute(
-            insert(TransactionalOutboxRow)
-            .values(
+            insert_outbox_row(
                 outbox_id=outbox_id,
                 topic=topic,
                 idempotency_key=idempotency_key,
                 payload=payload,
                 state=OutboxState.PENDING.value,
                 available_at=now,
-                attempt_count=0,
-                created_at=now,
-            )
-            .on_conflict_do_nothing(
-                index_elements=[
-                    TransactionalOutboxRow.topic,
-                    TransactionalOutboxRow.idempotency_key,
-                ]
+                now=now,
             )
         )
         row = session.scalar(
-            select(TransactionalOutboxRow).where(
-                TransactionalOutboxRow.topic == topic,
-                TransactionalOutboxRow.idempotency_key == idempotency_key,
-            )
+            outbox_row_by_topic_and_key(topic, idempotency_key)
         )
         if row is None:
             raise RuntimeError("outbox row could not be created")
@@ -397,34 +390,9 @@ class SQLAlchemyOutboxRepository:
         Returns:
             List of claimed OutboxMessages.
         """
-        claimable = or_(
-            and_(
-                TransactionalOutboxRow.state.in_(
-                    [
-                        OutboxState.PENDING.value,
-                        OutboxState.FAILED_RETRYABLE.value,
-                    ]
-                ),
-                TransactionalOutboxRow.available_at <= now,
-            ),
-            and_(
-                TransactionalOutboxRow.state == OutboxState.CLAIMED.value,
-                TransactionalOutboxRow.lease_expires_at <= now,
-            ),
-        )
-        statement = (
-            select(TransactionalOutboxRow)
-            .where(TransactionalOutboxRow.topic == topic, claimable)
-            .order_by(
-                TransactionalOutboxRow.available_at,
-                TransactionalOutboxRow.created_at,
-                TransactionalOutboxRow.outbox_id,
-            )
-            .limit(limit)
-            .with_for_update(skip_locked=True)
-        )
+        claimable_statement = outbox_claim_batch(topic, now, limit)
         with self._session_factory.begin() as session:
-            rows = session.scalars(statement).all()
+            rows = session.scalars(claimable_statement).all()
             result: list[OutboxMessage] = []
             for row in rows:
                 row.state = OutboxState.CLAIMED.value
@@ -522,12 +490,7 @@ class SQLAlchemyOutboxRepository:
         """
         with self._session_factory() as session:
             return int(
-                session.scalar(
-                    select(func.count())
-                    .select_from(TransactionalOutboxRow)
-                    .where(TransactionalOutboxRow.topic == topic)
-                )
-                or 0
+                session.scalar(outbox_count_by_topic(topic)) or 0
             )
 
 

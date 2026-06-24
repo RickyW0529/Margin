@@ -11,6 +11,9 @@ __pycache__/
 .venv/
 venv/
 .margin/
+tushare_cache/
+backtest_output/
+backtest_output_*/
 web/node_modules/
 web/.next/
 dist/

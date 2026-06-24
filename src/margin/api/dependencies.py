@@ -24,7 +24,12 @@ from margin.core.provider import (
 from margin.core.secret_store import SecretStore, SQLAlchemySecretRepository
 from margin.dashboard.repository import SQLAlchemyDashboardRepository
 from margin.dashboard.service import DashboardServiceBundle
+from margin.data.company_pool import SQLAlchemyCompanyPoolRepository
 from margin.data.ingestion import DataWarehouseIngestionStack
+from margin.data.policy import (
+    DataAcquisitionPolicyService,
+    SQLAlchemyDataAcquisitionPolicyRepository,
+)
 from margin.data.providers.akshare_provider import AKShareProvider
 from margin.data.providers.tushare_provider import TushareProvider
 from margin.data.warehouse_repository import SQLAlchemyWarehouseRepository
@@ -494,7 +499,11 @@ def get_valuation_discovery_service() -> ValuationDiscoveryService:
     )
 
     strategy_repository = SQLAlchemyStrategyRepository(session_factory)
-    scope_provider = SQLAlchemyScopeBindingProvider(strategy_repository)
+    company_pool_repository = SQLAlchemyCompanyPoolRepository(session_factory)
+    scope_provider = SQLAlchemyScopeBindingProvider(
+        strategy_repository,
+        company_pool_repository=company_pool_repository,
+    )
     warehouse_repository = SQLAlchemyWarehouseRepository(session_factory)
     warehouse_fact_adapter = WarehouseFactAdapter(warehouse_repository)
     valuation_repository = SQLAlchemyValuationDiscoveryRepository(session_factory)
@@ -784,6 +793,16 @@ def get_news_service() -> NewsService:
 def get_data_warehouse_stack() -> DataWarehouseIngestionStack:
     """Return the production data warehouse ingestion stack."""
     return build_data_warehouse_stack(get_settings())
+
+
+@lru_cache
+def get_data_policy_service() -> DataAcquisitionPolicyService:
+    """Return the PostgreSQL-backed rolling-window policy service."""
+    engine = build_database_engine(get_settings())
+    repository = SQLAlchemyDataAcquisitionPolicyRepository(
+        create_session_factory(engine)
+    )
+    return DataAcquisitionPolicyService(repository)
 
 
 @lru_cache

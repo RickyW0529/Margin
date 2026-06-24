@@ -8,7 +8,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  activateDataPolicy,
+  createDataPolicy,
   createResearchItemFeedback,
+  fetchQuantStrategyDefaults,
   fetchResearchCandidates,
   fetchResearchRunDetailV2,
   startValuationDiscoveryRefresh,
@@ -84,6 +87,48 @@ describe("api mutation helpers", () => {
     );
   });
 
+  it("creates and activates rolling data policy versions", async () => {
+    json.mockResolvedValue({});
+    window.localStorage.setItem("margin.adminApiToken", "admin-token");
+    window.localStorage.setItem("margin.csrfToken", "csrf-token");
+    vi.stubGlobal("crypto", {
+      randomUUID: vi
+        .fn()
+        .mockReturnValueOnce("policy-create-idem")
+        .mockReturnValueOnce("policy-activate-idem"),
+    });
+
+    await createDataPolicy({
+      financial_comparison_years: 1,
+      revision_lookback_days: 30,
+      rolling_window_months: 24,
+    });
+    await activateDataPolicy("data-policy-24");
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8000/api/v1/data-policies",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer admin-token",
+          "Idempotency-Key": "policy-create-idem",
+          "X-CSRF-Token": "csrf-token",
+        }),
+      }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:8000/api/v1/data-policies/data-policy-24/activate",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "Idempotency-Key": "policy-activate-idem",
+        }),
+      }),
+    );
+  });
+
   it("fetches v0.2 research candidates with server-side filters", async () => {
     json.mockResolvedValueOnce({ items: [], page_info: { has_next_page: false } });
 
@@ -98,6 +143,19 @@ describe("api mutation helpers", () => {
 
     expect(fetch).toHaveBeenCalledWith(
       "http://localhost:8000/api/v1/research?scope_version_id=scope-1&universe=HS300&limit=25&screening_status=pass&data_status=complete&review_required=true",
+      expect.objectContaining({
+        next: { revalidate: 30 },
+      }),
+    );
+  });
+
+  it("fetches built-in quant strategy defaults", async () => {
+    json.mockResolvedValueOnce({ presets: {} });
+
+    await fetchQuantStrategyDefaults();
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/quant-strategy-defaults",
       expect.objectContaining({
         next: { revalidate: 30 },
       }),

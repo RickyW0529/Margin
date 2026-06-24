@@ -18,6 +18,10 @@ from margin.research.db_models import (
     ResearchDeltaReviewRow,
 )
 from margin.research.graph.state import ReviewMode, ReviewOutcome
+from margin.sql.research_queries import (
+    delta_outbox_by_graph_run,
+    delta_review_by_graph_run,
+)
 
 RESEARCH_DELTA_PUBLISHED = "research_delta_published"
 
@@ -138,9 +142,7 @@ class SQLAlchemyResearchDeltaRepository:
                 raise ValueError(f"graph run does not exist: {review.graph_run_id}")
 
             existing = session.scalars(
-                select(ResearchDeltaReviewRow).where(
-                    ResearchDeltaReviewRow.graph_run_id == review.graph_run_id
-                )
+                delta_review_by_graph_run(review.graph_run_id)
             ).first()
             if existing is not None:
                 if _review_from_row(existing) != review:
@@ -170,9 +172,7 @@ class SQLAlchemyResearchDeltaRepository:
         """Load the terminal review for one graph run."""
         with self._session_factory() as session:
             row = session.scalars(
-                select(ResearchDeltaReviewRow).where(
-                    ResearchDeltaReviewRow.graph_run_id == graph_run_id
-                )
+                delta_review_by_graph_run(graph_run_id)
             ).first()
             return _review_from_row(row) if row is not None else None
 
@@ -230,10 +230,7 @@ class SQLAlchemyResearchDeltaRepository:
         payload = _outbox_payload(review)
         payload_hash = _hash_json(payload)
         existing = session.scalars(
-            select(ResearchDeltaOutboxRow).where(
-                ResearchDeltaOutboxRow.graph_run_id == review.graph_run_id,
-                ResearchDeltaOutboxRow.event_type == RESEARCH_DELTA_PUBLISHED,
-            )
+            delta_outbox_by_graph_run(review.graph_run_id, RESEARCH_DELTA_PUBLISHED)
         ).first()
         if existing is not None:
             if existing.payload_hash != payload_hash or existing.payload != payload:

@@ -4,10 +4,10 @@
 
 import Link from "next/link";
 
-import type {
-  DashboardPageInfo,
-  ResearchCandidateListItemV2,
-} from "@/lib/api";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import type { DashboardPageInfo, ResearchCandidateListItemV2 } from "@/lib/api";
+import { formatDate, formatPercent, formatScore } from "@/lib/utils";
 
 type ResearchResultsTableProps = {
   items: ResearchCandidateListItemV2[];
@@ -16,20 +16,25 @@ type ResearchResultsTableProps = {
   universe: string;
 };
 
-const percentFormatter = new Intl.NumberFormat("zh-CN", {
-  style: "percent",
-  maximumFractionDigits: 0,
-});
+function statusTone(status: string): BadgeProps["tone"] {
+  const normalized = status.toLowerCase().replaceAll("_", "-");
+  if (["pass", "fresh", "complete"].includes(normalized)) {
+    return "positive";
+  }
+  if (
+    ["risk-flag", "stale", "review-required", "near-threshold", "watchlist"].includes(
+      normalized,
+    )
+  ) {
+    return "caution";
+  }
+  if (["data-insufficient", "missing", "reject"].includes(normalized)) {
+    return "negative";
+  }
+  return "muted";
+}
 
-const scoreFormatter = new Intl.NumberFormat("zh-CN", {
-  maximumFractionDigits: 1,
-});
-
-/**
- * Renders a stable tabular view of research candidates. The table deliberately
- * separates current review outcome from the effective assessment pointer so the
- * user can see whether today's AI review changed the persisted conclusion.
- */
+/** Renders research candidates with current/effective split and cursor pagination. */
 export function ResearchResultsTable({
   items,
   pageInfo,
@@ -37,81 +42,126 @@ export function ResearchResultsTable({
   universe,
 }: ResearchResultsTableProps) {
   if (items.length === 0) {
-    return <div className="empty-state">暂无符合当前筛选条件的研究候选</div>;
+    return (
+      <div className="grid place-items-center rounded-md border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
+        暂无符合当前筛选条件的研究候选
+      </div>
+    );
   }
 
   return (
-    <div className="research-table-stack">
-      <div className="table-scroll">
-        <table aria-label="研究候选结果">
+    <div className="grid gap-3">
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table
+          className="w-full min-w-[860px] border-collapse text-sm"
+          aria-label="研究候选结果"
+        >
           <thead>
-            <tr>
-              <th scope="col">公司</th>
-              <th scope="col">量化</th>
-              <th scope="col">分数</th>
-              <th scope="col">估值折价</th>
-              <th scope="col">本轮复核</th>
-              <th scope="col">有效结论</th>
-              <th scope="col">纪律</th>
-              <th scope="col">数据</th>
+            <tr className="border-b border-border bg-muted/50 text-left">
+              <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                公司
+              </th>
+              <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                量化
+              </th>
+              <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                分数
+              </th>
+              <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                估值折价
+              </th>
+              <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                本轮复核
+              </th>
+              <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                有效结论
+              </th>
+              <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                纪律
+              </th>
+              <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                数据
+              </th>
             </tr>
           </thead>
           <tbody>
             {items.map((item) => (
-              <tr key={item.item_id}>
-                <td>
-                  <div className="research-symbol-cell">
-                    <Link className="table-link" href={`/research/items/${item.item_id}`}>
+              <tr
+                key={item.item_id}
+                className="border-b border-border transition-colors last:border-b-0 hover:bg-muted/30"
+              >
+                <td className="px-3 py-3">
+                  <div className="grid gap-0.5">
+                    <Link
+                      href={`/research/items/${item.item_id}`}
+                      className="text-sm font-semibold text-accent no-underline hover:underline"
+                    >
                       {item.symbol}
                     </Link>
-                    <span>{item.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {item.name}
+                    </span>
                   </div>
                 </td>
-                <td>
-                  <span className={`badge ${statusClass(item.screening_status)}`}>
+                <td className="px-3 py-3">
+                  <Badge tone={statusTone(item.screening_status)}>
                     {item.screening_status}
-                  </span>
+                  </Badge>
                 </td>
-                <td>
-                  <strong>{formatScore(item.final_score)}</strong>
-                  <span className="table-helper">
+                <td className="px-3 py-3">
+                  <strong className="tabular text-sm font-semibold text-foreground">
+                    {formatScore(item.final_score)}
+                  </strong>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
                     置信度 {formatPercent(item.confidence)}
                   </span>
                 </td>
-                <td>{formatPercent(item.discount_rate)}</td>
-                <td>
-                  <div className="table-stack-cell">
-                    <span>本轮：{item.current_review_outcome}</span>
-                    {item.review_required ? (
-                      <span className="badge risk">需要复核</span>
-                    ) : null}
-                  </div>
+                <td className="px-3 py-3 tabular text-foreground">
+                  {formatPercent(item.discount_rate)}
                 </td>
-                <td>
-                  <div className="table-stack-cell">
-                    <span>有效：{item.effective_assessment_id ?? "暂无"}</span>
-                    <span className={`badge ${statusClass(item.assessment_freshness)}`}>
-                      {item.assessment_freshness}
+                <td className="px-3 py-3">
+                  <div className="grid gap-1">
+                    <span className="text-xs text-foreground">
+                      本轮：{item.current_review_outcome}
                     </span>
-                    {item.stale_reason ? (
-                      <span className="table-helper">{item.stale_reason}</span>
+                    {item.review_required ? (
+                      <Badge tone="caution">需要复核</Badge>
                     ) : null}
                   </div>
                 </td>
-                <td>
-                  <div className="table-stack-cell">
-                    <span>{item.research_guardrail}</span>
+                <td className="px-3 py-3">
+                  <div className="grid gap-1">
+                    <span className="text-xs text-foreground">
+                      有效：{item.effective_assessment_id ?? "暂无"}
+                    </span>
+                    <Badge tone={statusTone(item.assessment_freshness)}>
+                      {item.assessment_freshness}
+                    </Badge>
+                    {item.stale_reason ? (
+                      <span className="text-xs text-muted-foreground">
+                        {item.stale_reason}
+                      </span>
+                    ) : null}
+                  </div>
+                </td>
+                <td className="px-3 py-3">
+                  <div className="grid gap-1">
+                    <span className="text-xs text-foreground">
+                      {item.research_guardrail}
+                    </span>
                     {item.risk_flags.length > 0 ? (
-                      <span className="table-helper">
+                      <span className="text-xs text-muted-foreground">
                         风险 {item.risk_flags.join(" / ")}
                       </span>
                     ) : null}
                   </div>
                 </td>
-                <td>
-                  <div className="table-stack-cell">
-                    <span>{item.data_status}</span>
-                    <span className="table-helper">
+                <td className="px-3 py-3">
+                  <div className="grid gap-1">
+                    <span className="text-xs text-foreground">
+                      {item.data_status}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
                       {formatDate(item.last_checked_at)}
                     </span>
                   </div>
@@ -121,62 +171,28 @@ export function ResearchResultsTable({
           </tbody>
         </table>
       </div>
-      <div className="table-pagination">
-        <span>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground">
           本页 {items.length} / page size {pageInfo.page_size}
         </span>
         {pageInfo.has_next_page && pageInfo.next_cursor ? (
-          <Link
-            className="secondary-link"
-            href={nextHref({
-              cursor: pageInfo.next_cursor,
-              scopeVersionId,
-              universe,
-            })}
-          >
-            下一页
-          </Link>
+          <Button asChild variant="secondary" size="sm">
+            <Link
+              href={nextHref({
+                cursor: pageInfo.next_cursor,
+                scopeVersionId,
+                universe,
+              })}
+            >
+              下一页
+            </Link>
+          </Button>
         ) : (
-          <span className="helper-text">已到最后一页</span>
+          <span className="text-xs text-muted-foreground">已到最后一页</span>
         )}
       </div>
     </div>
   );
-}
-
-function formatScore(value: number | null): string {
-  return value == null ? "--" : scoreFormatter.format(value);
-}
-
-function formatPercent(value: number | null): string {
-  return value == null ? "--" : percentFormatter.format(value);
-}
-
-function formatDate(value: string): string {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(parsed);
-}
-
-function statusClass(status: string): string {
-  const normalized = status.toLowerCase().replaceAll("_", "-");
-  if (["pass", "fresh", "complete"].includes(normalized)) {
-    return "positive";
-  }
-  if (["risk-flag", "stale", "review-required"].includes(normalized)) {
-    return "risk";
-  }
-  if (["data-insufficient", "missing"].includes(normalized)) {
-    return "data_missing";
-  }
-  return "watch";
 }
 
 function nextHref({

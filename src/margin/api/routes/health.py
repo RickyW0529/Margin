@@ -15,10 +15,17 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine
 
 from margin.core.provider import HealthCheckResult, ProviderStatus
 from margin.settings import get_settings
+from margin.sql.health_queries import (
+    active_provider_config_count,
+    alembic_version,
+    outbox_pending_count,
+    queue_counts,
+    retryable_step_count,
+)
 from margin.storage.database import DatabaseSettings, create_database_engine
 
 router = APIRouter(tags=["health"])
@@ -79,47 +86,28 @@ def _ready_checks() -> dict[str, dict[str, object]]:
         with engine.connect() as conn:
             conn.exec_driver_sql("SELECT 1")
             checks["database"] = {"status": "ok"}
-            current = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
+            current = conn.execute(alembic_version()).scalar()
             checks["migration_head"] = {
                 "status": "ok" if current == head else "failed",
                 "current": current,
                 "head": head,
             }
             outbox_pending = int(
-                conn.execute(
-                    text(
-                        "SELECT count(*) FROM transactional_outbox "
-                        "WHERE state IN ('pending', 'failed_retryable')"
-                    )
-                ).scalar()
-                or 0
+                conn.execute(outbox_pending_count()).scalar() or 0
             )
             checks["outbox"] = {
                 "status": "ok",
                 "pending_count": outbox_pending,
             }
             active_provider_configs = int(
-                conn.execute(
-                    text(
-                        "SELECT count(*) FROM provider_config_versions "
-                        "WHERE lifecycle = 'active'"
-                    )
-                ).scalar()
-                or 0
+                conn.execute(active_provider_config_count()).scalar() or 0
             )
             checks["provider_config"] = {
                 "status": "ok",
                 "active_count": active_provider_configs,
             }
             retryable_steps = int(
-                conn.execute(
-                    text(
-                        "SELECT count(*) FROM orchestration_step_attempts "
-                        "WHERE state IN ('pending', 'failed_retryable', "
-                        "'waiting_rate_limit', 'waiting_budget')"
-                    )
-                ).scalar()
-                or 0
+                conn.execute(retryable_step_count()).scalar() or 0
             )
             checks["worker"] = {
                 "status": "ok",
@@ -148,42 +136,19 @@ def _queue_counts() -> dict[str, int]:
         engine = create_database_engine(
             DatabaseSettings(url=str(settings.database_url))
         )
+        probes = queue_counts()
         with engine.connect() as conn:
             counts["waiting_budget_count"] = int(
-                conn.execute(
-                    text(
-                        "SELECT count(*) FROM orchestration_step_attempts "
-                        "WHERE state = 'waiting_budget'"
-                    )
-                ).scalar()
-                or 0
+                conn.execute(probes["waiting_budget"]).scalar() or 0
             )
             counts["waiting_rate_limit_count"] = int(
-                conn.execute(
-                    text(
-                        "SELECT count(*) FROM orchestration_step_attempts "
-                        "WHERE state = 'waiting_rate_limit'"
-                    )
-                ).scalar()
-                or 0
+                conn.execute(probes["waiting_rate_limit"]).scalar() or 0
             )
             counts["retry_queue_count"] = int(
-                conn.execute(
-                    text(
-                        "SELECT count(*) FROM orchestration_step_attempts "
-                        "WHERE state = 'failed_retryable'"
-                    )
-                ).scalar()
-                or 0
+                conn.execute(probes["retry_queue"]).scalar() or 0
             )
             counts["outbox_pending_count"] = int(
-                conn.execute(
-                    text(
-                        "SELECT count(*) FROM transactional_outbox "
-                        "WHERE state IN ('pending', 'failed_retryable')"
-                    )
-                ).scalar()
-                or 0
+                conn.execute(probes["outbox_pending"]).scalar() or 0
             )
     except Exception:  # noqa: BLE001
         pass

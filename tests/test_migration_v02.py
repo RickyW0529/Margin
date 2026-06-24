@@ -19,7 +19,7 @@ def test_migration_sequence_from_clean_database(database_url: str) -> None:
     )
 
     assert result.current_head == result.expected_head
-    assert result.current_head == "20260623_0034_pointer_lineage"
+    assert result.current_head == "20260624_0041_akshare_source"
     assert result.failed_revision is None
     assert {
         "orchestration_runs",
@@ -49,6 +49,18 @@ def test_migration_sequence_from_clean_database(database_url: str) -> None:
         "llm_call_records",
         "research_delta_reviews",
         "research_delta_outbox",
+        "data_acquisition_policy_versions",
+        "quant_data_requirements",
+        "provider_endpoint_requirements",
+        "provider_endpoint_requirement_links",
+        "source_quality_decisions",
+        "source_akshare.ak_stock_zh_a_spot_em",
+        "source_akshare.ak_stock_zh_a_hist",
+        "source_akshare.ak_stock_balance_sheet_by_report_em",
+        "source_akshare.ak_stock_value_em",
+        "source_akshare.ak_index_stock_cons_csindex",
+        "company_pool_snapshots",
+        "company_pool_members",
     } <= set(result.tables)
     assert {
         "portfolios",

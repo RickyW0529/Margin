@@ -4,13 +4,13 @@
  * @fileoverview Global admin unlock gate rendered in the top bar.
  *
  * Mutating Margin endpoints require a local admin bearer token plus a CSRF
- * token. Instead of spreadsheets of input forms across settings pages, this
- * single floating control lets the user unlock admin mode once for the whole
- * browser. It also offers a one-click "use dev defaults" button in
- * development so local stacks boot without copy-pasting tokens.
+ * token. This single control lets the user unlock admin mode once for the
+ * whole browser. Credentials live in localStorage and never enter the server
+ * bundle or repository.
  */
 
 import { useState, useSyncExternalStore } from "react";
+import { ShieldAlert, ShieldCheck } from "lucide-react";
 
 import {
   clearAdminSession,
@@ -18,8 +18,17 @@ import {
   hasAdminSession,
   setAdminSession,
 } from "@/lib/admin-session";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
-/** Reads the dev-default hint flag exposed to the browser bundle. */
 const DEV_HINT_DEFAULTS =
   process.env.NEXT_PUBLIC_MARGIN_DEV_ADMIN_HINT === "1";
 
@@ -52,9 +61,7 @@ function notifyChange() {
   window.dispatchEvent(new Event(ADMIN_EVENT));
 }
 
-/** Props for the AdminGate component. */
 export type AdminGateProps = {
-  /** Optional callback invoked whenever the unlocked state changes. */
   onSessionChange?: () => void;
 };
 
@@ -91,7 +98,7 @@ export function AdminGate({ onSessionChange }: AdminGateProps = {}) {
     setError(null);
   }
 
-  function unlock() {
+  function handleGateClick() {
     const existing = getAdminSession();
     if (existing) {
       clearAdminSession();
@@ -104,106 +111,100 @@ export function AdminGate({ onSessionChange }: AdminGateProps = {}) {
 
   if (unlocked) {
     return (
-      <button
+      <Button
         type="button"
-        className="admin-gate admin-gate-unlocked"
-        onClick={unlock}
+        variant="secondary"
+        size="sm"
+        onClick={handleGateClick}
         title="已解锁管理员模式，点击清除"
+        className="gap-1.5"
       >
-        <span aria-hidden="true">●</span> 已解锁
-      </button>
+        <ShieldCheck className="size-3.5 text-positive" />
+        已解锁
+      </Button>
     );
   }
 
   return (
     <>
-      <button
+      <Button
         type="button"
-        className="admin-gate admin-gate-locked"
+        variant="secondary"
+        size="sm"
         onClick={() => setOpen(true)}
         title="解锁管理员模式以执行写操作"
+        className="gap-1.5"
       >
-        <span aria-hidden="true">○</span> 未解锁
-      </button>
-      {open ? (
-        <div
-          className="admin-gate-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="admin-gate-title"
-        >
-          <div className="admin-gate-card">
-            <div className="admin-gate-header">
-              <h2 id="admin-gate-title">解锁管理员模式</h2>
-              <button
-                type="button"
-                className="admin-gate-close"
-                aria-label="关闭"
-                onClick={() => setOpen(false)}
-              >
-                ×
-              </button>
-            </div>
-            <p className="admin-gate-help">
-              写密钥、测试 Provider、启动估值发现等操作需要本地管理员凭据。仅在当前浏览器保存，不会进入服务端或代码仓库。
-            </p>
-            <label className="form-field">
-              <span>Admin API token</span>
-              <input
-                aria-label="Admin API token"
-                autoComplete="off"
-                onChange={(event) => setAdminToken(event.target.value)}
+        <ShieldAlert className="size-3.5 text-caution" />
+        未解锁
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>解锁管理员模式</DialogTitle>
+          </DialogHeader>
+          <DialogDescription>
+            写密钥、测试 Provider、启动估值发现等操作需要本地管理员凭据。仅在当前浏览器保存，不会进入服务端或代码仓库。
+          </DialogDescription>
+          <div className="grid gap-3 pt-1">
+            <div className="grid gap-1.5">
+              <Label htmlFor="admin-gate-token">Admin API token</Label>
+              <Input
+                id="admin-gate-token"
                 type="password"
+                autoComplete="off"
                 value={adminToken}
+                onChange={(event) => setAdminToken(event.target.value)}
               />
-            </label>
-            <label className="form-field">
-              <span>CSRF token</span>
-              <input
-                aria-label="CSRF token"
-                autoComplete="off"
-                onChange={(event) => setCsrfToken(event.target.value)}
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="admin-gate-csrf">CSRF token</Label>
+              <Input
+                id="admin-gate-csrf"
                 type="password"
+                autoComplete="off"
                 value={csrfToken}
+                onChange={(event) => setCsrfToken(event.target.value)}
               />
-            </label>
-            <label className="checkbox-field">
+            </div>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <input
+                type="checkbox"
                 checked={remember}
                 onChange={(event) => setRemember(event.target.checked)}
-                type="checkbox"
               />
-              <span>记住本次会话（localStorage）</span>
+              记住本次会话（localStorage）
             </label>
-            {error ? <p className="form-error">{error}</p> : null}
+            {error ? (
+              <p className="text-xs text-negative" role="alert">
+                {error}
+              </p>
+            ) : null}
             {DEV_HINT_DEFAULTS ? (
-              <button
+              <Button
                 type="button"
-                className="secondary-button"
+                variant="secondary"
+                size="sm"
                 onClick={fillDevDefaults}
               >
                 填入 dev 默认 token
-              </button>
+              </Button>
             ) : null}
-            <div className="admin-gate-actions">
-              <button
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
                 type="button"
-                className="secondary-button"
+                variant="secondary"
                 onClick={() => setOpen(false)}
               >
                 取消
-              </button>
-              <button
-                type="button"
-                className="primary-button"
-                onClick={applySession}
-              >
+              </Button>
+              <Button type="button" onClick={applySession}>
                 解锁
-              </button>
+              </Button>
             </div>
           </div>
-        </div>
-      ) : null}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

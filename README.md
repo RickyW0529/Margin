@@ -9,13 +9,13 @@
   ·
   <a href="./docs/README.md">Documentation</a>
   ·
-  <a href="./docs/design/v0.2/README.md">Design</a>
+  <a href="./docs/design/v0.3/README.md">Design</a>
   ·
   <a href="./docs/code/README.md">Code Docs</a>
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.2-d6b04d">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.3-d6b04d">
   <img alt="Status" src="https://img.shields.io/badge/status-active-2f855a">
   <img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776ab">
   <img alt="Local first" src="https://img.shields.io/badge/local--first-yes-2f855a">
@@ -25,10 +25,14 @@ Margin is an open-source personal investment research system. Its core rule is s
 
 Margin is not a trading bot. It does not place orders, store brokerage passwords, or promise returns.
 
-## What v0.2 Does
+## What v0.3 Does
 
-Margin v0.2 connects the research-candidate loop:
+Margin v0.3 connects the Tushare-backed quant data loop and the research-candidate loop:
 
+- independent Tushare source-system tables, source-quality screening, and unified warehouse publication;
+- quant-only endpoint admission, excluding data with no active consumer;
+- rolling 24-month market/adjustment data, financial statements/ratios, valuation snapshots, suspension facts, and benchmark data;
+- non-ST, non-delisting, non-future-listed All-A company-pool snapshots feeding quant input;
 - Raw/Fact/Canonical market-data warehouse with PIT semantics;
 - AKShare/Tushare provider access and provider health gates;
 - filing/WebSearch snapshots, news target queues, and document events;
@@ -37,7 +41,7 @@ Margin v0.2 connects the research-candidate loop:
 - valuation discovery with quant gating, news refresh, RAG, AI delta review, and effective-assessment pointers;
 - LangGraph-based AI review with scoped read-only tools, prompt factory, reflection, checkpoints, and hash-only audit;
 - versioned strategy, provider, scope, indicator, prompt, and tool-policy configuration;
-- research candidate dashboard with server-side filters, current-vs-effective assessment display, evidence locators, read-only Copilot, and Provider settings;
+- research workspace UI with candidate snapshots, implemented-route navigation, server-side filters, current-vs-effective assessment display, evidence locators, read-only Copilot, Provider blocker visibility, and Provider settings;
 - Docker Compose deployment with PostgreSQL, API, worker, web, Prometheus, and Grafana.
 
 ```mermaid
@@ -76,6 +80,13 @@ Open:
 - API: http://localhost:8000
 - Prometheus: http://localhost:9090
 - Grafana: http://localhost:3002
+
+Frontend entrypoints:
+
+- `/`: research workspace overview, candidate snapshot, recommended workflow, and Provider status;
+- `/research`: candidate list, filters, refresh trigger, Provider blockers, and read-only Copilot;
+- `/settings/data`: rolling data acquisition policy configuration;
+- `/settings/providers`: write-only Provider keys and health activation.
 
 Health checks:
 
@@ -151,16 +162,16 @@ The dashboard and valuation smoke scripts bypass system proxies for local URLs s
 | Document | Path |
 | --- | --- |
 | Documentation index | [docs/README.md](./docs/README.md) |
-| Current design index | [docs/design/v0.2/README.md](./docs/design/v0.2/README.md) |
-| Product design, Chinese | [docs/design/v0.2/product/Margin_产品设计_v0.2_中文.md](./docs/design/v0.2/product/Margin_产品设计_v0.2_中文.md) |
-| Product design, English | [docs/design/v0.2/product/Margin_Product_Design_v0.2_EN.md](./docs/design/v0.2/product/Margin_Product_Design_v0.2_EN.md) |
-| Architecture design, Chinese | [docs/design/v0.2/architecture/Margin_架构设计_v0.2_中文.md](./docs/design/v0.2/architecture/Margin_架构设计_v0.2_中文.md) |
-| Architecture design, English | [docs/design/v0.2/architecture/Margin_Architecture_Design_v0.2_EN.md](./docs/design/v0.2/architecture/Margin_Architecture_Design_v0.2_EN.md) |
+| Current design index | [docs/design/v0.3/README.md](./docs/design/v0.3/README.md) |
+| Product design, Chinese | [docs/design/v0.3/product/Margin_产品设计_v0.3_中文.md](./docs/design/v0.3/product/Margin_产品设计_v0.3_中文.md) |
+| Product design, English | [docs/design/v0.3/product/Margin_Product_Design_v0.3_EN.md](./docs/design/v0.3/product/Margin_Product_Design_v0.3_EN.md) |
+| Architecture design, Chinese | [docs/design/v0.3/architecture/Margin_架构设计_v0.3_中文.md](./docs/design/v0.3/architecture/Margin_架构设计_v0.3_中文.md) |
+| Architecture design, English | [docs/design/v0.3/architecture/Margin_Architecture_Design_v0.3_EN.md](./docs/design/v0.3/architecture/Margin_Architecture_Design_v0.3_EN.md) |
 | Current code documentation | [docs/code/README.md](./docs/code/README.md) |
 
 ## Safety Boundaries
 
-Margin v0.2 intentionally does not include:
+Margin v0.3 intentionally does not include:
 
 - automatic buy/sell orders;
 - brokerage credential storage;

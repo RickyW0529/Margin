@@ -83,11 +83,11 @@ describe("HomePage", () => {
     );
     expect(fetchProviderStatus).toHaveBeenCalled();
     expect(fetchProviderConfigs).toHaveBeenCalled();
-    expect(screen.getByRole("heading", { name: "Margin 工作台" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "研究工作台" })).toBeInTheDocument();
     expect(screen.queryByText(/组合|持仓/)).not.toBeInTheDocument();
     expect(screen.getByText("今日候选")).toBeInTheDocument();
     expect(screen.getByText("v0.2 candidate BFF")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "进入研究面板" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "打开研究候选" })).toHaveAttribute(
       "href",
       "/research",
     );

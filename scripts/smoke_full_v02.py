@@ -18,7 +18,7 @@ from typing import Any
 from urllib.error import URLError
 from urllib.request import urlopen
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 
 from margin.core.provider import HealthCheckResult, ProviderStatus
 from margin.core.secret_store import SecretRedactor
@@ -26,6 +26,7 @@ from margin.data.providers.akshare_provider import AKShareProvider
 from margin.data.providers.tushare_provider import TushareProvider
 from margin.news.providers.tavily import TavilySearchAdapter
 from margin.research.llm import LLMProvider
+from margin.sql.health_queries import alembic_version, pgvector_extension
 from margin.vector.providers.openai_embedding import OpenAIEmbeddingProvider
 from margin.vector.providers.rerank import HTTPRerankProvider
 
@@ -249,12 +250,12 @@ def _database_stage(database_url: str) -> dict[str, Any]:
         with engine.connect() as connection:
             pgvector_available = (
                 connection.execute(
-                    text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
+                    pgvector_extension()
                 ).scalar()
                 == 1
             )
             current_head = connection.execute(
-                text("SELECT version_num FROM alembic_version")
+                alembic_version()
             ).scalar()
     finally:
         engine.dispose()

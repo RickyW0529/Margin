@@ -7,16 +7,15 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from margin.data.db_models import (
-    CorporateActionRow,
-    RawDataSnapshotRow,
-    RetentionDeletionAuditRow,
-    StandardizedIndicatorFactRow,
-)
+from margin.data.db_models import RetentionDeletionAuditRow
 from margin.news.models import ensure_utc, utc_now
+from margin.sql.data_queries import (
+    corporate_action_reference_count,
+    delete_raw_snapshot,
+    fact_reference_count,
+)
 
 
 @dataclass(frozen=True)
@@ -93,9 +92,7 @@ class SQLAlchemyRetentionService:
                     )
                     continue
                 result = session.execute(
-                    delete(RawDataSnapshotRow).where(
-                        RawDataSnapshotRow.snapshot_id == candidate.object_id
-                    )
+                    delete_raw_snapshot(candidate.object_id)
                 )
                 if result.rowcount:
                     deleted.append(candidate.object_id)
@@ -122,15 +119,9 @@ class SQLAlchemyRetentionService:
 
 def _raw_snapshot_reference_count(session: Session, snapshot_id: str) -> int:
     """raw snapshot reference count."""
-    fact_count = session.scalar(
-        select(func.count())
-        .select_from(StandardizedIndicatorFactRow)
-        .where(StandardizedIndicatorFactRow.raw_snapshot_id == snapshot_id)
-    )
+    fact_count = session.scalar(fact_reference_count(snapshot_id))
     corporate_action_count = session.scalar(
-        select(func.count())
-        .select_from(CorporateActionRow)
-        .where(CorporateActionRow.raw_snapshot_id == snapshot_id)
+        corporate_action_reference_count(snapshot_id)
     )
     return int(fact_count or 0) + int(corporate_action_count or 0)
 

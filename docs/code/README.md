@@ -32,7 +32,7 @@ docs/code/
 | 05 | rag_evidence | RAG 证据模块 | [05-rag_evidence.md](./05-rag_evidence.md) | `src/margin/evidence/` |
 | 06 | multi_agent_research | 多 Agent 研究流程模块 | [06-multi_agent_research.md](./06-multi_agent_research.md) | `src/margin/research/` |
 | 07 | strategy_config | 策略配置模块 | [07-strategy_config.md](./07-strategy_config.md) | `src/margin/strategy/`、`src/margin/core/secret_store.py`、`src/margin/api/routes/strategy.py`、`src/margin/api/routes/strategy_config.py`、`web/components/provider-settings-panel.tsx` |
-| 08 | research_candidate_dashboard | 研究候选面板模块 | [08-research_candidate_dashboard.md](./08-research_candidate_dashboard.md) | `src/margin/dashboard/`、`src/margin/api/routes/dashboard.py`、`src/margin/api/routes/valuation_discovery.py`、`web/app/research/`、`web/app/settings/`、`web/components/research-*.tsx`、`web/components/current-vs-effective-panel.tsx`、`web/components/evidence-locator-list.tsx`、`web/components/read-only-copilot-panel.tsx`、`web/components/provider-settings-panel.tsx` |
+| 08 | research_candidate_dashboard | 研究候选面板模块 | [08-research_candidate_dashboard.md](./08-research_candidate_dashboard.md) | `src/margin/dashboard/`、`src/margin/api/routes/dashboard.py`、`src/margin/api/routes/valuation_discovery.py`、`web/app/layout.tsx`、`web/app/page.tsx`、`web/app/research/`、`web/app/settings/`、`web/components/research-*.tsx`、`web/components/current-vs-effective-panel.tsx`、`web/components/evidence-locator-list.tsx`、`web/components/read-only-copilot-panel.tsx`、`web/components/provider-settings-panel.tsx` |
 | 10 | deployment_audit | 部署与审计模块 | [10-deployment_audit.md](./10-deployment_audit.md) | `src/margin/core/`（audit、snapshot、degradation、logging、metrics、run_states、orchestration、capacity、outbox）、`src/margin/api/middleware.py`、`src/margin/api/metrics.py`、`src/margin/api/routes/health.py`、`Dockerfile`、`web/Dockerfile`、`docker-compose.yml`、`.github/workflows/ci.yml`、`scripts/`（migration/worker/smoke）、`docker/prometheus.yml`、`docker/grafana/` |
 | 11 | valuation_discovery | 公司池与估值发现模块 | [11-valuation_discovery.md](./11-valuation_discovery.md) | `src/margin/valuation_discovery/`、`src/margin/api/routes/valuation_discovery.py`、`scripts/smoke_valuation_discovery_p0.py`、`scripts/smoke_valuation_discovery_p1.py` |
 
@@ -48,6 +48,12 @@ docs/code/
 - **按模块查找**：直接打开对应编号 markdown 文件。
 - **跨模块追踪**：每份文档末尾的「跨模块使用说明」列出本模块消费或提供的服务、Provider 与数据流。
 - **与设计对照**：代码文档描述当前实现；产品目标与模块边界查看对应大版本的 `docs/design/<version>/`。
+
+## v0.3 当前新增实现摘要
+
+- `01-data_provider` 已新增 Tushare 独立源系统、量化 endpoint 准入目录、滚动采集策略、质量筛选层、warehouse publisher 和真实两年行情/财务/benchmark 回填脚本。
+- `11-valuation_discovery` 已接入数据层公司池快照；最新真实量化 run `qr_df48cd92fdf1424d` 使用 5304 家非 ST/非退市/非未来上市公司，输出 3 家 pass、54 家 near-threshold。
+- `/settings/data` 与 `/api/v1/data-policies` 暴露近两年滚动窗口等数据采集策略配置。
 
 ## 更新说明
 

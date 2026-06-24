@@ -6,12 +6,9 @@ import uuid
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
-from sqlalchemy import case, select
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from margin.data.db_models import (
-    DataFreshnessStateRow,
     DataSyncRunRow,
     DataSyncWorkItemRow,
     ProviderEndpointRow,
@@ -25,6 +22,15 @@ from margin.data.sync_models import (
     EndpointWorkItem,
 )
 from margin.news.models import ensure_utc, utc_now
+from margin.sql.data_queries import (
+    active_work_item_for_run,
+    claimable_work_item,
+    sync_run_by_id_for_update,
+    sync_run_latest_by_requester,
+    sync_runs_active_for_update,
+    upsert_freshness,
+    work_items_for_run,
+)
 
 
 class ProviderSyncError(RuntimeError):
@@ -109,9 +115,7 @@ class SQLAlchemyDataSyncRepository:
         claimed_at = ensure_utc(now or utc_now())
         with self._session_factory.begin() as session:
             run_row = session.scalars(
-                select(DataSyncRunRow)
-                .where(DataSyncRunRow.run_id == run_id)
-                .with_for_update(skip_locked=True)
+                sync_run_by_id_for_update(run_id)
             ).first()
             if run_row is None:
                 return None
@@ -134,18 +138,7 @@ class SQLAlchemyDataSyncRepository:
         claimed_at = ensure_utc(now or utc_now())
         with self._session_factory.begin() as session:
             run_rows = session.scalars(
-                select(DataSyncRunRow)
-                .where(
-                    DataSyncRunRow.status.in_(
-                        [
-                            DataSyncStatus.PENDING.value,
-                            DataSyncStatus.RUNNING.value,
-                            DataSyncStatus.FAILED_RETRYABLE.value,
-                        ]
-                    )
-                )
-                .order_by(DataSyncRunRow.created_at, DataSyncRunRow.run_id)
-                .with_for_update(skip_locked=True)
+                sync_runs_active_for_update()
             ).all()
             for run_row in run_rows:
                 claimed = self._claim_for_run(
@@ -169,13 +162,7 @@ class SQLAlchemyDataSyncRepository:
         """Return the newest run created by a durable orchestration requester."""
         with self._session_factory() as session:
             row = session.scalar(
-                select(DataSyncRunRow)
-                .where(DataSyncRunRow.requested_by == requested_by)
-                .order_by(
-                    DataSyncRunRow.created_at.desc(),
-                    DataSyncRunRow.run_id.desc(),
-                )
-                .limit(1)
+                sync_run_latest_by_requester(requested_by=requested_by)
             )
             return _run_from_row(row) if row is not None else None
 
@@ -227,26 +214,12 @@ class SQLAlchemyDataSyncRepository:
                 f"fresh_{provider}_{endpoint_code}_{observed_at.date().isoformat()}"
             )[:64]
             session.execute(
-                insert(DataFreshnessStateRow)
-                .values(
+                upsert_freshness(
                     freshness_id=freshness_id,
                     provider=provider,
                     endpoint_code=endpoint_code,
                     as_of_date=observed_at.date(),
-                    expected_at=observed_at,
                     observed_at=observed_at,
-                    status="fresh",
-                    lag_seconds=0,
-                    created_at=observed_at,
-                )
-                .on_conflict_do_update(
-                    constraint="uq_data_freshness",
-                    set_={
-                        "expected_at": observed_at,
-                        "observed_at": observed_at,
-                        "status": "fresh",
-                        "lag_seconds": 0,
-                    },
                 )
             )
             self._reconcile_run(session, row.run_id)
@@ -283,48 +256,12 @@ class SQLAlchemyDataSyncRepository:
         """Claim one sequential endpoint while recovering expired leases."""
         lease_cutoff = claimed_at - timedelta(seconds=lease_seconds)
         active_running = session.scalars(
-            select(DataSyncWorkItemRow.work_item_id)
-            .where(DataSyncWorkItemRow.run_id == run_row.run_id)
-            .where(DataSyncWorkItemRow.status == DataSyncStatus.RUNNING.value)
-            .where(DataSyncWorkItemRow.claimed_at > lease_cutoff)
-            .limit(1)
+            active_work_item_for_run(run_row.run_id, lease_cutoff)
         ).first()
         if active_running is not None:
             return None
-        priority = case(
-            (DataSyncWorkItemRow.endpoint_id.like("%:security_master"), 10),
-            (DataSyncWorkItemRow.endpoint_id.like("%:index_member_csi300"), 20),
-            (DataSyncWorkItemRow.endpoint_id.like("%:index_member_csi500"), 21),
-            (DataSyncWorkItemRow.endpoint_id.like("%:daily_bar"), 30),
-            (DataSyncWorkItemRow.endpoint_id.like("%:adjustment_factor"), 40),
-            (DataSyncWorkItemRow.endpoint_id.like("%:financial_statement"), 50),
-            (DataSyncWorkItemRow.endpoint_id.like("%:valuation"), 60),
-            else_=100,
-        )
         row = session.scalars(
-            select(DataSyncWorkItemRow)
-            .where(DataSyncWorkItemRow.run_id == run_row.run_id)
-            .where(
-                (
-                    DataSyncWorkItemRow.status.in_(
-                        [
-                            DataSyncStatus.PENDING.value,
-                            DataSyncStatus.FAILED_RETRYABLE.value,
-                        ]
-                    )
-                    & (
-                        (DataSyncWorkItemRow.next_attempt_at.is_(None))
-                        | (DataSyncWorkItemRow.next_attempt_at <= claimed_at)
-                    )
-                )
-                | (
-                    (DataSyncWorkItemRow.status == DataSyncStatus.RUNNING.value)
-                    & (DataSyncWorkItemRow.claimed_at <= lease_cutoff)
-                )
-            )
-            .order_by(priority, DataSyncWorkItemRow.created_at)
-            .with_for_update(skip_locked=True)
-            .limit(1)
+            claimable_work_item(run_row.run_id, claimed_at, lease_cutoff)
         ).first()
         if row is None:
             return None
@@ -344,7 +281,7 @@ class SQLAlchemyDataSyncRepository:
         if run_row is None:
             raise KeyError(f"unknown data sync run: {run_id}")
         items = session.scalars(
-            select(DataSyncWorkItemRow).where(DataSyncWorkItemRow.run_id == run_id)
+            work_items_for_run(run_id)
         ).all()
         succeeded = sum(
             item.status == DataSyncStatus.SUCCEEDED.value for item in items

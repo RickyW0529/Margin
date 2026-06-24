@@ -13,10 +13,16 @@ import math
 from collections.abc import Callable
 from datetime import datetime
 
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from margin.news.models import SourceLevel, utc_now
+from margin.sql.vector_queries import (
+    chunk_security_link_count,
+    count_chunk_security_links,
+    count_embeddings,
+    list_chunks_statement,
+    search_vector_statement,
+)
 from margin.vector.db_models import (
     ChunkEmbeddingRow,
     ChunkRow,
@@ -105,8 +111,7 @@ class VectorRepository:
         """Return persisted chunk-security link count."""
         with self._session_factory() as session:
             return int(
-                session.scalar(select(func.count()).select_from(ChunkSecurityLinkRow))
-                or 0
+                session.scalar(count_chunk_security_links()) or 0
             )
 
     def chunk_has_security_link(self, chunk_id: str, security_id: str) -> bool:
@@ -114,12 +119,7 @@ class VectorRepository:
         with self._session_factory() as session:
             return (
                 session.scalar(
-                    select(func.count())
-                    .select_from(ChunkSecurityLinkRow)
-                    .where(
-                        ChunkSecurityLinkRow.chunk_id == chunk_id,
-                        ChunkSecurityLinkRow.security_id == security_id,
-                    )
+                    chunk_security_link_count(chunk_id, security_id)
                 )
                 or 0
             ) > 0
@@ -128,7 +128,7 @@ class VectorRepository:
         """Return persisted embedding row count."""
         with self._session_factory() as session:
             return int(
-                session.scalar(select(func.count()).select_from(ChunkEmbeddingRow)) or 0
+                session.scalar(count_embeddings()) or 0
             )
 
     def upsert_indexed_document(self, document: IndexedDocument) -> None:
@@ -257,22 +257,12 @@ class VectorRepository:
                 f"Query dimension mismatch: expected {self._dimension}, got {len(query_vector)}"
             )
         with self._session_factory() as session:
-            statement = select(ChunkRow, ChunkEmbeddingRow).join(
-                ChunkEmbeddingRow,
-                ChunkEmbeddingRow.chunk_id == ChunkRow.chunk_id,
+            statement = search_vector_statement(
+                security_ids=security_ids,
+                symbol=symbol,
+                decision_at=decision_at,
+                doc_types=doc_types,
             )
-            statement = statement.where(ChunkRow.is_active.is_(True))
-            if security_ids:
-                statement = statement.join(
-                    ChunkSecurityLinkRow,
-                    ChunkSecurityLinkRow.chunk_id == ChunkRow.chunk_id,
-                ).where(ChunkSecurityLinkRow.security_id.in_(security_ids))
-            elif symbol:
-                statement = statement.where(ChunkRow.symbol == symbol)
-            if decision_at:
-                statement = statement.where(ChunkRow.available_at <= decision_at)
-            if doc_types:
-                statement = statement.where(ChunkRow.doc_type.in_(doc_types))
             rows = session.execute(statement).all()
 
         scored = [
@@ -304,22 +294,11 @@ class VectorRepository:
         decision_at: datetime | None = None,
     ) -> list[Chunk]:
         """Return persisted chunks for keyword fallback retrieval."""
-        statement = select(ChunkRow)
-        statement = statement.where(ChunkRow.is_active.is_(True))
-        if security_ids:
-            statement = statement.join(
-                ChunkSecurityLinkRow,
-                ChunkSecurityLinkRow.chunk_id == ChunkRow.chunk_id,
-            ).where(ChunkSecurityLinkRow.security_id.in_(security_ids))
-        elif symbol:
-            statement = statement.where(ChunkRow.symbol == symbol)
-        if decision_at:
-            statement = statement.where(ChunkRow.available_at <= decision_at)
-        if doc_types:
-            statement = statement.where(ChunkRow.doc_type.in_(doc_types))
-        statement = statement.order_by(
-            ChunkRow.available_at.desc(),
-            ChunkRow.chunk_id,
+        statement = list_chunks_statement(
+            symbol=symbol,
+            security_ids=security_ids,
+            doc_types=doc_types,
+            decision_at=decision_at,
         )
         with self._session_factory() as session:
             return [

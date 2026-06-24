@@ -15,6 +15,7 @@
 - 提供 Provider 状态展示；
 - 提供启动 valuation discovery refresh 的前端表单；
 - 提供 Provider 密钥配置页面，密钥只写不读，保存/测试后清空输入。
+- 提供面向研究流程的前端信息架构：先处理 Provider/Scope，再查看候选与证据，不展示持仓或交易入口。
 
 不再承担：
 
@@ -33,13 +34,20 @@
 | `src/margin/dashboard/service.py` | `DashboardQueryService`、`FeedbackService`、`ProviderStatusService`、`JobService` 与 `DashboardServiceBundle`。 |
 | `src/margin/api/routes/dashboard.py` | `/api/v1/research`、`/api/v1/research/items/{item_id}`、`/api/v1/research/copilot`、feedback、provider status、job 端点。 |
 | `src/margin/api/routes/valuation_discovery.py` | Dashboard 刷新入口：`POST /api/v1/valuation-discovery/refreshes` 与 `GET /api/v1/valuation-discovery/runs/{run_id}`。 |
-| `web/app/page.tsx` | 首页，从 v0.2 candidate API 读取摘要数据，不调用旧 research-home。 |
-| `web/app/research/page.tsx` | 研究候选页，包含 refresh 表单、filter bar、结果表、只读 Copilot、Provider 状态。 |
+| `web/app/layout.tsx` | 全局应用框架；Tailwind v4 + Vercel Geist 设计系统，深色侧栏（`Sidebar` client 组件 + active 路由高亮）+ 顶栏 guardrail + `AdminGate`（Radix Dialog）。 |
+| `web/app/page.tsx` | 研究工作台首页，从 v0.2 candidate API 读取摘要数据，展示候选快照、推荐操作顺序和 Provider blocker。 |
 | `web/app/research/runs/[runId]/page.tsx` | 估值发现运行进度页，调用 valuation-discovery run status API。 |
-| `web/app/research/items/[itemId]/page.tsx` | 公司研究详情页，展示 current/effective、thesis、factors、evidence locators、feedback。 |
-| `web/app/research/universe/page.tsx` | 公司池/Universe 说明页。 |
-| `web/app/settings/` | Provider、scope、strategy 配置页面。 |
-| `web/lib/api.ts` | 前端 API client，只保留 v0.2 dashboard、valuation discovery、provider settings 等调用。 |
+| `web/app/research/items/[itemId]/page.tsx` | 公司研究详情页，展示 current/effective、thesis、量化快照、FactorScoreBar、证据 locators、反馈。 |
+| `web/app/research/universe/page.tsx` | 公司池/Universe 状态页，按 universe 查询候选 facets。 |
+| `web/app/strategies/[strategyId]/strategy-detail-client.tsx` | 策略详情 client，版本生命周期（validate/backtest/paper-trade/activate/archive）+ Prompt 预览。 |
+| `web/app/settings/` | Provider、scope、strategy、data 配置页面；scope/strategy 使用 `ConfigVersionList` 触发 append-only 激活。 |
+| `web/lib/api.ts` | 前端 API client；v0.2 dashboard、valuation discovery、provider settings、strategy，补齐 `createVersionedConfig`/`activateVersionedConfig`、`createProviderConfig`/`activateProviderConfig`、`fetchNewsRun`、`fetchJobRun`。 |
+| `web/lib/utils.ts` | `cn` 类名合并 + 日期/分数/百分比/带符号百分比格式化。 |
+| `web/components/sidebar.tsx` | 深色侧栏 client 组件，`usePathname` active 高亮，保留已实现导航入口。 |
+| `web/components/ui/` | shadcn 风格 UI 原语：Button（CVA + asChild/loading）、Card、Badge（positive/caution/negative/neutral/muted/accent）、Input、Label、Textarea、Select、Dialog、Tabs、Tooltip、ScrollArea、Separator、Skeleton。 |
+| `web/components/valuation-bar.tsx` | 内在价值区间条 + 现价标记，缺数据时静默降级。 |
+| `web/components/factor-score-bar.tsx` | 因子分数横向条。 |
+| `web/components/config-version-list.tsx` | 通用版本化配置列表 + append-only 激活按钮（universe/indicator/quant/style/scope）。 |
 | `web/components/research-run-form.tsx` | 启动 valuation discovery refresh 的表单。 |
 | `web/components/research-filter-bar.tsx` | 候选列表筛选控件。 |
 | `web/components/research-results-table.tsx` | 候选公司表格。 |
@@ -144,8 +152,8 @@
 
 | 页面 | 数据来源 | 说明 |
 | --- | --- | --- |
-| `/` | `fetchResearchCandidates`、`fetchProviderStatus`、provider configs | 首页显示候选摘要、Provider 状态和配置入口。 |
-| `/research` | `fetchResearchCandidates`、`startValuationDiscoveryRefresh` | 研究候选工作台；用户选择 scope 与日期后启动 valuation discovery refresh。 |
+| `/` | `fetchResearchCandidates`、`fetchProviderStatus`、provider configs | 研究工作台首页；展示候选摘要、最新候选快照、推荐操作顺序和 Provider 状态。 |
+| `/research` | `fetchResearchCandidates`、`startValuationDiscoveryRefresh` | 研究候选工作台；用户先筛选候选，再在右侧触发 valuation discovery refresh 并查看 Provider blocker。 |
 | `/research/runs/[runId]` | `fetchResearchRunDetailV2` → `/api/v1/valuation-discovery/runs/{run_id}` | 运行进度页，展示 target count、completed、pending、failed、wait state、trace。 |
 | `/research/items/[itemId]` | `fetchResearchItemDetailV2` | 公司详情页，展示 current/effective、factor snapshot、证据 locator、反馈表单。 |
 | `/research/universe` | 静态/配置说明 | 展示沪深300、中证500、全 A 等公司池配置逻辑。 |
@@ -157,7 +165,7 @@
 
 | 组件 | 说明 |
 | --- | --- |
-| `ResearchRunForm` | 启动 valuation discovery refresh；不再创建旧 research run。 |
+| `ResearchRunForm` | 启动 valuation discovery refresh；不再创建旧 research run；对 local admin、Provider/scope 未配置、Tavily 未激活等错误给出明确操作提示。 |
 | `ResearchFilterBar` | 服务端筛选候选列表。 |
 | `ResearchResultsTable` | 表格展示候选公司、状态、风险、分数和 effective assessment。 |
 | `ResearchRunProgress` | 展示 valuation discovery run 进度。 |
@@ -165,9 +173,27 @@
 | `EvidenceLocatorList` | 展示 evidence id、source level、locator、snapshot id。 |
 | `ReadOnlyCopilotPanel` | 提交只读问题；拒绝写意图。 |
 | `ProviderSettingsPanel` | Provider 密钥写入；前端永不回显完整密钥。 |
-| `ProviderStatusPanel` | Provider 健康状态列表。 |
+| `ProviderStatusPanel` | Provider 健康状态列表，标题区展示 healthy/blocker 数量。 |
 | `ResearchFeedbackForm` | 追加用户反馈。 |
 | `ResearchStatusBadge` | 状态徽章。 |
+| `ValuationBar` | 内在价值区间条 + 现价标记。 |
+| `FactorScoreBar` | 因子分数横向条。 |
+| `ConfigVersionList` | 通用版本化配置列表 + 激活按钮。 |
+| `Sidebar` | 深色侧栏，active 路由高亮。 |
+| `AdminGate` | 顶栏管理员解锁（Radix Dialog + localStorage 凭据）。 |
+| `PageLoading` | 路由级 Skeleton 占位。 |
+| `ui/*` | shadcn 风格 UI 原语（Button/Card/Badge/Input/Dialog/Tabs 等）。 |
+
+## 8.1 设计系统
+
+前端已迁移到 Tailwind CSS v4（`@tailwindcss/postcss`）+ shadcn 风格 token，配色采用 Vercel Geist 体系：
+
+- 背景 `#ffffff`、前景 `#111111`、强调/聚焦环 `#0070f3`（Vercel blue）；
+- 深色侧栏 `#111111` + `sidebar-accent` 高亮；
+- 语义色 positive `#0b9e5b` / caution `#c47f17` / negative `#e5484d`，各配 soft 背景用于 Badge；
+- 字体统一 Inter（`next/font/google` 自托管），数字用 tabular-nums；
+- 圆角 0.5rem，间距档位 4/8/12/16/24/32；
+- 替换 v0.1 手写 1700 行 `globals.css` 为 Tailwind utility + token，删除 Fraunces 衬线与暖米配色，转向简约专业。
 
 ## 9. 验证
 
@@ -183,7 +209,9 @@
 前端覆盖：
 
 - 首页候选摘要；
+- 全局导航只暴露已实现入口；
 - `/research` refresh 表单与候选表；
+- Tavily/service_not_configured 等 refresh blocker 的用户提示；
 - valuation discovery run 进度页；
 - item detail 页；
 - provider settings；
@@ -195,6 +223,7 @@
 pytest -q tests/api/test_dashboard_v02.py tests/dashboard
 cd web && npx vitest run
 cd web && npm run lint
+cd web && npm run build
 python scripts/smoke_dashboard_e2e.py --base-url http://localhost:3000
 ```
 

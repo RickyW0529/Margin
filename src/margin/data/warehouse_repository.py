@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from margin.data.db_models import (
@@ -15,13 +14,19 @@ from margin.data.db_models import (
     CanonicalIndicatorValueRow,
     DataFreshnessStateRow,
     DataQualityEventRow,
-    ProviderEndpointRow,
     SecurityIndustryMembershipRow,
-    SecurityMasterRow,
-    StandardizedIndicatorFactRow,
 )
 from margin.data.freshness import DataDomain, FreshnessStatus
 from margin.news.models import ensure_utc
+from margin.sql.data_queries import (
+    adjusted_prices_by_decision,
+    canonical_values_by_decision,
+    freshness_records,
+    indicator_history_pit,
+    industry_memberships_bitemporal,
+    quality_events_recent,
+    security_profiles_active,
+)
 
 
 class PITQueryError(ValueError):
@@ -178,6 +183,7 @@ class IndicatorHistoryQuery:
     start_date: date
     end_date: date
     decision_at: datetime | None = None
+    max_points_per_indicator: int | None = None
 
 
 @dataclass(frozen=True)
@@ -208,21 +214,11 @@ class SQLAlchemyWarehouseRepository:
         if not query.security_ids:
             return []
         with self._session_factory() as session:
-            statement = (
-                select(CanonicalIndicatorValueRow)
-                .where(CanonicalIndicatorValueRow.security_id.in_(query.security_ids))
-                .where(CanonicalIndicatorValueRow.decision_at <= decision_at)
-                .order_by(
-                    CanonicalIndicatorValueRow.security_id,
-                    CanonicalIndicatorValueRow.indicator_id,
-                    CanonicalIndicatorValueRow.decision_at.desc(),
-                    CanonicalIndicatorValueRow.created_at.desc(),
-                )
+            statement = canonical_values_by_decision(
+                security_ids=query.security_ids,
+                decision_at=decision_at,
+                indicator_ids=query.indicator_ids or None,
             )
-            if query.indicator_ids:
-                statement = statement.where(
-                    CanonicalIndicatorValueRow.indicator_id.in_(query.indicator_ids)
-                )
             rows = session.scalars(statement).all()
         latest: dict[tuple[str, str], CanonicalValue] = {}
         for row in rows:
@@ -248,22 +244,11 @@ class SQLAlchemyWarehouseRepository:
             return []
         with self._session_factory() as session:
             rows = session.scalars(
-                select(SecurityIndustryMembershipRow)
-                .where(SecurityIndustryMembershipRow.security_id.in_(query.security_ids))
-                .where(SecurityIndustryMembershipRow.taxonomy == query.taxonomy)
-                .where(SecurityIndustryMembershipRow.valid_from <= query.on_date)
-                .where(
-                    (SecurityIndustryMembershipRow.valid_to.is_(None))
-                    | (SecurityIndustryMembershipRow.valid_to > query.on_date)
-                )
-                .where(SecurityIndustryMembershipRow.system_from <= system_as_of)
-                .where(
-                    (SecurityIndustryMembershipRow.system_to.is_(None))
-                    | (SecurityIndustryMembershipRow.system_to > system_as_of)
-                )
-                .order_by(
-                    SecurityIndustryMembershipRow.security_id,
-                    SecurityIndustryMembershipRow.system_from.desc(),
+                industry_memberships_bitemporal(
+                    security_ids=query.security_ids,
+                    on_date=query.on_date,
+                    taxonomy=query.taxonomy,
+                    system_as_of=system_as_of,
                 )
             ).all()
         latest: dict[str, IndustryMembershipValue] = {}
@@ -278,16 +263,11 @@ class SQLAlchemyWarehouseRepository:
             return []
         with self._session_factory() as session:
             rows = session.scalars(
-                select(AdjustedPriceSeriesRow)
-                .where(AdjustedPriceSeriesRow.security_id.in_(query.security_ids))
-                .where(AdjustedPriceSeriesRow.trade_date >= query.start_date)
-                .where(AdjustedPriceSeriesRow.trade_date <= query.end_date)
-                .where(AdjustedPriceSeriesRow.decision_at <= decision_at)
-                .order_by(
-                    AdjustedPriceSeriesRow.security_id,
-                    AdjustedPriceSeriesRow.trade_date,
-                    AdjustedPriceSeriesRow.decision_at.desc(),
-                    AdjustedPriceSeriesRow.created_at.desc(),
+                adjusted_prices_by_decision(
+                    security_ids=query.security_ids,
+                    start_date=query.start_date,
+                    end_date=query.end_date,
+                    decision_at=decision_at,
                 )
             ).all()
         latest: dict[tuple[str, date], AdjustedPriceValue] = {}
@@ -302,30 +282,8 @@ class SQLAlchemyWarehouseRepository:
         Domain filtering joins the endpoint registry instead of guessing from
         endpoint names.
         """
-        normalized_domains = {DataDomain(domain) for domain in domains or set()}
-        statement = select(DataFreshnessStateRow)
-        if normalized_domains:
-            statement = (
-                statement.join(
-                    ProviderEndpointRow,
-                    (ProviderEndpointRow.provider == DataFreshnessStateRow.provider)
-                    & (
-                        ProviderEndpointRow.code
-                        == DataFreshnessStateRow.endpoint_code
-                    ),
-                )
-                .where(
-                    ProviderEndpointRow.domain.in_(
-                        [domain.value for domain in normalized_domains]
-                    )
-                )
-            )
-        statement = statement.order_by(
-            DataFreshnessStateRow.provider,
-            DataFreshnessStateRow.endpoint_code,
-            DataFreshnessStateRow.as_of_date.desc(),
-            DataFreshnessStateRow.created_at.desc(),
-        )
+        normalized_domains = {DataDomain(domain).value for domain in domains or set()}
+        statement = freshness_records(normalized_domains or None)
         with self._session_factory() as session:
             rows = session.scalars(statement).all()
         latest: dict[tuple[str, str], FreshnessRecord] = {}
@@ -338,11 +296,10 @@ class SQLAlchemyWarehouseRepository:
 
     def quality_events(self, query: QualityEventQuery) -> list[QualityEvent]:
         """Return append-only quality events."""
-        statement = select(DataQualityEventRow).order_by(DataQualityEventRow.created_at.desc())
-        if query.security_ids:
-            statement = statement.where(DataQualityEventRow.security_id.in_(query.security_ids))
-        if query.since is not None:
-            statement = statement.where(DataQualityEventRow.created_at >= ensure_utc(query.since))
+        statement = quality_events_recent(
+            security_ids=query.security_ids,
+            since=ensure_utc(query.since) if query.since is not None else None,
+        )
         with self._session_factory() as session:
             rows = session.scalars(statement).all()
         return [_quality_event_from_row(row) for row in rows]
@@ -359,16 +316,9 @@ class SQLAlchemyWarehouseRepository:
             return []
         with self._session_factory() as session:
             rows = session.scalars(
-                select(SecurityMasterRow)
-                .where(SecurityMasterRow.security_id.in_(security_ids))
-                .where(SecurityMasterRow.system_from <= known_at)
-                .where(
-                    (SecurityMasterRow.system_to.is_(None))
-                    | (SecurityMasterRow.system_to > known_at)
-                )
-                .order_by(
-                    SecurityMasterRow.security_id,
-                    SecurityMasterRow.system_from.desc(),
+                security_profiles_active(
+                    security_ids=security_ids,
+                    system_as_of=known_at,
                 )
             ).all()
         latest: dict[str, SecurityProfileValue] = {}
@@ -395,43 +345,16 @@ class SQLAlchemyWarehouseRepository:
         decision_at = _require_decision_at(query.decision_at)
         if not query.security_ids or not query.indicator_ids:
             return []
-        window_start = datetime.combine(query.start_date, time.min, tzinfo=UTC)
-        window_end = datetime.combine(
-            query.end_date + timedelta(days=1),
-            time.min,
-            tzinfo=UTC,
-        )
         with self._session_factory() as session:
-            rows = session.scalars(
-                select(StandardizedIndicatorFactRow)
-                .where(
-                    StandardizedIndicatorFactRow.security_id.in_(
-                        query.security_ids
-                    )
-                )
-                .where(
-                    StandardizedIndicatorFactRow.indicator_id.in_(
-                        query.indicator_ids
-                    )
-                )
-                .where(StandardizedIndicatorFactRow.event_at >= window_start)
-                .where(StandardizedIndicatorFactRow.event_at < window_end)
-                .where(StandardizedIndicatorFactRow.available_at <= decision_at)
-                .where(StandardizedIndicatorFactRow.numeric_value.is_not(None))
-                .order_by(
-                    StandardizedIndicatorFactRow.security_id,
-                    StandardizedIndicatorFactRow.indicator_id,
-                    StandardizedIndicatorFactRow.event_at,
-                )
-            ).all()
-        selected: dict[tuple[str, str, datetime], StandardizedIndicatorFactRow] = {}
-        for row in rows:
-            key = (row.security_id, row.indicator_id, row.event_at)
-            current = selected.get(key)
-            if current is None or _history_candidate_key(row) < _history_candidate_key(
-                current
-            ):
-                selected[key] = row
+            statement = indicator_history_pit(
+                security_ids=query.security_ids,
+                indicator_ids=query.indicator_ids,
+                start_date=query.start_date,
+                end_date=query.end_date,
+                decision_at=decision_at,
+                max_points_per_indicator=query.max_points_per_indicator,
+            )
+            rows = session.execute(statement).mappings().all()
         return [
             IndicatorHistoryValue(
                 fact_id=row.fact_id,
@@ -444,14 +367,7 @@ class SQLAlchemyWarehouseRepository:
                 numeric_value=row.numeric_value,
                 quality_score=row.quality_score,
             )
-            for row in sorted(
-                selected.values(),
-                key=lambda item: (
-                    item.security_id,
-                    item.indicator_id,
-                    item.event_at,
-                ),
-            )
+            for row in rows
         ]
 
 
@@ -467,19 +383,6 @@ def _require_system_as_of(value: datetime | None) -> datetime:
     if value is None:
         raise PITQueryError("system_as_of is required for bitemporal warehouse queries")
     return ensure_utc(value)
-
-
-def _history_candidate_key(
-    row: StandardizedIndicatorFactRow,
-) -> tuple[Decimal, int, float, str]:
-    """Match the canonical resolver's provider selection within one period."""
-    provider_priority = {"tushare": 0, "akshare": 1}
-    return (
-        -row.quality_score,
-        provider_priority.get(row.provider, len(provider_priority)),
-        -row.fetched_at.timestamp(),
-        row.fact_id,
-    )
 
 
 def _canonical_value_from_row(row: CanonicalIndicatorValueRow) -> CanonicalValue:

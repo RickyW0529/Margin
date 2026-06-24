@@ -29,10 +29,10 @@ from langgraph.checkpoint.base import (
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.types import RunnableConfig
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from margin.research.db_models import AIGraphCheckpointRow, AIGraphRunRow
+from margin.sql.research_queries import checkpoint_row, checkpoints_list
 
 _CheckpointKey = tuple[str, str, str]
 
@@ -83,24 +83,18 @@ class PostgresGraphCheckpointer(BaseCheckpointSaver[int]):
         """List checkpoints ordered newest-first."""
         before_checkpoint_id = get_checkpoint_id(before) if before else None
         with self._session_factory() as session:
-            statement = select(AIGraphCheckpointRow).order_by(
-                AIGraphCheckpointRow.created_at.desc(),
-                AIGraphCheckpointRow.checkpoint_id.desc(),
-            )
+            thread_id = None
+            checkpoint_ns = None
+            checkpoint_id = None
             if config is not None:
                 thread_id, checkpoint_ns = _thread_and_namespace(config)
-                statement = statement.where(
-                    AIGraphCheckpointRow.graph_run_id == thread_id,
-                    AIGraphCheckpointRow.checkpoint_ns == checkpoint_ns,
-                )
-                if checkpoint_id := get_checkpoint_id(config):
-                    statement = statement.where(
-                        AIGraphCheckpointRow.checkpoint_id == checkpoint_id
-                    )
-            if before_checkpoint_id is not None:
-                statement = statement.where(
-                    AIGraphCheckpointRow.checkpoint_id < before_checkpoint_id
-                )
+                checkpoint_id = get_checkpoint_id(config)
+            statement = checkpoints_list(
+                thread_id=thread_id,
+                checkpoint_ns=checkpoint_ns,
+                checkpoint_id=checkpoint_id,
+                before_checkpoint_id=before_checkpoint_id,
+            )
             rows = session.scalars(statement).all()
 
         yielded = 0
@@ -318,19 +312,7 @@ class PostgresGraphCheckpointer(BaseCheckpointSaver[int]):
         Returns:
         AIGraphCheckpointRow | None: Description.
         """
-        statement = select(AIGraphCheckpointRow).where(
-            AIGraphCheckpointRow.graph_run_id == thread_id,
-            AIGraphCheckpointRow.checkpoint_ns == checkpoint_ns,
-        )
-        if checkpoint_id is not None:
-            statement = statement.where(
-                AIGraphCheckpointRow.checkpoint_id == checkpoint_id
-            )
-        else:
-            statement = statement.order_by(
-                AIGraphCheckpointRow.created_at.desc(),
-                AIGraphCheckpointRow.checkpoint_id.desc(),
-            )
+        statement = checkpoint_row(thread_id, checkpoint_ns, checkpoint_id)
         if for_update:
             statement = statement.with_for_update()
         return session.scalars(statement).first()

@@ -5,13 +5,15 @@
  *
  * Renders the strategy profile, its versions and lifecycle controls
  * (validate / backtest / paper-trade / activate / archive) plus a prompt
- * preview. Mutating actions re-fetch the profile so the lifecycle stays in
- * sync with the backend.
+ * preview.
  */
 
 import { useCallback, useState } from "react";
 import Link from "next/link";
 
+import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   activateStrategyVersion,
   archiveStrategy,
@@ -21,6 +23,7 @@ import {
   paperTradeStrategyVersion,
   validateStrategyVersion,
 } from "@/lib/api";
+import { formatDateShort } from "@/lib/utils";
 
 type StrategyVersionLike = {
   version_id?: string;
@@ -53,12 +56,27 @@ const LIFECYCLE_ORDER: Record<string, string> = {
   active: "active",
 };
 
+function stateTone(state: string | undefined): BadgeProps["tone"] {
+  if (state === "active") {
+    return "positive";
+  }
+  if (state === "archived" || state === "invalid" || state === "suspended") {
+    return "negative";
+  }
+  if (state === "validating" || state === "backtesting" || state === "paper_trading") {
+    return "caution";
+  }
+  return "muted";
+}
+
 export function StrategyDetailClient({
   strategyId,
   initialProfile,
   initialError,
 }: StrategyDetailClientProps) {
-  const [profile, setProfile] = useState<StrategyProfileLike | null>(initialProfile);
+  const [profile, setProfile] = useState<StrategyProfileLike | null>(
+    initialProfile,
+  );
   const [error, setError] = useState<string | null>(initialError);
   const [pending, setPending] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<string | null>(null);
@@ -74,10 +92,7 @@ export function StrategyDetailClient({
     }
   }, [strategyId]);
 
-  async function runAction(
-    key: string,
-    fn: () => Promise<unknown>,
-  ) {
+  async function runAction(key: string, fn: () => Promise<unknown>) {
     setPending(key);
     try {
       await fn();
@@ -102,211 +117,246 @@ export function StrategyDetailClient({
   const versions = profile?.versions ?? [];
 
   return (
-    <main className="workspace-shell">
-      <section className="workspace-header" aria-labelledby="strategy-title">
+    <main className="mx-auto max-w-5xl space-y-6 px-10 py-9">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="eyebrow">Strategy</p>
-          <h1 id="strategy-title">{profile?.name ?? strategyId}</h1>
+          <p className="text-xs font-medium uppercase tracking-wider text-accent">
+            Strategy
+          </p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
+            {profile?.name ?? strategyId}
+          </h1>
         </div>
-        <div className="status-strip">
-          <span>{profile?.strategy_id ?? ""}</span>
-          <span>owner {String(profile?.owner_id ?? "")}</span>
-          <Link className="secondary-link" href="/strategies">
-            返回列表
-          </Link>
+        <div className="flex flex-wrap gap-2">
+          <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            {profile?.strategy_id ?? ""}
+          </span>
+          <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            owner {String(profile?.owner_id ?? "")}
+          </span>
+          <Button asChild variant="secondary" size="sm">
+            <Link href="/strategies">返回列表</Link>
+          </Button>
         </div>
-      </section>
+      </header>
+
       {error ? (
-        <div className="notice-panel" role="alert">
-          <span>{error}</span>
+        <div
+          className="flex items-center gap-2 rounded-lg border border-negative-soft bg-negative-soft px-4 py-3 text-sm text-negative"
+          role="alert"
+        >
+          {error}
         </div>
       ) : null}
-      <section className="panel">
-        <div className="panel-heading">
+
+      <Card>
+        <CardHeader>
           <div>
-            <p className="eyebrow">Versions</p>
-            <h2>版本生命周期</h2>
+            <p className="text-xs font-medium uppercase tracking-wider text-accent">
+              Versions
+            </p>
+            <CardTitle className="mt-1">版本生命周期</CardTitle>
           </div>
-          <span>active {String(profile?.active_version_id ?? "--")}</span>
-        </div>
-        {versions.length === 0 ? (
-          <div className="empty-state compact">暂无版本</div>
-        ) : (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>version_id</th>
-                  <th>名称</th>
-                  <th>状态</th>
-                  <th>创建</th>
-                  <th>Prompt</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {versions.map((version) => {
-                  const next = LIFECYCLE_ORDER[version.state ?? ""] ?? "done";
-                  return (
-                    <tr key={String(version.version_id)}>
-                      <td className="symbol-cell">{version.version_id}</td>
-                      <td>{version.name}</td>
-                      <td>
-                        <span className={`badge ${stateBadgeClass(version.state)}`}>
-                          {version.state}
-                        </span>
-                      </td>
-                      <td className="table-helper">{shortDate(version.created_at)}</td>
-                      <td>
-                        <button
-                          className="table-link"
-                          onClick={() => void showPrompt(String(version.version_id))}
-                          type="button"
-                        >
-                          查看
-                        </button>
-                      </td>
-                      <td>
-                        <div className="research-filter-actions">
-                          {next === "validate" ? (
-                            <button
-                              className="primary-button"
-                              disabled={pending === "validate"}
-                              onClick={() =>
-                                void runAction("validate", () =>
-                                  validateStrategyVersion(
-                                    strategyId,
-                                    String(version.version_id),
-                                  ),
-                                )
-                              }
-                              type="button"
-                            >
-                              {pending === "validate" ? "..." : "校验"}
-                            </button>
-                          ) : null}
-                          {next === "backtest" ? (
-                            <button
-                              className="primary-button"
-                              disabled={pending === "backtest"}
-                              onClick={() =>
-                                void runAction("backtest", () =>
-                                  backtestStrategyVersion(
-                                    strategyId,
-                                    String(version.version_id),
-                                  ),
-                                )
-                              }
-                              type="button"
-                            >
-                              {pending === "backtest" ? "..." : "回测"}
-                            </button>
-                          ) : null}
-                          {next === "paper-trade" ? (
-                            <button
-                              className="primary-button"
-                              disabled={pending === "paper-trade"}
-                              onClick={() =>
-                                void runAction("paper-trade", () =>
-                                  paperTradeStrategyVersion(
-                                    strategyId,
-                                    String(version.version_id),
-                                  ),
-                                )
-                              }
-                              type="button"
-                            >
-                              {pending === "paper-trade" ? "..." : "纸面"}
-                            </button>
-                          ) : null}
-                          {next === "active" ? null : (
-                            <button
-                              className="secondary-button"
-                              disabled={pending === "activate"}
-                              onClick={() =>
-                                void runAction("activate", () =>
-                                  activateStrategyVersion(
-                                    strategyId,
-                                    String(version.version_id),
-                                  ),
-                                )
-                              }
-                              type="button"
-                            >
-                              {pending === "activate" ? "..." : "激活"}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-      <section className="panel">
-        <div className="panel-heading">
+          <span className="text-xs text-muted-foreground">
+            active {String(profile?.active_version_id ?? "--")}
+          </span>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {versions.length === 0 ? (
+            <div className="grid place-items-center rounded-md border border-dashed border-border py-6 text-sm text-muted-foreground">
+              暂无版本
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full min-w-[760px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-left">
+                    <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                      version_id
+                    </th>
+                    <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                      名称
+                    </th>
+                    <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                      状态
+                    </th>
+                    <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                      创建
+                    </th>
+                    <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                      Prompt
+                    </th>
+                    <th className="px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                      操作
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {versions.map((version) => {
+                    const next =
+                      LIFECYCLE_ORDER[version.state ?? ""] ?? "done";
+                    return (
+                      <tr
+                        key={String(version.version_id)}
+                        className="border-b border-border transition-colors last:border-b-0 hover:bg-muted/30"
+                      >
+                        <td className="px-3 py-3 font-mono text-xs text-foreground">
+                          {version.version_id}
+                        </td>
+                        <td className="px-3 py-3 text-foreground">
+                          {version.name}
+                        </td>
+                        <td className="px-3 py-3">
+                          <Badge tone={stateTone(version.state)}>
+                            {version.state}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-3 text-xs text-muted-foreground">
+                          {formatDateShort(version.created_at)}
+                        </td>
+                        <td className="px-3 py-3">
+                          <button
+                            type="button"
+                            className="text-xs font-medium text-accent hover:underline"
+                            onClick={() =>
+                              void showPrompt(String(version.version_id))
+                            }
+                          >
+                            查看
+                          </button>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex flex-wrap gap-1.5">
+                            {next === "validate" ? (
+                              <Button
+                                size="sm"
+                                loading={pending === "validate"}
+                                onClick={() =>
+                                  void runAction("validate", () =>
+                                    validateStrategyVersion(
+                                      strategyId,
+                                      String(version.version_id),
+                                    ),
+                                  )
+                                }
+                                type="button"
+                              >
+                                校验
+                              </Button>
+                            ) : null}
+                            {next === "backtest" ? (
+                              <Button
+                                size="sm"
+                                loading={pending === "backtest"}
+                                onClick={() =>
+                                  void runAction("backtest", () =>
+                                    backtestStrategyVersion(
+                                      strategyId,
+                                      String(version.version_id),
+                                    ),
+                                  )
+                                }
+                                type="button"
+                              >
+                                回测
+                              </Button>
+                            ) : null}
+                            {next === "paper-trade" ? (
+                              <Button
+                                size="sm"
+                                loading={pending === "paper-trade"}
+                                onClick={() =>
+                                  void runAction("paper-trade", () =>
+                                    paperTradeStrategyVersion(
+                                      strategyId,
+                                      String(version.version_id),
+                                    ),
+                                  )
+                                }
+                                type="button"
+                              >
+                                纸面
+                              </Button>
+                            ) : null}
+                            {next === "active" ? null : (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                loading={pending === "activate"}
+                                onClick={() =>
+                                  void runAction("activate", () =>
+                                    activateStrategyVersion(
+                                      strategyId,
+                                      String(version.version_id),
+                                    ),
+                                  )
+                                }
+                                type="button"
+                              >
+                                激活
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <div>
-            <p className="eyebrow">Prompt preview</p>
-            <h2>合并 Prompt</h2>
+            <p className="text-xs font-medium uppercase tracking-wider text-accent">
+              Prompt preview
+            </p>
+            <CardTitle className="mt-1">合并 Prompt</CardTitle>
           </div>
-        </div>
-        {promptError ? <p className="form-error">{promptError}</p> : null}
-        {prompt ? (
-          <div className="report-panel">
-            <pre>{prompt}</pre>
-          </div>
-        ) : (
-          <p className="helper-text">点击某版本的「查看」预览合并后的 Prompt。</p>
-        )}
-      </section>
-      <section className="panel">
-        <div className="panel-heading">
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {promptError ? (
+            <p className="text-xs text-negative" role="alert">
+              {promptError}
+            </p>
+          ) : null}
+          {prompt ? (
+            <pre className="max-h-72 overflow-auto rounded-md border border-border bg-foreground p-4 text-xs leading-relaxed text-background">
+              {prompt}
+            </pre>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              点击某版本的「查看」预览合并后的 Prompt。
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <div>
-            <p className="eyebrow">Danger zone</p>
-            <h2>归档策略</h2>
+            <p className="text-xs font-medium uppercase tracking-wider text-accent">
+              Danger zone
+            </p>
+            <CardTitle className="mt-1">归档策略</CardTitle>
           </div>
-        </div>
-        <button
-          className="secondary-button"
-          disabled={pending === "archive"}
-          onClick={() =>
-            void runAction("archive", () => archiveStrategy(strategyId))
-          }
-          type="button"
-        >
-          {pending === "archive" ? "归档中..." : "归档当前激活版本"}
-        </button>
-      </section>
+        </CardHeader>
+        <CardContent>
+          <Button
+            variant="secondary"
+            loading={pending === "archive"}
+            onClick={() =>
+              void runAction("archive", () => archiveStrategy(strategyId))
+            }
+            type="button"
+          >
+            归档当前激活版本
+          </Button>
+        </CardContent>
+      </Card>
     </main>
   );
-}
-
-function shortDate(value: string | undefined): string {
-  if (!value) {
-    return "--";
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-  }).format(parsed);
-}
-
-function stateBadgeClass(state: string | undefined): string {
-  if (state === "active") {
-    return "positive";
-  }
-  if (state === "archived" || state === "invalid" || state === "suspended") {
-    return "invalidated";
-  }
-  if (state === "validating" || state === "backtesting" || state === "paper_trading") {
-    return "watch";
-  }
-  return "";
 }

@@ -7,15 +7,21 @@ from datetime import datetime
 from threading import RLock
 from typing import Protocol
 
-from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session
 
 from margin.core.db_orchestration import (
     OrchestrationRunRow,
     OrchestrationStepAttemptRow,
 )
 from margin.core.run_states import OrchestrationRun, RunState, StepAttempt, StepState
+from margin.sql.core_queries import (
+    claim_next_step_statement,
+    latest_step_event,
+    orchestration_runs,
+    step_event_by_sequence,
+    step_events_by_run_and_step,
+)
 
 
 class OrchestrationRepository(Protocol):
@@ -376,20 +382,12 @@ class SQLAlchemyOrchestrationRepository:
         if limit <= 0:
             return []
         state_value = state.value if isinstance(state, RunState) else state
-        clause = []
-        if run_type is not None:
-            clause.append(OrchestrationRunRow.run_type == run_type)
-        if scope_version_id is not None:
-            clause.append(OrchestrationRunRow.scope_version_id == scope_version_id)
-        if state_value is not None:
-            clause.append(OrchestrationRunRow.state == state_value)
-        statement = select(OrchestrationRunRow)
-        if clause:
-            statement = statement.where(and_(*clause))
-        statement = statement.order_by(
-            OrchestrationRunRow.created_at.desc(),
-            OrchestrationRunRow.run_id.desc(),
-        ).limit(limit)
+        statement = orchestration_runs(
+            run_type=run_type,
+            scope_version_id=scope_version_id,
+            state_value=state_value,
+            limit=limit,
+        )
         with self._session_factory() as session:
             return [_run_from_row(row) for row in session.scalars(statement).all()]
 
@@ -425,11 +423,11 @@ class SQLAlchemyOrchestrationRepository:
                 if existing_id is not None:
                     raise ValueError(f"step event '{event.event_id}' already exists")
                 existing_sequence = session.scalar(
-                    select(OrchestrationStepAttemptRow.event_id).where(
-                        OrchestrationStepAttemptRow.run_id == event.run_id,
-                        OrchestrationStepAttemptRow.step_id == event.step_id,
-                        OrchestrationStepAttemptRow.attempt_no == event.attempt_no,
-                        OrchestrationStepAttemptRow.state_seq == event.state_seq,
+                    step_event_by_sequence(
+                        event.run_id,
+                        event.step_id,
+                        event.attempt_no,
+                        event.state_seq,
                     )
                 )
                 if existing_sequence is not None:
@@ -448,18 +446,7 @@ class SQLAlchemyOrchestrationRepository:
         Returns:
             Ordered list of step attempts.
         """
-        statement = (
-            select(OrchestrationStepAttemptRow)
-            .where(
-                OrchestrationStepAttemptRow.run_id == run_id,
-                OrchestrationStepAttemptRow.step_id == step_id,
-            )
-            .order_by(
-                OrchestrationStepAttemptRow.attempt_no,
-                OrchestrationStepAttemptRow.state_seq,
-                OrchestrationStepAttemptRow.created_at,
-            )
-        )
+        statement = step_events_by_run_and_step(run_id, step_id)
         with self._session_factory() as session:
             return [_event_from_row(row) for row in session.scalars(statement).all()]
 
@@ -473,19 +460,7 @@ class SQLAlchemyOrchestrationRepository:
         Returns:
             The latest step attempt, or None.
         """
-        statement = (
-            select(OrchestrationStepAttemptRow)
-            .where(
-                OrchestrationStepAttemptRow.run_id == run_id,
-                OrchestrationStepAttemptRow.step_id == step_id,
-            )
-            .order_by(
-                OrchestrationStepAttemptRow.attempt_no.desc(),
-                OrchestrationStepAttemptRow.state_seq.desc(),
-                OrchestrationStepAttemptRow.created_at.desc(),
-            )
-            .limit(1)
-        )
+        statement = latest_step_event(run_id, step_id)
         with self._session_factory() as session:
             row = session.scalar(statement)
             return _event_from_row(row) if row is not None else None
@@ -509,51 +484,9 @@ class SQLAlchemyOrchestrationRepository:
         Returns:
             A claimed step attempt, or None if nothing is due.
         """
-        current = OrchestrationStepAttemptRow
-        newer = aliased(OrchestrationStepAttemptRow)
-        has_newer = exists(
-            select(newer.event_id).where(
-                newer.run_id == current.run_id,
-                newer.step_id == current.step_id,
-                or_(
-                    newer.attempt_no > current.attempt_no,
-                    and_(
-                        newer.attempt_no == current.attempt_no,
-                        newer.state_seq > current.state_seq,
-                    ),
-                ),
-            )
-        )
-        due_retry = or_(current.retry_after.is_(None), current.retry_after <= now)
-        claimable = or_(
-            current.state == StepState.PENDING.value,
-            and_(current.state == StepState.FAILED_RETRYABLE.value, due_retry),
-            and_(
-                current.state.in_(
-                    [
-                        StepState.WAITING_RATE_LIMIT.value,
-                        StepState.WAITING_BUDGET.value,
-                    ]
-                ),
-                due_retry,
-            ),
-            and_(
-                current.state == StepState.RUNNING.value,
-                current.lease_expires_at.is_not(None),
-                current.lease_expires_at <= now,
-            ),
-        )
-        statement = (
-            select(current)
-            .where(~has_newer, claimable)
-            .order_by(current.created_at, current.run_id, current.step_id)
-            .limit(1)
-            .with_for_update(skip_locked=True)
-        )
-        if allowed_step_ids is not None:
-            if not allowed_step_ids:
-                return None
-            statement = statement.where(current.step_id.in_(allowed_step_ids))
+        if allowed_step_ids is not None and not allowed_step_ids:
+            return None
+        statement = claim_next_step_statement(now, allowed_step_ids)
         with self._session_factory.begin() as session:
             row = session.scalar(statement)
             if row is None:

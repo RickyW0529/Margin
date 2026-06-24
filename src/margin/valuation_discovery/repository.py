@@ -11,9 +11,17 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from margin.sql.valuation_queries import (
+    all_quant_input_snapshot_facts,
+    effective_assessment_pointers_for_count,
+    effective_assessment_pointers_ordered,
+    quant_input_snapshot_facts,
+    quant_input_snapshots_ordered,
+    valuation_assessment_evidence_by_assessment,
+    valuation_assessments_ordered,
+)
 from margin.valuation_discovery.db_models import (
     EffectiveAssessmentPointerRow,
     QuantInputSnapshotFactRow,
@@ -266,10 +274,10 @@ class SQLAlchemyValuationDiscoveryRepository:
         """Return persisted quant input snapshots ordered by creation time."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(QuantInputSnapshotRow).order_by(QuantInputSnapshotRow.created_at)
+                quant_input_snapshots_ordered()
             ).all()
             facts_by_snapshot: dict[str, list[QuantInputSnapshotFactRow]] = {}
-            for fact in session.scalars(select(QuantInputSnapshotFactRow)).all():
+            for fact in session.scalars(all_quant_input_snapshot_facts()).all():
                 facts_by_snapshot.setdefault(fact.snapshot_id, []).append(fact)
         return [
             _quant_input_snapshot_from_row(row, facts_by_snapshot.get(row.snapshot_id, []))
@@ -286,9 +294,7 @@ class SQLAlchemyValuationDiscoveryRepository:
             if row is None:
                 return None
             facts = session.scalars(
-                select(QuantInputSnapshotFactRow)
-                .where(QuantInputSnapshotFactRow.snapshot_id == snapshot_id)
-                .order_by(QuantInputSnapshotFactRow.fact_ref_id)
+                quant_input_snapshot_facts(snapshot_id)
             ).all()
         return _quant_input_snapshot_from_row(row, list(facts))
 
@@ -304,10 +310,7 @@ class SQLAlchemyValuationDiscoveryRepository:
         """Return effective assessment pointer events ordered by creation time."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(EffectiveAssessmentPointerRow).order_by(
-                    EffectiveAssessmentPointerRow.created_at,
-                    EffectiveAssessmentPointerRow.pointer_id,
-                )
+                effective_assessment_pointers_ordered()
             ).all()
         return [_effective_pointer_from_row(row) for row in rows]
 
@@ -339,10 +342,7 @@ class SQLAlchemyValuationDiscoveryRepository:
         """Return assessments ordered by decision time."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(ValuationAssessmentRow).order_by(
-                    ValuationAssessmentRow.decision_at,
-                    ValuationAssessmentRow.assessment_id,
-                )
+                valuation_assessments_ordered()
             ).all()
         return [_valuation_assessment_from_row(row) for row in rows]
 
@@ -353,15 +353,7 @@ class SQLAlchemyValuationDiscoveryRepository:
         """Return evidence edges for one assessment."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(ValuationAssessmentEvidenceRow)
-                .where(
-                    ValuationAssessmentEvidenceRow.assessment_id
-                    == assessment_id
-                )
-                .order_by(
-                    ValuationAssessmentEvidenceRow.evidence_id,
-                    ValuationAssessmentEvidenceRow.edge_id,
-                )
+                valuation_assessment_evidence_by_assessment(assessment_id)
             ).all()
         return [_valuation_evidence_from_row(row) for row in rows]
 
@@ -374,11 +366,7 @@ class SQLAlchemyValuationDiscoveryRepository:
         """Count latest visible pointers per security."""
         with self._session_factory() as session:
             rows = session.scalars(
-                select(EffectiveAssessmentPointerRow).where(
-                    EffectiveAssessmentPointerRow.scope_version_id
-                    == scope_version_id,
-                    EffectiveAssessmentPointerRow.effective_from <= as_of,
-                )
+                effective_assessment_pointers_for_count(scope_version_id, as_of)
             ).all()
         return len({row.security_id for row in rows})
 

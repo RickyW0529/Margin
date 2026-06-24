@@ -13,10 +13,14 @@ from datetime import datetime
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from pydantic import BaseModel, Field, SecretStr, field_validator
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from margin.news.models import ensure_utc, utc_now
+from margin.sql.core_queries import (
+    active_secrets_by_provider_and_name,
+    secret_by_idempotency,
+    secrets_list,
+)
 from margin.strategy.db_models import ProviderSecretVersionRow
 
 
@@ -128,10 +132,7 @@ class SQLAlchemySecretRepository:
         """Return a prior write with the same idempotency key if it exists."""
         with self._session_factory() as session:
             return session.scalar(
-                select(ProviderSecretVersionRow)
-                .where(ProviderSecretVersionRow.provider_name == provider_name)
-                .where(ProviderSecretVersionRow.secret_name == secret_name)
-                .where(ProviderSecretVersionRow.idempotency_key == idempotency_key)
+                secret_by_idempotency(provider_name, secret_name, idempotency_key)
             )
 
     def create_active(
@@ -145,10 +146,7 @@ class SQLAlchemySecretRepository:
         """Deactivate existing active rows and persist a new active version."""
         with self._session_factory.begin() as session:
             active_rows = session.scalars(
-                select(ProviderSecretVersionRow)
-                .where(ProviderSecretVersionRow.provider_name == provider_name)
-                .where(ProviderSecretVersionRow.secret_name == secret_name)
-                .where(ProviderSecretVersionRow.status == "active")
+                active_secrets_by_provider_and_name(provider_name, secret_name)
             ).all()
             for active in active_rows:
                 active.status = "deactivated"
@@ -163,18 +161,9 @@ class SQLAlchemySecretRepository:
     ) -> list[ProviderSecretVersionRow]:
         """List secret rows in creation order without decrypting them."""
         with self._session_factory() as session:
-            query = select(ProviderSecretVersionRow)
-            if provider_name is not None:
-                query = query.where(
-                    ProviderSecretVersionRow.provider_name == provider_name
-                )
-            if secret_name is not None:
-                query = query.where(
-                    ProviderSecretVersionRow.secret_name == secret_name
-                )
             return list(
                 session.scalars(
-                    query.order_by(ProviderSecretVersionRow.created_at)
+                    secrets_list(provider_name, secret_name)
                 ).all()
             )
 

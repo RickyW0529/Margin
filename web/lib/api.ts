@@ -174,11 +174,62 @@ export type ProviderHealthResult = {
   secret_metadata: ProviderSecretMetadata | null;
 };
 
+/** Immutable rolling-window data acquisition policy. */
+export type DataPolicyVersion = {
+  version_id: string;
+  owner_id: string;
+  rolling_window_months: number;
+  revision_lookback_days: number;
+  financial_comparison_years: number;
+  lifecycle: string;
+  config_hash: string;
+  created_at: string;
+  activated_at: string | null;
+  window_start: string;
+  window_end: string;
+};
+
+/** Data policy list response used by the settings page. */
+export type DataPolicyListResponse = {
+  active_version_id: string;
+  versions: DataPolicyVersion[];
+};
+
+/** Request for creating a new rolling-window policy version. */
+export type DataPolicyCreate = {
+  rolling_window_months: number;
+  revision_lookback_days: number;
+  financial_comparison_years: number;
+};
+
 /** Generic append-only strategy config version record. */
 export type VersionedConfigRecord = Record<string, unknown> & {
   version_id?: string;
   lifecycle?: string;
   owner_id?: string;
+};
+
+/** One monthly manual quant preset exposed by the backend. */
+export type QuantStrategyPreset = {
+  universe_code: string;
+  label: string;
+  benchmark_index_code: string | null;
+  rebalance_frequency: string;
+  buy_threshold: number;
+  sell_threshold: number;
+  min_avg_amount_20d: number;
+  weighting: string;
+  factor_weights: Record<string, number>;
+  candidate_policy: Record<string, unknown>;
+  calibration: Record<string, unknown>;
+};
+
+/** Built-in quant defaults for the user-facing strategy customizer. */
+export type QuantStrategyDefaults = {
+  profile: string;
+  default_universe: string;
+  execution_boundary: string;
+  presets: Record<string, QuantStrategyPreset>;
 };
 
 /** Request body for starting a v0.2 valuation-discovery refresh. */
@@ -339,6 +390,43 @@ export function fetchProviderConfigs(): Promise<ProviderConfigSummary[]> {
   return request<ProviderConfigSummary[]>("/api/v1/provider-configs");
 }
 
+/** Fetches all rolling-window policy versions and the active version ID. */
+export function fetchDataPolicies(): Promise<DataPolicyListResponse> {
+  return request<DataPolicyListResponse>("/api/v1/data-policies");
+}
+
+/** Creates an append-only rolling-window policy version. */
+export function createDataPolicy(
+  policy: DataPolicyCreate,
+): Promise<DataPolicyVersion> {
+  return authenticatedMutation<DataPolicyVersion>(
+    "/api/v1/data-policies",
+    "POST",
+    policy,
+  );
+}
+
+/** Activates one rolling-window policy version. */
+export function activateDataPolicy(
+  versionId: string,
+): Promise<DataPolicyVersion> {
+  return authenticatedMutation<DataPolicyVersion>(
+    `/api/v1/data-policies/${versionId}/activate`,
+    "POST",
+  );
+}
+
+/** Creates an asynchronous data-sync run using the active data policy. */
+export function triggerDataSync(
+  body: Record<string, unknown> = {},
+): Promise<{ sync_run_id: string; status: string }> {
+  return authenticatedMutation<{ sync_run_id: string; status: string }>(
+    "/api/v1/data-sync",
+    "POST",
+    body,
+  );
+}
+
 /** Fetches universe definition versions for settings pages. */
 export function fetchUniverseConfigs(): Promise<VersionedConfigRecord[]> {
   return request<VersionedConfigRecord[]>("/api/v1/universe-configs");
@@ -362,6 +450,11 @@ export function fetchQuantFeatureSets(): Promise<VersionedConfigRecord[]> {
 /** Fetches quant strategy versions for settings pages. */
 export function fetchQuantStrategies(): Promise<VersionedConfigRecord[]> {
   return request<VersionedConfigRecord[]>("/api/v1/quant-strategies");
+}
+
+/** Fetches built-in quant strategy presets for supported company pools. */
+export function fetchQuantStrategyDefaults(): Promise<QuantStrategyDefaults> {
+  return request<QuantStrategyDefaults>("/api/v1/quant-strategy-defaults");
 }
 
 /** Fetches style prompt versions for settings pages. */
@@ -429,6 +522,31 @@ export function testProviderConfig(
       },
     },
   );
+}
+
+function authenticatedMutation<T>(
+  path: string,
+  method: "POST" | "PUT",
+  body?: unknown,
+): Promise<T> {
+  const adminToken = readSessionCredential("margin.adminApiToken");
+  const csrfToken = readSessionCredential("margin.csrfToken");
+  if (!adminToken || !csrfToken) {
+    return Promise.reject(
+      new Error("Local admin session is not configured in this browser tab"),
+    );
+  }
+  return request<T>(path, {
+    method,
+    cache: "no-store",
+    headers: {
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+      Authorization: `Bearer ${adminToken}`,
+      "Idempotency-Key": globalThis.crypto.randomUUID(),
+      "X-CSRF-Token": csrfToken,
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
 }
 
 /** Starts the v0.2 valuation-discovery pipeline using local admin credentials. */
@@ -753,4 +871,79 @@ export function fetchStrategyPrompt(
   return request<StrategyPromptResponse>(
     `/strategies/${strategyId}/versions/${versionId}/prompt${qs ? `?${qs}` : ""}`,
   );
+}
+
+/** Versioned strategy-config resource kinds backed by append-only endpoints. */
+export type VersionedConfigKind =
+  | "universe-configs"
+  | "indicator-views"
+  | "quant-feature-sets"
+  | "quant-strategies"
+  | "style-prompts"
+  | "research-scopes";
+
+/** Creates an append-only versioned config of the given kind. */
+export function createVersionedConfig(
+  kind: VersionedConfigKind,
+  body: Record<string, unknown>,
+): Promise<VersionedConfigRecord> {
+  return authenticatedMutation<VersionedConfigRecord>(
+    `/api/v1/${kind}`,
+    "POST",
+    body,
+  );
+}
+
+/** Activates one versioned config version of the given kind. */
+export function activateVersionedConfig(
+  kind: VersionedConfigKind,
+  versionId: string,
+): Promise<VersionedConfigRecord> {
+  return authenticatedMutation<VersionedConfigRecord>(
+    `/api/v1/${kind}/${versionId}/activate`,
+    "POST",
+  );
+}
+
+/** Creates an append-only provider configuration version. */
+export function createProviderConfig(
+  body: Record<string, unknown>,
+): Promise<VersionedConfigRecord> {
+  return authenticatedMutation<VersionedConfigRecord>(
+    "/api/v1/provider-configs",
+    "POST",
+    body,
+  );
+}
+
+/** Activates a provider config version after a successful health check. */
+export function activateProviderConfig(
+  versionId: string,
+): Promise<VersionedConfigRecord> {
+  return authenticatedMutation<VersionedConfigRecord>(
+    `/api/v1/provider-configs/${versionId}/activate`,
+    "POST",
+  );
+}
+
+/** News WebSearch run status returned by GET /api/v1/news/runs/{run_id}. */
+export type NewsRunStatus = Record<string, unknown> & {
+  run_id?: string;
+  state?: string;
+};
+
+/** Fetches a news WebSearch run status. */
+export function fetchNewsRun(runId: string): Promise<NewsRunStatus> {
+  return request<NewsRunStatus>(`/api/v1/news/runs/${runId}`);
+}
+
+/** Dashboard job run record returned by GET /api/v1/jobs/{job_run_id}. */
+export type JobRun = Record<string, unknown> & {
+  job_run_id?: string;
+  state?: string;
+};
+
+/** Fetches a dashboard job run record. */
+export function fetchJobRun(jobRunId: string): Promise<JobRun> {
+  return request<JobRun>(`/api/v1/jobs/${jobRunId}`);
 }

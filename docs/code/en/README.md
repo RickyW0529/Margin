@@ -30,7 +30,7 @@ docs/code/en/
 | 05 | rag_evidence | RAG Evidence | [05-rag_evidence.md](./05-rag_evidence.md) | `src/margin/evidence/` |
 | 06 | multi_agent_research | Multi-Agent Research | [06-multi_agent_research.md](./06-multi_agent_research.md) | `src/margin/research/` |
 | 07 | strategy_config | Strategy Configuration | [07-strategy_config.md](./07-strategy_config.md) | `src/margin/strategy/`, `src/margin/core/secret_store.py`, `src/margin/api/routes/strategy.py`, `src/margin/api/routes/strategy_config.py`, `web/components/provider-settings-panel.tsx` |
-| 08 | research_candidate_dashboard | Research Candidate Dashboard | [08-research_candidate_dashboard.md](./08-research_candidate_dashboard.md) | `src/margin/dashboard/`, `src/margin/api/routes/dashboard.py`, `src/margin/api/routes/valuation_discovery.py`, `web/app/research/`, `web/app/settings/`, `web/components/research-*.tsx`, `web/components/current-vs-effective-panel.tsx`, `web/components/evidence-locator-list.tsx`, `web/components/read-only-copilot-panel.tsx`, `web/components/provider-settings-panel.tsx` |
+| 08 | research_candidate_dashboard | Research Candidate Dashboard | [08-research_candidate_dashboard.md](./08-research_candidate_dashboard.md) | `src/margin/dashboard/`, `src/margin/api/routes/dashboard.py`, `src/margin/api/routes/valuation_discovery.py`, `web/app/layout.tsx`, `web/app/page.tsx`, `web/app/research/`, `web/app/settings/`, `web/components/research-*.tsx`, `web/components/current-vs-effective-panel.tsx`, `web/components/evidence-locator-list.tsx`, `web/components/read-only-copilot-panel.tsx`, `web/components/provider-settings-panel.tsx` |
 | 10 | deployment_audit | Deployment & Audit | [10-deployment_audit.md](./10-deployment_audit.md) | `src/margin/core/` (audit, snapshot, degradation, logging, metrics, run_states, orchestration, capacity, outbox), `src/margin/api/middleware.py`, `src/margin/api/metrics.py`, `src/margin/api/routes/health.py`, `Dockerfile`, `web/Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml`, `scripts/` (migration/worker/smoke), `docker/prometheus.yml`, `docker/grafana/` |
 | 11 | valuation_discovery | Universe & Valuation Discovery | [11-valuation_discovery.md](./11-valuation_discovery.md) | `src/margin/valuation_discovery/`, `src/margin/api/routes/valuation_discovery.py`, `scripts/smoke_valuation_discovery_p0.py`, `scripts/smoke_valuation_discovery_p1.py` |
 
@@ -46,6 +46,12 @@ docs/code/en/
 - **Find by module**: open the corresponding numbered markdown file.
 - **Trace cross-module dependencies**: see the "Cross-Module Usage Notes" section at the end of each document.
 - **Map to design**: code docs describe the current implementation; use `docs/design/<version>/` for product goals and module boundaries.
+
+## v0.3 Current Implementation Summary
+
+- `01-data_provider` now includes the independent Tushare source system, quant endpoint admission catalog, rolling acquisition policy, source-quality screen, warehouse publisher, and real two-year market/financial/benchmark backfill path.
+- `11-valuation_discovery` now consumes data-layer company-pool snapshots. The latest real quant run `qr_df48cd92fdf1424d` used 5304 non-ST/non-delisting/non-future-listed companies and produced 3 pass and 54 near-threshold names.
+- `/settings/data` and `/api/v1/data-policies` expose the rolling data acquisition policy to frontend users.
 
 ## Update Policy
 
