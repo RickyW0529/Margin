@@ -2,11 +2,13 @@
 
 ## Overview
 
-`src/margin/valuation_discovery/` implements the v0.2/v0.3 universe, quant screening, news-target selection, industry valuation, confidence calibration, effective assessment pointer, and refresh orchestration flow. It consumes frozen warehouse inputs and strategy scopes only; it does not call AKShare, Tushare, Tavily, LLMs, or trading APIs directly.
+`src/margin/valuation_discovery/` implements the v0.2/v0.3 universe, quant screening, fourth-layer Analysis Mart, news-target selection, industry valuation, confidence calibration, effective assessment pointer, and refresh orchestration flow. It consumes frozen warehouse inputs and strategy scopes only; it does not call AKShare, Tushare, Tavily, LLMs, or trading APIs directly.
 
 In v0.3, `ALL_A` / `ALL_A_NON_ST` scopes prefer the latest data-layer `company_pool_snapshots` via `SQLAlchemyScopeBindingProvider` instead of static universe memberships. The company pool excludes ST, delisting-transition names, future listings, and delisted securities.
 
 The quant service now supports versioned manual-pool strategy metadata. When `QuantInputSnapshot.quant_feature_set.metadata.quant_strategy.thresholds.presets` provides factor weights, `QuantService` uses `manual_all_a_score` as the real `QuantResult.final_score` input for ranks and screening status. `theme_hotness` is a confirmed theme/industry-hotness bonus sourced from PIT-safe cross-section fields `theme_hot_score`, `theme_member_confidence`, and `theme_signal_confirmed`; unconfirmed signals and non-members receive no bonus. The compatibility path without versioned strategy metadata still uses the legacy five-group `FactorScorer.combine()` score.
+
+v0.3 adds a fourth-layer Analysis Mart. After quant results are produced, they can be materialized into `analysis_snapshots`, `analysis_metrics`, `analysis_findings`, and `analysis_evidence_links`. This layer serves dashboards and LangGraph scoped read tools with structured metrics, findings, quality flags, input/result hashes, and lineage so the AI flow does not recompute the same indicators from lower layers.
 
 ## Data Model and Migrations
 
@@ -16,10 +18,14 @@ The quant service now supports versioned manual-pool strategy metadata. When `Qu
 | `company_pool_snapshots` / `company_pool_members` | v0.3 materialized non-ST/non-delisting All-A company pool consumed by `ALL_A_NON_ST` scopes. |
 | `quant_input_snapshots` / `quant_input_snapshot_facts` | The only quant input contract, including scope, universe, indicators, fact lineage, PIT, freshness, and quality flags. |
 | `quant_screen_runs` / `quant_screen_results` / `quant_factor_values` | Quant runs, per-security results, factor-group values, ranks, and reason summaries. |
+| `analysis_snapshots` | Fourth-layer per-security analysis snapshots binding security/scope/decision time, quant run/result, QuantInput, strategy versions, input/result hashes, summaries, and quality flags. |
+| `analysis_metrics` | Fourth-layer structured metrics such as final score, factor scores, ranks, percentiles, data-quality indicators, and review flags. |
+| `analysis_findings` | Fourth-layer readable findings with screening outcomes, positive/negative factors, risk or missing-data reasons, severity, confidence, and evidence references. |
+| `analysis_evidence_links` | Fourth-layer lineage edges from snapshots/metrics/findings to quant results, QuantInput, canonical facts, Evidence, or future ML feature runs. |
 | `valuation_assessments` / `confidence_components` / `effective_assessment_pointers` | Valuation conclusions, confidence components, and current effective assessment pointers. |
 | `valuation_refresh_runs` / `valuation_refresh_steps` / `research_refresh_events` / `research_context_snapshots` | Refresh runs, step state, events, and research context snapshots. |
 
-Migrations: `20260622_0021` through `20260622_0024`, plus v0.3 source/company-pool/quant-history-index migrations `20260623_0036` through `20260624_0041`.
+Migrations: `20260622_0021` through `20260622_0024`, v0.3 source/company-pool/quant-history-index migrations `20260623_0036` through `20260624_0041`, plus Analysis Mart migration `20260624_0042_analysis_mart.py`.
 
 ## Key Code
 
@@ -32,11 +38,41 @@ Migrations: `20260622_0021` through `20260622_0024`, plus v0.3 source/company-po
 | `quant/filters.py` | `HardFilterEngine` | Structured hard filters for ST, suspension, listing age, liquidity, missing financials, losses, debt, goodwill, cashflow, and audit opinion. |
 | `quant/scoring.py` / `quant/service.py` | `FactorScorer`, `QuantService` | Industry normalization, weighted factor scoring, versioned manual-pool final score, status/guardrails, ranks, and persistence. |
 | `quant/manual_all_a.py` / `quant/theme_tilt.py` | `score_manual_all_a`, `score_theme_components`, `confirmation_states` | Manual three-pool quant scoring, confirmed theme/industry-hotness bonus, and theme entry/exit confirmation. |
+| `analysis_mart.py` | `AnalysisMartPublisher`, `SQLAlchemyAnalysisMartRepository`, `MemoryAnalysisMartRepository`, `AnalysisSnapshot`, `AnalysisMetric`, `AnalysisFinding` | Fourth-layer analysis-result publishing and reads; same-input replay is idempotent and conflicting replay is rejected. |
 | `news_targets.py` | `NewsTargetSelector` | Includes all PASS and strategy-allowed NEAR_THRESHOLD names; no top-N truncation. |
 | `valuation.py` | `IndustryValuationRegistry` | Bank, insurance, cyclic resource, consumer/manufacturing, growth/tech, and utilities valuation families. |
 | `confidence.py` | `ConfidenceCalibrator` | Deterministic confidence calibration; LLM confidence is not accepted as an input. |
 | `assessments.py` | `EffectiveAssessmentService` | Deferred/abstained reviews keep the prior assessment; update/invalidate outcomes point to new assessments. |
 | `orchestrator.py` / `service.py` | `ValuationDiscoveryOrchestrator`, `ValuationDiscoveryService` | 12-step refresh orchestration, idempotent start, and explicit failed/waiting/skipped semantics. |
+
+## Analysis Mart
+
+Publishing path:
+
+```text
+QuantInputSnapshot + QuantResult + quant run lineage
+  -> AnalysisMartPublisher.publish_quant_result(...)
+  -> analysis_snapshots / analysis_metrics / analysis_findings / analysis_evidence_links
+  -> ResearchContext payload.analysis_snapshot_id / analysis_summary
+  -> module 06 analysis_* scoped read tools
+```
+
+`AnalysisMartPublisher` currently derives:
+
+- snapshot summary: `screening_status`, `data_status`, `research_guardrail`, `review_required`, ranks, major reasons, risks, and missing fields;
+- metrics: `final_score`, `quality_score`, `value_score`, `growth_score`, `momentum_score`, `risk_score`, ranks, and review/data-quality indicators;
+- findings: one `quant_screening` finding with screening state, data state, risk flags, positive/negative factors, and confidence;
+- evidence links: lineage to `quant_screen_results`, `quant_screen_runs`, and `quant_input_snapshots`.
+
+Repository behavior:
+
+- `upsert_bundle()` writes the snapshot, metrics, findings, and links in one transaction;
+- identical primary keys with identical content are idempotent replays;
+- identical primary keys with different content/hash are rejected to avoid overwriting historical analysis;
+- `latest_snapshot(security_id, scope_version_id, as_of)` returns the visible snapshot for a decision time;
+- `list_metrics()`, `list_findings()`, and `list_evidence_links()` serve dashboards and AI tools.
+
+`ResearchContextBuilderAdapter` publishes Analysis Mart when a repository is available and stores `analysis_snapshot_id` plus `analysis_summary` in the frozen payload. Without a repository it keeps the compatibility path and does not block offline usage.
 
 ## FastAPI Endpoint
 
@@ -83,5 +119,5 @@ Top pass:
 ## Cross-Module Notes
 
 - Reads: canonical/fact lineage warehouse data, strategy scopes, and module 10 orchestration primitives.
-- Writes: quant candidates, NewsTargets, valuation conclusions, effective pointers, and API-visible run IDs.
-- Boundary: quant code does not call external providers; news, indexing, RAG, and AI are delegated to their own module services.
+- Writes: quant candidates, Analysis Mart snapshots/metrics/findings/lineage, NewsTargets, valuation conclusions, effective pointers, and API-visible run IDs.
+- Boundary: quant code does not call external providers; Analysis Mart is derived only from the unique serving layer, quant results, and controlled evidence links; news, indexing, RAG, and AI are delegated to their own module services.

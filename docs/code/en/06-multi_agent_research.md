@@ -10,7 +10,7 @@ Current boundaries:
 
 - Input: a frozen context snapshot ID. The module does not fetch live market data, perform live news search, or read transient frontend state.
 - Orchestration: LangGraph topology with context routing, evidence planning, retrieval, fundamental analysis, valuation analysis, risk review, counter-argument review, decision, citation validation, optional repair, and finalize.
-- Tools: `ScopedToolFactory`, `ToolPolicyEngine`, and `ToolExecutor` expose only node-specific minimal tool manifests. Cross-scope, cross-security, PIT-invalid, over-budget, over-deadline, and unauthorized calls are denied by default.
+- Tools: `ScopedToolFactory`, `ToolPolicyEngine`, and `ToolExecutor` expose only node-specific minimal tool manifests, including the three read-only Analysis Mart tools. Cross-scope, cross-security, PIT-invalid, over-budget, over-deadline, and unauthorized calls are denied by default.
 - Prompts: `PromptFactory` produces fixed-section prompts. External text is always placed in an untrusted data block.
 - Reflection: `NodeExecutionRunner` performs draft → deterministic validation → critic → at most one revision. Critic/revision cannot introduce new evidence IDs.
 - Output: `ResearchDeltaReview`, which records the current review outcome and effective-assessment pointer. It never emits BUY/SELL instructions.
@@ -36,6 +36,7 @@ Current boundaries:
 | `src/margin/research/tools/policy.py` | Default-deny tool policy engine. |
 | `src/margin/research/tools/executor.py` | Audited tool executor. |
 | `src/margin/research/tools/manifests.py` | LLM-facing tool manifest DTOs. |
+| `src/margin/research/analysis_tools.py` | Registers the read-only `analysis_snapshot_get`, `analysis_metrics_list`, and `analysis_findings_list` tools. |
 | `src/margin/research/checkpoint.py` | PostgreSQL LangGraph checkpointer with identity-hash validation and pending-write recovery. |
 | `src/margin/research/delta_repository.py` | Memory/PostgreSQL persistence for `ResearchDeltaReview` and `research_delta_outbox`. |
 | `src/margin/research/graph_audit_repository.py` | PostgreSQL repositories for LLM/tool call audits. |
@@ -99,6 +100,16 @@ The model never sees a global tool registry. Each node receives only the manifes
 
 AI nodes are read-only. They cannot initiate live WebSearch; news/WebSearch data must be acquired by upstream refresh flows and enter research as stored snapshots.
 
+Analysis Mart tools are read-only over the fourth-layer `analysis_*` tables. They enforce security/PIT boundaries by request shape: cross-security, future, or missing snapshots return empty results.
+
+| Tool | Capability | Input | Output |
+| --- | --- | --- | --- |
+| `analysis_snapshot_get` | `QUANT_READ` | `security_id`, `scope_version_id`, `decision_at` | Latest visible `AnalysisSnapshot` or `null`. |
+| `analysis_metrics_list` | `QUANT_READ` | `security_id`, `decision_at`, `analysis_snapshot_id` | Structured metrics for the snapshot; unauthorized or missing reads return an empty list. |
+| `analysis_findings_list` | `QUANT_READ` | `security_id`, `decision_at`, `analysis_snapshot_id` | Structured findings for the snapshot; unauthorized or missing reads return an empty list. |
+
+When `ResearchService` receives a `session_factory` and no explicit repository, it builds a `SQLAlchemyAnalysisMartRepository` and registers these tools in the default registry. The `valuation_analysis` node has the `QUANT_READ` grant, so it can read Analysis Mart while other nodes remain constrained by their node grants.
+
 ## 6. Prompt Factory
 
 `PromptFactory` emits sections in this order:
@@ -137,7 +148,7 @@ Removed entrypoints:
 
 ## 8. Verification
 
-Covered by tests for review routing, graph execution, checkpoint recovery, scoped tool policy, prompt ordering, node reflection, delta-review persistence, outbox idempotency, and real-LLM smoke failure semantics.
+Covered by tests for review routing, graph execution, checkpoint recovery, scoped tool policy, Analysis Mart tool security/PIT reads, prompt ordering, node reflection, delta-review persistence, outbox idempotency, and real-LLM smoke failure semantics.
 
 Useful commands:
 
@@ -160,4 +171,4 @@ python scripts/smoke_ai_delta_review.py --mode delta --require-real-llm
 | `04-text_indexing` / `05-rag_evidence` | Provide citeable evidence packages and locators. |
 | `07-strategy_config` | Provides strategy, prompt, tool-policy, and scope versions. |
 | `08-research_candidate_dashboard` | Displays current review, effective assessment, locators, and read-only Copilot output. |
-| `11-valuation_discovery` | Orchestrates quant-passed companies through news, RAG, and AI delta review, then publishes effective assessment pointers. |
+| `11-valuation_discovery` | Publishes the fourth-layer Analysis Mart, orchestrates quant-passed companies through news, RAG, and AI delta review, then publishes effective assessment pointers. |

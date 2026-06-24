@@ -50,7 +50,8 @@ docs/code/en/
 ## v0.3 Current Implementation Summary
 
 - `01-data_provider` now includes the independent Tushare source system, quant endpoint admission catalog, rolling acquisition policy, source-quality screen, warehouse publisher, and real two-year market/financial/benchmark backfill path.
-- `11-valuation_discovery` now consumes data-layer company-pool snapshots. The latest real quant run `qr_df48cd92fdf1424d` used 5304 non-ST/non-delisting/non-future-listed companies and produced 3 pass and 54 near-threshold names.
+- `11-valuation_discovery` now consumes data-layer company-pool snapshots and publishes the fourth-layer Analysis Mart. The latest real quant run `qr_df48cd92fdf1424d` used 5304 non-ST/non-delisting/non-future-listed companies and produced 3 pass and 54 near-threshold names; quant output can be materialized as `analysis_snapshots`, metrics, findings, and lineage.
+- `06-multi_agent_research` registers `analysis_snapshot_get`, `analysis_metrics_list`, and `analysis_findings_list` scoped read tools. The `valuation_analysis` node can read fourth-layer analysis results by security/scope/PIT.
 - `/settings/data` and `/api/v1/data-policies` expose the rolling data acquisition policy to frontend users.
 
 ## Update Policy

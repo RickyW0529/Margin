@@ -10,7 +10,7 @@
 
 - 输入：已冻结的研究上下文快照 ID，不直接抓行情、搜索新闻或读取用户前端临时状态。
 - 编排：LangGraph 图，含路由、证据计划、检索、基本面分析、估值分析、风险复核、反方论证、决策、引用校验、修复与 finalize。
-- 工具：通过 `ScopedToolFactory`、`ToolPolicyEngine`、`ToolExecutor` 按节点生成最小权限工具清单；默认拒绝越权、跨 scope、跨 security、PIT 违规、预算超限和 deadline 过期。
+- 工具：通过 `ScopedToolFactory`、`ToolPolicyEngine`、`ToolExecutor` 按节点生成最小权限工具清单；包含 Analysis Mart 三个只读工具；默认拒绝越权、跨 scope、跨 security、PIT 违规、预算超限和 deadline 过期。
 - Prompt：通过 `PromptFactory` 生成固定 section 顺序的提示词，所有外部文本都进入 untrusted data block。
 - 反思：`NodeExecutionRunner` 对 LLM 节点执行 draft → deterministic validation → critic → 最多一次 revision；critic/revision 不能新增 evidence ID。
 - 输出：`ResearchDeltaReview`，表示本轮 current review outcome 与有效结论指针，不输出 BUY/SELL。
@@ -36,6 +36,7 @@
 | `src/margin/research/tools/policy.py` | 默认拒绝的工具权限策略。 |
 | `src/margin/research/tools/executor.py` | 统一工具执行器，执行前校验策略并写审计。 |
 | `src/margin/research/tools/manifests.py` | 面向 LLM 的工具 manifest 结构。 |
+| `src/margin/research/analysis_tools.py` | 注册 `analysis_snapshot_get`、`analysis_metrics_list`、`analysis_findings_list` 三个 Analysis Mart 只读工具。 |
 | `src/margin/research/checkpoint.py` | PostgreSQL LangGraph checkpoint saver，校验 identity hash 并恢复 pending writes。 |
 | `src/margin/research/delta_repository.py` | `ResearchDeltaReview` 与 `research_delta_outbox` 的内存/PostgreSQL 持久化。 |
 | `src/margin/research/graph_audit_repository.py` | LLM/tool 调用审计 PostgreSQL repository。 |
@@ -121,8 +122,19 @@ ResearchService.run_delta_review(context_snapshot_id)
 当前设计原则：
 
 - 图内工具只读。
+- Analysis Mart 工具只读第四层 `analysis_*` 表，按 security/scope/PIT 查最新可见快照或子行；跨证券、未来快照或不存在的 snapshot 返回空结果。
 - AI 节点不能发起实时 WebSearch；新闻/WebSearch 由上游 refresh 流程存储后作为快照进入上下文。
 - 工具结果只能作为证据或计算输入，不能覆盖系统提示词、策略权限或输出 schema。
+
+当前内置 Analysis Mart 工具：
+
+| 工具 | capability | 输入 | 输出 |
+| --- | --- | --- | --- |
+| `analysis_snapshot_get` | `QUANT_READ` | `security_id`, `scope_version_id`, `decision_at` | 最新可见 `AnalysisSnapshot` 或 `null`。 |
+| `analysis_metrics_list` | `QUANT_READ` | `security_id`, `decision_at`, `analysis_snapshot_id` | 该 snapshot 的结构化 metrics；无权限或不存在返回空列表。 |
+| `analysis_findings_list` | `QUANT_READ` | `security_id`, `decision_at`, `analysis_snapshot_id` | 该 snapshot 的结构化 findings；无权限或不存在返回空列表。 |
+
+默认 `ResearchService` 在传入 `session_factory` 且未显式提供 repository 时，会构造 `SQLAlchemyAnalysisMartRepository` 并把这些工具注册进默认 registry。`valuation_analysis` 节点拥有 `QUANT_READ` grant，因此可以读取 Analysis Mart；其他节点仍按 node grant 限制。
 
 ## 6. Prompt 工厂
 
@@ -168,6 +180,7 @@ ResearchService.run_delta_review(context_snapshot_id)
 - LangGraph 正常/延期/拒绝/修复路径；
 - checkpoint identity hash 与 pending writes 恢复；
 - scoped tool permission；
+- Analysis Mart tool scope/security/PIT 限制；
 - prompt factory section 顺序与 untrusted data 隔离；
 - node runner 反思、revision 与 evidence ID 约束；
 - delta review repository 与 outbox 幂等；
@@ -194,4 +207,4 @@ python scripts/smoke_ai_delta_review.py --mode delta --require-real-llm
 | `04-text_indexing` / `05-rag_evidence` | 提供可定位、可校验的 EvidencePackage。 |
 | `07-strategy_config` | 提供策略、prompt、工具权限和 scope 版本。 |
 | `08-research_candidate_dashboard` | 展示 current review、effective assessment、证据 locator 与只读 Copilot。 |
-| `11-valuation_discovery` | 触发量化通过公司池的新闻、RAG 和 AI delta review，并发布有效 assessment 指针。 |
+| `11-valuation_discovery` | 发布 Analysis Mart 第四层，触发量化通过公司池的新闻、RAG 和 AI delta review，并发布有效 assessment 指针。 |

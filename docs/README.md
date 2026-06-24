@@ -27,7 +27,7 @@ docs/
 |------|------|--------|------|
 | v0.1 | 已实现 / 历史快照 | `design/v0.1/` | 首个完整版本设计，包含旧持仓/组合边界，仅作历史审计 |
 | v0.2 | 历史实现快照 | `design/v0.2/` | 公司池、数据仓库、量化闸门、新闻/RAG、AI delta review、估值发现与研究候选面板 |
-| v0.3 | 当前实现 | `design/v0.3/` | Tushare 独立源系统、量化需求闭包、质量筛选、统一仓库、非 ST/非退市公司池和真实量化输出 |
+| v0.3 | 当前实现 | `design/v0.3/` | Tushare 独立源系统、量化需求闭包、质量筛选、统一仓库、非 ST/非退市公司池、Analysis Mart 第四层和真实量化/分析输出 |
 
 > `design/` 只随产品大版本更新；`code/` 不分版本，每次功能代码完成后同步更新，始终表示当前最新实现。
 
@@ -63,9 +63,11 @@ docs/
 
 v0.3 将数据链路明确为：
 
-`Tushare / AKShare / future source systems -> quality screening -> unified warehouse -> company-pool view -> upper services`
+`Tushare / AKShare / future source systems -> quality screening -> unified warehouse -> canonical/company-pool/quant-input serving -> Analysis Mart -> upper services`
 
-当前已打通 Tushare 主链路：独立 `source_tushare` schema、endpoint 专用 landing 表、量化需求 endpoint 目录、质量决策表、统一 warehouse publication、非 ST/非退市/非未来上市公司池快照，以及公司池到 QuantInputSnapshot 和量化结果的真实落库。AKShare 已建立独立 `source_akshare` schema 与 endpoint landing 表骨架；当前环境 AKShare 外部代理不可控时不阻断 Tushare 验收。
+当前已打通 Tushare 主链路：独立 `source_tushare` schema、endpoint 专用 landing 表、量化需求 endpoint 目录、质量决策表、统一 warehouse publication、非 ST/非退市/非未来上市公司池快照，以及公司池到 QuantInputSnapshot、量化结果和 Analysis Mart 第四层分析结果的真实落库。AKShare 已建立独立 `source_akshare` schema 与 endpoint landing 表骨架；当前环境 AKShare 外部代理不可控时不阻断 Tushare 验收。
+
+Analysis Mart 第四层由 `analysis_snapshots`、`analysis_metrics`、`analysis_findings` 与 `analysis_evidence_links` 组成，从第三层 canonical/company-pool/quant-input 与量化结果派生，向 Dashboard 和 LangGraph scoped read tools 提供可复用的数据分析摘要、指标、发现与 lineage。
 
 滚动窗口默认近 24 个月，可通过 `/settings/data` 前端页面和 `/api/v1/data-policies` API 配置；只采集能回链量化需求的数据，排除龙虎榜、大宗交易、pledge detail 等无当前消费方数据，避免数据库膨胀。
 

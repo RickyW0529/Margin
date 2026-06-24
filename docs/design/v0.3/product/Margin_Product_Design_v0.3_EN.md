@@ -5,7 +5,7 @@
 > Document version: v0.3
 > Status: review
 > Previous baseline: v0.2 active
-> Current implementation: the repository still uses the v0.2 generic data path; the v0.3 five-layer data architecture is under development
+> Current implementation: the v0.3 data path, real quant output, and fourth-layer Analysis Mart are implemented; AKShare real-network backfill follows the documented degradation boundary
 > Positioning: local-first, evidence-driven, configurable personal investment research software
 > Disclaimer: Margin is research assistance software. It is not financial advice and does not place trades.
 
@@ -311,9 +311,10 @@ Startup freshness checks must not block API or Web startup. If providers are una
 6. Factor calculators produce scores plus independent screening/data/risk/review/guardrail fields, ranks, confidence, and readable reasons.
 7. Every company in the daily research target set is persisted as a `news_refresh_target`; no fixed top-N truncates coverage.
 8. `NewsRefreshService` uses priority batches, backpressure, and retries to search every target.
-9. Post-quant `ResearchContext` references the quant input snapshot and combines the previous effective assessment, current quant result, material news bundle, and RAG evidence.
+9. Post-quant `ResearchContext` references the quant input snapshot and combines the previous effective assessment, current quant result, Analysis Mart snapshot, material news bundle, and RAG evidence.
 10. `AIDeltaReviewGraph` routes through full, delta, verified carry-forward, abstain, or deferred review and applies bounded tools/reflection.
-11. The dashboard separately shows current review outcome, effective assessment, freshness, pipeline state, evidence, and audit lineage.
+11. Quant output and reusable data-analysis results are materialized into the fourth-layer Analysis Mart so AI scoped tools and dashboards can read snapshots, metrics, findings, and lineage.
+12. The dashboard separately shows current review outcome, effective assessment, freshness, pipeline state, evidence, and audit lineage.
 
 ```mermaid
 flowchart TD
@@ -453,7 +454,7 @@ The criteria are delivered through three sequential gates rather than one simult
 | P-12 | rejection output includes structured reasons, indicators, versions, and quality state |
 | P-13 | ordinary price changes only reprice; a watch crossing triggers AI only after material evidence or review expiry |
 | P-14 | financials, filings, material news, industry changes, or review expiry create AI refresh events |
-| P-15 | post-quant ResearchContext references quant input/result, news bundle, previous effective assessment, evidence, and scoped tools |
+| P-15 | post-quant ResearchContext references quant input/result, Analysis Mart snapshot, news bundle, previous effective assessment, evidence, and scoped tools |
 | P-16 | AI claims bind evidence IDs, locators, source levels, and availability |
 | P-17 | company detail exposes valuation, confidence, value-trap risk, horizon, invalidation, and lineage |
 | P-18 | missing/conflicting data or evidence degrades conservatively |
@@ -476,12 +477,12 @@ The criteria are delivered through three sequential gates rather than one simult
 | P-35 | quant output separates screening, data, risk, review, and research-guardrail fields |
 | P-36 | invalid PE cannot score as cheap and overheat uses non-trading `OVERHEAT_CAUTION` |
 | P-37 | historical runs enforce `available_at <= trade_date` and mark PIT degradation explicitly |
-| P-38 | quant runs/results persist strategy/data versions, factors, flags, ranks, and readable reasons |
+| P-38 | quant runs/results persist strategy/data versions, factors, flags, ranks, readable reasons, and can publish to Analysis Mart |
 | P-39 | the graph accepts only a frozen context snapshot and excludes outer workflow duties |
 | P-40 | deterministic routing separates carry-forward, delta, full, deferred, and abstain paths |
 | P-41 | fundamental, valuation, risk, and counter-argument analyses fan out and remain evidence-bound |
 | P-42 | only one supplemental retrieval and one citation repair are permitted |
-| P-43 | graph tools are read-only, scoped, PIT-safe, and never expose live providers/WebSearch |
+| P-43 | graph tools are read-only, scoped, PIT-safe, may read Analysis Mart, and never expose live providers/WebSearch |
 | P-44 | graph/node runs and PostgreSQL checkpoints support audited recovery |
 | P-45 | ScopedToolFactory builds node-specific manifests; the model never sees the global registry |
 | P-46 | every tool request passes capability, grant, scope, PIT, budget, and schema checks |
@@ -499,6 +500,8 @@ The criteria are delivered through three sequential gates rather than one simult
 | P-58 | long tasks return `202 + run_id`; APIs support pagination, idempotency, progress, and structured errors |
 | P-59 | graph/tool/prompt/strategy/secret versions are frozen per run and preserved on recovery |
 | P-60 | checkpoint, audit, and final publication use transactional/outbox consistency and do not duplicate after crashes |
+| P-61 | Analysis Mart stores snapshots, metrics, findings, and evidence links; same-input replay is idempotent and conflicting replay is rejected |
+| P-62 | AI scoped tools can read Analysis Mart snapshots, metrics, and findings by security/scope/PIT; cross-security or future snapshots return empty results |
 
 ## 10. Known Limitations
 

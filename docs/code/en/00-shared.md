@@ -18,6 +18,7 @@ This document describes the cross-cutting infrastructure components used through
 - [12. `src/margin/core/resilience.py` — Resilience Primitives](#12-srcmargincoreresiliencepy--resilience-primitives)
 - [13. `src/margin/core/secret.py` — Secret Resolution](#13-srcmargincoresecretpy--secret-resolution)
 - [14. Cross-Module Usage Notes](#14-cross-module-usage-notes)
+- [15. SQL Query Factory](#15-sql-query-factory)
 
 ---
 
@@ -964,3 +965,25 @@ Secret reference metadata for display; does not contain the secret value.
 - **Resilience defaults**: `RateLimiter` and `RetryConfig` use sensible defaults (`60 calls / 60 s`, `3` retries with exponential backoff). They are intentionally not thread-safe, matching the MVP single-threaded worker model.
 - **Worker scheduling**: The worker schedules two interval jobs (`holdings-monitoring` and `document-indexing`) with coalescing and single-instance constraints to prevent overlapping sweeps.
 - **Dashboard transparency**: `build_provider_status_providers` deliberately returns degraded placeholders for missing integrations so the dashboard can display explicit configuration gaps instead of omitting providers silently.
+
+---
+
+## 15. SQL Query Factory
+
+SQLAlchemy `select()/insert()/update()/delete()` builders and raw `text()` statements are centralized in `src/margin/sql/`. Repositories own session/transaction handling and row mapping; query construction lives in domain-specific factory modules.
+
+| File | Query functions | Main consumers |
+| --- | ---: | --- |
+| `raw_statements.py` | constants | health routes, migration verification, repair and backtest scripts |
+| `health_queries.py` | 8 | health routes and deployment checks |
+| `data_queries.py` | 36 | warehouse, sync, ingestion, company-pool, retention, policy, and Tushare repositories |
+| `strategy_queries.py` | 18 | strategy repository and bootstrap scripts |
+| `news_queries.py` | 15 | news repository |
+| `evidence_queries.py` | 8 | evidence repository |
+| `valuation_queries.py` | 16 | valuation discovery repositories, context adapters, and Analysis Mart repository |
+| `research_queries.py` | 6 | research repository, graph audit, delta repository, and checkpoint saver |
+| `core_queries.py` | 17 | outbox, capacity, secret store, audit, and orchestration repositories |
+| `vector_queries.py` | 5 | vector repository |
+| `dashboard_queries.py` | 5 | dashboard repository |
+| `backtest_queries.py` | 8 | database backtest scripts |
+| **Total** | **142 functions** | — |

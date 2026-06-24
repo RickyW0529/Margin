@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -336,3 +336,107 @@ class ConfidenceComponentRow(Base):
     score: Mapped[float] = mapped_column(Float, nullable=False)
     weight: Mapped[float] = mapped_column(Float, nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class AnalysisSnapshotRow(Base):
+    """Fourth-layer analysis snapshot exposed to upper services and AI tools."""
+
+    __tablename__ = "analysis_snapshots"
+    __table_args__ = (
+        Index(
+            "ix_analysis_snapshots_security_scope_decision",
+            "security_id",
+            "scope_version_id",
+            "decision_at",
+        ),
+        Index(
+            "ix_analysis_snapshots_quant_run",
+            "quant_run_id",
+            "security_id",
+        ),
+    )
+
+    analysis_snapshot_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    security_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    scope_version_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    decision_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    trading_date: Mapped[date] = mapped_column(Date, nullable=False)
+    analysis_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    analysis_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    quant_run_id: Mapped[str | None] = mapped_column(String(64))
+    quant_result_id: Mapped[str | None] = mapped_column(String(64))
+    input_snapshot_id: Mapped[str | None] = mapped_column(String(64))
+    strategy_version_id: Mapped[str | None] = mapped_column(String(64))
+    config_hash: Mapped[str | None] = mapped_column(String(96))
+    input_hash: Mapped[str] = mapped_column(String(96), nullable=False)
+    result_hash: Mapped[str] = mapped_column(String(96), nullable=False)
+    summary_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    quality_flags: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class AnalysisMetricRow(Base):
+    """Structured metric materialized into the Analysis Mart."""
+
+    __tablename__ = "analysis_metrics"
+    __table_args__ = (
+        Index("ix_analysis_metrics_snapshot_group", "analysis_snapshot_id", "metric_group"),
+    )
+
+    metric_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    analysis_snapshot_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    metric_code: Mapped[str] = mapped_column(String(128), nullable=False)
+    metric_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    metric_group: Mapped[str] = mapped_column(String(64), nullable=False)
+    numeric_value: Mapped[float | None] = mapped_column(Float)
+    unit: Mapped[str | None] = mapped_column(String(32))
+    direction: Mapped[str] = mapped_column(String(32), nullable=False)
+    percentile_market: Mapped[float | None] = mapped_column(Float)
+    percentile_industry: Mapped[float | None] = mapped_column(Float)
+    rank_market: Mapped[int | None] = mapped_column(Integer)
+    rank_industry: Mapped[int | None] = mapped_column(Integer)
+    source_refs: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)
+    detail_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class AnalysisFindingRow(Base):
+    """Structured analysis finding derived from quant, canonical, or AI outputs."""
+
+    __tablename__ = "analysis_findings"
+    __table_args__ = (
+        Index("ix_analysis_findings_snapshot_type", "analysis_snapshot_id", "finding_type"),
+    )
+
+    finding_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    analysis_snapshot_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    finding_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    severity: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    evidence_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    source_refs: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)
+    detail_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class AnalysisEvidenceLinkRow(Base):
+    """Evidence and lineage edge for one Analysis Mart snapshot."""
+
+    __tablename__ = "analysis_evidence_links"
+    __table_args__ = (
+        Index("ix_analysis_evidence_links_snapshot", "analysis_snapshot_id"),
+        Index("ix_analysis_evidence_links_evidence", "evidence_id"),
+    )
+
+    link_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    analysis_snapshot_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    finding_id: Mapped[str | None] = mapped_column(String(96))
+    metric_id: Mapped[str | None] = mapped_column(String(96))
+    evidence_id: Mapped[str | None] = mapped_column(String(96))
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    detail_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

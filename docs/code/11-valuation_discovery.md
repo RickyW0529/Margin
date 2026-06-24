@@ -2,11 +2,13 @@
 
 ## 模块概述
 
-`src/margin/valuation_discovery/` 实现 v0.2/v0.3 的公司池、量化筛选、新闻目标选择、行业估值、置信度校准、有效结论指针和刷新编排。模块只消费冻结的数据仓库输入和策略 scope，不直接调用 AKShare、Tushare、Tavily、LLM 或交易接口。
+`src/margin/valuation_discovery/` 实现 v0.2/v0.3 的公司池、量化筛选、Analysis Mart 第四层、新闻目标选择、行业估值、置信度校准、有效结论指针和刷新编排。模块只消费冻结的数据仓库输入和策略 scope，不直接调用 AKShare、Tushare、Tavily、LLM 或交易接口。
 
 v0.3 中，公司池来源切到数据层 materialized company pool：`SQLAlchemyScopeBindingProvider` 对 `ALL_A` / `ALL_A_NON_ST` scope 优先读取最新 `company_pool_snapshots`，量化输入不再使用静态 universe membership。公司池排除 ST、`退市*` 名称、未来上市和已退市证券。
 
 当前量化服务支持版本化手工池策略：当 `QuantInputSnapshot.quant_feature_set.metadata.quant_strategy.thresholds.presets` 提供因子权重时，`QuantService` 使用 `manual_all_a_score` 作为真实 `QuantResult.final_score`、rank 和 screening status 的输入。`theme_hotness` 是确认后的题材/行业热点加分项，来自 PIT 安全 cross-section 中的 `theme_hot_score`、`theme_member_confidence`、`theme_signal_confirmed` 字段；未确认或非成员公司不加分。无版本化策略 metadata 的兼容路径仍使用旧五组分 `FactorScorer.combine()`。
+
+v0.3 已新增第四层 Analysis Mart：量化结果发布后可物化为 `analysis_snapshots`、`analysis_metrics`、`analysis_findings` 和 `analysis_evidence_links`。这一层面向 Dashboard 与 LangGraph scoped read tools，保存 AI 可直接读取的结构化指标、主要发现、质量标记、输入/结果 hash 和 lineage，避免 AI 每次自行从第三层重算指标。
 
 ## 数据模型与迁移
 
@@ -16,10 +18,14 @@ v0.3 中，公司池来源切到数据层 materialized company pool：`SQLAlchem
 | `company_pool_snapshots` / `company_pool_members` | v0.3 数据层物化的非 ST/非退市全 A 公司池快照，供 `ALL_A_NON_ST` scope 直接消费。 |
 | `quant_input_snapshots` / `quant_input_snapshot_facts` | 量化唯一输入契约，记录 scope、universe、指标集合、事实 lineage、PIT/freshness/quality 标记。 |
 | `quant_screen_runs` / `quant_screen_results` / `quant_factor_values` | 量化运行、单票结果、分组因子值、rank、原因摘要。 |
+| `analysis_snapshots` | 第四层单证券分析快照，绑定 security/scope/decision time、quant run/result、QuantInput、策略版本、输入 hash、结果 hash、摘要和质量标记。 |
+| `analysis_metrics` | 第四层结构化指标，保存最终分、五组因子分、rank、分位、数据质量和 review 标记等 AI/Dashboard 直接消费字段。 |
+| `analysis_findings` | 第四层可读发现，保存筛选结论、主要正负因子、风险/缺失原因、严重度、置信度和证据引用。 |
+| `analysis_evidence_links` | 第四层 lineage 边，把 snapshot/metric/finding 反链到 quant result、QuantInput、canonical fact、Evidence 或后续 ML feature run。 |
 | `valuation_assessments` / `confidence_components` / `effective_assessment_pointers` | 估值结论、置信度组成和当前有效结论指针。 |
 | `valuation_refresh_runs` / `valuation_refresh_steps` / `research_refresh_events` / `research_context_snapshots` | 估值发现刷新、步骤、事件和研究上下文快照。 |
 
-相关迁移：`20260622_0021` 至 `20260622_0024`，以及 v0.3 公司池/源系统/量化历史索引迁移 `20260623_0036` 至 `20260624_0041`。
+相关迁移：`20260622_0021` 至 `20260622_0024`，v0.3 公司池/源系统/量化历史索引迁移 `20260623_0036` 至 `20260624_0041`，以及 Analysis Mart 迁移 `20260624_0042_analysis_mart.py`。
 
 ## 关键代码
 
@@ -32,11 +38,41 @@ v0.3 中，公司池来源切到数据层 materialized company pool：`SQLAlchem
 | `quant/filters.py` | `HardFilterEngine` | ST、停牌、上市时间、流动性、财务缺失、亏损、负债、商誉、现金流、审计意见过滤。 |
 | `quant/scoring.py` / `quant/service.py` | `FactorScorer`, `QuantService` | 行业内标准化、五因子加权、版本化手工池最终分、状态/guardrail、rank 和结果持久化。 |
 | `quant/manual_all_a.py` / `quant/theme_tilt.py` | `score_manual_all_a`, `score_theme_components`, `confirmation_states` | 手工三池量化分、确认后的题材/行业热点加分、题材热度进入/退出确认。 |
+| `analysis_mart.py` | `AnalysisMartPublisher`, `SQLAlchemyAnalysisMartRepository`, `MemoryAnalysisMartRepository`, `AnalysisSnapshot`, `AnalysisMetric`, `AnalysisFinding` | 第四层分析结果发布与读取；同输入重放幂等，冲突重放拒绝。 |
 | `news_targets.py` | `NewsTargetSelector` | PASS 全量进入新闻目标；允许的 NEAR_THRESHOLD 可进入；不做 top-N 裁剪。 |
 | `valuation.py` | `IndustryValuationRegistry` | 银行、保险、周期资源、消费/制造、成长/科技、公用事业估值模型族。 |
 | `confidence.py` | `ConfidenceCalibrator` | 确定性置信度校准，不接受 LLM 置信度覆盖。 |
 | `assessments.py` | `EffectiveAssessmentService` | deferred/abstain 保留旧结论，invalidate/update 指向新结论。 |
 | `orchestrator.py` / `service.py` | `ValuationDiscoveryOrchestrator`, `ValuationDiscoveryService` | 12 步刷新编排、幂等启动、失败/等待/跳过语义。 |
+
+## Analysis Mart 第四层
+
+发布路径：
+
+```text
+QuantInputSnapshot + QuantResult + quant run lineage
+  -> AnalysisMartPublisher.publish_quant_result(...)
+  -> analysis_snapshots / analysis_metrics / analysis_findings / analysis_evidence_links
+  -> ResearchContext payload.analysis_snapshot_id / analysis_summary
+  -> 06 analysis_* scoped read tools
+```
+
+`AnalysisMartPublisher` 当前从量化结果加工：
+
+- snapshot summary：`screening_status`、`data_status`、`research_guardrail`、`review_required`、rank、主要原因、风险/缺失字段；
+- metrics：`final_score`、`quality_score`、`value_score`、`growth_score`、`momentum_score`、`risk_score`、rank 和 review/data quality 指标；
+- findings：`quant_screening` 发现，包含筛选状态、数据状态、风险标记、正负因子和置信度；
+- evidence links：至少反链到 `quant_screen_results`、`quant_screen_runs` 和 `quant_input_snapshots`。
+
+Repository 行为：
+
+- `upsert_bundle()` 在一个事务内写入 snapshot、metrics、findings 和 links；
+- 相同主键且内容一致的重放视为幂等；
+- 相同主键但内容/hash 不一致的重放抛错，避免覆盖历史分析结果；
+- `latest_snapshot(security_id, scope_version_id, as_of)` 按 decision time 返回当前可见快照；
+- `list_metrics()`、`list_findings()`、`list_evidence_links()` 供 Dashboard 和 AI 工具读取。
+
+`ResearchContextBuilderAdapter` 在构造后置 AI 上下文时会尝试发布 Analysis Mart，并把 `analysis_snapshot_id` 与 `analysis_summary` 写入冻结 payload；没有 repository 时保持兼容路径，不阻断旧测试和离线用法。
 
 ## FastAPI 接口
 
@@ -83,5 +119,5 @@ Top pass：
 ## 跨模块依赖
 
 - 读取：数据仓库 canonical/fact lineage、策略 scope、module 10 orchestration。
-- 输出：量化候选、NewsTarget、估值结论、effective pointer、Dashboard/API 可读 run 状态。
-- 边界：量化层不调用外部 Provider；新闻、索引、RAG 和 AI 由后续模块服务承接。
+- 输出：量化候选、Analysis Mart 快照/指标/发现/证据链、NewsTarget、估值结论、effective pointer、Dashboard/API 可读 run 状态。
+- 边界：量化层不调用外部 Provider；Analysis Mart 只由第三层唯一化数据、量化结果和受控证据引用派生；新闻、索引、RAG 和 AI 由后续模块服务承接。

@@ -345,6 +345,8 @@ def _context_summary(context: ResearchContextSnapshot) -> str:
             "previous_effective_assessment_id": context.payload.get(
                 "previous_effective_assessment_id"
             ),
+            "analysis_snapshot_id": context.payload.get("analysis_snapshot_id"),
+            "analysis_summary": context.payload.get("analysis_summary", {}),
             "material_quant_change": context.payload.get(
                 "material_quant_change"
             ),
@@ -354,6 +356,7 @@ def _context_summary(context: ResearchContextSnapshot) -> str:
         },
         ensure_ascii=False,
         sort_keys=True,
+        separators=(",", ":"),
     )
 
 

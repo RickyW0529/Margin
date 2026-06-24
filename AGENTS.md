@@ -219,5 +219,6 @@ ruff check --fix src tests
 - v0.2 `07-strategy_config` 已补齐版本化 Provider/Universe/Indicator/Quant/Prompt/Tool/Scope 配置、AES-GCM Secret Store、write-only 密钥 API、SSRF/host allowlist、真实 Provider health 激活闸门、幂等审计和前端 Provider Settings；真实 Tushare/Tavily/LLM/Embedding health 通过，Rerank 尚缺本地配置。
 - `0801`-`0803` 已补齐研究候选面板 Candidate Card、证据展开、估值/反方/反馈视图、调度入口、Provider 状态、API 与 Next.js 页面；`/api/v1/provider-status` 真实探测 LLM/Embedding，并显式展示 Tavily/Rerank 缺配置 degraded。
 - v0.2 已删除模块 02/09 的源码、API、前端、Worker 调度和数据库表；编号仅用于历史审计。
-- v0.3 `11-valuation_discovery` 已接入数据层公司池快照，排除 ST、`退市*`、未来上市和已退市证券；最新真实量化 run `qr_df48cd92fdf1424d` 基于 `cps_29518c0fec90836c57609b6f1f24` 产出 5304 家结果、3 家 pass、54 家 near_threshold。
+- v0.3 `11-valuation_discovery` 已接入数据层公司池快照，排除 ST、`退市*`、未来上市和已退市证券；新增 Analysis Mart 第四层 `analysis_snapshots`/`analysis_metrics`/`analysis_findings`/`analysis_evidence_links`，量化结果可幂等发布为 AI/Dashboard 可读分析结果；最新真实量化 run `qr_df48cd92fdf1424d` 基于 `cps_29518c0fec90836c57609b6f1f24` 产出 5304 家结果、3 家 pass、54 家 near_threshold。
+- v0.3 `06-multi_agent_research` 已开放 Analysis Mart scoped read tools：`analysis_snapshot_get`、`analysis_metrics_list`、`analysis_findings_list`，`valuation_analysis` 节点可按 security/scope/PIT 读取第四层分析快照、指标和发现。
 - `1001`-`1004` 已补齐 migrate/seed/web/api/worker/postgres/prometheus/grafana 一键部署、测试库隔离、不可变审计、结构化日志、Trace/指标、Grafana dashboard、Provider 降级与 CI 验证。

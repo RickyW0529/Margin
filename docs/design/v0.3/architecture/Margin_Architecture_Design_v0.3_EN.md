@@ -7,7 +7,7 @@
 > Architecture style: modular monolith, local Docker Compose, persistent worker, typed provider/tool boundaries
 > Current stack: FastAPI, Next.js, PostgreSQL/pgvector, APScheduler, Prometheus, Grafana, OpenAI-compatible LLM/Embedding
 > Previous baseline: v0.2 active
-> Boundary: the current codebase still uses the v0.2 generic raw/fact/canonical path. v0.3 restructures the data layers and does not implement broker execution, holdings analysis, or holdings monitoring.
+> Boundary: v0.3 restructures the data layers and adds the fourth-layer Analysis Mart. It does not implement broker execution, holdings analysis, or holdings monitoring.
 
 ---
 
@@ -15,7 +15,7 @@
 
 v0.3 adds module `11-valuation_discovery` to the existing modular monolith. It owns universe snapshots, multi-factor quant screening, industry-aware valuation models, intrinsic-value assessments, confidence calibration, and research-refresh events. Existing modules remain responsible for providers, filings, vector indexing, evidence, AI workflows, strategy versions, dashboards, and runtime scheduling. Portfolio, holdings, and holdings-monitoring implementations are removed; module IDs remain only for historical audit.
 
-### 0.1 Authoritative five-layer data architecture
+### 0.1 Authoritative four database layers plus service layer
 
 This section overrides conflicting data-flow details copied from v0.2.
 
@@ -26,16 +26,20 @@ flowchart TB
         AK[(source_akshare<br/>endpoint-specific tables)]
         O[(future source schemas)]
     end
-    S --> Q[2. Data quality gate<br/>schema/completeness/duplicate/PIT/range/conflict/publication]
-    Q --> W[(3. Unified warehouse<br/>dimensions/facts/canonical/PIT)]
-    W --> U[4. Universe view layer<br/>ALL_A_NON_ST/CSI300/CSI500/custom snapshots]
-    U --> A[5. Upstream services<br/>QuantInput/quant/valuation/news/AI/dashboard]
+    S --> Q[Data quality gate<br/>schema/completeness/duplicate/PIT/range/conflict/publication]
+    Q --> W[(2. Aggregated warehouse<br/>standard facts/dimensions/quality publication/PIT)]
+    W --> U[3. Unique serving layer<br/>canonical/universe/QuantInputSnapshot]
+    U --> M[(4. Analysis Mart<br/>snapshots/metrics/findings/evidence links)]
+    M --> A[Service layer<br/>quant/valuation/news/AI/dashboard]
+    U --> A
 ```
 
 Source systems are physically isolated and never write one another's endpoint tables.
-The quality layer is the only publication path into the warehouse. Universe views never
-read `source_*` schemas, and upstream services consume typed warehouse/universe contracts
-only. Canonical values are warehouse serving values and never replace source history.
+The quality layer is the only publication path into the warehouse. The unique serving
+layer never reads `source_*` schemas, and upstream services consume typed
+warehouse/universe/Analysis-Mart contracts only. Canonical values are warehouse serving
+values and never replace source history. Analysis Mart is derived from the unique serving
+layer, quant results, and controlled evidence links; it cannot modify lower-layer facts.
 
 Each provider schema owns an endpoint catalog, sync runs, bounded partitions, call audit,
 raw-snapshot lineage, and one landing table per endpoint. Landing rows retain complete JSON
@@ -56,6 +60,15 @@ securities with PIT evidence and exclusion reasons. QuantInput freezes this univ
 canonical fact IDs, market windows, quality/PIT state, and an input hash. Quant persists a
 result for every member and acceptance exposes real company names, scores, ranks, statuses,
 and structured reasons.
+
+Analysis Mart is the fourth-layer serving table family for AI and dashboards:
+`analysis_snapshots` stores immutable security/scope/decision-time summaries, lineage,
+quality flags, input hashes, and result hashes; `analysis_metrics` stores structured
+scores, ranks, percentiles, missing-field counts, and review/data-quality indicators;
+`analysis_findings` stores human/AI-readable findings with confidence and severity; and
+`analysis_evidence_links` links snapshots, metrics, and findings back to quant results,
+QuantInput, canonical facts, evidence, or future ML feature runs. Replays with the same
+input/result hash are idempotent, while conflicting replays are rejected and audited.
 
 #### 0.1.1 Rolling-window policy and control plane
 
@@ -199,9 +212,9 @@ Data consumption constraints:
 - user universe and indicator-set selections never reduce warehouse acquisition coverage;
 - quant gates read only immutable `QuantInputSnapshot` references, including historical industry membership and as-of corporate-action adjustments;
 - News/WebSearch is not an unbounded web crawl; after quant completes, `NewsRefreshService` receives target companies, searches and fetches related news, stores snapshots, links securities, scores materiality, and indexes eligible documents;
-- AI research receives `ResearchContext`, previous AI assessment, RAG evidence, and audited tool results; it does not directly fetch external market/fundamental data and does not run live WebSearch during reasoning;
+- AI research receives `ResearchContext`, Analysis Mart summaries, previous AI assessment, RAG evidence, and audited tool results; it does not directly fetch external market/fundamental data and does not run live WebSearch during reasoning;
 - `QuantInputSnapshot` binds scope, sync run, universe, quant feature set, industry/corporate-action versions, canonical fact IDs, PIT/quality state, and input hash;
-- post-quant `ResearchContext` binds quant input/result, news bundle, previous effective assessment, user view, evidence IDs, and input hash;
+- post-quant `ResearchContext` binds quant input/result, Analysis Mart snapshot, news bundle, previous effective assessment, user view, evidence IDs, and input hash;
 - missing or low-quality required data results in `DATA_INSUFFICIENT` or `ABSTAINED`, not an AI-filled guess.
 
 Multi-factor quant screening lives under `src/margin/valuation_discovery/quant/`. Phase 1 implements a single-day cross-sectional run with `config.py`, `models.py`, `data_adapter.py`, `universe.py`, `filters.py`, `normalization.py`, `factors/`, `scoring.py`, `selector.py`, `repository.py`, and `service.py`. Backtesting, performance attribution, and report export are Phase 2 and do not block the v0.3 main path.
@@ -403,7 +416,8 @@ Module interfaces should remain explicit:
 | filing/news event | filing_websearch | indexing, refresh policy | source, event type, importance/materiality, affected securities, snapshot reference |
 | evidence | indexing / rag_evidence | AI research, valuation | evidence ID, claim ID, locator, source level, availability timestamp |
 | refresh event | valuation_discovery | AI research | symbol, trigger type, reason, priority, dedupe key, strategy version |
-| ResearchContext | multi_agent_research / valuation_discovery | research workflow, audit | quant-input reference, scope/view, quant result, previous effective assessment, news bundle, evidence IDs, input hash |
+| Analysis Mart | valuation_discovery | research tools, dashboard, audit | analysis snapshot, metrics, findings, evidence/source links, input/result hashes, quality flags |
+| ResearchContext | multi_agent_research / valuation_discovery | research workflow, audit | quant-input reference, scope/view, quant result, analysis snapshot, previous effective assessment, news bundle, evidence IDs, input hash |
 | AI internal graph | multi_agent_research | valuation_discovery, audit | frozen context ref, change set, review mode, bounded tool calls, parallel node outputs, checkpoint, citation validation, delta decision |
 | ToolManifest/session | multi_agent_research | LangGraph LLM node | node grants, capabilities, scoped schemas, PIT/budget, tool/policy versions, manifest hash |
 | PromptArtifact | multi_agent_research / strategy_config | LLM execution, audit | system/task/style/context/tool/schema layers, draft/reflection/revision type, version, hash |
@@ -607,7 +621,7 @@ Provider adapters:
 - OpenAI-compatible embeddings;
 - optional rerank provider.
 
-Provider adapters are used by data sync, NewsRefreshService, embedding, LLM, and rerank services. They are not exposed directly to AI agents. AI agents can only access frozen `ResearchContext`, retrieval results, stored news/WebSearch snapshots, and valuation tool outputs through scoped tools; they cannot issue live WebSearch queries during reasoning.
+Provider adapters are used by data sync, NewsRefreshService, embedding, LLM, and rerank services. They are not exposed directly to AI agents. AI agents can only access frozen `ResearchContext`, Analysis Mart, retrieval results, stored news/WebSearch snapshots, and valuation tool outputs through scoped tools; they cannot issue live WebSearch queries during reasoning.
 
 Frontend secret writes go through `ProviderSecretService`, not process-environment mutation. List responses expose only configured/last-four/version/health metadata. Runtime resolution uses the active encrypted Secret Store version; environment values are migration/bootstrap inputs.
 
@@ -634,6 +648,9 @@ Stable capabilities include:
 research.context.read
 quant.result.read
 financial.snapshot.read
+analysis.snapshot.read
+analysis.metrics.read
+analysis.findings.read
 news.snapshot.read
 filing.snapshot.read
 evidence.retrieve
@@ -651,7 +668,7 @@ Node-scoped defaults:
 | Materiality classifier / evidence plan | none | 0/0 |
 | Retrieve evidence | financial/quant/filing/news/retrieval/valuation | graph-level retrieval budget |
 | Fundamental analysis | none; frozen evidence package only | 0/0 |
-| Valuation analysis | deterministic valuation calculator only | 1/1 |
+| Valuation analysis | Analysis Mart snapshot/metrics/findings plus deterministic valuation calculator | 1/1 valuation plus read-only analysis budget |
 | Risk review | none; frozen evidence package only | 0/0 |
 | Counter-argument | none; frozen evidence package only | 0/0 |
 | Targeted reanalysis | none; one supplemental package only | 0/0 |

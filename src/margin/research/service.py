@@ -6,7 +6,7 @@ import hashlib
 import json
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -48,6 +48,9 @@ from margin.research.tools.factory import ScopedToolFactory, ScopedToolSession
 from margin.research.tools.policy import ToolPolicyEngine
 from margin.storage.database import SessionFactory
 from margin.valuation_discovery.db_models import ResearchContextSnapshotRow
+
+if TYPE_CHECKING:
+    from margin.valuation_discovery.analysis_mart import AnalysisMartRepository
 
 
 class ResearchContextSnapshot(BaseModel):
@@ -177,6 +180,7 @@ class ResearchService:
         v02_checkpointer: Any | None = None,
         v02_llm_audit_repository: LLMCallAuditRepository | None = None,
         v02_tool_audit_repository: ToolCallAuditRepository | None = None,
+        analysis_mart_repository: AnalysisMartRepository | None = None,
     ) -> None:
         """Initialize the research service.
 
@@ -208,6 +212,18 @@ class ResearchService:
         self._v02_checkpointer = v02_checkpointer
         self._v02_llm_audit_repository = v02_llm_audit_repository
         self._v02_tool_audit_repository = v02_tool_audit_repository
+        if analysis_mart_repository is not None:
+            self._analysis_mart_repository = analysis_mart_repository
+        elif session_factory is not None:
+            from margin.valuation_discovery.analysis_mart import (
+                SQLAlchemyAnalysisMartRepository,
+            )
+
+            self._analysis_mart_repository = SQLAlchemyAnalysisMartRepository(
+                session_factory
+            )
+        else:
+            self._analysis_mart_repository = None
 
     def run_delta_review(self, context_snapshot_id: str) -> AIDeltaReviewResult:
         """Run the v0.2 AI delta-review graph for one frozen context snapshot."""
@@ -266,6 +282,7 @@ class ResearchService:
                 or _default_tool_factory(
                     context,
                     audit_repository=self._v02_tool_audit_repository,
+                    analysis_mart_repository=self._analysis_mart_repository,
                 ),
                 analysis_handlers=analysis_handlers
                 or _default_analysis_handlers(context),
@@ -397,6 +414,7 @@ def _default_tool_factory(
     context: ResearchContextSnapshot,
     *,
     audit_repository: ToolCallAuditRepository | None = None,
+    analysis_mart_repository: AnalysisMartRepository | None = None,
 ) -> ScopedToolFactory:
     """_default_tool_factory.
 
@@ -417,6 +435,13 @@ def _default_tool_factory(
             handler=lambda payload: _retrieve_evidence_from_context(context, payload),
         )
     )
+    if analysis_mart_repository is not None:
+        from margin.research.analysis_tools import register_analysis_mart_tools
+
+        register_analysis_mart_tools(
+            registry,
+            repository=analysis_mart_repository,
+        )
     return ScopedToolFactory(
         tool_registry=registry,
         policy=ToolPolicyEngine(),

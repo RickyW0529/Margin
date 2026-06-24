@@ -19,7 +19,7 @@ def test_migration_sequence_from_clean_database(database_url: str) -> None:
     )
 
     assert result.current_head == result.expected_head
-    assert result.current_head == "20260624_0041_akshare_source"
+    assert result.current_head == "20260624_0042_analysis_mart"
     assert result.failed_revision is None
     assert {
         "orchestration_runs",
@@ -61,6 +61,10 @@ def test_migration_sequence_from_clean_database(database_url: str) -> None:
         "source_akshare.ak_index_stock_cons_csindex",
         "company_pool_snapshots",
         "company_pool_members",
+        "analysis_snapshots",
+        "analysis_metrics",
+        "analysis_findings",
+        "analysis_evidence_links",
     } <= set(result.tables)
     assert {
         "portfolios",

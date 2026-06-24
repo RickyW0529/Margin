@@ -41,11 +41,16 @@ from margin.sql.valuation_queries import (
 from margin.storage.database import SessionFactory
 from margin.strategy.models import ConfigLifecycle
 from margin.strategy.validator import StrategyActivationValidator
+from margin.valuation_discovery.analysis_mart import (
+    AnalysisMartPublisher,
+    AnalysisMartRepository,
+)
 from margin.valuation_discovery.assessments import EffectiveAssessmentService
 from margin.valuation_discovery.db_models import (
     EffectiveAssessmentPointerRow,
     QuantInputSnapshotRow,
     QuantScreenResultRow,
+    QuantScreenRunRow,
     ResearchContextSnapshotRow,
 )
 from margin.valuation_discovery.models import (
@@ -281,6 +286,7 @@ class ResearchContextBuilderAdapter:
         retrieval_tool: Any | None = None,
         evidence_package_builder: EvidencePackageBuilder | None = None,
         evidence_repository: EvidenceRepository | None = None,
+        analysis_mart_repository: AnalysisMartRepository | None = None,
     ) -> None:
         """init  ."""
         self._session_factory = session_factory
@@ -288,6 +294,7 @@ class ResearchContextBuilderAdapter:
         self._retrieval_tool = retrieval_tool
         self._evidence_package_builder = evidence_package_builder
         self._evidence_repository = evidence_repository
+        self._analysis_mart_repository = analysis_mart_repository
 
     def build(
         self,
@@ -344,7 +351,8 @@ class ResearchContextBuilderAdapter:
                 security_id=security_id,
                 scope_version_id=scope_version_id,
             )
-            quant_input_snapshot_id = self._quant_input_snapshot_id(quant_run_id)
+            quant_lineage = self._quant_lineage(quant_run_id)
+            quant_input_snapshot_id = quant_lineage["input_snapshot_id"]
             previous_result = self._previous_quant_result(
                 security_id=security_id,
                 scope_version_id=scope_version_id,
@@ -355,6 +363,17 @@ class ResearchContextBuilderAdapter:
                 result,
             )
             quant_factor_details = result.factor_details if result else {}
+            analysis_snapshot = self._publish_analysis_snapshot(
+                scope_version_id=scope_version_id,
+                decision_at=decision_at,
+                quant_result=result,
+                quant_lineage=quant_lineage,
+                evidence_ids=(
+                    evidence_package.evidence_ids
+                    if evidence_package is not None
+                    else ()
+                ),
+            )
             payload: dict[str, Any] = {
                 "quant_run_id": quant_run_id,
                 "quant_input_valid": (
@@ -402,6 +421,14 @@ class ResearchContextBuilderAdapter:
                 "quant_ai_profile": quant_factor_details.get(
                     "ai_quant_profile",
                     {},
+                ),
+                "analysis_snapshot_id": (
+                    analysis_snapshot.analysis_snapshot_id
+                    if analysis_snapshot is not None
+                    else None
+                ),
+                "analysis_summary": (
+                    analysis_snapshot.summary if analysis_snapshot is not None else {}
                 ),
                 "news_target_reason": target.trigger_type.value,
                 "news_context_bundle_id": (
@@ -516,6 +543,51 @@ class ResearchContextBuilderAdapter:
             return session.scalar(
                 quant_input_snapshot_id_for_run(quant_run_id)
             )
+
+    def _quant_lineage(self, quant_run_id: str) -> dict[str, Any]:
+        """Load quant run and input snapshot lineage for Analysis Mart."""
+        with self._session_factory() as session:
+            run = session.get(QuantScreenRunRow, quant_run_id)
+            if run is None:
+                return {
+                    "input_snapshot_id": None,
+                    "input_hash": _hash_payload({"quant_run_id": quant_run_id}),
+                    "strategy_version_id": None,
+                    "config_hash": None,
+                }
+            input_row = session.get(QuantInputSnapshotRow, run.input_snapshot_id)
+            return {
+                "input_snapshot_id": run.input_snapshot_id,
+                "input_hash": (
+                    input_row.input_hash if input_row is not None else run.input_snapshot_id
+                ),
+                "strategy_version_id": run.strategy_version_id,
+                "config_hash": run.config_hash,
+            }
+
+    def _publish_analysis_snapshot(
+        self,
+        *,
+        scope_version_id: str,
+        decision_at: datetime,
+        quant_result: QuantResult | None,
+        quant_lineage: dict[str, Any],
+        evidence_ids: tuple[str, ...],
+    ) -> Any | None:
+        """Publish the fourth-layer analysis snapshot for one quant result."""
+        if self._analysis_mart_repository is None or quant_result is None:
+            return None
+        return AnalysisMartPublisher(self._analysis_mart_repository).publish_quant_result(
+            scope_version_id=scope_version_id,
+            decision_at=decision_at,
+            trading_date=decision_at.date(),
+            quant_result=quant_result,
+            input_snapshot_id=quant_lineage["input_snapshot_id"],
+            strategy_version_id=quant_lineage["strategy_version_id"],
+            config_hash=quant_lineage["config_hash"],
+            input_hash=quant_lineage["input_hash"],
+            evidence_ids=evidence_ids,
+        )
 
     def _quant_input_is_pit_valid(
         self,

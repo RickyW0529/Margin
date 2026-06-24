@@ -22,7 +22,12 @@ from margin.storage.database import (
     create_session_factory,
 )
 from margin.valuation_discovery.adapters import ResearchContextBuilderAdapter
+from margin.valuation_discovery.analysis_mart import SQLAlchemyAnalysisMartRepository
 from margin.valuation_discovery.db_models import (
+    AnalysisEvidenceLinkRow,
+    AnalysisFindingRow,
+    AnalysisMetricRow,
+    AnalysisSnapshotRow,
     EffectiveAssessmentPointerRow,
     QuantInputSnapshotRow,
     QuantScreenResultRow,
@@ -53,6 +58,7 @@ def test_context_builder_freezes_quant_news_evidence_and_previous_state(
         news_bundle_builder=FakeNewsBundleBuilder(),
         retrieval_tool=FakeRetrievalTool(),
         evidence_package_builder=FakeEvidencePackageBuilder(),
+        analysis_mart_repository=SQLAlchemyAnalysisMartRepository(session_factory),
     )
     result = QuantResult(
         result_id="result-current",
@@ -103,8 +109,21 @@ def test_context_builder_freezes_quant_news_evidence_and_previous_state(
     assert payload["evidence_ids"] == ["evidence-1"]
     assert payload["quant_ai_profile"]["scores"]["manual_all_a_score"] == 78.5
     assert payload["quant_ai_profile"]["raw_factors"]["market_cap"] == 120_000_000_000.0
+    assert payload["analysis_snapshot_id"].startswith("asnap_")
+    assert payload["analysis_summary"]["screening_status"] == "pass"
+    assert payload["analysis_summary"]["final_score"] == 82.0
+    assert payload["analysis_summary"]["strategy_profile"] == (
+        "manual_all_a_no_market_cap_no_top_n"
+    )
     assert payload["material_quant_change"] is True
     assert payload["news_target_complete"] is True
+    with session_factory() as session:
+        analysis_row = session.get(
+            AnalysisSnapshotRow,
+            payload["analysis_snapshot_id"],
+        )
+    assert analysis_row is not None
+    assert analysis_row.quant_result_id == "result-current"
     assert adapter.list_context_snapshot_ids(
         scope_version_id="scope-1",
         quant_run_id="quant-current",
@@ -173,6 +192,10 @@ def _clean(session_factory) -> None:
     with session_factory.begin() as session:
         for model in (
             ResearchContextSnapshotRow,
+            AnalysisEvidenceLinkRow,
+            AnalysisFindingRow,
+            AnalysisMetricRow,
+            AnalysisSnapshotRow,
             EffectiveAssessmentPointerRow,
             QuantScreenResultRow,
             QuantScreenRunRow,

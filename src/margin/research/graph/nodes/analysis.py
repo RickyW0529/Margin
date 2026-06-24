@@ -38,6 +38,7 @@ NODE_GRANTS: dict[str, set[ToolCapability]] = {
         ToolCapability.QUANT_READ,
     },
     "valuation_analysis": {
+        ToolCapability.QUANT_READ,
         ToolCapability.DETERMINISTIC_VALUATION,
         ToolCapability.RESTRICTED_CALCULATION,
     },

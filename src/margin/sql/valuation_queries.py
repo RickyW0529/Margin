@@ -6,6 +6,10 @@ from sqlalchemy import Select, select
 
 from margin.research.db_models import ResearchDeltaReviewRow
 from margin.valuation_discovery.db_models import (
+    AnalysisEvidenceLinkRow,
+    AnalysisFindingRow,
+    AnalysisMetricRow,
+    AnalysisSnapshotRow,
     EffectiveAssessmentPointerRow,
     QuantInputSnapshotFactRow,
     QuantInputSnapshotRow,
@@ -154,4 +158,54 @@ def latest_delta_review_id_for_context(context_snapshot_id: str) -> Select:
         .where(ResearchDeltaReviewRow.context_snapshot_id == context_snapshot_id)
         .order_by(ResearchDeltaReviewRow.created_at.desc())
         .limit(1)
+    )
+
+
+def latest_analysis_snapshot(
+    *,
+    security_id: str,
+    scope_version_id: str,
+    as_of,
+) -> Select:
+    """Return the latest Analysis Mart snapshot visible as of a time."""
+    return (
+        select(AnalysisSnapshotRow)
+        .where(
+            AnalysisSnapshotRow.security_id == security_id,
+            AnalysisSnapshotRow.scope_version_id == scope_version_id,
+            AnalysisSnapshotRow.decision_at <= as_of,
+        )
+        .order_by(
+            AnalysisSnapshotRow.decision_at.desc(),
+            AnalysisSnapshotRow.created_at.desc(),
+            AnalysisSnapshotRow.analysis_snapshot_id.desc(),
+        )
+        .limit(1)
+    )
+
+
+def analysis_metrics_by_snapshot(analysis_snapshot_id: str) -> Select:
+    """Return Analysis Mart metrics for one snapshot."""
+    return (
+        select(AnalysisMetricRow)
+        .where(AnalysisMetricRow.analysis_snapshot_id == analysis_snapshot_id)
+        .order_by(AnalysisMetricRow.metric_id)
+    )
+
+
+def analysis_findings_by_snapshot(analysis_snapshot_id: str) -> Select:
+    """Return Analysis Mart findings for one snapshot."""
+    return (
+        select(AnalysisFindingRow)
+        .where(AnalysisFindingRow.analysis_snapshot_id == analysis_snapshot_id)
+        .order_by(AnalysisFindingRow.finding_id)
+    )
+
+
+def analysis_evidence_links_by_snapshot(analysis_snapshot_id: str) -> Select:
+    """Return Analysis Mart evidence and lineage links for one snapshot."""
+    return (
+        select(AnalysisEvidenceLinkRow)
+        .where(AnalysisEvidenceLinkRow.analysis_snapshot_id == analysis_snapshot_id)
+        .order_by(AnalysisEvidenceLinkRow.link_id)
     )

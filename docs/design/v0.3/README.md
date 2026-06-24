@@ -1,6 +1,6 @@
 # Margin v0.3 设计文档索引
 
-本目录是 Margin v0.3 的产品与架构设计快照。它由 `design/v0.2/` 直接复制后增量迭代，完整保留 v0.2 审计基线。v0.3 的唯一主增量是把结构化数据链路重构为“独立数据源系统 → 质量筛选层 → 统一数据仓库层 → 公司池视图层 → 上层服务”，并以尽可能完整的 Tushare Pro 股票数据、非 ST 全 A 公司池和真实量化公司结果作为验收。
+本目录是 Margin v0.3 的产品与架构设计快照。它由 `design/v0.2/` 直接复制后增量迭代，完整保留 v0.2 审计基线。v0.3 的主增量是把结构化数据链路重构为“独立数据源系统 → 质量筛选层 → 统一数据仓库层 → 唯一化服务层 → Analysis Mart 第四层 → 上层服务”，并以尽可能完整的 Tushare Pro 股票数据、非 ST 全 A 公司池、真实量化公司结果和 AI 可读数据分析结果作为验收。
 
 ## 1. 当前版本状态
 
@@ -10,15 +10,15 @@
 | 文档版本 | v0.3 |
 | 设计状态 | review |
 | 上一版本基线 | v0.2 active |
-| 本版本增量 | 独立数据源系统、质量筛选层、统一仓库、非 ST 公司池视图、真实量化产出 |
-| 实现状态 | 开发中；当前源码仍以 v0.2 通用 Raw/Fact/Canonical 链路为基线 |
+| 本版本增量 | 独立数据源系统、质量筛选层、统一仓库、非 ST 公司池视图、Analysis Mart 第四层、真实量化与分析结果产出 |
+| 实现状态 | v0.3 数据主链路与 Analysis Mart 第四层已实现；AKShare 实网回填仍按降级边界处理 |
 | 后端 | FastAPI + SQLAlchemy + PostgreSQL/pgvector + APScheduler |
 | 前端 | Next.js App Router + TypeScript |
 | 部署 | Docker Compose: postgres, migrate, bootstrap, api, worker, web, prometheus, grafana |
 | AI Provider | OpenAI-compatible LLM；OpenAI-compatible Embedding；可选 Tavily WebSearch；可选 Rerank |
 | 默认实测配置 | DeepSeek LLM + 智谱 Embedding-3；Tavily/Rerank 缺配置时显式 degraded |
 
-v0.3 不改变 v0.2 已确认的研究与估值产品主线，只重做其数据底座。每个 Provider 是独立源系统；质量筛选层是进入统一仓库的唯一入口；公司池视图只能读取统一仓库；量化和其他上层服务只能读取公司池视图或仓库服务接口，禁止跨层直连。
+v0.3 不改变 v0.2 已确认的研究与估值产品主线，只重做其数据底座并新增面向 AI/Dashboard 的第四层 Analysis Mart。每个 Provider 是独立源系统；质量筛选层是进入统一仓库的唯一入口；公司池视图和 canonical serving 只能读取统一仓库；Analysis Mart 从第三层和量化结果派生，保存可复用指标、发现、摘要和证据链；量化、AI 和 Dashboard 只能通过类型化 repository/service 或 scoped read tools 消费，禁止跨层直连。
 
 ## 2. 文件清单
 
@@ -41,12 +41,14 @@ v0.3 不改变 v0.2 已确认的研究与估值产品主线，只重做其数据
 | 数据源系统层 | Tushare、AKShare 和未来 Provider 各自使用独立 schema、接口目录、运行/分片/调用审计、Raw Snapshot 与 endpoint 专用 landing 表 |
 | 质量筛选层 | 独立执行 Schema、完整性、重复、PIT、范围、异常值、跨源冲突和发布判定；失败数据隔离但不删除 |
 | 数据仓库层 | 保存统一证券维度、多源标准事实、专用市场/财务事实和 Canonical 服务值；只接收质量层发布 |
-| 公司池视图层 | 从仓库生成双时态公司池快照；`ALL_A_NON_ST` 排除 ST/*ST、退市整理和非普通 A 股并保留原因 |
-| 上层服务 | QuantInput、量化、估值、News/AI 和 Dashboard 只通过稳定仓库/公司池接口消费 |
+| 唯一化服务层 | 从仓库生成双时态公司池快照、canonical PIT 值和 `QuantInputSnapshot`；`ALL_A_NON_ST` 排除 ST/*ST、退市整理和非普通 A 股并保留原因 |
+| Analysis Mart 第四层 | 从第三层与量化结果生成 `analysis_snapshots`、`analysis_metrics`、`analysis_findings`、`analysis_evidence_links`，直接服务 AI 工具和 Dashboard |
+| 上层服务 | QuantInput、量化、估值、News/AI 和 Dashboard 只通过稳定仓库、公司池或 Analysis Mart 接口消费 |
 | Tushare 覆盖 | 对量化需求相关 Pro 接口建立目录并真实探测当前席位，约 95% 置信度确认量化所需可用接口已基本穷尽 |
 | 采集准入 | endpoint 必须回链 QuantFeatureSet、硬过滤、公司池、PIT/复权或 benchmark 需求；无量化消费方的数据禁止采集 |
 | 滚动窗口 | 默认保留并服务最近 24 个月，可由前端在 12–60 个月范围内创建版本并激活；同步每日滚动推进 |
 | 量化验收 | 使用真实非 ST 全 A 快照，持久化每家公司过滤/评分结果并输出具体公司、排名、分数和分析明细 |
+| AI 工具验收 | LangGraph scoped tool 可读取 Analysis Mart snapshot、metrics、findings；工具调用受 security/scope/PIT 约束 |
 | 降级边界 | AKShare 网络/代理失败不阻断 Tushare 主链路；未知接口保留审计状态，不伪装为成功 |
 
 ## 4. v0.3 设计决策
@@ -69,6 +71,7 @@ v0.3 不改变 v0.2 已确认的研究与估值产品主线，只重做其数据
 | 量化实现边界 | 量化子包放在 `src/margin/valuation_discovery/quant/`；输入只来自 `QuantDataAdapter` 和数据仓库，不接 AKShare/Tushare、不读 Raw Snapshot |
 | 因子体系 | Phase 1 使用 Quality 35%、Value 25%、Growth 15%、Momentum 15%、Risk 10%；行业内 winsorize/percentile rank，缺失字段降低 confidence |
 | 量化输出 | 拆分 `screening_status`、`data_status`、`risk_flags`、`review_required`、`research_guardrail`，保存分数、原因、缺失字段、排名和摘要 |
+| 数据分析结果 | 量化结果发布后同步物化 Analysis Mart 快照，保存给 AI 直接使用的结构化指标、关键发现、置信度、质量标记和 lineage |
 | 回测范围 | 回测、绩效归因和报告导出属于 Phase 2，不阻塞 v0.3 主链路的单日截面筛选 |
 | AI 调用策略 | 当日研究目标全部进入 NewsRefresh 队列，不按固定 top-N 截断；只有重要证据、首次研究或复核到期进入 LLM |
 | 价格变化 | 普通价格变化只重算估值；观察区间触发可先搜新闻，只有发现重要证据才触发 AI |
@@ -99,7 +102,7 @@ v0.3 不改变 v0.2 已确认的研究与估值产品主线，只重做其数据
 | 层级 | 交付边界 | 模块 |
 | --- | --- | --- |
 | P0 | 数据仓库、PIT、双时态公司池/行业、公司行动、QuantInputSnapshot、量化筛选、DB-backed 编排 | 01、07、10、11 |
-| P1 | 完整目标 NewsRefresh、官方公告、文本索引、RAG 证据、ResearchContext、AIDeltaReviewGraph、工具/Prompt/反思 | 03、04、05、06、11 |
+| P1 | 完整目标 NewsRefresh、官方公告、文本索引、RAG 证据、ResearchContext、Analysis Mart scoped tools、AIDeltaReviewGraph、工具/Prompt/反思 | 03、04、05、06、11 |
 | P2 | 全公司 Dashboard、Provider Secret UI、安全/容量/恢复治理、完整 E2E/smoke 和文档收口 | 07、08、10、跨模块 |
 
 必须先完成并验收全部模块 spec，再完成全部模块 plan，然后按 P0 → P1 → P2 和模块依赖逐个开发。单个模块完成测试、自我反思和 `docs/code/` 同步后才能进入下一模块。
@@ -114,11 +117,11 @@ v0.3 不改变 v0.2 已确认的研究与估值产品主线，只重做其数据
 | 03 filing_websearch | 面向量化目标公司的 NewsRefreshService、公告/新闻快照、公司关联、重要度判定、合规和事件去重 |
 | 04 text_indexing | 公告/新闻内容快照、按内容 hash 解析分块、Embedding、PIT 安全幂等索引 |
 | 05 rag_evidence | 估值假设、风险、反方理由的 evidence/claim 引用约束 |
-| 06 multi_agent_research | 受控 `AIDeltaReviewGraph`、ScopedToolFactory、PromptFactory、节点反思、确定性 carry-forward、并行分析、有限补证/修复、checkpoint 和结构化 delta decision |
+| 06 multi_agent_research | 受控 `AIDeltaReviewGraph`、Analysis Mart scoped read tools、ScopedToolFactory、PromptFactory、节点反思、确定性 carry-forward、并行分析、有限补证/修复、checkpoint 和结构化 delta decision |
 | 07 strategy_config | Provider、公司池、指标集、量化闸门、投资风格 Prompt 和研究作用域的版本化配置 |
 | 08 research_candidate_dashboard | 全公司估值发现面板、状态筛选、淘汰原因、估值区间展示 |
 | 10 deployment_audit | 启动 freshness 检查、每日增量任务、手动同步兜底、run/step 审计、重试、降级和指标 |
-| 11 valuation_discovery | 双时态公司池、作用域解析、DB-backed Orchestrator、`valuation_discovery/quant` 多因子量化筛选、行业估值、置信度校准、ResearchContext、刷新事件和估值快照 |
+| 11 valuation_discovery | 双时态公司池、作用域解析、DB-backed Orchestrator、`valuation_discovery/quant` 多因子量化筛选、Analysis Mart 第四层、行业估值、置信度校准、ResearchContext、刷新事件和估值快照 |
 
 ## 7. 与当前代码的对应关系
 
@@ -131,12 +134,12 @@ v0.3 已删除 v0.1 的组合、持仓和持仓监控实现，包括源码、API
 | 03 公告与 WebSearch | `src/margin/news/` | 交易所公告模型、raw snapshot、DocumentEvent、outbox、Tavily adapter、去重与合规边界 |
 | 04 文本索引 | `src/margin/vector/` | parser/chunker、EmbeddingProvider、pgvector 持久化、混合检索、indexing runner |
 | 05 RAG 证据 | `src/margin/evidence/` | Evidence/Claim 模型、locator、source level、claim validation、证据视图 |
-| 06 多 Agent 研究 | `src/margin/research/` | LangGraph AI delta review、ScopedToolFactory、PromptFactory、NodeExecutionRunner 反思、checkpoint、LLM/tool hash-only 审计和 delta review outbox |
+| 06 多 Agent 研究 | `src/margin/research/` | LangGraph AI delta review、Analysis Mart 只读工具、ScopedToolFactory、PromptFactory、NodeExecutionRunner 反思、checkpoint、LLM/tool hash-only 审计和 delta review outbox |
 | 07 策略配置 | `src/margin/strategy/`, `src/margin/api/routes/strategy.py` | 策略模板、自定义策略、版本生命周期、prompt 合成与沙箱验证 |
 | 08 研究候选面板 | `src/margin/dashboard/`, `src/margin/api/routes/dashboard.py`, `web/app/research/`, `web/app/settings/` | 服务端分页候选列表、公司详情 current/effective 分离、证据 locator、只读 Copilot、Provider 状态和前端 Provider/scope/strategy 配置 |
 | 09 持仓监控 | 已删除 | 仅保留历史编号 |
 | 10 部署与审计 | `docker-compose.yml`, `src/margin/core/`, `src/margin/worker.py` | Docker 一键启动、migrate/bootstrap、Worker、Prometheus/Grafana、不可变 audit、降级与健康检查 |
-| 11 公司池与估值发现 | `src/margin/valuation_discovery/`, `src/margin/api/routes/valuation_discovery.py`，量化子包为 `src/margin/valuation_discovery/quant` | DB-backed `ValuationDiscoveryOrchestrator`、Phase 1 多因子量化筛选、refresh run/step、effective assessment pointer 和发布链路 |
+| 11 公司池与估值发现 | `src/margin/valuation_discovery/`, `src/margin/api/routes/valuation_discovery.py`，量化子包为 `src/margin/valuation_discovery/quant` | DB-backed `ValuationDiscoveryOrchestrator`、Phase 1 多因子量化筛选、Analysis Mart 第四层发布链路、refresh run/step、effective assessment pointer |
 
 ## 8. 图表清单
 
