@@ -21,102 +21,114 @@
   <img alt="Local first" src="https://img.shields.io/badge/local--first-yes-2f855a">
 </p>
 
-Margin is an open-source personal investment research system. Its core rule is simple: every important research conclusion should be backed by evidence, time, source, and an audit trail.
+---
 
-Margin is not a trading bot. It does not place orders, store brokerage passwords, or promise returns.
+## What Margin Is
 
-## What v0.3 Does
+Margin answers one question: **based on the currently available evidence, what should this company actually be worth.**
 
-Margin v0.3 connects the Tushare-backed quant data loop and the research-candidate loop:
+It automatically syncs A-share market and financial data, screens candidate companies by quant strategy, captures filings and news, then has AI re-review each research conclusion with evidence. The core rule is simple: **every important conclusion must trace back to evidence, time, source, and an audit trail.**
 
-- independent Tushare source-system tables, source-quality screening, and unified warehouse publication;
-- quant-only endpoint admission, excluding data with no active consumer;
-- rolling 24-month market/adjustment data, financial statements/ratios, valuation snapshots, suspension facts, and benchmark data;
-- non-ST, non-delisting, non-future-listed All-A company-pool snapshots feeding quant input;
-- Raw/Fact/Canonical market-data warehouse with PIT semantics;
-- AKShare/Tushare provider access and provider health gates;
-- filing/WebSearch snapshots, news target queues, and document events;
-- parsing, chunking, embeddings, hybrid retrieval, and pgvector storage;
-- RAG evidence packages, source locators, claim validation, and citation audit;
-- valuation discovery with quant gating, news refresh, RAG, AI delta review, and effective-assessment pointers;
-- LangGraph-based AI review with scoped read-only tools, prompt factory, reflection, checkpoints, and hash-only audit;
-- versioned strategy, provider, scope, indicator, prompt, and tool-policy configuration;
-- research workspace UI with candidate snapshots, implemented-route navigation, server-side filters, current-vs-effective assessment display, evidence locators, read-only Copilot, Provider blocker visibility, and Provider settings;
-- Docker Compose deployment with PostgreSQL, API, worker, web, Prometheus, and Grafana.
+Margin is not a trading bot. It places no orders, stores no brokerage passwords, promises no returns, and manages no positions. The final judgment is always yours.
+
+## What It Can Do For You
+
+- **Automatic A-share data sync**: rolling 24-month window of daily quotes, adjustment factors, financial statements, valuation snapshots, suspension facts and benchmarks — stored as a traceable point-in-time warehouse.
+- **Quant candidate screening**: scores and ranks the full A-share pool (excluding ST / delisting / future-listed), keeping filtered names visible so rejected names are never hidden.
+- **Filing and news capture**: official filings snapshots + WebSearch news — parsed, chunked and embedded on ingest, ready to cite.
+- **AI re-reviews every conclusion**: each research conclusion goes through delta review with evidence citations, reflection and conflict flags. When core data is missing it abstains (ABSTAINED) rather than forcing a high-confidence take.
+- **Research dashboard at a glance**: the frontend shows valuation range, evidence locators, review reasons and provider blockers per candidate — every conclusion links back to its source.
+- **Local-first, data stays on your machine**: your market data, evidence and audit trail live in local PostgreSQL. Provider keys are write-only, never echoed back. A missing provider degrades gracefully — never silently fakes success.
+
+## User Flow
+
+The full loop from data to conclusion, with every step recorded:
+
+```mermaid
+flowchart LR
+    Data[Market / filing auto-sync] --> Pool[Company pool snapshot<br/>All-A · excludes ST/delisting]
+    Pool --> Quant[Quant candidate screening]
+    Quant --> News[Filing / news capture]
+    News --> AI[AI re-review of each conclusion<br/>with cited evidence]
+    AI --> Panel[Research dashboard<br/>evidence traceable back]
+    Panel -.->|snapshots persisted| Audit[(immutable audit)]
+```
+
+## System Layers
+
+Bottom-up — each layer only reads the one above; data flows in, not out:
 
 ```mermaid
 flowchart TB
-    Web[Next.js Web] --> API[FastAPI API]
-    API --> Dashboard[Research Dashboard]
-    API --> Valuation[Valuation Discovery]
-    Valuation --> Research[AI Delta Review]
-    Research --> Tools[Scoped Read-only Tools]
-    Tools --> Retrieval[Vector Retrieval]
-    Valuation --> News[News / Filing Refresh]
-    API --> Data[Data Warehouse]
-    Research --> LLM[LLM Provider]
-    Retrieval --> Embedding[Embedding Provider]
-    API --> PG[(PostgreSQL + pgvector)]
-    Data --> PG
-    News --> PG
-    Worker[APScheduler Worker] --> Valuation
-    Worker --> Retrieval
-    API --> Prometheus[Prometheus]
-    Prometheus --> Grafana[Grafana]
+    subgraph L5[Research Dashboard Layer]
+        Web[Next.js Web · candidates · evidence · valuation]
+    end
+    subgraph L4[App & AI Layer]
+        API[FastAPI API]
+        Review[LangGraph AI review · read-only tools · reflection]
+        API --> Review
+    end
+    subgraph L3[Research Logic Layer]
+        Valuation[Valuation Discovery]
+        RAG[RAG Evidence]
+        Strategy[Strategy Config]
+        Review --> RAG
+        Review --> Strategy
+    end
+    subgraph L2[Data Warehouse Layer]
+        Warehouse["Unified warehouse (Raw → Fact → Canonical)<br/>point-in-time · company-pool views"]
+        Valuation --> Warehouse
+        Review --> Warehouse
+        RAG --> Warehouse
+    end
+    subgraph L1[Data Source Layer]
+        Tushare[Tushare]
+        AKShare[AKShare]
+        Filing[Filing snapshots]
+        WebSearch[WebSearch news]
+        Warehouse --> Tushare
+        Warehouse --> AKShare
+        Warehouse --> Filing
+        Warehouse --> WebSearch
+    end
+    subgraph L0[Infrastructure Layer]
+        PG[(PostgreSQL + pgvector)]
+        Obs[Audit · Prometheus · Grafana]
+        Web --> API
+        Warehouse --> PG
+        API --> PG
+        Obs --> PG
+    end
 ```
 
 ## Quick Start
 
 ```bash
 cp .env.example .env
-# Edit .env and add optional provider keys.
+# Edit .env, add the provider keys you want (missing ones degrade gracefully).
 
 docker compose up -d --build
 ```
 
 Open:
 
-- Web: http://localhost:3000
+- Research dashboard: http://localhost:3000
 - API: http://localhost:8000
 - Prometheus: http://localhost:9090
 - Grafana: http://localhost:3002
 
 Frontend entrypoints:
 
-- `/`: research workspace overview, candidate snapshot, recommended workflow, and Provider status;
-- `/research`: candidate list, filters, refresh trigger, Provider blockers, and read-only Copilot;
-- `/settings/data`: rolling data acquisition policy configuration;
-- `/settings/providers`: write-only Provider keys and health activation.
-
-Health checks:
-
-```bash
-curl -fsS http://localhost:8000/health
-curl -fsS http://localhost:8000/health/ready
-curl -fsS "http://localhost:8000/api/v1/research?scope_version_id=scope-current&universe=ALL_A"
-```
+- `/`: research workspace overview, candidate snapshot, recommended workflow, provider status
+- `/research`: candidate list, filters, refresh triggers, evidence expansion, read-only Copilot
+- `/settings/data`: rolling data acquisition window config
+- `/settings/providers`: provider keys write-in and health checks
 
 ## Provider Configuration
 
-Common `.env` variables:
+See `.env.example`. `MARGIN_ADMIN_API_TOKEN` and `MARGIN_CSRF_TOKEN` protect local mutating endpoints (provider settings, refresh triggers, etc.); replace the defaults outside local development.
 
-```env
-MARGIN_LLM_BASE_URL=https://api.deepseek.com
-MARGIN_LLM_API_KEY=
-MARGIN_LLM_MODEL=deepseek-v4-pro
-MARGIN_EMBEDDING_BASE_URL=https://open.bigmodel.cn/api/paas/v4
-MARGIN_EMBEDDING_API_KEY=
-MARGIN_EMBEDDING_MODEL=embedding-3
-MARGIN_EMBEDDING_DIMENSION=2048
-MARGIN_WEBSEARCH_API_KEY=
-MARGIN_TUSHARE_TOKEN=
-MARGIN_TUSHARE_HTTP_URL=https://teajoin.com
-MARGIN_RERANK_API_KEY=
-MARGIN_ADMIN_API_TOKEN=dev-admin-token
-MARGIN_CSRF_TOKEN=dev-csrf-token
-```
-
-`MARGIN_ADMIN_API_TOKEN` and `MARGIN_CSRF_TOKEN` protect local mutating endpoints such as Provider settings and refresh triggers; replace the defaults outside local development. Missing optional providers degrade conservatively. The system should abstain instead of producing a high-confidence research signal when core data or evidence is unavailable. Tavily quota exhaustion, AKShare upstream network failures, and missing Rerank config are exposed explicitly as degraded/unhealthy or `service_not_configured`, not as fake success.
+When an optional provider is missing, the system degrades conservatively: if core quotes, evidence or citations are unavailable, the research result is `ABSTAINED` rather than a high-confidence conclusion. Tavily quota exhaustion, AKShare upstream failures, and missing rerank config are exposed explicitly as degraded / unhealthy / `service_not_configured` — never as fake success.
 
 ## Development
 
@@ -138,15 +150,11 @@ npm test
 npm run build
 ```
 
-Compose:
+Compose and local smoke:
 
 ```bash
 docker compose config --quiet
-```
 
-Local smoke:
-
-```bash
 python scripts/smoke_dashboard_e2e.py --base-url http://localhost:3000
 MARGIN_ADMIN_API_TOKEN=dev-admin-token MARGIN_CSRF_TOKEN=dev-csrf-token \
   python scripts/smoke_valuation_discovery_p1.py \
@@ -155,7 +163,7 @@ MARGIN_ADMIN_API_TOKEN=dev-admin-token MARGIN_CSRF_TOKEN=dev-csrf-token \
   --api-url http://localhost:8000
 ```
 
-The dashboard and valuation smoke scripts bypass system proxies for local URLs so localhost checks are not routed through external proxies. Real-provider smoke still reports the actual network, quota, and authentication outcome as a structured blocker.
+The dashboard and valuation smoke scripts bypass system proxies for local URLs; real-provider smoke still reports the actual network, quota and auth outcome as a structured blocker.
 
 ## Documentation
 
@@ -171,15 +179,15 @@ The dashboard and valuation smoke scripts bypass system proxies for local URLs s
 
 ## Safety Boundaries
 
-Margin v0.3 intentionally does not include:
+Margin intentionally does not include:
 
-- automatic buy/sell orders;
-- brokerage credential storage;
-- holdings or position management;
-- guaranteed-return language;
-- MCP Server or MCP Gateway;
-- arbitrary custom HTTP tools;
-- multi-tenant SaaS account management.
+- automatic buy/sell orders
+- brokerage credential storage
+- holdings or position management
+- guaranteed-return language
+- MCP Server or MCP Gateway
+- arbitrary custom HTTP tools
+- multi-tenant SaaS account management
 
 Nothing in this repository is financial advice.
 
