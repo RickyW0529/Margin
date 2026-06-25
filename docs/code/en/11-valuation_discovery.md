@@ -2,13 +2,13 @@
 
 ## Overview
 
-`src/margin/valuation_discovery/` implements the v0.2/v0.3 universe, quant screening, fourth-layer Analysis Mart, news-target selection, industry valuation, confidence calibration, effective assessment pointer, and refresh orchestration flow. It consumes frozen warehouse inputs and strategy scopes only; it does not call AKShare, Tushare, Tavily, LLMs, or trading APIs directly.
+`src/margin/valuation_discovery/` implements the v0.2/v0.3 universe, quant screening, fourth-layer Quant Feature Mart / Analysis Mart, news-target selection, industry valuation, confidence calibration, effective assessment pointer, and refresh orchestration flow. It consumes frozen warehouse inputs and strategy scopes only; it does not call AKShare, Tushare, Tavily, LLMs, or trading APIs directly.
 
 In v0.3, `ALL_A` / `ALL_A_NON_ST` scopes prefer the latest data-layer `company_pool_snapshots` via `SQLAlchemyScopeBindingProvider` instead of static universe memberships. The company pool excludes ST, delisting-transition names, future listings, and delisted securities.
 
 The quant service now supports versioned manual-pool strategy metadata. When `QuantInputSnapshot.quant_feature_set.metadata.quant_strategy.thresholds.presets` provides factor weights, `QuantService` uses `manual_all_a_score` as the real `QuantResult.final_score` input for ranks and screening status. `theme_hotness` is a confirmed theme/industry-hotness bonus sourced from PIT-safe cross-section fields `theme_hot_score`, `theme_member_confidence`, and `theme_signal_confirmed`; unconfirmed signals and non-members receive no bonus. The compatibility path without versioned strategy metadata still uses the legacy five-group `FactorScorer.combine()` score.
 
-v0.3 adds a fourth-layer Analysis Mart. After quant results are produced, they can be materialized into `analysis_snapshots`, `analysis_metrics`, `analysis_findings`, and `analysis_evidence_links`. This layer serves dashboards and LangGraph scoped read tools with structured metrics, findings, quality flags, input/result hashes, and lineage so the AI flow does not recompute the same indicators from lower layers.
+v0.3 adds fourth-layer marts. Third-layer canonical data is first materialized by the ETL pipeline into `quant_feature_snapshots` / `quant_feature_rows`, and quant reads only those fourth-layer feature snapshots. Quant results are then published through ETL into `analysis_snapshots`, `analysis_metrics`, `analysis_findings`, and `analysis_evidence_links`. This layer serves Quant, dashboards, and LangGraph scoped read tools with structured metrics, findings, quality flags, input/result hashes, and lineage so the AI flow does not recompute the same indicators from lower layers.
 
 ## Data Model and Migrations
 
@@ -16,7 +16,9 @@ v0.3 adds a fourth-layer Analysis Mart. After quant results are produced, they c
 |-------|---------|
 | `universe_definitions` / `universe_versions` / `universe_memberships` / `universe_snapshots` | Built-in and future custom universes with valid time and system time. |
 | `company_pool_snapshots` / `company_pool_members` | v0.3 materialized non-ST/non-delisting All-A company pool consumed by `ALL_A_NON_ST` scopes. |
-| `quant_input_snapshots` / `quant_input_snapshot_facts` | The only quant input contract, including scope, universe, indicators, fact lineage, PIT, freshness, and quality flags. |
+| `quant_input_snapshots` / `quant_input_snapshot_facts` | The only quant input contract, including scope, universe, indicators, fourth-layer `feature_snapshot_id`, fact lineage, PIT, freshness, and quality flags. |
+| `quant_feature_snapshots` | Fourth-layer quant feature snapshots by scope/universe/decision/trading date, storing third-layer ETL input hash, feature columns, lineage summary, quality flags, and row count. |
+| `quant_feature_rows` | Fourth-layer per-security quant feature rows with directly consumable fields, source refs, and row-level quality flags such as ST or stale/suspended market data. |
 | `quant_screen_runs` / `quant_screen_results` / `quant_factor_values` | Quant runs, per-security results, factor-group values, ranks, and reason summaries. |
 | `analysis_snapshots` | Fourth-layer per-security analysis snapshots binding security/scope/decision time, quant run/result, QuantInput, strategy versions, input/result hashes, summaries, and quality flags. |
 | `analysis_metrics` | Fourth-layer structured metrics such as final score, factor scores, ranks, percentiles, data-quality indicators, and review flags. |
@@ -25,7 +27,7 @@ v0.3 adds a fourth-layer Analysis Mart. After quant results are produced, they c
 | `valuation_assessments` / `confidence_components` / `effective_assessment_pointers` | Valuation conclusions, confidence components, and current effective assessment pointers. |
 | `valuation_refresh_runs` / `valuation_refresh_steps` / `research_refresh_events` / `research_context_snapshots` | Refresh runs, step state, events, and research context snapshots. |
 
-Migrations: `20260622_0021` through `20260622_0024`, v0.3 source/company-pool/quant-history-index migrations `20260623_0036` through `20260624_0041`, plus Analysis Mart migration `20260624_0042_analysis_mart.py`.
+Migrations: `20260622_0021` through `20260622_0024`, v0.3 source/company-pool/quant-history-index migrations `20260623_0036` through `20260624_0041`, Analysis Mart migration `20260624_0042_analysis_mart.py`, and Quant Feature Mart migration `20260625_0043_quant_feature_mart.py`.
 
 ## Key Code
 
@@ -34,28 +36,40 @@ Migrations: `20260622_0021` through `20260622_0024`, v0.3 source/company-pool/qu
 | `models.py` | `UniverseMembership`, `QuantInputSnapshot`, `QuantRun`, `QuantResult`, `NewsTarget`, `EffectiveAssessmentPointer` | Immutable domain records. |
 | `universe.py` | `UniverseResolver` | Resolves `CSI300`, `CSI500`, and `ALL_A` by business and system time. |
 | `scope.py` / `quant_input.py` | `ScopeBinding`, `QuantInputSnapshotBuilder` | Freezes user-visible and quant-required indicators into PIT input snapshots. |
-| `quant_adapter.py` | `SQLAlchemyScopeBindingProvider`, `WarehouseFactAdapter`, `build_cross_section_loader`, `QuantAdapter` | Connects strategy scopes, data-layer company pools, warehouse canonical/history reads, and quant service execution. Historical market reads cap at the latest 260 PIT points per security/indicator for stable full-universe runs. |
+| `quant_adapter.py` | `SQLAlchemyScopeBindingProvider`, `WarehouseFactAdapter`, `build_cross_section_loader`, `QuantAdapter` | Connects strategy scopes, data-layer company pools, warehouse canonical/history reads, fourth-layer feature ETL, and quant service execution. Historical market reads cap at the latest 260 PIT points per security/indicator for stable full-universe runs. |
 | `quant/filters.py` | `HardFilterEngine` | Structured hard filters for ST, suspension, listing age, liquidity, missing financials, losses, debt, goodwill, cashflow, and audit opinion. |
 | `quant/scoring.py` / `quant/service.py` | `FactorScorer`, `QuantService` | Industry normalization, weighted factor scoring, versioned manual-pool final score, status/guardrails, ranks, and persistence. |
 | `quant/manual_all_a.py` / `quant/theme_tilt.py` | `score_manual_all_a`, `score_theme_components`, `confirmation_states` | Manual three-pool quant scoring, confirmed theme/industry-hotness bonus, and theme entry/exit confirmation. |
-| `analysis_mart.py` | `AnalysisMartPublisher`, `SQLAlchemyAnalysisMartRepository`, `MemoryAnalysisMartRepository`, `AnalysisSnapshot`, `AnalysisMetric`, `AnalysisFinding` | Fourth-layer analysis-result publishing and reads; same-input replay is idempotent and conflicting replay is rejected. |
+| `etl.py` | `SQLAlchemyQuantFeatureMartETLPipeline`, `QuantFeatureMartETLPipeline`, `AnalysisResultMartETLPipeline`, `build_feature_mart_cross_section_loader` | The v0.3 ETL management layer; it coordinates third-layer-to-feature-mart publishing, quant reads from fourth-layer features, and quant-result publishing back to Analysis Mart. |
+| `analysis_mart.py` | `AnalysisMartPublisher`, `SQLAlchemyAnalysisMartRepository`, `MemoryAnalysisMartRepository`, `QuantFeatureSnapshot`, `AnalysisSnapshot`, `AnalysisMetric`, `AnalysisFinding` | Fourth-layer feature and analysis-result publishing/reads; same-input replay is idempotent and conflicting replay is rejected. |
 | `news_targets.py` | `NewsTargetSelector` | Includes all PASS and strategy-allowed NEAR_THRESHOLD names; no top-N truncation. |
 | `valuation.py` | `IndustryValuationRegistry` | Bank, insurance, cyclic resource, consumer/manufacturing, growth/tech, and utilities valuation families. |
 | `confidence.py` | `ConfidenceCalibrator` | Deterministic confidence calibration; LLM confidence is not accepted as an input. |
 | `assessments.py` | `EffectiveAssessmentService` | Deferred/abstained reviews keep the prior assessment; update/invalidate outcomes point to new assessments. |
 | `orchestrator.py` / `service.py` | `ValuationDiscoveryOrchestrator`, `ValuationDiscoveryService` | 12-step refresh orchestration, idempotent start, and explicit failed/waiting/skipped semantics. |
 
-## Analysis Mart
+## Fourth-Layer Marts and ETL
 
 Publishing path:
 
 ```text
-QuantInputSnapshot + QuantResult + quant run lineage
-  -> AnalysisMartPublisher.publish_quant_result(...)
+third-layer canonical/company pool/history
+  -> SQLAlchemyQuantFeatureMartETLPipeline.materialize(...)
+  -> quant_feature_snapshots / quant_feature_rows
+  -> QuantService reads only the fourth-layer feature_snapshot_id cross-section
+  -> QuantResult + quant run lineage
+  -> AnalysisResultMartETLPipeline.publish_quant_result(...)
   -> analysis_snapshots / analysis_metrics / analysis_findings / analysis_evidence_links
   -> ResearchContext payload.analysis_snapshot_id / analysis_summary
   -> module 06 analysis_* scoped read tools
 ```
+
+Transaction boundaries:
+
+- `SQLAlchemyQuantFeatureMartETLPipeline` writes the `feature_snapshot_id`-bound `quant_input_snapshots`, `quant_input_snapshot_facts`, `quant_feature_snapshots`, and `quant_feature_rows` in one database transaction;
+- `AnalysisMartRepository.upsert_bundle()` writes `analysis_snapshots`, metrics, findings, and links in one transaction;
+- any child-row conflict or write failure rolls back the current ETL publication, so no header-only or partial-row dirty data remains;
+- when feature ETL is configured, `QuantAdapter.build_input()` materializes fourth-layer features before passing the bound `QuantInputSnapshot` into quant execution.
 
 `AnalysisMartPublisher` currently derives:
 

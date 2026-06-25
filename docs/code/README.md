@@ -52,8 +52,8 @@ docs/code/
 ## v0.3 当前新增实现摘要
 
 - `01-data_provider` 已新增 Tushare 独立源系统、量化 endpoint 准入目录、滚动采集策略、质量筛选层、warehouse publisher 和真实两年行情/财务/benchmark 回填脚本。
-- `11-valuation_discovery` 已接入数据层公司池快照，并新增 Analysis Mart 第四层；最新真实量化 run `qr_df48cd92fdf1424d` 使用 5304 家非 ST/非退市/非未来上市公司，输出 3 家 pass、54 家 near-threshold，量化结果可发布为 `analysis_snapshots`、metrics、findings 和 lineage。
-- `06-multi_agent_research` 已注册 `analysis_snapshot_get`、`analysis_metrics_list`、`analysis_findings_list` 三个 scoped read tools，`valuation_analysis` 节点可按 security/scope/PIT 读取第四层分析结果。
+- `11-valuation_discovery` 已接入数据层公司池快照，并新增第四层 Quant Feature Mart + Analysis Mart；第三层 ETL 事务性发布 `quant_feature_snapshots/rows` 供量化只读，量化结果再事务性发布为 `analysis_snapshots`、metrics、findings 和 lineage。最新真实量化 run `qr_df48cd92fdf1424d` 使用 5304 家非 ST/非退市/非未来上市公司，输出 3 家 pass、54 家 near-threshold。
+- `06-multi_agent_research` 已注册 `analysis_snapshot_get`、`analysis_metrics_list`、`analysis_findings_list`、`quant_feature_snapshot_get`、`quant_feature_rows_list` 五个 scoped read tools，`valuation_analysis` 节点可按 security/scope/PIT 读取第四层特征与分析结果。
 - `/settings/data` 与 `/api/v1/data-policies` 暴露近两年滚动窗口等数据采集策略配置。
 
 ## 更新说明

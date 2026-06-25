@@ -36,7 +36,7 @@
 | `src/margin/research/tools/policy.py` | 默认拒绝的工具权限策略。 |
 | `src/margin/research/tools/executor.py` | 统一工具执行器，执行前校验策略并写审计。 |
 | `src/margin/research/tools/manifests.py` | 面向 LLM 的工具 manifest 结构。 |
-| `src/margin/research/analysis_tools.py` | 注册 `analysis_snapshot_get`、`analysis_metrics_list`、`analysis_findings_list` 三个 Analysis Mart 只读工具。 |
+| `src/margin/research/analysis_tools.py` | 注册 `analysis_snapshot_get`、`analysis_metrics_list`、`analysis_findings_list`、`quant_feature_snapshot_get`、`quant_feature_rows_list` 五个第四层 Mart 只读工具。 |
 | `src/margin/research/checkpoint.py` | PostgreSQL LangGraph checkpoint saver，校验 identity hash 并恢复 pending writes。 |
 | `src/margin/research/delta_repository.py` | `ResearchDeltaReview` 与 `research_delta_outbox` 的内存/PostgreSQL 持久化。 |
 | `src/margin/research/graph_audit_repository.py` | LLM/tool 调用审计 PostgreSQL repository。 |
@@ -126,15 +126,17 @@ ResearchService.run_delta_review(context_snapshot_id)
 - AI 节点不能发起实时 WebSearch；新闻/WebSearch 由上游 refresh 流程存储后作为快照进入上下文。
 - 工具结果只能作为证据或计算输入，不能覆盖系统提示词、策略权限或输出 schema。
 
-当前内置 Analysis Mart 工具：
+当前内置第四层 Mart 工具：
 
 | 工具 | capability | 输入 | 输出 |
 | --- | --- | --- | --- |
 | `analysis_snapshot_get` | `QUANT_READ` | `security_id`, `scope_version_id`, `decision_at` | 最新可见 `AnalysisSnapshot` 或 `null`。 |
 | `analysis_metrics_list` | `QUANT_READ` | `security_id`, `decision_at`, `analysis_snapshot_id` | 该 snapshot 的结构化 metrics；无权限或不存在返回空列表。 |
 | `analysis_findings_list` | `QUANT_READ` | `security_id`, `decision_at`, `analysis_snapshot_id` | 该 snapshot 的结构化 findings；无权限或不存在返回空列表。 |
+| `quant_feature_snapshot_get` | `QUANT_READ` | `scope_version_id`, `decision_at` | 最新可见 `QuantFeatureSnapshot` 元数据或 `null`，不返回全市场明细。 |
+| `quant_feature_rows_list` | `QUANT_READ` | `security_id`, `decision_at`, `feature_snapshot_id` | 当前 scoped security 在该 feature snapshot 中的特征行；跨 security 或未来时间被策略拒绝。 |
 
-默认 `ResearchService` 在传入 `session_factory` 且未显式提供 repository 时，会构造 `SQLAlchemyAnalysisMartRepository` 并把这些工具注册进默认 registry。`valuation_analysis` 节点拥有 `QUANT_READ` grant，因此可以读取 Analysis Mart；其他节点仍按 node grant 限制。
+默认 `ResearchService` 在传入 `session_factory` 且未显式提供 repository 时，会构造 `SQLAlchemyAnalysisMartRepository` 并把这些工具注册进默认 registry。`valuation_analysis` 节点拥有 `QUANT_READ` grant，因此可以读取第四层 Mart；其他节点仍按 node grant 限制。
 
 ## 6. Prompt 工厂
 

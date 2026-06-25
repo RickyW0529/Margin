@@ -72,7 +72,12 @@ from margin.valuation_discovery.adapters import (
     ScopeResolutionAdapter,
     ValuationPublisherAdapter,
 )
+from margin.valuation_discovery.analysis_mart import SQLAlchemyAnalysisMartRepository
 from margin.valuation_discovery.assessments import EffectiveAssessmentService
+from margin.valuation_discovery.etl import (
+    SQLAlchemyQuantFeatureMartETLPipeline,
+    build_feature_mart_cross_section_loader,
+)
 from margin.valuation_discovery.news_targets import NewsTargetSelector
 from margin.valuation_discovery.orchestrator import (
     ValuationDiscoveryDependencies,
@@ -507,13 +512,20 @@ def get_valuation_discovery_service() -> ValuationDiscoveryService:
     warehouse_repository = SQLAlchemyWarehouseRepository(session_factory)
     warehouse_fact_adapter = WarehouseFactAdapter(warehouse_repository)
     valuation_repository = SQLAlchemyValuationDiscoveryRepository(session_factory)
+    analysis_mart_repository = SQLAlchemyAnalysisMartRepository(session_factory)
     snapshot_builder = QuantInputSnapshotBuilder(
         repository=valuation_repository,
         warehouse_repository=warehouse_fact_adapter,
     )
+    feature_mart_etl = SQLAlchemyQuantFeatureMartETLPipeline(
+        session_factory,
+        source_loader=build_cross_section_loader(warehouse_repository),
+    )
     quant_repository = SQLAlchemyQuantRepository(
         session_factory,
-        cross_section_loader=build_cross_section_loader(warehouse_repository),
+        cross_section_loader=build_feature_mart_cross_section_loader(
+            analysis_mart_repository
+        ),
     )
     quant_service = QuantService(repository=quant_repository)
     quant_adapter = QuantAdapter(
@@ -521,6 +533,7 @@ def get_valuation_discovery_service() -> ValuationDiscoveryService:
         snapshot_builder=snapshot_builder,
         scope_provider=scope_provider,
         quant_repository=quant_repository,
+        feature_mart_pipeline=feature_mart_etl,
     )
 
     news_target_selector = NewsTargetSelector()
@@ -576,6 +589,7 @@ def get_valuation_discovery_service() -> ValuationDiscoveryService:
             evidence_repository,
         ),
         evidence_repository=evidence_repository,
+        analysis_mart_repository=analysis_mart_repository,
     )
     ai_review_service = AIReviewAdapter(
         research_service,

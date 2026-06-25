@@ -32,6 +32,21 @@ class AnalysisRowsQuery(BaseModel):
     analysis_snapshot_id: str
 
 
+class QuantFeatureSnapshotQuery(BaseModel):
+    """Lookup the latest fourth-layer quant feature snapshot for one scope."""
+
+    scope_version_id: str
+    decision_at: datetime
+
+
+class QuantFeatureRowsQuery(BaseModel):
+    """Read current-security feature rows from one quant feature snapshot."""
+
+    security_id: str
+    decision_at: datetime
+    feature_snapshot_id: str
+
+
 def register_analysis_mart_tools(
     registry: ToolDefinitionRegistry,
     *,
@@ -57,6 +72,32 @@ def register_analysis_mart_tools(
             description="List structured metrics for one Analysis Mart snapshot.",
             input_model=AnalysisRowsQuery,
             handler=lambda payload: _list_metrics(repository, payload),
+            estimated_result_bytes=32_768,
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="quant_feature_snapshot_get",
+            capability=ToolCapability.QUANT_READ,
+            version="quant-feature-snapshot-get-v0.3.0",
+            description=(
+                "Read metadata for the latest fourth-layer quant feature snapshot."
+            ),
+            input_model=QuantFeatureSnapshotQuery,
+            handler=lambda payload: _get_feature_snapshot(repository, payload),
+            estimated_result_bytes=16_384,
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="quant_feature_rows_list",
+            capability=ToolCapability.QUANT_READ,
+            version="quant-feature-rows-list-v0.3.0",
+            description=(
+                "List fourth-layer quant features for the scoped security only."
+            ),
+            input_model=QuantFeatureRowsQuery,
+            handler=lambda payload: _list_feature_rows(repository, payload),
             estimated_result_bytes=32_768,
         )
     )
@@ -113,6 +154,37 @@ def _list_findings(
         "findings": [
             _serialize(finding)
             for finding in repository.list_findings(snapshot.analysis_snapshot_id)
+        ],
+    }
+
+
+def _get_feature_snapshot(
+    repository: AnalysisMartRepository,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    snapshot = repository.latest_feature_snapshot(
+        scope_version_id=str(payload["scope_version_id"]),
+        as_of=payload["decision_at"],
+    )
+    return {
+        "feature_snapshot": _serialize(snapshot) if snapshot is not None else None
+    }
+
+
+def _list_feature_rows(
+    repository: AnalysisMartRepository,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    snapshot = repository.get_feature_snapshot(str(payload["feature_snapshot_id"]))
+    if snapshot is None or snapshot.decision_at > payload["decision_at"]:
+        return {"feature_rows": []}
+    security_id = str(payload["security_id"])
+    return {
+        "feature_snapshot_id": snapshot.feature_snapshot_id,
+        "feature_rows": [
+            _serialize(row)
+            for row in repository.list_feature_rows(snapshot.feature_snapshot_id)
+            if row.security_id == security_id
         ],
     }
 

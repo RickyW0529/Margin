@@ -844,13 +844,13 @@
 | `strategy_queries.py` | 18 | `strategy/repository.py`、`scripts/bootstrap_config.py` |
 | `news_queries.py` | 15 | `news/repository.py` |
 | `evidence_queries.py` | 8 | `evidence/repository.py` |
-| `valuation_queries.py` | 16 | `valuation_discovery/repository.py`、`valuation_discovery/adapters.py`、`valuation_discovery/analysis_mart.py` |
+| `valuation_queries.py` | 18 | `valuation_discovery/repository.py`、`valuation_discovery/adapters.py`、`valuation_discovery/analysis_mart.py` |
 | `research_queries.py` | 6 | `research/repository.py`、`graph_audit_repository.py`、`delta_repository.py`、`checkpoint.py` |
 | `core_queries.py` | 17 | `core/outbox.py`、`capacity.py`、`secret_store.py`、`audit_repository.py`、`orchestration_repository.py` |
 | `vector_queries.py` | 5 | `vector/repository.py` |
 | `dashboard_queries.py` | 5 | `dashboard/repository.py` |
 | `backtest_queries.py` | 8 | `scripts/backtest_three_quant_pools_db.py` |
-| **总计** | **142 函数** | — |
+| **总计** | **144 函数** | — |
 
 ### 14.3 使用模式
 

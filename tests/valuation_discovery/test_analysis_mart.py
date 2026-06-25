@@ -20,6 +20,8 @@ from margin.valuation_discovery.analysis_mart import (
     AnalysisMetric,
     AnalysisSnapshot,
     MemoryAnalysisMartRepository,
+    QuantFeatureRow,
+    QuantFeatureSnapshot,
     SQLAlchemyAnalysisMartRepository,
 )
 from margin.valuation_discovery.db_models import (
@@ -27,6 +29,8 @@ from margin.valuation_discovery.db_models import (
     AnalysisFindingRow,
     AnalysisMetricRow,
     AnalysisSnapshotRow,
+    QuantFeatureRowRow,
+    QuantFeatureSnapshotRow,
 )
 from margin.valuation_discovery.models import (
     DataStatus,
@@ -36,6 +40,101 @@ from margin.valuation_discovery.models import (
 )
 
 DECISION_AT = datetime(2026, 6, 24, 8, 0, tzinfo=UTC)
+
+
+def test_memory_feature_mart_persists_snapshot_idempotently() -> None:
+    """Fourth-layer quant feature snapshots can be replayed safely."""
+    repository = MemoryAnalysisMartRepository()
+    snapshot, rows = _feature_snapshot()
+
+    repository.upsert_feature_snapshot(snapshot, rows)
+    repository.upsert_feature_snapshot(snapshot, rows)
+
+    assert repository.get_feature_snapshot("qfsnap-1") == snapshot
+    assert repository.latest_feature_snapshot(
+        scope_version_id="scope-v1",
+        as_of=DECISION_AT,
+    ) == snapshot
+    assert repository.list_feature_rows("qfsnap-1") == list(rows)
+
+
+def test_memory_feature_mart_rejects_conflicting_snapshot_replay() -> None:
+    """Feature mart rows are append-only and cannot be overwritten."""
+    repository = MemoryAnalysisMartRepository()
+    snapshot, rows = _feature_snapshot()
+    repository.upsert_feature_snapshot(snapshot, rows)
+    conflicting = QuantFeatureSnapshot(
+        **{
+            **snapshot.__dict__,
+            "input_hash": "sha256:changed",
+        }
+    )
+
+    with pytest.raises(ValueError, match="conflicting quant feature snapshot"):
+        repository.upsert_feature_snapshot(conflicting, rows)
+
+
+def test_postgres_feature_mart_persists_snapshot(database_url: str) -> None:
+    """PostgreSQL repository stores feature snapshots and rows."""
+    engine = create_database_engine(DatabaseSettings(url=database_url))
+    Base.metadata.create_all(engine)
+    session_factory = create_session_factory(engine)
+    snapshot, rows = _feature_snapshot(snapshot_id="qfsnap-pg")
+
+    with session_factory.begin() as session:
+        _delete_feature_rows(session, "qfsnap-pg")
+
+    repository = SQLAlchemyAnalysisMartRepository(session_factory)
+    try:
+        repository.upsert_feature_snapshot(snapshot, rows)
+        repository.upsert_feature_snapshot(snapshot, rows)
+
+        assert repository.get_feature_snapshot("qfsnap-pg") == snapshot
+        assert repository.list_feature_rows("qfsnap-pg") == list(rows)
+    finally:
+        with session_factory.begin() as session:
+            _delete_feature_rows(session, "qfsnap-pg")
+        engine.dispose()
+
+
+def test_postgres_feature_mart_rolls_back_partial_child_conflict(
+    database_url: str,
+) -> None:
+    """Feature ETL never leaves a snapshot header without its rows."""
+    engine = create_database_engine(DatabaseSettings(url=database_url))
+    Base.metadata.create_all(engine)
+    session_factory = create_session_factory(engine)
+    snapshot, rows = _feature_snapshot(snapshot_id="qfsnap-rollback")
+    existing_snapshot, existing_rows = _feature_snapshot(snapshot_id="qfsnap-existing")
+    existing_snapshot = QuantFeatureSnapshot(
+        **{**existing_snapshot.__dict__, "row_count": 1}
+    )
+    existing_row = QuantFeatureRow(
+        **{
+            **existing_rows[0].__dict__,
+            "row_id": rows[0].row_id,
+            "features": {"pe_ttm": 99.0},
+        }
+    )
+
+    with session_factory.begin() as session:
+        _delete_feature_rows(session, "qfsnap-rollback")
+        _delete_feature_rows(session, "qfsnap-existing")
+
+    repository = SQLAlchemyAnalysisMartRepository(session_factory)
+    try:
+        repository.upsert_feature_snapshot(existing_snapshot, (existing_row,))
+
+        with pytest.raises(ValueError, match="conflicting quant feature row"):
+            repository.upsert_feature_snapshot(snapshot, rows)
+
+        assert repository.get_feature_snapshot("qfsnap-rollback") is None
+        assert repository.get_feature_snapshot("qfsnap-existing") == existing_snapshot
+    finally:
+        with session_factory.begin() as session:
+            _delete_feature_rows(session, "qfsnap-rollback")
+            _delete_feature_rows(session, "qfsnap-existing")
+        engine.dispose()
 
 
 def test_memory_analysis_mart_persists_bundle_idempotently() -> None:
@@ -115,6 +214,48 @@ def test_postgres_analysis_mart_persists_bundle(database_url: str) -> None:
     finally:
         with session_factory.begin() as session:
             _delete_bundle_rows(session, "asnap-pg")
+        engine.dispose()
+
+
+def test_postgres_analysis_mart_rolls_back_partial_child_conflict(
+    database_url: str,
+) -> None:
+    """Analysis-result ETL commits snapshot and child rows atomically."""
+    engine = create_database_engine(DatabaseSettings(url=database_url))
+    Base.metadata.create_all(engine)
+    session_factory = create_session_factory(engine)
+    bundle = _bundle(snapshot_id="asnap-rollback")
+    existing = _bundle(snapshot_id="asnap-existing")
+    existing_metric = AnalysisMetric(
+        **{
+            **existing.metrics[0].__dict__,
+            "metric_id": bundle.metrics[0].metric_id,
+        }
+    )
+    existing = AnalysisMartBundle(
+        snapshot=existing.snapshot,
+        metrics=(existing_metric,),
+        findings=existing.findings,
+        evidence_links=existing.evidence_links,
+    )
+
+    with session_factory.begin() as session:
+        _delete_bundle_rows(session, "asnap-rollback")
+        _delete_bundle_rows(session, "asnap-existing")
+
+    repository = SQLAlchemyAnalysisMartRepository(session_factory)
+    try:
+        repository.upsert_bundle(existing)
+
+        with pytest.raises(ValueError, match="conflicting analysis metric"):
+            repository.upsert_bundle(bundle)
+
+        assert repository.get_snapshot("asnap-rollback") is None
+        assert repository.get_snapshot("asnap-existing") == existing.snapshot
+    finally:
+        with session_factory.begin() as session:
+            _delete_bundle_rows(session, "asnap-rollback")
+            _delete_bundle_rows(session, "asnap-existing")
         engine.dispose()
 
 
@@ -287,6 +428,81 @@ def _bundle(
     )
 
 
+def _feature_snapshot(
+    *,
+    snapshot_id: str = "qfsnap-1",
+    decision_at: datetime = DECISION_AT,
+) -> tuple[QuantFeatureSnapshot, tuple[QuantFeatureRow, ...]]:
+    snapshot = QuantFeatureSnapshot(
+        feature_snapshot_id=snapshot_id,
+        scope_version_id="scope-v1",
+        universe_snapshot_id="universe-v1",
+        decision_at=decision_at,
+        known_at=decision_at,
+        trading_date=date(2026, 6, 24),
+        feature_set_version_id="feature-set-v1",
+        feature_schema_version="quant-feature-mart-v0.3.0",
+        source_layer="third_layer",
+        input_hash="sha256:features",
+        row_count=2,
+        feature_columns=(
+            "pe_ttm",
+            "avg_amount_20d",
+            "return_6m_ex_1m",
+            "is_st",
+        ),
+        lineage_summary={
+            "canonical_fact_count": 6,
+            "history_indicator_ids": ["close", "amount", "adj_factor"],
+        },
+        quality_flags=("pit_valid",),
+        created_at=decision_at,
+    )
+    rows = (
+        QuantFeatureRow(
+            row_id=f"{snapshot_id}-000001",
+            feature_snapshot_id=snapshot_id,
+            security_id="000001.SZ",
+            symbol="000001.SZ",
+            name="平安银行",
+            industry_id="bank",
+            features={
+                "pe_ttm": 8.2,
+                "avg_amount_20d": 820000000.0,
+                "return_6m_ex_1m": 0.12,
+                "is_st": False,
+            },
+            source_refs=(
+                {
+                    "source_type": "canonical_fact",
+                    "source_id": "fact-pe",
+                    "indicator_id": "pe_ttm",
+                },
+            ),
+            quality_flags=("pit_valid",),
+            created_at=decision_at,
+        ),
+        QuantFeatureRow(
+            row_id=f"{snapshot_id}-000002",
+            feature_snapshot_id=snapshot_id,
+            security_id="000002.SZ",
+            symbol="000002.SZ",
+            name="ST示例",
+            industry_id="software",
+            features={
+                "pe_ttm": 20.0,
+                "avg_amount_20d": 80000000.0,
+                "return_6m_ex_1m": -0.03,
+                "is_st": True,
+            },
+            source_refs=(),
+            quality_flags=("st_security",),
+            created_at=decision_at,
+        ),
+    )
+    return snapshot, rows
+
+
 def _delete_bundle_rows(session, snapshot_id: str) -> None:
     session.query(AnalysisEvidenceLinkRow).filter_by(
         analysis_snapshot_id=snapshot_id
@@ -299,4 +515,13 @@ def _delete_bundle_rows(session, snapshot_id: str) -> None:
     ).delete()
     session.query(AnalysisSnapshotRow).filter_by(
         analysis_snapshot_id=snapshot_id
+    ).delete()
+
+
+def _delete_feature_rows(session, snapshot_id: str) -> None:
+    session.query(QuantFeatureRowRow).filter_by(
+        feature_snapshot_id=snapshot_id
+    ).delete()
+    session.query(QuantFeatureSnapshotRow).filter_by(
+        feature_snapshot_id=snapshot_id
     ).delete()

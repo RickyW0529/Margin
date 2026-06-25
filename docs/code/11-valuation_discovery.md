@@ -2,13 +2,13 @@
 
 ## 模块概述
 
-`src/margin/valuation_discovery/` 实现 v0.2/v0.3 的公司池、量化筛选、Analysis Mart 第四层、新闻目标选择、行业估值、置信度校准、有效结论指针和刷新编排。模块只消费冻结的数据仓库输入和策略 scope，不直接调用 AKShare、Tushare、Tavily、LLM 或交易接口。
+`src/margin/valuation_discovery/` 实现 v0.2/v0.3 的公司池、量化筛选、第四层 Quant Feature Mart / Analysis Mart、新闻目标选择、行业估值、置信度校准、有效结论指针和刷新编排。模块只消费冻结的数据仓库输入和策略 scope，不直接调用 AKShare、Tushare、Tavily、LLM 或交易接口。
 
 v0.3 中，公司池来源切到数据层 materialized company pool：`SQLAlchemyScopeBindingProvider` 对 `ALL_A` / `ALL_A_NON_ST` scope 优先读取最新 `company_pool_snapshots`，量化输入不再使用静态 universe membership。公司池排除 ST、`退市*` 名称、未来上市和已退市证券。
 
 当前量化服务支持版本化手工池策略：当 `QuantInputSnapshot.quant_feature_set.metadata.quant_strategy.thresholds.presets` 提供因子权重时，`QuantService` 使用 `manual_all_a_score` 作为真实 `QuantResult.final_score`、rank 和 screening status 的输入。`theme_hotness` 是确认后的题材/行业热点加分项，来自 PIT 安全 cross-section 中的 `theme_hot_score`、`theme_member_confidence`、`theme_signal_confirmed` 字段；未确认或非成员公司不加分。无版本化策略 metadata 的兼容路径仍使用旧五组分 `FactorScorer.combine()`。
 
-v0.3 已新增第四层 Analysis Mart：量化结果发布后可物化为 `analysis_snapshots`、`analysis_metrics`、`analysis_findings` 和 `analysis_evidence_links`。这一层面向 Dashboard 与 LangGraph scoped read tools，保存 AI 可直接读取的结构化指标、主要发现、质量标记、输入/结果 hash 和 lineage，避免 AI 每次自行从第三层重算指标。
+v0.3 已新增第四层 Mart：第三层唯一化数据先由 ETL 管道物化为 `quant_feature_snapshots` / `quant_feature_rows`，量化层只读第四层特征快照；量化结果再通过 ETL 管道发布为 `analysis_snapshots`、`analysis_metrics`、`analysis_findings` 和 `analysis_evidence_links`。这一层面向 Quant、Dashboard 与 LangGraph scoped read tools，保存 AI 可直接读取的结构化指标、主要发现、质量标记、输入/结果 hash 和 lineage，避免 AI 每次自行从第三层重算指标。
 
 ## 数据模型与迁移
 
@@ -16,7 +16,9 @@ v0.3 已新增第四层 Analysis Mart：量化结果发布后可物化为 `analy
 |----|------|
 | `universe_definitions` / `universe_versions` / `universe_memberships` / `universe_snapshots` | 内置和未来自定义公司池，支持 valid time + system time。 |
 | `company_pool_snapshots` / `company_pool_members` | v0.3 数据层物化的非 ST/非退市全 A 公司池快照，供 `ALL_A_NON_ST` scope 直接消费。 |
-| `quant_input_snapshots` / `quant_input_snapshot_facts` | 量化唯一输入契约，记录 scope、universe、指标集合、事实 lineage、PIT/freshness/quality 标记。 |
+| `quant_input_snapshots` / `quant_input_snapshot_facts` | 量化唯一输入契约，记录 scope、universe、指标集合、第四层 `feature_snapshot_id`、事实 lineage、PIT/freshness/quality 标记。 |
+| `quant_feature_snapshots` | 第四层量化特征快照，按 scope/universe/decision/trading date 保存第三层 ETL 输入 hash、特征列、lineage summary、质量标记和行数。 |
+| `quant_feature_rows` | 第四层逐证券量化特征行，保存量化可直接读取的字段、source refs、ST/停牌等行级质量标记。 |
 | `quant_screen_runs` / `quant_screen_results` / `quant_factor_values` | 量化运行、单票结果、分组因子值、rank、原因摘要。 |
 | `analysis_snapshots` | 第四层单证券分析快照，绑定 security/scope/decision time、quant run/result、QuantInput、策略版本、输入 hash、结果 hash、摘要和质量标记。 |
 | `analysis_metrics` | 第四层结构化指标，保存最终分、五组因子分、rank、分位、数据质量和 review 标记等 AI/Dashboard 直接消费字段。 |
@@ -25,7 +27,7 @@ v0.3 已新增第四层 Analysis Mart：量化结果发布后可物化为 `analy
 | `valuation_assessments` / `confidence_components` / `effective_assessment_pointers` | 估值结论、置信度组成和当前有效结论指针。 |
 | `valuation_refresh_runs` / `valuation_refresh_steps` / `research_refresh_events` / `research_context_snapshots` | 估值发现刷新、步骤、事件和研究上下文快照。 |
 
-相关迁移：`20260622_0021` 至 `20260622_0024`，v0.3 公司池/源系统/量化历史索引迁移 `20260623_0036` 至 `20260624_0041`，以及 Analysis Mart 迁移 `20260624_0042_analysis_mart.py`。
+相关迁移：`20260622_0021` 至 `20260622_0024`，v0.3 公司池/源系统/量化历史索引迁移 `20260623_0036` 至 `20260624_0041`，Analysis Mart 迁移 `20260624_0042_analysis_mart.py`，以及 Quant Feature Mart 迁移 `20260625_0043_quant_feature_mart.py`。
 
 ## 关键代码
 
@@ -34,28 +36,40 @@ v0.3 已新增第四层 Analysis Mart：量化结果发布后可物化为 `analy
 | `models.py` | `UniverseMembership`, `QuantInputSnapshot`, `QuantRun`, `QuantResult`, `NewsTarget`, `EffectiveAssessmentPointer` | 不可变领域模型。 |
 | `universe.py` | `UniverseResolver` | 按业务时间和系统时间解析 `CSI300`、`CSI500`、`ALL_A`。 |
 | `scope.py` / `quant_input.py` | `ScopeBinding`, `QuantInputSnapshotBuilder` | 冻结用户可见指标和底层量化指标，构建 PIT 输入快照。 |
-| `quant_adapter.py` | `SQLAlchemyScopeBindingProvider`, `WarehouseFactAdapter`, `build_cross_section_loader`, `QuantAdapter` | 连接策略 scope、数据层公司池、warehouse canonical/fact history 和量化服务；历史行情读取按每证券/指标最近 260 个 PIT 点限流，避免加载两年全量事实。 |
+| `quant_adapter.py` | `SQLAlchemyScopeBindingProvider`, `WarehouseFactAdapter`, `build_cross_section_loader`, `QuantAdapter` | 连接策略 scope、数据层公司池、warehouse canonical/fact history、第四层特征 ETL 和量化服务；历史行情读取按每证券/指标最近 260 个 PIT 点限流，避免加载两年全量事实。 |
 | `quant/filters.py` | `HardFilterEngine` | ST、停牌、上市时间、流动性、财务缺失、亏损、负债、商誉、现金流、审计意见过滤。 |
 | `quant/scoring.py` / `quant/service.py` | `FactorScorer`, `QuantService` | 行业内标准化、五因子加权、版本化手工池最终分、状态/guardrail、rank 和结果持久化。 |
 | `quant/manual_all_a.py` / `quant/theme_tilt.py` | `score_manual_all_a`, `score_theme_components`, `confirmation_states` | 手工三池量化分、确认后的题材/行业热点加分、题材热度进入/退出确认。 |
-| `analysis_mart.py` | `AnalysisMartPublisher`, `SQLAlchemyAnalysisMartRepository`, `MemoryAnalysisMartRepository`, `AnalysisSnapshot`, `AnalysisMetric`, `AnalysisFinding` | 第四层分析结果发布与读取；同输入重放幂等，冲突重放拒绝。 |
+| `etl.py` | `SQLAlchemyQuantFeatureMartETLPipeline`, `QuantFeatureMartETLPipeline`, `AnalysisResultMartETLPipeline`, `build_feature_mart_cross_section_loader` | v0.3 ETL 管道层统一入口；第三层到第四层特征发布、量化只读第四层、量化结果反写 Analysis Mart 都从这里编排。 |
+| `analysis_mart.py` | `AnalysisMartPublisher`, `SQLAlchemyAnalysisMartRepository`, `MemoryAnalysisMartRepository`, `QuantFeatureSnapshot`, `AnalysisSnapshot`, `AnalysisMetric`, `AnalysisFinding` | 第四层特征/分析结果发布与读取；同输入重放幂等，冲突重放拒绝。 |
 | `news_targets.py` | `NewsTargetSelector` | PASS 全量进入新闻目标；允许的 NEAR_THRESHOLD 可进入；不做 top-N 裁剪。 |
 | `valuation.py` | `IndustryValuationRegistry` | 银行、保险、周期资源、消费/制造、成长/科技、公用事业估值模型族。 |
 | `confidence.py` | `ConfidenceCalibrator` | 确定性置信度校准，不接受 LLM 置信度覆盖。 |
 | `assessments.py` | `EffectiveAssessmentService` | deferred/abstain 保留旧结论，invalidate/update 指向新结论。 |
 | `orchestrator.py` / `service.py` | `ValuationDiscoveryOrchestrator`, `ValuationDiscoveryService` | 12 步刷新编排、幂等启动、失败/等待/跳过语义。 |
 
-## Analysis Mart 第四层
+## 第四层 Mart 与 ETL
 
 发布路径：
 
 ```text
-QuantInputSnapshot + QuantResult + quant run lineage
-  -> AnalysisMartPublisher.publish_quant_result(...)
+第三层 canonical/company pool/history
+  -> SQLAlchemyQuantFeatureMartETLPipeline.materialize(...)
+  -> quant_feature_snapshots / quant_feature_rows
+  -> QuantService 只读 feature_snapshot_id 对应的第四层截面
+  -> QuantResult + quant run lineage
+  -> AnalysisResultMartETLPipeline.publish_quant_result(...)
   -> analysis_snapshots / analysis_metrics / analysis_findings / analysis_evidence_links
   -> ResearchContext payload.analysis_snapshot_id / analysis_summary
   -> 06 analysis_* scoped read tools
 ```
+
+事务边界：
+
+- `SQLAlchemyQuantFeatureMartETLPipeline` 在一个数据库事务内写入绑定 `feature_snapshot_id` 后的 `quant_input_snapshots`、`quant_input_snapshot_facts`、`quant_feature_snapshots` 和 `quant_feature_rows`；
+- `AnalysisMartRepository.upsert_bundle()` 在一个事务内写入 `analysis_snapshots`、metrics、findings 和 links；
+- 任一 child row 冲突或写入失败都会回滚本次 ETL，不留下只有 header 或只有部分 rows 的脏数据；
+- `QuantAdapter.build_input()` 配置 feature ETL 后先物化第四层特征，再把绑定后的 `QuantInputSnapshot` 交给量化运行。
 
 `AnalysisMartPublisher` 当前从量化结果加工：
 

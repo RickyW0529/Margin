@@ -384,6 +384,7 @@ def _quant_input_snapshot_to_row(snapshot: QuantInputSnapshot) -> QuantInputSnap
         optional_indicators=list(snapshot.optional_indicators),
         quant_feature_set_version_id=getattr(snapshot.quant_feature_set, "version_id", None),
         user_indicator_view_version_id=getattr(snapshot.user_indicator_view, "version_id", None),
+        feature_snapshot_id=snapshot.feature_snapshot_id,
         market_window_start=snapshot.market_window_start,
         market_window_end=snapshot.market_window_end,
         fact_count=snapshot.fact_count,
@@ -432,6 +433,7 @@ def _quant_input_snapshot_from_row(
         security_ids=tuple(row.security_ids),
         required_indicators=tuple(row.required_indicators),
         optional_indicators=tuple(row.optional_indicators),
+        feature_snapshot_id=row.feature_snapshot_id,
         market_window_start=row.market_window_start,
         market_window_end=row.market_window_end,
         fact_refs=tuple(

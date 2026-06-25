@@ -14,8 +14,16 @@ from margin.data.warehouse_repository import (
     IndustryMembershipValue,
     SecurityProfileValue,
 )
+from margin.valuation_discovery.analysis_mart import MemoryAnalysisMartRepository
+from margin.valuation_discovery.etl import (
+    QuantFeatureMartETLPipeline,
+    build_feature_mart_cross_section_loader,
+    publish_quant_feature_snapshot,
+)
 from margin.valuation_discovery.models import QuantInputSnapshot
-from margin.valuation_discovery.quant_adapter import build_cross_section_loader
+from margin.valuation_discovery.quant_adapter import (
+    build_cross_section_loader,
+)
 
 DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 
@@ -136,6 +144,77 @@ def test_loader_builds_pit_metadata_and_market_features() -> None:
         "amount",
         "adj_factor",
     }
+
+
+def test_feature_mart_loader_reads_materialized_cross_section() -> None:
+    """Third-layer ETL writes fourth-layer features consumed by quant."""
+    warehouse = FakeWarehouse()
+    repository = MemoryAnalysisMartRepository()
+    snapshot = QuantInputSnapshot(
+        scope_version_id="scope-v1",
+        universe_snapshot_id="universe-v1",
+        decision_at=DECISION_AT,
+        known_at=DECISION_AT,
+        security_ids=("000001.SZ", "000002.SZ"),
+        required_indicators=("net_profit_ttm", "pe_ttm"),
+        optional_indicators=("roe_ttm", "audit_opinion"),
+        market_window_start=datetime(2025, 1, 1, tzinfo=UTC),
+        market_window_end=DECISION_AT,
+    )
+    frame = build_cross_section_loader(warehouse)(snapshot)
+
+    feature_snapshot = publish_quant_feature_snapshot(
+        repository=repository,
+        snapshot=snapshot,
+        frame=frame,
+    )
+    bound_snapshot = QuantInputSnapshot(
+        **{
+            **snapshot.model_dump(),
+            "feature_snapshot_id": feature_snapshot.feature_snapshot_id,
+        }
+    )
+
+    loaded = build_feature_mart_cross_section_loader(repository)(bound_snapshot)
+
+    assert bound_snapshot.feature_snapshot_id == feature_snapshot.feature_snapshot_id
+    assert loaded.loc["000001.SZ", "pe_ttm"] == 10.0
+    assert loaded.loc["000001.SZ", "avg_amount_20d"] == 100_000_000
+    assert loaded.loc["000001.SZ", "return_12m_ex_1m"] > 0
+    assert bool(loaded.loc["000002.SZ", "is_st"])
+    assert bool(loaded.loc["000002.SZ", "is_suspended"])
+
+
+def test_feature_mart_etl_pipeline_binds_snapshot_before_quant_read() -> None:
+    """Managed ETL returns a quant input bound to the fourth-layer feature set."""
+    warehouse = FakeWarehouse()
+    repository = MemoryAnalysisMartRepository()
+    snapshot = QuantInputSnapshot(
+        scope_version_id="scope-v1",
+        universe_snapshot_id="universe-v1",
+        decision_at=DECISION_AT,
+        known_at=DECISION_AT,
+        security_ids=("000001.SZ", "000002.SZ"),
+        required_indicators=("net_profit_ttm", "pe_ttm"),
+        optional_indicators=("roe_ttm", "audit_opinion"),
+        market_window_start=datetime(2025, 1, 1, tzinfo=UTC),
+        market_window_end=DECISION_AT,
+    )
+    pipeline = QuantFeatureMartETLPipeline(
+        repository=repository,
+        source_loader=build_cross_section_loader(warehouse),
+    )
+
+    result = pipeline.materialize(snapshot)
+    loaded = build_feature_mart_cross_section_loader(repository)(
+        result.input_snapshot
+    )
+
+    assert result.input_snapshot.feature_snapshot_id == (
+        result.feature_snapshot.feature_snapshot_id
+    )
+    assert repository.get_feature_snapshot(result.feature_snapshot.feature_snapshot_id)
+    assert loaded.loc["000001.SZ", "pe_ttm"] == 10.0
 
 
 def _canonical(

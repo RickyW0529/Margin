@@ -85,6 +85,7 @@ class QuantInputSnapshotBuilder:
         scope: ScopeBinding,
         decision_at: datetime,
         market_window_days: int,
+        persist: bool = True,
     ) -> QuantInputSnapshot:
         """Build a frozen snapshot from scope and warehouse facts.
 
@@ -167,8 +168,13 @@ class QuantInputSnapshotBuilder:
             corporate_action_adjustment_version=scope.corporate_action_adjustment_version,
             industry_snapshot_id=scope.industry_snapshot_id,
         )
-        self._repository.add_quant_input_snapshot(snapshot)
+        if persist:
+            self.persist(snapshot)
         return snapshot
+
+    def persist(self, snapshot: QuantInputSnapshot) -> None:
+        """Persist a frozen quant input snapshot."""
+        self._repository.add_quant_input_snapshot(snapshot)
 
     def get(self, snapshot_id: str) -> QuantInputSnapshot | None:
         """Reload a persisted input snapshot for orchestration recovery."""

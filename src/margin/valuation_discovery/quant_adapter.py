@@ -27,6 +27,10 @@ from margin.data.warehouse_repository import (
     SQLAlchemyWarehouseRepository,
 )
 from margin.strategy.repository import SQLAlchemyStrategyRepository
+from margin.valuation_discovery.etl import (
+    QuantFeatureMartETLPipeline,
+    SQLAlchemyQuantFeatureMartETLPipeline,
+)
 from margin.valuation_discovery.models import (
     QuantInputSnapshot,
     QuantResult,
@@ -312,7 +316,6 @@ def build_cross_section_loader(
 
     return loader
 
-
 def _pivot_canonical_values(
     values: list[CanonicalValue],
     security_ids: tuple[str, ...],
@@ -534,6 +537,9 @@ class QuantAdapter:
         snapshot_builder: QuantInputSnapshotBuilder,
         scope_provider: ScopeBindingProvider,
         quant_repository: QuantRepository,
+        feature_mart_pipeline: (
+            QuantFeatureMartETLPipeline | SQLAlchemyQuantFeatureMartETLPipeline | None
+        ) = None,
         market_window_days: int = 252,
     ) -> None:
         """init  ."""
@@ -541,6 +547,7 @@ class QuantAdapter:
         self._snapshot_builder = snapshot_builder
         self._scope_provider = scope_provider
         self._quant_repository = quant_repository
+        self._feature_mart_pipeline = feature_mart_pipeline
         self._market_window_days = market_window_days
 
     def build_input(
@@ -551,14 +558,18 @@ class QuantAdapter:
     ) -> QuantInputSnapshot:
         """Resolve the scope and persist its frozen PIT quant input."""
         scope = self._scope_provider.get_scope_binding(scope_version_id)
-        return self._snapshot_builder.build(
+        snapshot = self._snapshot_builder.build(
             scope=scope,
             decision_at=decision_at,
             market_window_days=max(
                 self._market_window_days,
                 scope.quant_feature_set.history_days or 0,
             ),
+            persist=self._feature_mart_pipeline is None,
         )
+        if self._feature_mart_pipeline is None:
+            return snapshot
+        return self._feature_mart_pipeline.materialize(snapshot).input_snapshot
 
     def run(
         self,

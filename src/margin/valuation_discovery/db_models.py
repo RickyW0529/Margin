@@ -114,6 +114,7 @@ class QuantInputSnapshotRow(Base):
     optional_indicators: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     quant_feature_set_version_id: Mapped[str | None] = mapped_column(String(64))
     user_indicator_view_version_id: Mapped[str | None] = mapped_column(String(64))
+    feature_snapshot_id: Mapped[str | None] = mapped_column(String(64))
     market_window_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     market_window_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fact_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -336,6 +337,60 @@ class ConfidenceComponentRow(Base):
     score: Mapped[float] = mapped_column(Float, nullable=False)
     weight: Mapped[float] = mapped_column(Float, nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class QuantFeatureSnapshotRow(Base):
+    """Fourth-layer quant input feature snapshot materialized from layer 3."""
+
+    __tablename__ = "quant_feature_snapshots"
+    __table_args__ = (
+        Index(
+            "ix_quant_feature_snapshots_scope_decision",
+            "scope_version_id",
+            "decision_at",
+        ),
+        Index(
+            "ix_quant_feature_snapshots_universe",
+            "universe_snapshot_id",
+            "decision_at",
+        ),
+    )
+
+    feature_snapshot_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    scope_version_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    universe_snapshot_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    decision_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    known_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    trading_date: Mapped[date] = mapped_column(Date, nullable=False)
+    feature_set_version_id: Mapped[str | None] = mapped_column(String(64))
+    feature_schema_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_layer: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(96), nullable=False)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    feature_columns: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    lineage_summary: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    quality_flags: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class QuantFeatureRowRow(Base):
+    """One materialized feature row consumed by the quant layer."""
+
+    __tablename__ = "quant_feature_rows"
+    __table_args__ = (
+        Index("ix_quant_feature_rows_snapshot_security", "feature_snapshot_id", "security_id"),
+    )
+
+    row_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    feature_snapshot_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    security_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    symbol: Mapped[str | None] = mapped_column(String(32))
+    name: Mapped[str | None] = mapped_column(String(128))
+    industry_id: Mapped[str | None] = mapped_column(String(128))
+    features_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    source_refs: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)
+    quality_flags: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class AnalysisSnapshotRow(Base):

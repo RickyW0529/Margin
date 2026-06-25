@@ -61,14 +61,27 @@ canonical fact IDs, market windows, quality/PIT state, and an input hash. Quant 
 result for every member and acceptance exposes real company names, scores, ranks, statuses,
 and structured reasons.
 
-Analysis Mart is the fourth-layer serving table family for AI and dashboards:
-`analysis_snapshots` stores immutable security/scope/decision-time summaries, lineage,
-quality flags, input hashes, and result hashes; `analysis_metrics` stores structured
-scores, ranks, percentiles, missing-field counts, and review/data-quality indicators;
-`analysis_findings` stores human/AI-readable findings with confidence and severity; and
-`analysis_evidence_links` links snapshots, metrics, and findings back to quant results,
-QuantInput, canonical facts, evidence, or future ML feature runs. Replays with the same
-input/result hash are idempotent, while conflicting replays are rejected and audited.
+The fourth-layer marts are serving tables for Quant, AI, and dashboards, and their ETL
+pipelines are managed centrally in the valuation-discovery ETL layer. Third-layer
+canonical/company-pool/history data is first materialized into Quant Feature Mart:
+`quant_feature_snapshots` stores the scope/universe/decision/trading-date feature snapshot,
+input hash, feature columns, lineage summary, quality flags, and row count; and
+`quant_feature_rows` stores per-security quant-ready features plus source refs and row-level
+quality flags. Quant reads only the `feature_snapshot_id` cross-section from this fourth
+layer instead of reconstructing the full cross-section from layer three during execution.
+
+Quant output is then materialized into Analysis Mart: `analysis_snapshots` stores immutable
+security/scope/decision-time summaries, lineage, quality flags, input hashes, and result
+hashes; `analysis_metrics` stores structured scores, ranks, percentiles, missing-field
+counts, and review/data-quality indicators; `analysis_findings` stores human/AI-readable
+findings with confidence and severity; and `analysis_evidence_links` links snapshots,
+metrics, and findings back to quant results, QuantInput, canonical facts, evidence, or
+future ML feature runs. Replays with the same input/result hash are idempotent, while
+conflicting replays are rejected and audited. ETL publication is transactional: feature
+snapshot headers, feature rows, the bound QuantInput, and fact lineage are committed
+together; analysis snapshots, metrics, findings, and links are also committed together.
+Any child-row conflict or write failure rolls back the ETL publication and must not leave
+header-only or partial-row dirty data.
 
 #### 0.1.1 Rolling-window policy and control plane
 

@@ -221,6 +221,7 @@ class QuantInputSnapshot(FrozenModel):
     optional_indicators: tuple[str, ...] = ()
     quant_feature_set: Any | None = None
     user_indicator_view: Any | None = None
+    feature_snapshot_id: str | None = None
     market_window_start: datetime | None = None
     market_window_end: datetime | None = None
     fact_refs: tuple[dict[str, Any], ...] = ()
@@ -254,6 +255,7 @@ class QuantInputSnapshot(FrozenModel):
                 "security_ids": self.security_ids,
                 "required_indicators": self.required_indicators,
                 "optional_indicators": self.optional_indicators,
+                "feature_snapshot_id": self.feature_snapshot_id,
                 "market_window_start": self.market_window_start,
                 "market_window_end": self.market_window_end,
                 "fact_refs": self.fact_refs,

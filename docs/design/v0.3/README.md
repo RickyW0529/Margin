@@ -42,13 +42,13 @@ v0.3 不改变 v0.2 已确认的研究与估值产品主线，只重做其数据
 | 质量筛选层 | 独立执行 Schema、完整性、重复、PIT、范围、异常值、跨源冲突和发布判定；失败数据隔离但不删除 |
 | 数据仓库层 | 保存统一证券维度、多源标准事实、专用市场/财务事实和 Canonical 服务值；只接收质量层发布 |
 | 唯一化服务层 | 从仓库生成双时态公司池快照、canonical PIT 值和 `QuantInputSnapshot`；`ALL_A_NON_ST` 排除 ST/*ST、退市整理和非普通 A 股并保留原因 |
-| Analysis Mart 第四层 | 从第三层与量化结果生成 `analysis_snapshots`、`analysis_metrics`、`analysis_findings`、`analysis_evidence_links`，直接服务 AI 工具和 Dashboard |
+| 第四层 Mart 与 ETL | 第三层 ETL 事务性生成 `quant_feature_snapshots`、`quant_feature_rows` 供量化只读；量化结果再事务性生成 `analysis_snapshots`、`analysis_metrics`、`analysis_findings`、`analysis_evidence_links`，直接服务 AI 工具和 Dashboard |
 | 上层服务 | QuantInput、量化、估值、News/AI 和 Dashboard 只通过稳定仓库、公司池或 Analysis Mart 接口消费 |
 | Tushare 覆盖 | 对量化需求相关 Pro 接口建立目录并真实探测当前席位，约 95% 置信度确认量化所需可用接口已基本穷尽 |
 | 采集准入 | endpoint 必须回链 QuantFeatureSet、硬过滤、公司池、PIT/复权或 benchmark 需求；无量化消费方的数据禁止采集 |
 | 滚动窗口 | 默认保留并服务最近 24 个月，可由前端在 12–60 个月范围内创建版本并激活；同步每日滚动推进 |
 | 量化验收 | 使用真实非 ST 全 A 快照，持久化每家公司过滤/评分结果并输出具体公司、排名、分数和分析明细 |
-| AI 工具验收 | LangGraph scoped tool 可读取 Analysis Mart snapshot、metrics、findings；工具调用受 security/scope/PIT 约束 |
+| AI 工具验收 | LangGraph scoped tool 可读取 Quant Feature Mart 元数据/当前 security 特征行，以及 Analysis Mart snapshot、metrics、findings；工具调用受 security/scope/PIT 约束 |
 | 降级边界 | AKShare 网络/代理失败不阻断 Tushare 主链路；未知接口保留审计状态，不伪装为成功 |
 
 ## 4. v0.3 设计决策

@@ -16,16 +16,57 @@ from margin.sql.valuation_queries import (
     analysis_findings_by_snapshot,
     analysis_metrics_by_snapshot,
     latest_analysis_snapshot,
+    latest_quant_feature_snapshot,
+    quant_feature_rows_by_snapshot,
 )
 from margin.valuation_discovery.db_models import (
     AnalysisEvidenceLinkRow,
     AnalysisFindingRow,
     AnalysisMetricRow,
     AnalysisSnapshotRow,
+    QuantFeatureRowRow,
+    QuantFeatureSnapshotRow,
 )
 from margin.valuation_discovery.models import QuantResult
 
 SessionFactory = Callable[[], Session]
+
+
+@dataclass(frozen=True)
+class QuantFeatureSnapshot:
+    """Fourth-layer quant input feature snapshot materialized from layer 3."""
+
+    feature_snapshot_id: str
+    scope_version_id: str
+    universe_snapshot_id: str
+    decision_at: datetime
+    known_at: datetime
+    trading_date: date
+    feature_set_version_id: str | None
+    feature_schema_version: str
+    source_layer: str
+    input_hash: str
+    row_count: int
+    feature_columns: tuple[str, ...]
+    lineage_summary: dict[str, Any]
+    quality_flags: tuple[str, ...] = ()
+    created_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class QuantFeatureRow:
+    """One materialized feature row consumed by the quant layer."""
+
+    row_id: str
+    feature_snapshot_id: str
+    security_id: str
+    symbol: str | None
+    name: str | None
+    industry_id: str | None
+    features: dict[str, Any]
+    source_refs: tuple[dict[str, Any], ...] = ()
+    quality_flags: tuple[str, ...] = ()
+    created_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -122,6 +163,30 @@ class AnalysisMartBundle:
 class AnalysisMartRepository(Protocol):
     """Persistence contract for fourth-layer analysis results."""
 
+    def upsert_feature_snapshot(
+        self,
+        snapshot: QuantFeatureSnapshot,
+        rows: tuple[QuantFeatureRow, ...],
+    ) -> None:
+        """Persist one QuantFeatureMart snapshot idempotently."""
+
+    def get_feature_snapshot(
+        self,
+        feature_snapshot_id: str,
+    ) -> QuantFeatureSnapshot | None:
+        """Return one feature snapshot by ID."""
+
+    def latest_feature_snapshot(
+        self,
+        *,
+        scope_version_id: str,
+        as_of: datetime,
+    ) -> QuantFeatureSnapshot | None:
+        """Return the latest feature snapshot visible at or before ``as_of``."""
+
+    def list_feature_rows(self, feature_snapshot_id: str) -> list[QuantFeatureRow]:
+        """Return materialized feature rows for one snapshot."""
+
     def upsert_bundle(self, bundle: AnalysisMartBundle) -> None:
         """Persist one bundle idempotently and reject conflicting replays."""
 
@@ -151,10 +216,73 @@ class MemoryAnalysisMartRepository:
     """In-memory Analysis Mart repository for unit tests."""
 
     def __init__(self) -> None:
+        self._feature_snapshots: dict[str, QuantFeatureSnapshot] = {}
+        self._feature_rows: dict[str, QuantFeatureRow] = {}
         self._snapshots: dict[str, AnalysisSnapshot] = {}
         self._metrics: dict[str, AnalysisMetric] = {}
         self._findings: dict[str, AnalysisFinding] = {}
         self._links: dict[str, AnalysisEvidenceLink] = {}
+
+    def upsert_feature_snapshot(
+        self,
+        snapshot: QuantFeatureSnapshot,
+        rows: tuple[QuantFeatureRow, ...],
+    ) -> None:
+        """Persist one feature snapshot idempotently."""
+        _validate_feature_snapshot(snapshot, rows)
+        _ensure_same_or_absent(
+            self._feature_snapshots,
+            snapshot.feature_snapshot_id,
+            snapshot,
+            "quant feature snapshot",
+        )
+        for row in rows:
+            _ensure_same_or_absent(
+                self._feature_rows,
+                row.row_id,
+                row,
+                "quant feature row",
+            )
+        self._feature_snapshots.setdefault(snapshot.feature_snapshot_id, snapshot)
+        for row in rows:
+            self._feature_rows.setdefault(row.row_id, row)
+
+    def get_feature_snapshot(
+        self,
+        feature_snapshot_id: str,
+    ) -> QuantFeatureSnapshot | None:
+        """Return one feature snapshot by ID."""
+        return self._feature_snapshots.get(feature_snapshot_id)
+
+    def latest_feature_snapshot(
+        self,
+        *,
+        scope_version_id: str,
+        as_of: datetime,
+    ) -> QuantFeatureSnapshot | None:
+        """Return the latest visible feature snapshot."""
+        candidates = [
+            snapshot
+            for snapshot in self._feature_snapshots.values()
+            if snapshot.scope_version_id == scope_version_id
+            and snapshot.decision_at <= as_of
+        ]
+        return max(
+            candidates,
+            key=lambda item: (item.decision_at, item.created_at or item.decision_at),
+            default=None,
+        )
+
+    def list_feature_rows(self, feature_snapshot_id: str) -> list[QuantFeatureRow]:
+        """Return feature rows for one snapshot."""
+        return sorted(
+            (
+                row
+                for row in self._feature_rows.values()
+                if row.feature_snapshot_id == feature_snapshot_id
+            ),
+            key=lambda item: (item.security_id, item.row_id),
+        )
 
     def upsert_bundle(self, bundle: AnalysisMartBundle) -> None:
         """Persist one bundle idempotently."""
@@ -248,6 +376,63 @@ class SQLAlchemyAnalysisMartRepository:
 
     def __init__(self, session_factory: SessionFactory) -> None:
         self._session_factory = session_factory
+
+    def upsert_feature_snapshot(
+        self,
+        snapshot: QuantFeatureSnapshot,
+        rows: tuple[QuantFeatureRow, ...],
+    ) -> None:
+        """Persist one feature snapshot idempotently in one transaction."""
+        _validate_feature_snapshot(snapshot, rows)
+        with self._session_factory.begin() as session:
+            self._upsert_row(
+                session,
+                QuantFeatureSnapshotRow,
+                snapshot.feature_snapshot_id,
+                _feature_snapshot_to_row(snapshot),
+                _feature_snapshot_from_row,
+                "quant feature snapshot",
+            )
+            for row in rows:
+                self._upsert_row(
+                    session,
+                    QuantFeatureRowRow,
+                    row.row_id,
+                    _feature_row_to_row(row),
+                    _feature_row_from_row,
+                    "quant feature row",
+                )
+
+    def get_feature_snapshot(
+        self,
+        feature_snapshot_id: str,
+    ) -> QuantFeatureSnapshot | None:
+        """Return one feature snapshot by ID."""
+        with self._session_factory() as session:
+            row = session.get(QuantFeatureSnapshotRow, feature_snapshot_id)
+        return _feature_snapshot_from_row(row) if row is not None else None
+
+    def latest_feature_snapshot(
+        self,
+        *,
+        scope_version_id: str,
+        as_of: datetime,
+    ) -> QuantFeatureSnapshot | None:
+        """Return the latest visible feature snapshot."""
+        with self._session_factory() as session:
+            row = session.scalar(
+                latest_quant_feature_snapshot(
+                    scope_version_id=scope_version_id,
+                    as_of=as_of,
+                )
+            )
+        return _feature_snapshot_from_row(row) if row is not None else None
+
+    def list_feature_rows(self, feature_snapshot_id: str) -> list[QuantFeatureRow]:
+        """Return rows for one feature snapshot."""
+        with self._session_factory() as session:
+            rows = session.scalars(quant_feature_rows_by_snapshot(feature_snapshot_id)).all()
+        return [_feature_row_from_row(row) for row in rows]
 
     def upsert_bundle(self, bundle: AnalysisMartBundle) -> None:
         """Persist one bundle idempotently in one transaction."""
@@ -762,6 +947,87 @@ def _ensure_same_or_absent(
     current = store.get(key)
     if current is not None and current != value:
         raise ValueError(f"conflicting {label}")
+
+
+def _validate_feature_snapshot(
+    snapshot: QuantFeatureSnapshot,
+    rows: tuple[QuantFeatureRow, ...],
+) -> None:
+    if snapshot.row_count != len(rows):
+        raise ValueError("feature snapshot row_count does not match rows")
+    for row in rows:
+        if row.feature_snapshot_id != snapshot.feature_snapshot_id:
+            raise ValueError("feature row references a different feature snapshot")
+
+
+def _feature_snapshot_to_row(snapshot: QuantFeatureSnapshot) -> QuantFeatureSnapshotRow:
+    return QuantFeatureSnapshotRow(
+        feature_snapshot_id=snapshot.feature_snapshot_id,
+        scope_version_id=snapshot.scope_version_id,
+        universe_snapshot_id=snapshot.universe_snapshot_id,
+        decision_at=snapshot.decision_at,
+        known_at=snapshot.known_at,
+        trading_date=snapshot.trading_date,
+        feature_set_version_id=snapshot.feature_set_version_id,
+        feature_schema_version=snapshot.feature_schema_version,
+        source_layer=snapshot.source_layer,
+        input_hash=snapshot.input_hash,
+        row_count=snapshot.row_count,
+        feature_columns=list(snapshot.feature_columns),
+        lineage_summary=snapshot.lineage_summary,
+        quality_flags=list(snapshot.quality_flags),
+        created_at=snapshot.created_at or snapshot.decision_at,
+    )
+
+
+def _feature_snapshot_from_row(row: QuantFeatureSnapshotRow) -> QuantFeatureSnapshot:
+    return QuantFeatureSnapshot(
+        feature_snapshot_id=row.feature_snapshot_id,
+        scope_version_id=row.scope_version_id,
+        universe_snapshot_id=row.universe_snapshot_id,
+        decision_at=row.decision_at,
+        known_at=row.known_at,
+        trading_date=row.trading_date,
+        feature_set_version_id=row.feature_set_version_id,
+        feature_schema_version=row.feature_schema_version,
+        source_layer=row.source_layer,
+        input_hash=row.input_hash,
+        row_count=row.row_count,
+        feature_columns=tuple(row.feature_columns),
+        lineage_summary=dict(row.lineage_summary),
+        quality_flags=tuple(row.quality_flags),
+        created_at=row.created_at,
+    )
+
+
+def _feature_row_to_row(row: QuantFeatureRow) -> QuantFeatureRowRow:
+    return QuantFeatureRowRow(
+        row_id=row.row_id,
+        feature_snapshot_id=row.feature_snapshot_id,
+        security_id=row.security_id,
+        symbol=row.symbol,
+        name=row.name,
+        industry_id=row.industry_id,
+        features_json=row.features,
+        source_refs=list(row.source_refs),
+        quality_flags=list(row.quality_flags),
+        created_at=row.created_at or datetime.now(UTC),
+    )
+
+
+def _feature_row_from_row(row: QuantFeatureRowRow) -> QuantFeatureRow:
+    return QuantFeatureRow(
+        row_id=row.row_id,
+        feature_snapshot_id=row.feature_snapshot_id,
+        security_id=row.security_id,
+        symbol=row.symbol,
+        name=row.name,
+        industry_id=row.industry_id,
+        features=dict(row.features_json),
+        source_refs=tuple(dict(ref) for ref in row.source_refs),
+        quality_flags=tuple(row.quality_flags),
+        created_at=row.created_at,
+    )
 
 
 def _snapshot_to_row(snapshot: AnalysisSnapshot) -> AnalysisSnapshotRow:

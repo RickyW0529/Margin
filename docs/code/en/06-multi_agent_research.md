@@ -36,7 +36,7 @@ Current boundaries:
 | `src/margin/research/tools/policy.py` | Default-deny tool policy engine. |
 | `src/margin/research/tools/executor.py` | Audited tool executor. |
 | `src/margin/research/tools/manifests.py` | LLM-facing tool manifest DTOs. |
-| `src/margin/research/analysis_tools.py` | Registers the read-only `analysis_snapshot_get`, `analysis_metrics_list`, and `analysis_findings_list` tools. |
+| `src/margin/research/analysis_tools.py` | Registers five read-only fourth-layer Mart tools: `analysis_snapshot_get`, `analysis_metrics_list`, `analysis_findings_list`, `quant_feature_snapshot_get`, and `quant_feature_rows_list`. |
 | `src/margin/research/checkpoint.py` | PostgreSQL LangGraph checkpointer with identity-hash validation and pending-write recovery. |
 | `src/margin/research/delta_repository.py` | Memory/PostgreSQL persistence for `ResearchDeltaReview` and `research_delta_outbox`. |
 | `src/margin/research/graph_audit_repository.py` | PostgreSQL repositories for LLM/tool call audits. |
@@ -100,15 +100,17 @@ The model never sees a global tool registry. Each node receives only the manifes
 
 AI nodes are read-only. They cannot initiate live WebSearch; news/WebSearch data must be acquired by upstream refresh flows and enter research as stored snapshots.
 
-Analysis Mart tools are read-only over the fourth-layer `analysis_*` tables. They enforce security/PIT boundaries by request shape: cross-security, future, or missing snapshots return empty results.
+Fourth-layer Mart tools are read-only over `quant_feature_*` and `analysis_*` tables. They enforce security/PIT boundaries by request shape: cross-security, future, or missing snapshots return empty results.
 
 | Tool | Capability | Input | Output |
 | --- | --- | --- | --- |
 | `analysis_snapshot_get` | `QUANT_READ` | `security_id`, `scope_version_id`, `decision_at` | Latest visible `AnalysisSnapshot` or `null`. |
 | `analysis_metrics_list` | `QUANT_READ` | `security_id`, `decision_at`, `analysis_snapshot_id` | Structured metrics for the snapshot; unauthorized or missing reads return an empty list. |
 | `analysis_findings_list` | `QUANT_READ` | `security_id`, `decision_at`, `analysis_snapshot_id` | Structured findings for the snapshot; unauthorized or missing reads return an empty list. |
+| `quant_feature_snapshot_get` | `QUANT_READ` | `scope_version_id`, `decision_at` | Latest visible `QuantFeatureSnapshot` metadata or `null`; it does not return market-wide feature rows. |
+| `quant_feature_rows_list` | `QUANT_READ` | `security_id`, `decision_at`, `feature_snapshot_id` | Feature rows for the scoped security in that feature snapshot; cross-security or future-time reads are denied by policy. |
 
-When `ResearchService` receives a `session_factory` and no explicit repository, it builds a `SQLAlchemyAnalysisMartRepository` and registers these tools in the default registry. The `valuation_analysis` node has the `QUANT_READ` grant, so it can read Analysis Mart while other nodes remain constrained by their node grants.
+When `ResearchService` receives a `session_factory` and no explicit repository, it builds a `SQLAlchemyAnalysisMartRepository` and registers these tools in the default registry. The `valuation_analysis` node has the `QUANT_READ` grant, so it can read fourth-layer marts while other nodes remain constrained by their node grants.
 
 ## 6. Prompt Factory
 

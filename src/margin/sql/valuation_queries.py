@@ -11,6 +11,8 @@ from margin.valuation_discovery.db_models import (
     AnalysisMetricRow,
     AnalysisSnapshotRow,
     EffectiveAssessmentPointerRow,
+    QuantFeatureRowRow,
+    QuantFeatureSnapshotRow,
     QuantInputSnapshotFactRow,
     QuantInputSnapshotRow,
     QuantScreenResultRow,
@@ -37,6 +39,36 @@ def quant_input_snapshot_facts(snapshot_id: str) -> Select:
         select(QuantInputSnapshotFactRow)
         .where(QuantInputSnapshotFactRow.snapshot_id == snapshot_id)
         .order_by(QuantInputSnapshotFactRow.fact_ref_id)
+    )
+
+
+def latest_quant_feature_snapshot(
+    *,
+    scope_version_id: str,
+    as_of,
+) -> Select:
+    """Return the latest QuantFeatureMart snapshot visible as of a time."""
+    return (
+        select(QuantFeatureSnapshotRow)
+        .where(
+            QuantFeatureSnapshotRow.scope_version_id == scope_version_id,
+            QuantFeatureSnapshotRow.decision_at <= as_of,
+        )
+        .order_by(
+            QuantFeatureSnapshotRow.decision_at.desc(),
+            QuantFeatureSnapshotRow.created_at.desc(),
+            QuantFeatureSnapshotRow.feature_snapshot_id.desc(),
+        )
+        .limit(1)
+    )
+
+
+def quant_feature_rows_by_snapshot(feature_snapshot_id: str) -> Select:
+    """Return feature rows for one QuantFeatureMart snapshot."""
+    return (
+        select(QuantFeatureRowRow)
+        .where(QuantFeatureRowRow.feature_snapshot_id == feature_snapshot_id)
+        .order_by(QuantFeatureRowRow.security_id, QuantFeatureRowRow.row_id)
     )
 
 

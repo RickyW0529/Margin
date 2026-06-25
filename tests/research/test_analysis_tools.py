@@ -13,6 +13,8 @@ from margin.research.tools.policy import ToolPolicyEngine
 from margin.valuation_discovery.analysis_mart import (
     AnalysisMartPublisher,
     MemoryAnalysisMartRepository,
+    QuantFeatureRow,
+    QuantFeatureSnapshot,
 )
 from margin.valuation_discovery.models import (
     DataStatus,
@@ -45,6 +47,8 @@ def test_analysis_mart_tools_read_snapshot_metrics_and_findings() -> None:
         "analysis_snapshot_get",
         "analysis_metrics_list",
         "analysis_findings_list",
+        "quant_feature_snapshot_get",
+        "quant_feature_rows_list",
     } <= manifest_names
 
     snapshot = session.call(
@@ -80,6 +84,28 @@ def test_analysis_mart_tools_read_snapshot_metrics_and_findings() -> None:
     assert findings.success is True
     assert findings.data["findings"][0]["finding_type"] == "quant_screening"
 
+    feature_snapshot = session.call(
+        "quant_feature_snapshot_get",
+        {
+            "scope_version_id": "scope-v1",
+            "decision_at": DECISION_AT.isoformat(),
+        },
+    )
+    assert feature_snapshot.success is True
+    feature_snapshot_id = feature_snapshot.data["feature_snapshot"][
+        "feature_snapshot_id"
+    ]
+    feature_rows = session.call(
+        "quant_feature_rows_list",
+        {
+            "security_id": "000001.SZ",
+            "decision_at": DECISION_AT.isoformat(),
+            "feature_snapshot_id": feature_snapshot_id,
+        },
+    )
+    assert feature_rows.success is True
+    assert feature_rows.data["feature_rows"][0]["features"]["pe_ttm"] == 8.2
+
 
 def test_analysis_mart_tools_deny_cross_security() -> None:
     """Existing scoped policy blocks tools from reading another security."""
@@ -109,6 +135,18 @@ def test_analysis_mart_tools_deny_cross_security() -> None:
     assert result.success is False
     assert result.error_code == "security_scope_violation"
 
+    feature_result = session.call(
+        "quant_feature_rows_list",
+        {
+            "security_id": "600000.SH",
+            "decision_at": DECISION_AT.isoformat(),
+            "feature_snapshot_id": "qfsnap-tools",
+        },
+    )
+
+    assert feature_result.success is False
+    assert feature_result.error_code == "security_scope_violation"
+
 
 def test_default_research_tool_factory_registers_analysis_tools() -> None:
     """Production default tool factory exposes Analysis Mart tools when provided."""
@@ -133,7 +171,9 @@ def test_default_research_tool_factory_registers_analysis_tools() -> None:
         grants={ToolCapability.QUANT_READ},
     )
 
-    assert "analysis_snapshot_get" in {tool.name for tool in session.manifest().tools}
+    manifest_names = {tool.name for tool in session.manifest().tools}
+    assert "analysis_snapshot_get" in manifest_names
+    assert "quant_feature_rows_list" in manifest_names
 
 
 def test_valuation_analysis_node_can_read_analysis_mart() -> None:
@@ -143,6 +183,44 @@ def test_valuation_analysis_node_can_read_analysis_mart() -> None:
 
 def _repository() -> MemoryAnalysisMartRepository:
     repository = MemoryAnalysisMartRepository()
+    repository.upsert_feature_snapshot(
+        QuantFeatureSnapshot(
+            feature_snapshot_id="qfsnap-tools",
+            scope_version_id="scope-v1",
+            universe_snapshot_id="universe-tools",
+            decision_at=DECISION_AT,
+            known_at=DECISION_AT,
+            trading_date=date(2026, 6, 24),
+            feature_set_version_id="qfs-tools",
+            feature_schema_version="quant-feature-mart-v0.3.0",
+            source_layer="third_layer",
+            input_hash="sha256:features",
+            row_count=1,
+            feature_columns=("pe_ttm", "pb", "roe_ttm"),
+            lineage_summary={"quant_input_snapshot_id": "quant-input-tools"},
+            quality_flags=("pit_valid",),
+            created_at=DECISION_AT,
+        ),
+        (
+            QuantFeatureRow(
+                row_id="qfrow-tools-000001",
+                feature_snapshot_id="qfsnap-tools",
+                security_id="000001.SZ",
+                symbol="000001.SZ",
+                name="平安银行",
+                industry_id="bank",
+                features={"pe_ttm": 8.2, "pb": 0.68, "roe_ttm": 0.15},
+                source_refs=(
+                    {
+                        "source_type": "canonical_fact",
+                        "source_id": "fact-pe-tools",
+                    },
+                ),
+                quality_flags=("pit_valid",),
+                created_at=DECISION_AT,
+            ),
+        ),
+    )
     publisher = AnalysisMartPublisher(repository)
     publisher.publish_quant_result(
         scope_version_id="scope-v1",

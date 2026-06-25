@@ -41,10 +41,7 @@ from margin.sql.valuation_queries import (
 from margin.storage.database import SessionFactory
 from margin.strategy.models import ConfigLifecycle
 from margin.strategy.validator import StrategyActivationValidator
-from margin.valuation_discovery.analysis_mart import (
-    AnalysisMartPublisher,
-    AnalysisMartRepository,
-)
+from margin.valuation_discovery.analysis_mart import AnalysisMartRepository
 from margin.valuation_discovery.assessments import EffectiveAssessmentService
 from margin.valuation_discovery.db_models import (
     EffectiveAssessmentPointerRow,
@@ -53,6 +50,7 @@ from margin.valuation_discovery.db_models import (
     QuantScreenRunRow,
     ResearchContextSnapshotRow,
 )
+from margin.valuation_discovery.etl import AnalysisResultMartETLPipeline
 from margin.valuation_discovery.models import (
     DataStatus,
     QuantResult,
@@ -577,7 +575,9 @@ class ResearchContextBuilderAdapter:
         """Publish the fourth-layer analysis snapshot for one quant result."""
         if self._analysis_mart_repository is None or quant_result is None:
             return None
-        return AnalysisMartPublisher(self._analysis_mart_repository).publish_quant_result(
+        return AnalysisResultMartETLPipeline(
+            self._analysis_mart_repository
+        ).publish_quant_result(
             scope_version_id=scope_version_id,
             decision_at=decision_at,
             trading_date=decision_at.date(),

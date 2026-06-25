@@ -50,8 +50,8 @@ docs/code/en/
 ## v0.3 Current Implementation Summary
 
 - `01-data_provider` now includes the independent Tushare source system, quant endpoint admission catalog, rolling acquisition policy, source-quality screen, warehouse publisher, and real two-year market/financial/benchmark backfill path.
-- `11-valuation_discovery` now consumes data-layer company-pool snapshots and publishes the fourth-layer Analysis Mart. The latest real quant run `qr_df48cd92fdf1424d` used 5304 non-ST/non-delisting/non-future-listed companies and produced 3 pass and 54 near-threshold names; quant output can be materialized as `analysis_snapshots`, metrics, findings, and lineage.
-- `06-multi_agent_research` registers `analysis_snapshot_get`, `analysis_metrics_list`, and `analysis_findings_list` scoped read tools. The `valuation_analysis` node can read fourth-layer analysis results by security/scope/PIT.
+- `11-valuation_discovery` now consumes data-layer company-pool snapshots and publishes the fourth-layer Quant Feature Mart + Analysis Mart. Third-layer ETL transactionally publishes `quant_feature_snapshots/rows` for quant-only reads, and quant output is then transactionally published as `analysis_snapshots`, metrics, findings, and lineage. The latest real quant run `qr_df48cd92fdf1424d` used 5304 non-ST/non-delisting/non-future-listed companies and produced 3 pass and 54 near-threshold names.
+- `06-multi_agent_research` registers `analysis_snapshot_get`, `analysis_metrics_list`, `analysis_findings_list`, `quant_feature_snapshot_get`, and `quant_feature_rows_list` scoped read tools. The `valuation_analysis` node can read fourth-layer features and analysis results by security/scope/PIT.
 - `/settings/data` and `/api/v1/data-policies` expose the rolling data acquisition policy to frontend users.
 
 ## Update Policy

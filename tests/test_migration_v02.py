@@ -19,7 +19,7 @@ def test_migration_sequence_from_clean_database(database_url: str) -> None:
     )
 
     assert result.current_head == result.expected_head
-    assert result.current_head == "20260624_0042_analysis_mart"
+    assert result.current_head == "20260625_0043_quant_feature_mart"
     assert result.failed_revision is None
     assert {
         "orchestration_runs",
@@ -65,6 +65,8 @@ def test_migration_sequence_from_clean_database(database_url: str) -> None:
         "analysis_metrics",
         "analysis_findings",
         "analysis_evidence_links",
+        "quant_feature_snapshots",
+        "quant_feature_rows",
     } <= set(result.tables)
     assert {
         "portfolios",
