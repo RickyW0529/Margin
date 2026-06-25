@@ -183,48 +183,6 @@ class SourceSchemaFieldRow(Base):
     sample_values: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
 
 
-class IndicatorDefinitionRow(Base):
-    """Canonical indicator definition."""
-
-    __tablename__ = "indicator_definitions"
-
-    indicator_id: Mapped[str] = mapped_column(String(96), primary_key=True)
-    version: Mapped[str] = mapped_column(String(64), primary_key=True)
-    domain: Mapped[str] = mapped_column(String(48), nullable=False)
-    name: Mapped[str] = mapped_column(Text, nullable=False)
-    value_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    unit: Mapped[str | None] = mapped_column(String(32))
-    direction: Mapped[str | None] = mapped_column(String(16))
-    required_for_quant: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    definition: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
-
-class ProviderIndicatorMappingRow(Base):
-    """Mapping from provider/source fields to canonical indicators."""
-
-    __tablename__ = "provider_indicator_mappings"
-    __table_args__ = (
-        UniqueConstraint(
-            "provider",
-            "endpoint_code",
-            "source_field",
-            "mapping_version",
-            name="uq_provider_indicator_mapping",
-        ),
-    )
-
-    mapping_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    provider: Mapped[str] = mapped_column(String(64), nullable=False)
-    endpoint_code: Mapped[str] = mapped_column(String(96), nullable=False)
-    source_field: Mapped[str] = mapped_column(String(128), nullable=False)
-    indicator_id: Mapped[str] = mapped_column(String(96), nullable=False)
-    indicator_version: Mapped[str] = mapped_column(String(64), nullable=False)
-    mapping_version: Mapped[str] = mapped_column(String(64), nullable=False)
-    transform: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
-    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-
-
 class StandardizedIndicatorFactRow(Base):
     """Append-only provider fact normalized to a canonical indicator."""
 

@@ -14,7 +14,6 @@ v0.3 adds fourth-layer marts. Third-layer canonical data is first materialized b
 
 | Table | Purpose |
 |-------|---------|
-| `universe_definitions` / `universe_versions` / `universe_memberships` / `universe_snapshots` | Built-in and future custom universes with valid time and system time. |
 | `company_pool_snapshots` / `company_pool_members` | v0.3 materialized non-ST/non-delisting All-A company pool consumed by `ALL_A_NON_ST` scopes. |
 | `quant_input_snapshots` / `quant_input_snapshot_facts` | The only quant input contract, including scope, universe, indicators, fourth-layer `feature_snapshot_id`, fact lineage, PIT, freshness, and quality flags. |
 | `quant_feature_snapshots` | Fourth-layer quant feature snapshots by scope/universe/decision/trading date, storing third-layer ETL input hash, feature columns, lineage summary, quality flags, and row count. |
@@ -24,10 +23,10 @@ v0.3 adds fourth-layer marts. Third-layer canonical data is first materialized b
 | `analysis_metrics` | Fourth-layer structured metrics such as final score, factor scores, ranks, percentiles, data-quality indicators, and review flags. |
 | `analysis_findings` | Fourth-layer readable findings with screening outcomes, positive/negative factors, risk or missing-data reasons, severity, confidence, and evidence references. |
 | `analysis_evidence_links` | Fourth-layer lineage edges from snapshots/metrics/findings to quant results, QuantInput, canonical facts, Evidence, or future ML feature runs. |
-| `valuation_assessments` / `confidence_components` / `effective_assessment_pointers` | Valuation conclusions, confidence components, and current effective assessment pointers. |
-| `valuation_refresh_runs` / `valuation_refresh_steps` / `research_refresh_events` / `research_context_snapshots` | Refresh runs, step state, events, and research context snapshots. |
+| `valuation_assessments` / `effective_assessment_pointers` | Valuation conclusions and current effective assessment pointers. |
+| `research_context_snapshots` | Frozen research-context snapshots consumed by AI review. |
 
-Migrations: `20260622_0021` through `20260622_0024`, v0.3 source/company-pool/quant-history-index migrations `20260623_0036` through `20260624_0041`, Analysis Mart migration `20260624_0042_analysis_mart.py`, and Quant Feature Mart migration `20260625_0043_quant_feature_mart.py`.
+Migrations: `20260622_0021` through `20260622_0024`, v0.3 source/company-pool/quant-history-index migrations `20260623_0036` through `20260624_0041`, Analysis Mart migration `20260624_0042_analysis_mart.py`, Quant Feature Mart migration `20260625_0043_quant_feature_mart.py`, and dead-table cleanup migration `20260625_0044_remove_dead_tables.py`.
 
 ## Key Code
 

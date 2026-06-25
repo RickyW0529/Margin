@@ -23,13 +23,11 @@
 | `src/margin/research/llm.py` | OpenAI-compatible LLM provider、确定性测试 provider、模型路由和结构化输出护栏。 |
 | `src/margin/research/service.py` | 高层入口；生产路径为 `ResearchService.run_delta_review(context_snapshot_id)`。 |
 | `src/margin/research/graph/state.py` | LangGraph 状态、review mode、review outcome、节点状态与图事件模型。 |
-| `src/margin/research/graph/routing.py` | 根据快照差异、证据状态、provider 状态和策略约束确定 review mode。 |
-| `src/margin/research/graph/builder.py` | 构建 AI delta review LangGraph 拓扑。 |
+| `src/margin/research/graph/builder.py` | 构建 AI delta review LangGraph 拓扑，并承载确定性条件路由。 |
 | `src/margin/research/graph/nodes/` | context、evidence、analysis、decision 等节点实现。 |
 | `src/margin/research/execution/llm_service.py` | LLM 调用服务，记录 hash-only prompt/output 审计。 |
 | `src/margin/research/execution/node_runner.py` | 带反思机制的节点执行器。 |
 | `src/margin/research/execution/reflection.py` | 节点 draft/critic/revision 结果结构。 |
-| `src/margin/research/execution/model_router.py` | 节点到模型任务的路由。 |
 | `src/margin/research/prompts/` | Prompt 模型、仓库与工厂。 |
 | `src/margin/research/tools/definitions.py` | 工具定义、权限级别、工具参数与执行上下文。 |
 | `src/margin/research/tools/factory.py` | 按节点和上下文生成 scoped tool manifest。 |

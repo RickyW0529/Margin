@@ -11,91 +11,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 from margin.storage.base import Base
 
 
-class UniverseDefinitionRow(Base):
-    """Universe definition data, including built-ins and future custom pools."""
-
-    __tablename__ = "universe_definitions"
-
-    definition_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    universe_code: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    name: Mapped[str] = mapped_column(String(256), nullable=False)
-    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    rule_code: Mapped[str] = mapped_column(String(128), nullable=False)
-    rule_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    created_by: Mapped[str] = mapped_column(String(64), nullable=False)
-
-
-class UniverseVersionRow(Base):
-    """Immutable universe definition version."""
-
-    __tablename__ = "universe_versions"
-    __table_args__ = (
-        Index("ix_universe_versions_code_system", "universe_code", "system_from"),
-    )
-
-    universe_version_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    definition_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    universe_code: Mapped[str] = mapped_column(String(64), nullable=False)
-    version: Mapped[str] = mapped_column(String(64), nullable=False)
-    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    effective_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    system_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    system_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    source: Mapped[str] = mapped_column(String(128), nullable=False)
-    quality: Mapped[str] = mapped_column(String(32), nullable=False)
-    metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-
-
-class UniverseSnapshotRow(Base):
-    """Frozen universe membership snapshot consumed by quant."""
-
-    __tablename__ = "universe_snapshots"
-    __table_args__ = (
-        Index("ix_universe_snapshots_code_time", "universe_code", "business_at", "known_at"),
-    )
-
-    snapshot_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    universe_code: Mapped[str] = mapped_column(String(64), nullable=False)
-    universe_version_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    business_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    known_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    security_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
-    membership_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
-    input_hash: Mapped[str] = mapped_column(String(96), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
-
-class UniverseMembershipRow(Base):
-    """Bitemporal universe membership row."""
-
-    __tablename__ = "universe_memberships"
-    __table_args__ = (
-        Index(
-            "ix_universe_memberships_code_valid_system",
-            "universe_code",
-            "valid_from",
-            "system_from",
-        ),
-        Index("ix_universe_memberships_security_time", "security_id", "valid_from"),
-    )
-
-    membership_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    universe_code: Mapped[str] = mapped_column(String(64), nullable=False)
-    universe_version_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    security_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
-    valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    system_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    system_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    weight: Mapped[float | None] = mapped_column(Float)
-    rank: Mapped[int | None] = mapped_column(Integer)
-    source: Mapped[str] = mapped_column(String(128), nullable=False)
-    quality: Mapped[str] = mapped_column(String(32), nullable=False)
-    raw_lineage_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
-    metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-
-
 class QuantInputSnapshotRow(Base):
     """Frozen PIT-safe quant input snapshot."""
 
@@ -212,48 +127,6 @@ class QuantFactorValueRow(Base):
     detail_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
 
-class ResearchRefreshEventRow(Base):
-    """Append-only event emitted by the refresh state machine."""
-
-    __tablename__ = "research_refresh_events"
-
-    event_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    refresh_run_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    payload_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
-
-class ValuationRefreshRunRow(Base):
-    """Durable valuation discovery refresh run."""
-
-    __tablename__ = "valuation_refresh_runs"
-    __table_args__ = (
-        Index("ix_valuation_refresh_runs_scope_decision", "scope_version_id", "decision_at"),
-    )
-
-    refresh_run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    scope_version_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    decision_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    state: Mapped[str] = mapped_column(String(32), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
-
-class ValuationRefreshStepRow(Base):
-    """Append-only refresh step event."""
-
-    __tablename__ = "valuation_refresh_steps"
-
-    step_event_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    refresh_run_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    step: Mapped[str] = mapped_column(String(64), nullable=False)
-    state: Mapped[str] = mapped_column(String(32), nullable=False)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    output_ref: Mapped[str | None] = mapped_column(String(256))
-    error_code: Mapped[str | None] = mapped_column(String(128))
-
-
 class ResearchContextSnapshotRow(Base):
     """Frozen research context made available to AI/dashboard modules."""
 
@@ -324,19 +197,6 @@ class EffectiveAssessmentPointerRow(Base):
     last_successful_data_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_successful_news_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
-
-class ConfidenceComponentRow(Base):
-    """Deterministic confidence component."""
-
-    __tablename__ = "confidence_components"
-
-    component_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    assessment_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    component_name: Mapped[str] = mapped_column(String(128), nullable=False)
-    score: Mapped[float] = mapped_column(Float, nullable=False)
-    weight: Mapped[float] = mapped_column(Float, nullable=False)
-    reason: Mapped[str] = mapped_column(Text, nullable=False)
 
 
 class QuantFeatureSnapshotRow(Base):

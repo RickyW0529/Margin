@@ -85,8 +85,9 @@ Key responsibilities:
 | `src/margin/data/company_pool.py` | Non-ST, non-delisting, non-future-listed company-pool snapshot materialization. |
 | `src/margin/data/retention.py` | Reference-aware retention deletion and immutable audit. |
 | `src/margin/data/schema_discovery.py` | Source-field lifecycle, missing-field, and type-change tracking. |
-| `src/margin/data/facts.py`, `src/margin/data/canonical.py`, `src/margin/data/indicator_catalog.py` | Standardized provider facts, canonical resolver, and indicator catalog/mappings. |
-| `src/margin/data/security_master.py`, `src/margin/data/industry.py`, `src/margin/data/corporate_actions.py` | Security master, bitemporal industry membership, and PIT-safe corporate actions/adjusted prices. |
+| `src/margin/data/facts.py`, `src/margin/data/canonical.py` | Standardized provider fact models and the canonical resolver. |
+| `src/margin/data/db_models.py`, `src/margin/data/ingestion.py`, `src/margin/sql/data_queries.py` | Security-master ORM, warehouse writes, and PIT-safe reads. |
+| `src/margin/data/industry.py`, `src/margin/data/corporate_actions.py` | Bitemporal industry membership and PIT-safe corporate actions/adjusted prices. |
 | `src/margin/data/standardize.py` | Symbol normalization, field mapping, unit/currency conversion, time standardization, and `StandardDataEvent` creation. |
 | `src/margin/data/quality.py` | Point-in-time field validation, anti-lookahead checks, data quality inspection, and quality event emission. |
 | `src/margin/core/provider.py` | Core provider abstractions: enums, descriptors, health results, call results, and business protocols. |

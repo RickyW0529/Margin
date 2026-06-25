@@ -14,7 +14,6 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
-    Text,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -199,43 +198,3 @@ class TransactionalOutboxRow(Base):
     last_error_code: Mapped[str | None] = mapped_column(String(96))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-
-class IdempotencyRecordRow(Base):
-    """Persistent replay record for mutation and trigger requests."""
-
-    __tablename__ = "idempotency_records"
-    __table_args__ = (
-        UniqueConstraint("scope", "key_hash", name="uq_idempotency_scope_key"),
-        Index("ix_idempotency_expiry", "expires_at"),
-    )
-
-    record_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    scope: Mapped[str] = mapped_column(String(128), nullable=False)
-    key_hash: Mapped[str] = mapped_column(String(96), nullable=False)
-    request_hash: Mapped[str] = mapped_column(String(96), nullable=False)
-    response_ref: Mapped[str | None] = mapped_column(String(256))
-    status: Mapped[str] = mapped_column(String(32), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-
-class SmokeRunRecordRow(Base):
-    """Sanitized result for one real or local smoke stage."""
-
-    __tablename__ = "smoke_run_records"
-    __table_args__ = (
-        Index("ix_smoke_run_stage_started", "stage", "started_at"),
-        Index("ix_smoke_run_status_started", "status", "started_at"),
-    )
-
-    smoke_run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    stage: Mapped[str] = mapped_column(String(96), nullable=False)
-    provider: Mapped[str | None] = mapped_column(String(64))
-    status: Mapped[str] = mapped_column(String(32), nullable=False)
-    external_blocker: Mapped[str | None] = mapped_column(String(48))
-    detail_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
-    error_code: Mapped[str | None] = mapped_column(String(96))
-    redacted_error: Mapped[str | None] = mapped_column(Text)
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

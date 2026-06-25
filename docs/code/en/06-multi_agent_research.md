@@ -23,13 +23,11 @@ Current boundaries:
 | `src/margin/research/llm.py` | OpenAI-compatible LLM provider, deterministic provider, model router, and structured-output guardrail. |
 | `src/margin/research/service.py` | High-level service; production entrypoint is `ResearchService.run_delta_review(context_snapshot_id)`. |
 | `src/margin/research/graph/state.py` | LangGraph state, review modes, review outcomes, node status, and graph event models. |
-| `src/margin/research/graph/routing.py` | Deterministic review-mode routing. |
-| `src/margin/research/graph/builder.py` | LangGraph topology builder. |
+| `src/margin/research/graph/builder.py` | LangGraph topology builder and deterministic conditional routing. |
 | `src/margin/research/graph/nodes/` | Context, evidence, analysis, and decision nodes. |
 | `src/margin/research/execution/llm_service.py` | LLM execution service with hash-only audit. |
 | `src/margin/research/execution/node_runner.py` | Node runner with reflection and one bounded revision. |
 | `src/margin/research/execution/reflection.py` | Draft, critic, and revision result models. |
-| `src/margin/research/execution/model_router.py` | Node-to-model task routing. |
 | `src/margin/research/prompts/` | Prompt models, repository, and factory. |
 | `src/margin/research/tools/definitions.py` | Tool definitions, permission levels, params, and execution context. |
 | `src/margin/research/tools/factory.py` | Scoped tool manifest factory. |

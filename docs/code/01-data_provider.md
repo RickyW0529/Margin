@@ -62,8 +62,9 @@
 | `src/margin/data/company_pool.py` | 非 ST、非退市、非未来上市公司池快照 materialization。 |
 | `src/margin/data/retention.py` | 引用感知的 retention 删除与不可变 audit。 |
 | `src/margin/data/schema_discovery.py` | Source schema 字段生命周期与 missing/type-change 检测。 |
-| `src/margin/data/facts.py`、`src/margin/data/canonical.py`、`src/margin/data/indicator_catalog.py` | 标准化指标事实、canonical resolver 和指标映射目录。 |
-| `src/margin/data/security_master.py`、`src/margin/data/industry.py`、`src/margin/data/corporate_actions.py` | 证券主数据、bitemporal 行业成员和 PIT-safe 公司行动/复权计算。 |
+| `src/margin/data/facts.py`、`src/margin/data/canonical.py` | 标准化指标事实模型和 canonical resolver。 |
+| `src/margin/data/db_models.py`、`src/margin/data/ingestion.py`、`src/margin/sql/data_queries.py` | 证券主数据 ORM、warehouse 写入和 PIT-safe 读取。 |
+| `src/margin/data/industry.py`、`src/margin/data/corporate_actions.py` | bitemporal 行业成员和 PIT-safe 公司行动/复权计算。 |
 | `src/margin/data/standardize.py` | 字段映射、代码规范化、单位换算、时间标准化、标准事件生成。 |
 | `src/margin/data/quality.py` | 时间点字段校验、未来信息泄露检查、数据质量报告与事件。 |
 | `src/margin/core/provider.py` | Provider 类型、状态、描述符、基类与业务协议（市场数据、网页搜索）。 |

@@ -19,7 +19,7 @@ def test_migration_sequence_from_clean_database(database_url: str) -> None:
     )
 
     assert result.current_head == result.expected_head
-    assert result.current_head == "20260625_0043_quant_feature_mart"
+    assert result.current_head == "20260625_0044_dead_schema"
     assert result.failed_revision is None
     assert {
         "orchestration_runs",
@@ -74,5 +74,17 @@ def test_migration_sequence_from_clean_database(database_url: str) -> None:
         "position_theses",
         "alert_events",
         "position_reviews",
+        "indicator_definitions",
+        "provider_indicator_mappings",
+        "universe_definitions",
+        "universe_versions",
+        "universe_snapshots",
+        "universe_memberships",
+        "research_refresh_events",
+        "valuation_refresh_runs",
+        "valuation_refresh_steps",
+        "confidence_components",
+        "idempotency_records",
+        "smoke_run_records",
     }.isdisjoint(result.tables)
     assert result.pgvector_available is True
