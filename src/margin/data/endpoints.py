@@ -76,13 +76,25 @@ class ProviderEndpointRegistry:
     """In-memory endpoint registry used by sync planning."""
 
     def __init__(self, endpoints: Iterable[ProviderEndpoint] | None = None) -> None:
-        """Initialize the instance."""
+        """Initialize the registry.
+
+        Args:
+            endpoints: Optional iterable of endpoints to register immediately.
+        """
         self._endpoints: dict[tuple[str, str], ProviderEndpoint] = {}
         for endpoint in endpoints or ():
             self.register(endpoint)
 
     def register(self, endpoint: ProviderEndpoint) -> None:
-        """Register an endpoint, rejecting duplicate provider/code pairs."""
+        """Register an endpoint, rejecting duplicate provider/code pairs.
+
+        Args:
+            endpoint: The endpoint descriptor to register.
+
+        Raises:
+            DuplicateEndpointError: If the provider/code pair is already
+                registered.
+        """
         key = (endpoint.provider, endpoint.code)
         if key in self._endpoints:
             raise DuplicateEndpointError(
@@ -91,7 +103,18 @@ class ProviderEndpointRegistry:
         self._endpoints[key] = endpoint
 
     def get(self, provider: str, code: str) -> ProviderEndpoint:
-        """Return an endpoint descriptor by provider/code."""
+        """Return an endpoint descriptor by provider/code.
+
+        Args:
+            provider: The provider name.
+            code: The endpoint code.
+
+        Returns:
+            The matching ``ProviderEndpoint``.
+
+        Raises:
+            UnknownEndpointError: If no endpoint matches the provider/code.
+        """
         key = (provider.strip().lower(), code.strip().lower())
         try:
             return self._endpoints[key]
@@ -104,7 +127,15 @@ class ProviderEndpointRegistry:
         provider: str | None = None,
         domain: str | None = None,
     ) -> tuple[ProviderEndpoint, ...]:
-        """List endpoint descriptors, optionally filtered by provider and domain."""
+        """List endpoint descriptors, optionally filtered by provider and domain.
+
+        Args:
+            provider: Optional provider name filter.
+            domain: Optional domain filter.
+
+        Returns:
+            A tuple of matching endpoints sorted by endpoint ID.
+        """
         normalized_provider = provider.strip().lower() if provider else None
         normalized_domain = domain.strip().lower() if domain else None
         return tuple(
@@ -116,7 +147,12 @@ class ProviderEndpointRegistry:
 
     @classmethod
     def default(cls) -> ProviderEndpointRegistry:
-        """Build the default AKShare/Tushare endpoint registry."""
+        """Build the default AKShare/Tushare endpoint registry.
+
+        Returns:
+            A registry pre-populated with security, market, corporate-action,
+            financial, valuation, and universe endpoints for both providers.
+        """
         endpoints: list[ProviderEndpoint] = []
         for provider in ("akshare", "tushare"):
             endpoints.extend(

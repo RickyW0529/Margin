@@ -62,15 +62,11 @@ class MockProvider(BaseProvider):
 
     @property
     def descriptor(self) -> ProviderDescriptor:
-        """Returns:
-            The configured provider descriptor.
-        """
+        """Return the configured provider descriptor."""
         return self._descriptor
 
     def healthcheck(self) -> HealthCheckResult:
-        """Returns:
-            A health result using the configured status.
-        """
+        """Return a health result using the configured status."""
         return HealthCheckResult(
             provider_name=self._descriptor.name,
             status=self._health_status,
@@ -78,22 +74,22 @@ class MockProvider(BaseProvider):
         )
 
     def get_bars(self, symbols, start, end, frequency="1d"):
-        """get bars."""
+        """Record the call and return stub bar data for the given symbols."""
         self.call_log.append(("get_bars", (symbols, start, end), {"frequency": frequency}))
         return [{"symbol": s, "close": 100.0} for s in symbols]
 
     def get_financials(self, symbols, start, end):
-        """get financials."""
+        """Record the call and return stub financial data for the given symbols."""
         self.call_log.append(("get_financials", (symbols, start, end), {}))
         return [{"symbol": s, "revenue": 1e8} for s in symbols]
 
     def failing_method(self, *args, **kwargs):
-        """failing method."""
+        """Record the call and raise a simulated ``ProviderError``."""
         self.call_log.append(("failing_method", args, kwargs))
         raise ProviderError("simulated failure")
 
     def non_retry_failure(self):
-        """non retry failure."""
+        """Record the call and raise a non-retryable ``ValueError``."""
         self.call_log.append(("non_retry_failure", (), {}))
         raise ValueError("bad input")
 
@@ -119,19 +115,19 @@ class TestRegistration:
     """Tests covering provider registration, retrieval, and listing."""
 
     def test_register_and_get(self, registry):
-        """A registered provider can be retrieved by name."""
+        """Test that a registered provider can be retrieved by name."""
         p = MockProvider(name="akshare")
         registry.register(p)
         assert registry.get("akshare") is p
 
     def test_register_duplicate_raises(self, registry):
-        """Registering the same name twice without override raises an error."""
+        """Test that registering the same name twice without override raises."""
         registry.register(MockProvider(name="dup"))
         with pytest.raises(ProviderAlreadyRegisteredError):
             registry.register(MockProvider(name="dup"))
 
     def test_register_override(self, registry):
-        """``allow_override=True`` replaces an existing provider registration."""
+        """Test that ``allow_override=True`` replaces an existing registration."""
         p1 = MockProvider(name="p", version="1.0")
         registry.register(p1)
         p2 = MockProvider(name="p", version="2.0")
@@ -139,12 +135,12 @@ class TestRegistration:
         assert registry.get("p").descriptor.version == "2.0"
 
     def test_get_unregistered_raises(self, registry):
-        """Retrieving an unregistered provider raises ``ProviderNotFoundError``."""
+        """Test that retrieving an unregistered provider raises ``ProviderNotFoundError``."""
         with pytest.raises(ProviderNotFoundError):
             registry.get("nonexistent")
 
     def test_list_by_type(self, registry):
-        """``list_by_type`` filters registered providers by their type."""
+        """Test that ``list_by_type`` filters registered providers by their type."""
         registry.register(MockProvider(name="akshare", provider_type=ProviderType.MARKET_DATA))
         registry.register(MockProvider(name="tushare", provider_type=ProviderType.MARKET_DATA))
         registry.register(MockProvider(name="openai", provider_type=ProviderType.LLM))
@@ -156,7 +152,7 @@ class TestRegistration:
         assert llms == ["openai"]
 
     def test_list_all(self, registry):
-        """``list_all`` returns the names of every registered provider."""
+        """Test that ``list_all`` returns the names of every registered provider."""
         registry.register(MockProvider(name="a"))
         registry.register(MockProvider(name="b"))
         assert set(registry.list_all()) == {"a", "b"}
@@ -166,13 +162,13 @@ class TestHealthCheck:
     """Tests covering registry-level health checks."""
 
     def test_single_healthcheck(self, registry):
-        """``healthcheck`` for a single provider returns that provider's status."""
+        """Test that ``healthcheck`` for a single provider returns its status."""
         registry.register(MockProvider(name="p", health_status=ProviderStatus.HEALTHY))
         result = registry.healthcheck("p")
         assert result.status == ProviderStatus.HEALTHY
 
     def test_healthcheck_all(self, registry):
-        """``healthcheck_all`` returns statuses for all registered providers."""
+        """Test that ``healthcheck_all`` returns statuses for all registered providers."""
         registry.register(MockProvider(name="a", health_status=ProviderStatus.HEALTHY))
         registry.register(MockProvider(name="b", health_status=ProviderStatus.DEGRADED))
         results = registry.healthcheck_all()
@@ -184,7 +180,7 @@ class TestCall:
     """Tests covering ``registry.call``, retries, fallback, and audit logging."""
 
     def test_call_success(self, registry):
-        """A successful call returns data and a populated ``CallResult``."""
+        """Test that a successful call returns data and a populated ``CallResult``."""
         provider = MockProvider(name="akshare")
         registry.register(provider)
         symbols = ["000001.SZ", "600000.SH"]
@@ -209,7 +205,7 @@ class TestCall:
         assert result.from_fallback is False
 
     def test_call_logs_audit(self, registry, tmp_path):
-        """``registry.call`` writes an audit record for the invocation."""
+        """Test that ``registry.call`` writes an audit record for the invocation."""
         registry.register(MockProvider(name="akshare"))
         registry.call("akshare", "get_bars",
                        args=(["000001.SZ"], datetime(2026, 6, 1), datetime(2026, 6, 18)))
@@ -221,7 +217,7 @@ class TestCall:
         assert records[0].success is True
 
     def test_call_with_retry(self, registry):
-        """Transient ``ProviderError`` failures are retried up to ``max_retries``."""
+        """Test that transient ``ProviderError`` failures are retried up to ``max_retries``."""
         provider = MockProvider(name="flaky")
         registry.register(
             provider,
@@ -231,7 +227,7 @@ class TestCall:
         call_count = 0
         original = provider.get_bars
         def flaky_get_bars(symbols, start, end, frequency="1d"):
-            """flaky get bars."""
+            """Fail twice then delegate to the original method."""
             nonlocal call_count
             call_count += 1
             if call_count < 3:
@@ -248,7 +244,7 @@ class TestCall:
         assert result.attempt_count == 3
 
     def test_call_failure_recorded(self, registry):
-        """A failing call returns a failure result and writes an audit record."""
+        """Test that a failing call returns a failure result and writes an audit record."""
         provider = MockProvider(name="bad")
         registry.register(
             provider,
@@ -267,7 +263,7 @@ class TestCall:
         assert records[0].error is not None
 
     def test_call_method_not_found(self, registry):
-        """Calling a missing method records a failure without invoking the provider."""
+        """Test that calling a missing method records a failure without invoking the provider."""
         registry.register(MockProvider(name="p"))
         data, result = registry.call("p", "nonexistent_method")
         assert result.success is False
@@ -279,7 +275,7 @@ class TestCall:
         assert "not found" in records[0].error
 
     def test_call_non_retry_exception_is_audited_before_raise(self, registry):
-        """Non-retryable exceptions are audited and then wrapped in ``ProviderError``."""
+        """Test that non-retryable exceptions are audited and wrapped in ``ProviderError``."""
         registry.register(MockProvider(name="p"))
 
         with pytest.raises(ProviderError, match="ValueError: bad input"):
@@ -291,12 +287,12 @@ class TestCall:
         assert "ValueError: bad input" in records[0].error
 
     def test_call_with_fallback(self, registry):
-        """When the primary provider fails, the configured fallback is used."""
+        """Test that when the primary provider fails, the configured fallback is used."""
         primary = MockProvider(name="primary")
         secondary = MockProvider(name="secondary")
 
         def failing_get_bars(symbols, start, end, frequency="1d"):
-            """failing get bars."""
+            """Raise an error simulating a primary provider outage."""
             raise ProviderError("primary down")
 
         primary.get_bars = failing_get_bars
@@ -309,7 +305,7 @@ class TestCall:
         registry._fallbacks["primary"] = ["secondary"]
 
         def secondary_method(symbols, start, end, frequency="1d"):
-            """secondary method."""
+            """Return stub bar data for the fallback provider."""
             return [{"symbol": s, "close": 200.0} for s in symbols]
         secondary.get_bars = secondary_method
 
@@ -335,14 +331,14 @@ class TestSecretResolution:
     """Tests covering secret resolution via the registry."""
 
     def test_resolve_secrets(self, registry, monkeypatch):
-        """``resolve_secrets`` maps declared secret refs to their resolved values."""
+        """Test that ``resolve_secrets`` maps declared secret refs to their values."""
         monkeypatch.setenv("MARGIN_SECRET_TUSHARE_TOKEN", "real_token")
         registry.register(MockProvider(name="tushare", secret_refs=["tushare_token"]))
         secrets = registry.resolve_secrets("tushare")
         assert secrets == {"tushare_token": "real_token"}
 
     def test_register_injects_secret_refs_into_configurable_provider(self, registry, monkeypatch):
-        """Registration injects resolved secrets into providers that declare ``secret_refs``."""
+        """Test that registration injects resolved secrets into providers with ``secret_refs``."""
         monkeypatch.setenv("MARGIN_SECRET_TUSHARE_TOKEN", "real_token")
         provider = TushareProvider()
 
@@ -355,7 +351,7 @@ class TestCostTracking:
     """Tests covering per-call cost tracking in the registry."""
 
     def test_cost_recorded(self, registry):
-        """A successful call records the configured cost in the result and audit log."""
+        """Test that a successful call records the configured cost in the result and audit."""
         registry.register(MockProvider(name="paid"), cost_per_call=0.05)
         _, result = registry.call(
             "paid", "get_bars",
@@ -367,7 +363,7 @@ class TestCostTracking:
         assert records[0].cost == 0.05
 
     def test_cost_multiplied_by_attempts(self, registry):
-        """Total cost is multiplied by the number of retry attempts consumed."""
+        """Test that total cost is multiplied by the number of retry attempts."""
         provider = MockProvider(name="flaky_paid")
         registry.register(
             provider,
@@ -378,7 +374,7 @@ class TestCostTracking:
         call_count = 0
         original = provider.get_bars
         def flaky(symbols, start, end, frequency="1d"):
-            """flaky."""
+            """Fail twice then delegate to the original method."""
             nonlocal call_count
             call_count += 1
             if call_count < 3:

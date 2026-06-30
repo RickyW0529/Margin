@@ -1,4 +1,8 @@
-"""v0.2 deterministic evidence conflict classifier tests."""
+"""v0.2 deterministic evidence conflict classifier tests.
+
+Verifies that the :class:`EvidenceConflictClassifier` detects support/refute
+conflicts and assigns the correct severity.
+"""
 
 from __future__ import annotations
 
@@ -12,7 +16,11 @@ from margin.evidence.models import (
 
 
 def test_support_and_refute_links_create_high_severity_conflict() -> None:
-    """support and refute links create high severity conflict."""
+    """Test that support and refute links create a high-severity conflict.
+
+    When a claim has both a SUPPORTS and a REFUTES evidence link, the classifier
+    should produce a single high-severity conflict referencing both evidence IDs.
+    """
     claim = make_claim(
         statement="收入增长",
         evidence_ids=["ev-positive", "ev-negative"],

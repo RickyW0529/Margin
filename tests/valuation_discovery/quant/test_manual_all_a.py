@@ -1,4 +1,9 @@
-"""Manual All-A quant scoring tests."""
+"""Manual All-A quant scoring tests.
+
+This module validates that the manual All-A scoring strategy does not filter
+by market cap, exposes explainable AI quant profiles without trade instructions,
+and applies confidence-weighted theme hotness scoring.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +19,11 @@ from margin.valuation_discovery.quant.manual_all_a import (
 
 
 def test_manual_all_a_scoring_does_not_filter_by_market_cap() -> None:
-    """Manual All-A scoring keeps small companies when quality fields pass."""
+    """Verify manual All-A scoring keeps small companies when quality fields pass.
+
+    Returns:
+        None.
+    """
     frame = pd.DataFrame(
         [
             _row("small", market_cap=5_000_000_000.0, pe_ttm=8.0),
@@ -37,7 +46,11 @@ def test_manual_all_a_scoring_does_not_filter_by_market_cap() -> None:
 
 
 def test_ai_quant_profile_exposes_key_fields_without_trade_instruction() -> None:
-    """AI profile contains explainable quant facts, not direct order advice."""
+    """Verify the AI profile contains explainable quant facts, not direct order advice.
+
+    Returns:
+        None.
+    """
     scored = score_manual_all_a(
         pd.DataFrame([_row("000001.SZ", market_cap=120_000_000_000.0)]),
         config=ManualAllAConfig(score_threshold=0.0),
@@ -54,7 +67,11 @@ def test_ai_quant_profile_exposes_key_fields_without_trade_instruction() -> None
 
 
 def test_theme_hotness_score_requires_confirmed_member_confidence() -> None:
-    """Theme score is confidence-weighted and ignored until trend is confirmed."""
+    """Verify theme score is confidence-weighted and ignored until trend is confirmed.
+
+    Returns:
+        None.
+    """
     zero_base_weights = {key: 0.0 for key in DEFAULT_WEIGHTS}
     frame = pd.DataFrame(
         [
@@ -100,7 +117,11 @@ def test_theme_hotness_score_requires_confirmed_member_confidence() -> None:
 
 
 def test_ai_quant_profile_exposes_theme_context_for_research() -> None:
-    """AI profile receives theme context for explanation, not trade instruction."""
+    """Verify the AI profile receives theme context for explanation, not trade instruction.
+
+    Returns:
+        None.
+    """
     scored = score_manual_all_a(
         pd.DataFrame(
             [
@@ -128,7 +149,11 @@ def test_ai_quant_profile_exposes_theme_context_for_research() -> None:
 
 
 def test_inactive_theme_weight_does_not_dilute_base_score() -> None:
-    """Theme weight is neutral when no confirmed member receives a theme score."""
+    """Verify theme weight is neutral when no confirmed member receives a theme score.
+
+    Returns:
+        None.
+    """
     frame = pd.DataFrame(
         [
             _row("a", market_cap=10_000_000_000.0, pe_ttm=9.0),

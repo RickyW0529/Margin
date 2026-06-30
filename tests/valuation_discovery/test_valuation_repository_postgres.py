@@ -1,4 +1,10 @@
-"""PostgreSQL repository tests for valuation discovery."""
+"""PostgreSQL repository tests for valuation discovery.
+
+This module validates that the PostgreSQL valuation discovery repository
+persists invalid quant input snapshots, effective assessment pointers,
+assessment lineage atomically, and that the quant repository persists
+runs and results.
+"""
 
 from __future__ import annotations
 
@@ -36,7 +42,14 @@ from margin.valuation_discovery.repository import SQLAlchemyValuationDiscoveryRe
 
 
 def test_postgres_repository_persists_invalid_quant_input_snapshot(database_url: str) -> None:
-    """postgres repository persists invalid quant input snapshot."""
+    """Verify the PostgreSQL repository persists an invalid quant input snapshot.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        None.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -95,7 +108,14 @@ def test_postgres_repository_persists_invalid_quant_input_snapshot(database_url:
 def test_postgres_repository_persists_effective_assessment_pointer(
     database_url: str,
 ) -> None:
-    """postgres repository persists effective assessment pointer."""
+    """Verify the PostgreSQL repository persists an effective assessment pointer.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        None.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -130,7 +150,14 @@ def test_postgres_repository_persists_effective_assessment_pointer(
 def test_postgres_repository_atomically_publishes_assessment_lineage(
     database_url: str,
 ) -> None:
-    """Assessment, evidence, and pointer publication is replay-idempotent."""
+    """Verify assessment, evidence, and pointer publication is replay-idempotent.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        None.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -212,7 +239,14 @@ def test_postgres_repository_atomically_publishes_assessment_lineage(
 
 
 def test_postgres_quant_repository_persists_run_and_results(database_url: str) -> None:
-    """postgres quant repository persists run and results."""
+    """Verify the PostgreSQL quant repository persists a run and its results.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        None.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)

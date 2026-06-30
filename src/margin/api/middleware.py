@@ -27,10 +27,22 @@ def _get_trace_id(request: Request) -> str:
 
 
 class TraceIdMiddleware(BaseHTTPMiddleware):
-    """Populate trace_id from header or generate a new one."""
+    """Populate trace_id from header or generate a new one.
+
+    Attaches a request-scoped trace identifier to the request scope and
+    response headers so that distributed callers can correlate requests.
+    """
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        """dispatch."""
+        """Attach a trace id to the request scope and response headers.
+
+        Args:
+            request: Incoming HTTP request.
+            call_next: Next middleware or route handler in the chain.
+
+        Returns:
+            The HTTP response with the trace id header set.
+        """
         settings = get_settings()
         # Prefer the incoming header so distributed callers can correlate requests.
         trace_id = request.headers.get(settings.trace_id_header) or f"t-{uuid.uuid4().hex[:12]}"
@@ -41,10 +53,23 @@ class TraceIdMiddleware(BaseHTTPMiddleware):
 
 
 class MetricsMiddleware(BaseHTTPMiddleware):
-    """Record HTTP request counts and durations."""
+    """Record HTTP request counts and durations.
+
+    Observes request count and latency using the route path template
+    (when available) to keep label cardinality low.
+    """
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        """dispatch."""
+        """Record HTTP request count and duration for each processed request.
+
+        Args:
+            request: Incoming HTTP request.
+            call_next: Next middleware or route handler in the chain.
+
+        Returns:
+            The HTTP response from the downstream handler. If the handler
+            raises an unhandled exception, a 500 status is recorded.
+        """
         start = time.perf_counter()
         status_code = 500  # Default used if call_next raises an unhandled exception.
         try:

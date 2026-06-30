@@ -32,7 +32,7 @@ from margin.storage.database import (
 
 @pytest.fixture
 def sync_repository(database_url: str) -> SQLAlchemyDataSyncRepository:
-    """sync repository."""
+    """Provide a clean ``SQLAlchemyDataSyncRepository`` against a test database."""
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -45,7 +45,7 @@ def sync_repository(database_url: str) -> SQLAlchemyDataSyncRepository:
 
 
 def test_claim_is_exclusive(sync_repository: SQLAlchemyDataSyncRepository) -> None:
-    """claim is exclusive."""
+    """Test that only one worker can claim a given endpoint work item."""
     run = sync_repository.create_run(
         DataSyncRequest(provider="akshare", endpoint_codes=("daily_bar",)),
         endpoints=(ProviderEndpoint(provider="akshare", code="daily_bar", domain="market"),),
@@ -62,7 +62,7 @@ def test_claim_is_exclusive(sync_repository: SQLAlchemyDataSyncRepository) -> No
 def test_failed_endpoint_does_not_advance_cursor(
     sync_repository: SQLAlchemyDataSyncRepository,
 ) -> None:
-    """failed endpoint does not advance cursor."""
+    """Test that a failed endpoint does not advance the sync cursor."""
     run = sync_repository.create_run(
         DataSyncRequest(provider="akshare", endpoint_codes=("daily_bar",)),
         endpoints=(ProviderEndpoint(provider="akshare", code="daily_bar", domain="market"),),
@@ -71,7 +71,7 @@ def test_failed_endpoint_does_not_advance_cursor(
     assert item is not None
 
     def failing_handler(_item):
-        """failing handler."""
+        """Raise a retryable provider sync error."""
         raise ProviderSyncError("provider_500", "upstream failed")
 
     service = SyncService(
@@ -279,7 +279,7 @@ def test_successful_endpoint_records_queryable_freshness(
 
 
 def test_market_expected_as_of_waits_for_provider_availability_time() -> None:
-    """market expected as of waits for provider availability time."""
+    """Test that market freshness waits until the provider availability time."""
     calculator = FreshnessCalculator(
         trading_days={date(2026, 6, 19), date(2026, 6, 22)},
         timezone="Asia/Shanghai",
@@ -296,7 +296,7 @@ def test_market_expected_as_of_waits_for_provider_availability_time() -> None:
 
 
 def test_freshness_state_is_stale_when_latest_observation_lags_expected() -> None:
-    """freshness state is stale when laobservation lags expected."""
+    """Test that freshness is stale when the latest observation lags the expected time."""
     calculator = FreshnessCalculator(
         trading_days={date(2026, 6, 19), date(2026, 6, 22)},
         timezone="Asia/Shanghai",

@@ -19,7 +19,12 @@ from margin.storage.database import DatabaseSettings, create_database_engine
 
 
 def main() -> int:
-    """main."""
+    """Verify worker wiring and database migration head.
+
+    Returns:
+        int: 0 when the database is reachable and at the expected migration
+            head, otherwise 1.
+    """
     settings = get_settings()
     config = Config("alembic.ini")
     expected_head = ScriptDirectory.from_config(config).get_current_head()

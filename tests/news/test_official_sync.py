@@ -54,12 +54,24 @@ class FakeOfficialDiscovery:
     """Discovery fake returning preconfigured records."""
 
     def __init__(self, records: list[DiscoveredDocument]) -> None:
-        """Initialize the instance."""
+        """Initialize the fake discovery with preconfigured records.
+
+        Args:
+            records: The discovered documents to return from ``discover``.
+        """
         self.records = records
         self.seen_cursor: str | None = None
 
     def discover(self, cursor: str | None, limit: int) -> list[DiscoveredDocument]:
-        """discover."""
+        """Return up to ``limit`` preconfigured records and record the cursor.
+
+        Args:
+            cursor: The cursor passed by the caller.
+            limit: Maximum number of records to return.
+
+        Returns:
+            A slice of the preconfigured records list.
+        """
         self.seen_cursor = cursor
         return self.records[:limit]
 
@@ -68,7 +80,16 @@ class FakeAcquirer:
     """Acquirer fake that returns a durable document event."""
 
     def acquire(self, source_name: str, url: str, **kwargs):
-        """acquire."""
+        """Return a durable L1 document event for the given URL.
+
+        Args:
+            source_name: The source name to assign to the event.
+            url: The source URL for the document.
+            **kwargs: Optional ``title_override`` and ``published_at`` overrides.
+
+        Returns:
+            A ``DocumentEvent`` with L1 source level and seeded symbols.
+        """
         return make_document_event(
             source_url=url,
             source_name=source_name,
@@ -84,7 +105,16 @@ class FailingAcquirer:
     """Acquirer fake that simulates a download/persist failure before event creation."""
 
     def acquire(self, source_name: str, url: str, **kwargs):
-        """acquire."""
+        """Always raise a runtime error to simulate a download failure.
+
+        Args:
+            source_name: The source name (ignored).
+            url: The source URL (ignored).
+            **kwargs: Additional acquire arguments (ignored).
+
+        Raises:
+            RuntimeError: Always, to simulate a download or persist failure.
+        """
         raise RuntimeError("download failed")
 
 

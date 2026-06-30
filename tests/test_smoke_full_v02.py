@@ -1,4 +1,9 @@
-"""Full v0.2 smoke harness command-contract tests."""
+"""Full v0.2 smoke harness command-contract tests.
+
+Verifies that the full smoke script suppresses noisy stage output, requires real
+provider credentials without leaking secrets, accepts secret-manager env aliases,
+and can skip unconfigured providers in dry-run mode.
+"""
 
 from __future__ import annotations
 
@@ -18,9 +23,13 @@ from scripts.verify_migrations import verify_clean_database
 
 
 def test_smoke_stage_suppresses_noisy_stage_output(capsys) -> None:
-    """smoke stage suppresses noisy stage output."""
+    """Test that the smoke stage helper suppresses noisy stdout/stderr from stages.
+
+    Args:
+        capsys: Pytest fixture for capturing stdout/stderr.
+    """
     def noisy_stage() -> dict[str, str]:
-        """noisy stage."""
+        """Noisy stage that prints to stdout and stderr but returns an empty dict."""
         print("provider raw output should not be printed")
         print("provider stderr should not be printed", file=sys.stderr)
         return {}
@@ -37,7 +46,12 @@ def test_full_smoke_requires_real_provider_credentials_without_leaking_secret(
     tmp_path: Path,
     database_url: str,
 ) -> None:
-    """full smoke requires real provider credentials without leaking secret."""
+    """Test that the full smoke requires real provider credentials without leaking secrets.
+
+    Args:
+        tmp_path: Pytest fixture providing a temporary directory.
+        database_url: Connection string for the PostgreSQL test server.
+    """
     output_path = tmp_path / "smoke.json"
     env = {
         "MARGIN_DATABASE_URL": database_url,
@@ -94,18 +108,23 @@ def test_full_smoke_requires_real_provider_credentials_without_leaking_secret(
 
 
 def test_tushare_smoke_accepts_secret_manager_env_alias(monkeypatch) -> None:
-    """tushare smoke accepts secret manager env alias."""
+    """Test that the Tushare smoke stage accepts the secret-manager env alias.
+
+    Args:
+        monkeypatch: Pytest fixture for modifying environment variables and attributes.
+    """
     calls: dict[str, str | None] = {}
 
     class DummyTushareProvider:
-        """DummyTushareProvider."""
+        """Dummy Tushare provider that records constructor args and returns a healthy check."""
+
         def __init__(self, *, token: str, http_url: str | None = None) -> None:
-            """Initialize the instance."""
+            """Initialize the dummy provider and record the token and URL."""
             calls["token"] = token
             calls["http_url"] = http_url
 
         def healthcheck(self) -> HealthCheckResult:
-            """healthcheck."""
+            """Return a deterministic healthy check result."""
             return HealthCheckResult(
                 provider_name="tushare",
                 status=ProviderStatus.HEALTHY,
@@ -126,7 +145,12 @@ def test_full_smoke_dry_run_can_skip_unconfigured_real_providers(
     tmp_path: Path,
     database_url: str,
 ) -> None:
-    """full smoke dry run can skip unconfigured real providers."""
+    """Test that the full smoke dry run can skip unconfigured real providers.
+
+    Args:
+        tmp_path: Pytest fixture providing a temporary directory.
+        database_url: Connection string for the PostgreSQL test server.
+    """
     output_path = tmp_path / "smoke.json"
     url = make_url(database_url)
     smoke_database_name = f"{url.database}_smoke_full"

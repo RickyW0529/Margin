@@ -16,5 +16,10 @@ router = APIRouter(tags=["metrics"])
 
 @router.get("/metrics")
 def metrics() -> Response:
-    """Return the current metrics payload in Prometheus exposition format."""
+    """Return the current metrics payload in Prometheus exposition format.
+
+    Returns:
+        A Response with Prometheus-formatted metrics content and the
+        appropriate content type.
+    """
     return Response(content=generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)

@@ -16,7 +16,12 @@ class NewsContextBundleBuilder:
     """Select ranked documents and encode whether news refresh is complete."""
 
     def __init__(self, repository: NewsRepository) -> None:
-        """Initialize the instance."""
+        """Initialize the bundle builder.
+
+        Args:
+            repository: Repository used to read target statuses and context documents and
+                to persist bundles.
+        """
         self._repository = repository
 
     def build_for_run(
@@ -26,7 +31,16 @@ class NewsContextBundleBuilder:
         security_id: str,
         max_documents: int = 20,
     ) -> NewsContextBundle:
-        """Build and persist one security-specific news context bundle."""
+        """Build and persist one security-specific news context bundle.
+
+        Args:
+            run_id: Identifier of the news refresh run.
+            security_id: Identifier of the security to build the bundle for.
+            max_documents: Maximum number of ranked documents to include.
+
+        Returns:
+            A persisted ``NewsContextBundle`` with target-completion semantics.
+        """
         statuses = self._repository.list_target_statuses_for_security(
             run_id=run_id,
             security_id=security_id,

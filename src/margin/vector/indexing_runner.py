@@ -102,13 +102,26 @@ class IndexingRunner:
         pipeline: Any,
         lease_seconds: int = 300,
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the lease-aware indexing runner.
+
+        Args:
+            news_repository: Repository used to claim outbox rows with a lease.
+            pipeline: Indexing pipeline exposing an ``index_event`` method.
+            lease_seconds: Lease duration for claimed outbox rows.
+        """
         self._news = news_repository
         self._pipeline = pipeline
         self._lease_seconds = lease_seconds
 
     def claim_next(self, *, now=None):  # noqa: ANN001, ANN201
-        """Claim one eligible outbox row."""
+        """Claim one eligible outbox row.
+
+        Args:
+            now: Optional current timestamp override for lease calculation.
+
+        Returns:
+            The claimed outbox row, or ``None`` if no eligible row is available.
+        """
         claimed = self._news.claim_outbox_with_lease(
             "vector_index",
             limit=1,
@@ -118,7 +131,15 @@ class IndexingRunner:
         return claimed[0] if claimed else None
 
     def process_one(self, *, event_id: str) -> None:
-        """Process one document event and preserve retryability on provider failure."""
+        """Process one document event and preserve retryability on provider failure.
+
+        If the outbox row is not already in ``processing`` state, an attempt is
+        made to claim it first. On success the outbox row is marked as
+        succeeded; on failure it is marked as retryable.
+
+        Args:
+            event_id: Identifier of the document event to process.
+        """
         row = self._news.get_outbox_by_event(event_id, "vector_index")
         if row is None:
             return

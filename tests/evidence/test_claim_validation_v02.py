@@ -1,4 +1,8 @@
-"""v0.2 claim validation policy tests."""
+"""v0.2 claim validation policy tests.
+
+Verifies that the v0.2 citation policy abstains critical claims backed only by
+L4 evidence without cross-validation, instead of passing them.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +17,11 @@ DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 
 
 def test_critical_claim_with_only_l4_evidence_can_abstain_under_v02_policy() -> None:
-    """critical claim with only l4 evidence can abstain under v02 policy."""
+    """Test that a critical claim with only L4 evidence can abstain under v0.2 policy.
+
+    A risk-event claim backed solely by L4 evidence without cross-validation should
+    be abstained rather than passed, per the v0.2 citation policy.
+    """
     evidence = _evidence("ev-1", source_level=SourceLevel.L4)
     claim = make_claim(
         statement="存在重大风险事件",
@@ -36,7 +44,7 @@ def test_critical_claim_with_only_l4_evidence_can_abstain_under_v02_policy() -> 
 
 
 def _evidence(evidence_id: str, *, source_level: SourceLevel) -> Evidence:
-    """evidence."""
+    """Build a deterministic evidence fixture with the given source level."""
     chunk = make_chunk(
         document_id=f"doc-{evidence_id}",
         content="存在重大风险事件",

@@ -62,12 +62,23 @@ class DocumentStatus(StrEnum):
 
 
 def utc_now() -> datetime:
-    """Return the current timezone-aware UTC timestamp."""
+    """Return the current timezone-aware UTC timestamp.
+
+    Returns:
+        Timezone-aware datetime in UTC.
+    """
     return datetime.now(UTC)
 
 
 def ensure_utc(value: datetime) -> datetime:
-    """Normalize a datetime to timezone-aware UTC, assuming UTC for naive values."""
+    """Normalize a datetime to timezone-aware UTC, assuming UTC for naive values.
+
+    Args:
+        value: Datetime value to normalize.
+
+    Returns:
+        Timezone-aware UTC datetime.
+    """
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
@@ -79,7 +90,17 @@ def ensure_utc(value: datetime) -> datetime:
 
 
 class NewsRefreshStatus(StrEnum):
-    """Durable status for a target-driven news refresh run."""
+    """Durable status for a target-driven news refresh run.
+
+    Attributes:
+        PENDING: Run has been created but not yet started.
+        RUNNING: Run is actively processing targets.
+        WAITING_RATE_LIMIT: Run is waiting for a provider rate limit to reset.
+        WAITING_BUDGET: Run is waiting for a provider budget to reset.
+        COMPLETED: All targets processed successfully.
+        PARTIAL: Some targets failed but the run completed.
+        FAILED: Run failed before completing.
+    """
 
     PENDING = "pending"
     RUNNING = "running"
@@ -96,12 +117,30 @@ class NewsRefreshStatus(StrEnum):
         completed_count: int,
         failed_final_count: int,
     ) -> bool:
-        """Return whether all persisted targets reached a terminal target state."""
+        """Return whether all persisted targets reached a terminal target state.
+
+        Args:
+            target_count: Total number of targets in the run.
+            completed_count: Number of targets that completed successfully.
+            failed_final_count: Number of targets that failed terminally.
+
+        Returns:
+            True if the sum of completed and failed-final targets equals the total target
+            count.
+        """
         return target_count == completed_count + failed_final_count
 
 
 class NewsTargetStatus(StrEnum):
-    """Durable processing state for one research target in a news refresh run."""
+    """Durable processing state for one research target in a news refresh run.
+
+    Attributes:
+        PENDING: Target is waiting to be claimed.
+        CLAIMED: Target has been claimed by a worker.
+        COMPLETED: Target has been processed successfully.
+        RETRY: Target failed and is scheduled for retry.
+        FAILED_FINAL: Target has failed terminally after exhausting retries.
+    """
 
     PENDING = "pending"
     CLAIMED = "claimed"
@@ -111,7 +150,16 @@ class NewsTargetStatus(StrEnum):
 
 
 class TargetTriggerType(StrEnum):
-    """Why a security entered the news refresh target set."""
+    """Why a security entered the news refresh target set.
+
+    Attributes:
+        QUANT_PASS: Security passed the quant screening.
+        MATERIAL_FILING: A material filing was detected for the security.
+        THESIS_INVALIDATION_RISK: The investment thesis may be invalidated.
+        REVIEW_DUE: The security is due for a periodic review.
+        NEW_PASS: Security newly passed the quant screening.
+        NEAR_THRESHOLD: Security is near the quant screening threshold.
+    """
 
     QUANT_PASS = "quant_pass"
     MATERIAL_FILING = "material_filing"
@@ -122,7 +170,24 @@ class TargetTriggerType(StrEnum):
 
 
 class NewsTarget(BaseModel):
-    """One complete target that must be searched before a refresh run can reconcile."""
+    """One complete target that must be searched before a refresh run can reconcile.
+
+    Attributes:
+        scope_version_id: Identifier of the scope version that produced the quant run.
+        quant_run_id: Identifier of the quant run.
+        security_id: Identifier of the target security.
+        symbol: Ticker symbol of the target security.
+        name: Display name of the target security.
+        trigger_type: Why the security entered the target set.
+        decision_at: Decision timestamp used to scope the quant run.
+        priority: Numeric priority used for claim ordering.
+        status: Current durable processing state of the target.
+        attempts: Number of processing attempts made.
+        next_attempt_at: Scheduled time for the next retry, if any.
+        last_error_code: Stable error code from the last failure, if any.
+        aliases: Tuple of alternative names for the security.
+        industry_terms: Tuple of industry-specific terms for query generation.
+    """
 
     scope_version_id: str
     quant_run_id: str
@@ -142,14 +207,26 @@ class NewsTarget(BaseModel):
     @field_validator("decision_at", "next_attempt_at")
     @classmethod
     def normalize_target_timestamp(cls, value: datetime | None) -> datetime | None:
-        """Normalize queue timestamps to UTC."""
+        """Normalize queue timestamps to UTC.
+
+        Args:
+            value: Datetime value provided during model construction.
+
+        Returns:
+            Timezone-aware UTC datetime, or None if the input is None.
+        """
         if value is None:
             return None
         return ensure_utc(value)
 
     @property
     def dedupe_key(self) -> str:
-        """Stable target key independent of worker attempts or batching."""
+        """Stable target key independent of worker attempts or batching.
+
+        Returns:
+            SHA-256 hex digest string derived from scope, quant run, security, trigger, and
+            decision date.
+        """
         payload = "|".join(
             [
                 self.scope_version_id,
@@ -163,7 +240,22 @@ class NewsTarget(BaseModel):
 
 
 class NewsRefreshRun(BaseModel):
-    """Auditable summary of a target-driven news refresh run."""
+    """Auditable summary of a target-driven news refresh run.
+
+    Attributes:
+        run_id: Unique identifier for the run.
+        scope_version_id: Identifier of the scope version that produced the quant run.
+        quant_run_id: Identifier of the quant run being refreshed.
+        decision_at: Decision timestamp used to scope the quant run.
+        status: Current durable status of the run.
+        target_count: Total number of targets in the run.
+        completed_count: Number of targets that completed successfully.
+        failed_final_count: Number of targets that failed terminally.
+        created_at: Timestamp when the run was created.
+        started_at: Timestamp when the run started processing, if any.
+        finished_at: Timestamp when the run finished, if any.
+        error_summary: Structured error summary for failed or partial runs.
+    """
 
     run_id: str
     scope_version_id: str
@@ -181,14 +273,28 @@ class NewsRefreshRun(BaseModel):
     @field_validator("decision_at", "created_at", "started_at", "finished_at")
     @classmethod
     def normalize_run_timestamp(cls, value: datetime | None) -> datetime | None:
-        """Normalize run timestamps to UTC."""
+        """Normalize run timestamps to UTC.
+
+        Args:
+            value: Datetime value provided during model construction.
+
+        Returns:
+            Timezone-aware UTC datetime, or None if the input is None.
+        """
         if value is None:
             return None
         return ensure_utc(value)
 
 
 class NewsTargetWorkItem(BaseModel):
-    """Claimed target work item returned by the durable queue."""
+    """Claimed target work item returned by the durable queue.
+
+    Attributes:
+        target_id: Unique identifier for the target.
+        run_id: Identifier of the parent refresh run.
+        target: The claimed ``NewsTarget`` with current queue state.
+        claimed_at: Timestamp when the target was claimed.
+    """
 
     target_id: str
     run_id: str
@@ -198,14 +304,31 @@ class NewsTargetWorkItem(BaseModel):
     @field_validator("claimed_at")
     @classmethod
     def normalize_claimed_at(cls, value: datetime) -> datetime:
-        """Normalize claim timestamp to UTC."""
+        """Normalize claim timestamp to UTC.
+
+        Args:
+            value: Datetime value provided during model construction.
+
+        Returns:
+            Timezone-aware UTC datetime.
+        """
         return ensure_utc(value)
 
     model_config = {"frozen": True}
 
 
 class TargetReconciliation(BaseModel):
-    """Current target counts for a refresh run."""
+    """Current target counts for a refresh run.
+
+    Attributes:
+        target_count: Total number of targets in the run.
+        pending_count: Number of targets waiting to be claimed.
+        claimed_count: Number of targets currently claimed by workers.
+        retry_count: Number of targets scheduled for retry.
+        completed_count: Number of targets that completed successfully.
+        failed_final_count: Number of targets that failed terminally.
+        is_terminal: Whether all targets have reached a terminal state.
+    """
 
     target_count: int
     pending_count: int
@@ -219,7 +342,16 @@ class TargetReconciliation(BaseModel):
 
 
 class DocumentSecurityLink(BaseModel):
-    """Structured relation between a document event and a security."""
+    """Structured relation between a document event and a security.
+
+    Attributes:
+        event_id: Identifier of the document event.
+        security_id: Identifier of the related security.
+        symbol: Ticker symbol of the related security.
+        relation_type: Type of relation (e.g., mentioned, targeted_search).
+        source: Source of the link (e.g., deterministic_mapper, news_refresh).
+        created_at: Timestamp when the link was created.
+    """
 
     event_id: str
     security_id: str
@@ -231,14 +363,38 @@ class DocumentSecurityLink(BaseModel):
     @field_validator("created_at")
     @classmethod
     def normalize_link_created_at(cls, value: datetime) -> datetime:
-        """Normalize link timestamp to UTC."""
+        """Normalize link timestamp to UTC.
+
+        Args:
+            value: Datetime value provided during model construction.
+
+        Returns:
+            Timezone-aware UTC datetime.
+        """
         return ensure_utc(value)
 
     model_config = {"frozen": True}
 
 
 class DocumentMaterialityScore(BaseModel):
-    """Deterministic materiality score for one event/security pair."""
+    """Deterministic materiality score for one event/security pair.
+
+    Attributes:
+        event_id: Identifier of the document event, if available.
+        security_id: Identifier of the security the score applies to.
+        relevance_score: Relevance score in the range [0, 1].
+        materiality_score: Materiality score in the range [0, 1].
+        novelty_score: Novelty score in the range [0, 1].
+        trigger_type: Semantic trigger type (e.g., regulatory_penalty, major_contract).
+        risk_polarity: Risk polarity (positive, negative, neutral).
+        is_material: Whether the document is material enough to influence research.
+        reason_codes: Tuple of reason codes supporting the score.
+        scoring_version: Version of the scoring rules used.
+        is_untrusted_external_text: Whether the source is untrusted external text (L4/L5).
+        can_directly_change_research_state: Whether the score may directly change research
+            state.
+        created_at: Timestamp when the score was created.
+    """
 
     event_id: str | None = None
     security_id: str
@@ -257,14 +413,32 @@ class DocumentMaterialityScore(BaseModel):
     @field_validator("created_at")
     @classmethod
     def normalize_score_created_at(cls, value: datetime) -> datetime:
-        """Normalize score timestamp to UTC."""
+        """Normalize score timestamp to UTC.
+
+        Args:
+            value: Datetime value provided during model construction.
+
+        Returns:
+            Timezone-aware UTC datetime.
+        """
         return ensure_utc(value)
 
     model_config = {"frozen": True}
 
 
 class NewsContextDocument(BaseModel):
-    """One selected document in a downstream news context bundle."""
+    """One selected document in a downstream news context bundle.
+
+    Attributes:
+        event_id: Identifier of the document event.
+        title: Document title.
+        source_level: Source level of the document.
+        materiality_score: Materiality score of the document.
+        novelty_score: Novelty score of the document.
+        published_at: Publication timestamp of the document.
+        rank: Zero-based rank of the document within the bundle.
+        selection_reason: Reason the document was selected for the bundle.
+    """
 
     event_id: str
     title: str
@@ -278,14 +452,34 @@ class NewsContextDocument(BaseModel):
     @field_validator("published_at")
     @classmethod
     def normalize_context_document_published_at(cls, value: datetime) -> datetime:
-        """Normalize publication timestamp to UTC."""
+        """Normalize publication timestamp to UTC.
+
+        Args:
+            value: Datetime value provided during model construction.
+
+        Returns:
+            Timezone-aware UTC datetime.
+        """
         return ensure_utc(value)
 
     model_config = {"frozen": True}
 
 
 class NewsContextBundle(BaseModel):
-    """Bundle of news context passed to RAG/AI with target-completion semantics."""
+    """Bundle of news context passed to RAG/AI with target-completion semantics.
+
+    Attributes:
+        bundle_id: Unique identifier for the bundle.
+        run_id: Identifier of the parent refresh run.
+        security_id: Identifier of the security the bundle covers.
+        target_completion_state: Completion state of the target set (complete, partial,
+            failed).
+        can_support_verified_carry_forward: Whether the bundle can support verified
+            carry-forward.
+        incomplete_reason_codes: Tuple of reason codes when the bundle is incomplete.
+        documents: Tuple of selected ``NewsContextDocument`` objects.
+        created_at: Timestamp when the bundle was created.
+    """
 
     bundle_id: str
     run_id: str
@@ -299,7 +493,14 @@ class NewsContextBundle(BaseModel):
     @field_validator("created_at")
     @classmethod
     def normalize_bundle_created_at(cls, value: datetime) -> datetime:
-        """Normalize bundle timestamp to UTC."""
+        """Normalize bundle timestamp to UTC.
+
+        Args:
+            value: Datetime value provided during model construction.
+
+        Returns:
+            Timezone-aware UTC datetime.
+        """
         return ensure_utc(value)
 
     model_config = {"frozen": True}

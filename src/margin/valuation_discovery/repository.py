@@ -100,7 +100,7 @@ class MemoryValuationDiscoveryRepository:
     """In-memory repository used by unit tests and local composition tests."""
 
     def __init__(self) -> None:
-        """init  ."""
+        """Initialize an empty in-memory valuation discovery repository."""
         self._definitions: dict[str, UniverseDefinition] = {}
         self._memberships: dict[str, UniverseMembership] = {}
         self._snapshots: dict[str, UniverseSnapshot] = {}
@@ -260,7 +260,7 @@ class SQLAlchemyValuationDiscoveryRepository:
     """PostgreSQL-backed valuation discovery repository."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
-        """init  ."""
+        """Initialize the repository with a SQLAlchemy session factory."""
         self._session_factory = session_factory
 
     def add_quant_input_snapshot(self, snapshot: QuantInputSnapshot) -> None:
@@ -372,7 +372,7 @@ class SQLAlchemyValuationDiscoveryRepository:
 
 
 def _quant_input_snapshot_to_row(snapshot: QuantInputSnapshot) -> QuantInputSnapshotRow:
-    """quant input snapshot to row."""
+    """Convert a ``QuantInputSnapshot`` to its database row."""
     return QuantInputSnapshotRow(
         snapshot_id=snapshot.snapshot_id,
         scope_version_id=snapshot.scope_version_id,
@@ -405,7 +405,7 @@ def _quant_input_fact_to_row(
     index: int,
     fact_ref: dict[str, Any],
 ) -> QuantInputSnapshotFactRow:
-    """quant input fact to row."""
+    """Convert a fact reference dict to a ``QuantInputSnapshotFactRow``."""
     unique_material = f"{snapshot_id}:{index}:{fact_ref['fact_id']}:{fact_ref['indicator_id']}"
     fact_ref_id = "qisf_" + hashlib.sha256(unique_material.encode("utf-8")).hexdigest()[:24]
     return QuantInputSnapshotFactRow(
@@ -423,7 +423,7 @@ def _quant_input_snapshot_from_row(
     row: QuantInputSnapshotRow,
     fact_rows: list[QuantInputSnapshotFactRow],
 ) -> QuantInputSnapshot:
-    """quant input snapshot from row."""
+    """Convert a snapshot row and fact rows to the immutable domain model."""
     return QuantInputSnapshot(
         snapshot_id=row.snapshot_id,
         scope_version_id=row.scope_version_id,
@@ -460,7 +460,7 @@ def _quant_input_snapshot_from_row(
 
 
 def _parse_datetime(value: Any) -> datetime:
-    """parse datetime."""
+    """Parse a datetime or ISO string into a timezone-aware UTC datetime."""
     if isinstance(value, datetime):
         return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
     if isinstance(value, str):
@@ -472,7 +472,7 @@ def _parse_datetime(value: Any) -> datetime:
 def _effective_pointer_to_row(
     pointer: EffectiveAssessmentPointer,
 ) -> EffectiveAssessmentPointerRow:
-    """effective pointer to row."""
+    """Convert an ``EffectiveAssessmentPointer`` to its database row."""
     return EffectiveAssessmentPointerRow(
         pointer_id=pointer.pointer_id,
         security_id=pointer.security_id,
@@ -491,7 +491,7 @@ def _effective_pointer_to_row(
 def _effective_pointer_from_row(
     row: EffectiveAssessmentPointerRow,
 ) -> EffectiveAssessmentPointer:
-    """effective pointer from row."""
+    """Convert an effective pointer row to the immutable domain model."""
     return EffectiveAssessmentPointer(
         pointer_id=row.pointer_id,
         security_id=row.security_id,

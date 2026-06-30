@@ -49,7 +49,7 @@ class SmokeStage:
 
 
 def _secret_values() -> tuple[str, ...]:
-    """secret values."""
+    """Collect configured secret env values for redaction."""
     names = (
         "MARGIN_TUSHARE_TOKEN",
         "MARGIN_SECRET_TUSHARE_TOKEN",
@@ -62,7 +62,7 @@ def _secret_values() -> tuple[str, ...]:
 
 
 def _redact_text(value: str) -> str:
-    """redact text."""
+    """Redact known secrets from a text string."""
     return SecretRedactor(values=_secret_values()).redact(value)
 
 
@@ -70,7 +70,7 @@ def _stage(
     name: str,
     func: Callable[[], dict[str, Any] | None],
 ) -> SmokeStage:
-    """stage."""
+    """Run a smoke stage function and capture its result."""
     started = time.perf_counter()
     try:
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
@@ -104,7 +104,7 @@ def _stage(
 
 
 def _skipped(name: str, reason: str) -> SmokeStage:
-    """skipped."""
+    """Build a skipped smoke stage with a reason."""
     return SmokeStage(
         stage=name,
         status="skipped",
@@ -123,7 +123,7 @@ class SmokeFailure(RuntimeError):
         error_code: str,
         detail: dict[str, Any] | None = None,
     ) -> None:
-        """init  ."""
+        """Initialize the smoke failure with blocker and error code."""
         super().__init__(error_code)
         self.external_blocker = external_blocker
         self.error_code = error_code
@@ -131,7 +131,7 @@ class SmokeFailure(RuntimeError):
 
 
 def _require_env(names: tuple[str, ...]) -> dict[str, str]:
-    """require env."""
+    """Require all named env vars or raise SmokeFailure."""
     values: dict[str, str] = {}
     missing: list[str] = []
     for name in names:
@@ -150,7 +150,7 @@ def _require_env(names: tuple[str, ...]) -> dict[str, str]:
 
 
 def _require_one_env(names: tuple[str, ...]) -> str:
-    """require one env."""
+    """Require at least one named env var or raise SmokeFailure."""
     for name in names:
         value = os.getenv(name, "").strip()
         if value:
@@ -163,7 +163,7 @@ def _require_one_env(names: tuple[str, ...]) -> str:
 
 
 def _classify_exception(exc: Exception) -> str:
-    """classify exception."""
+    """Classify an exception into a stable blocker code."""
     message = str(exc).lower()
     if (
         "401" in message
@@ -186,7 +186,7 @@ def _classify_exception(exc: Exception) -> str:
 
 
 def _health_to_detail(result: HealthCheckResult) -> dict[str, Any]:
-    """health to detail."""
+    """Convert a HealthCheckResult to a serializable detail dict."""
     return {
         "provider": result.provider_name,
         "status": result.status.value,
@@ -196,7 +196,7 @@ def _health_to_detail(result: HealthCheckResult) -> dict[str, Any]:
 
 
 def _require_healthy(result: HealthCheckResult) -> dict[str, Any]:
-    """require healthy."""
+    """Require a healthy provider result or raise SmokeFailure."""
     detail = _health_to_detail(result)
     if result.status != ProviderStatus.HEALTHY:
         raise SmokeFailure(
@@ -208,7 +208,7 @@ def _require_healthy(result: HealthCheckResult) -> dict[str, Any]:
 
 
 def _compose_config_stage() -> dict[str, Any]:
-    """compose config stage."""
+    """Validate docker-compose configuration."""
     result = subprocess.run(
         ["docker", "compose", "config", "--quiet"],
         text=True,
@@ -225,7 +225,7 @@ def _compose_config_stage() -> dict[str, Any]:
 
 
 def _migration_stage(database_url: str) -> dict[str, Any]:
-    """migration stage."""
+    """Verify database migration head matches expected."""
     result = verify_clean_database(database_url)
     if result.current_head != result.expected_head:
         raise SmokeFailure(
@@ -244,7 +244,7 @@ def _migration_stage(database_url: str) -> dict[str, Any]:
 
 
 def _database_stage(database_url: str) -> dict[str, Any]:
-    """database stage."""
+    """Check database pgvector extension and migration head."""
     engine = create_engine(database_url)
     try:
         with engine.connect() as connection:
@@ -266,9 +266,9 @@ def _database_stage(database_url: str) -> dict[str, Any]:
 
 
 def _http_health_stage(url: str, *, name: str) -> Callable[[], dict[str, Any]]:
-    """http health stage."""
+    """Build an HTTP health check stage closure."""
     def check() -> dict[str, Any]:
-        """check."""
+        """Perform the HTTP health check."""
         try:
             with urlopen(url, timeout=10) as response:
                 if response.status >= 400:
@@ -289,7 +289,7 @@ def _http_health_stage(url: str, *, name: str) -> Callable[[], dict[str, Any]]:
 
 
 def _provider_stage(provider: str, *, require_real: bool) -> SmokeStage:
-    """provider stage."""
+    """Run or skip a provider health-check stage."""
     stage_name = f"provider:{provider}"
     if not require_real:
         return _skipped(stage_name, "real_provider_not_required")
@@ -297,7 +297,7 @@ def _provider_stage(provider: str, *, require_real: bool) -> SmokeStage:
 
 
 def _run_provider(provider: str) -> dict[str, Any]:
-    """run provider."""
+    """Execute a real provider health check by name."""
     if provider == "tushare":
         token = _require_one_env(("MARGIN_TUSHARE_TOKEN", "MARGIN_SECRET_TUSHARE_TOKEN"))
         return _require_healthy(
@@ -351,7 +351,15 @@ def _run_provider(provider: str) -> dict[str, Any]:
 
 
 def run_smoke(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
-    """run smoke."""
+    """Run all smoke stages and return an exit code with full payload.
+
+    Args:
+        args: Parsed CLI arguments controlling which stages run.
+
+    Returns:
+        tuple[int, dict[str, Any]]: Exit code (0 ok, 1 failed) and the full
+            smoke payload with per-stage results.
+    """
     stages: list[SmokeStage] = []
     if args.skip_compose:
         stages.append(_skipped("compose_config", "skip_compose"))
@@ -405,7 +413,7 @@ def run_smoke(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
 
 
 def _summary_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    """summary payload."""
+    """Build a compact summary payload from the full smoke result."""
     return {
         "status": payload["status"],
         "require_real_providers": payload["require_real_providers"],
@@ -422,7 +430,15 @@ def _summary_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """main."""
+    """Run the full v0.2 smoke harness and print a summary.
+
+    Args:
+        argv: Optional argument list. When ``None``, arguments are read from
+            ``sys.argv``.
+
+    Returns:
+        int: 0 when all stages pass, 1 when any stage fails.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url")
     parser.add_argument("--web-url")

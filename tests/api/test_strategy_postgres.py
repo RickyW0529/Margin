@@ -16,7 +16,7 @@ from margin.strategy.db_models import StrategyProfileRow, StrategyVersionRow
 
 
 def test_strategy_api_persists_across_default_service_instances(database_url, monkeypatch):
-    """Production strategy dependency must persist records in PostgreSQL."""
+    """Test that the production strategy dependency persists records in PostgreSQL."""
     monkeypatch.setenv("MARGIN_DATABASE_URL", database_url)
     get_strategy_service.cache_clear()
     engine = create_database_engine(DatabaseSettings(url=database_url))

@@ -16,7 +16,15 @@ from margin.core.snapshot_store import FileSnapshotStore
 
 
 def main(argv: list[str] | None = None) -> int:
-    """main."""
+    """CLI entry point for writing, reading, and listing snapshots.
+
+    Args:
+        argv: Optional argument list. When ``None``, arguments are read from
+            ``sys.argv``.
+
+    Returns:
+        int: 0 on success, 1 when no subcommand is given.
+    """
     parser = argparse.ArgumentParser(description="Margin snapshot store CLI")
     parser.add_argument("--base-path", default=str(Path(".margin") / "snapshots"))
     sub = parser.add_subparsers(dest="command")

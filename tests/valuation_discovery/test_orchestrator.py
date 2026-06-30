@@ -1,4 +1,10 @@
-"""Valuation discovery orchestrator tests."""
+"""Valuation discovery orchestrator tests.
+
+This module validates that the orchestrator enqueues steps durably, the
+worker runs the pipeline in order, recovery works after worker restart,
+missing dependencies fail correctly, retryable steps wait without skipping,
+and idempotent starts return the same run.
+"""
 
 from __future__ import annotations
 
@@ -15,7 +21,11 @@ from margin.valuation_discovery.service import ValuationDiscoveryService
 
 
 def test_start_only_enqueues_first_step() -> None:
-    """HTTP-facing start persists work without executing the pipeline inline."""
+    """Verify HTTP-facing start persists work without executing the pipeline inline.
+
+    Returns:
+        None.
+    """
     dependencies = _dependencies()
     orchestrator = ValuationDiscoveryOrchestrator(dependencies)
 
@@ -28,7 +38,11 @@ def test_start_only_enqueues_first_step() -> None:
 
 
 def test_step_worker_runs_pipeline_in_order() -> None:
-    """The durable worker executes and enqueues exactly one next step at a time."""
+    """Verify the durable worker executes and enqueues exactly one next step at a time.
+
+    Returns:
+        None.
+    """
     dependencies = _dependencies()
     orchestrator = ValuationDiscoveryOrchestrator(dependencies)
     run = orchestrator.start(scope_version_id="scope-1", decision_at=_decision_at())
@@ -47,7 +61,11 @@ def test_step_worker_runs_pipeline_in_order() -> None:
 
 
 def test_pipeline_recovers_all_artifacts_after_worker_restart() -> None:
-    """Every step can run in a fresh process using durable output references."""
+    """Verify every step can run in a fresh process using durable output references.
+
+    Returns:
+        None.
+    """
     dependencies = _dependencies()
     orchestrator = ValuationDiscoveryOrchestrator(dependencies)
     run = orchestrator.start(
@@ -68,7 +86,11 @@ def test_pipeline_recovers_all_artifacts_after_worker_restart() -> None:
 
 
 def test_missing_stage_dependency_fails_instead_of_fake_success() -> None:
-    """A missing production stage cannot be reported as succeeded."""
+    """Verify a missing production stage cannot be reported as succeeded.
+
+    Returns:
+        None.
+    """
     dependencies = _dependencies()
     dependencies.indexing_runner = None
     orchestrator = ValuationDiscoveryOrchestrator(dependencies)
@@ -85,7 +107,11 @@ def test_missing_stage_dependency_fails_instead_of_fake_success() -> None:
 
 
 def test_retryable_data_sync_waits_without_skipping_downstream() -> None:
-    """A pending external sync remains retryable and resumes on a later claim."""
+    """Verify a pending external sync remains retryable and resumes on a later claim.
+
+    Returns:
+        None.
+    """
     dependencies = _dependencies()
     dependencies.data_readiness_service = _RetryingDataReadinessService()
     orchestrator = ValuationDiscoveryOrchestrator(dependencies)
@@ -105,7 +131,11 @@ def test_retryable_data_sync_waits_without_skipping_downstream() -> None:
 
 
 def test_repeated_start_with_same_idempotency_key_returns_same_run() -> None:
-    """repeated start with same idempotency key returns same run."""
+    """Verify repeated start with the same idempotency key returns the same run.
+
+    Returns:
+        None.
+    """
     dependencies = _dependencies()
     orchestrator = ValuationDiscoveryOrchestrator(dependencies)
 
@@ -124,7 +154,11 @@ def test_repeated_start_with_same_idempotency_key_returns_same_run() -> None:
 
 
 def test_service_start_refresh_returns_accepted_response() -> None:
-    """service start refresh returns accepted response."""
+    """Verify the service start_refresh returns an accepted 202 response.
+
+    Returns:
+        None.
+    """
     service = ValuationDiscoveryService(ValuationDiscoveryOrchestrator(_dependencies()))
 
     response = service.start_refresh(
@@ -139,12 +173,12 @@ def test_service_start_refresh_returns_accepted_response() -> None:
 
 
 def _decision_at() -> datetime:
-    """decision at."""
+    """Return the deterministic decision timestamp used across orchestrator tests."""
     return datetime(2026, 6, 22, tzinfo=UTC)
 
 
 def _dependencies() -> ValuationDiscoveryDependencies:
-    """dependencies."""
+    """Build deterministic in-memory dependencies with fake services for the orchestrator."""
     return ValuationDiscoveryDependencies(
         repository=ValuationDiscoveryOrchestrationRepository.memory(),
         data_readiness_service=_FakeDataReadinessService(),
@@ -160,20 +194,21 @@ def _dependencies() -> ValuationDiscoveryDependencies:
 
 
 class _FakeQuantService:
-    """FakeQuantService."""
+    """Fake quant service tracking calls and returning deterministic runs."""
+
     def __init__(self) -> None:
-        """Initialize the instance."""
+        """Initialize the fake quant service with no error and zero calls."""
         self._error: str | None = None
         self.call_count = 0
         self._snapshot = "snapshot-1"
         self._run: _FakeQuantRun | None = None
 
     def fail_with(self, error_code: str) -> None:
-        """fail with."""
+        """Configure the service to raise on the next run call."""
         self._error = error_code
 
     def run(self, **_: object) -> _FakeQuantRun:
-        """run."""
+        """Run the fake quant pipeline and return a deterministic quant run."""
         self.call_count += 1
         if self._error is not None:
             raise RuntimeError(self._error)
@@ -201,44 +236,46 @@ class _FakeQuantService:
 
 @dataclass(frozen=True)
 class _FakeQuantRun:
-    """FakeQuantRun."""
+    """Fake quant run carrying a run ID and result tuple."""
     quant_run_id: str
     results: tuple[object, ...]
 
 
 @dataclass(frozen=True)
 class _FakeQuantResult:
-    """Fake quant result."""
+    """Fake quant result carrying only a security ID."""
 
     security_id: str
 
 
 class _FakeNewsTargetSelector:
-    """FakeNewsTargetSelector."""
+    """Fake news target selector returning a deterministic security tuple."""
+
     def select(self, **_: object) -> tuple[str, ...]:
-        """select."""
+        """Return a deterministic tuple of security IDs."""
         return ("000001.SZ",)
 
 
 class _FakeNewsService:
-    """FakeNewsService."""
+    """Fake news service that can be configured to fail on refresh."""
+
     def __init__(self) -> None:
-        """Initialize the instance."""
+        """Initialize the fake news service with no error."""
         self._error: str | None = None
 
     def fail_with(self, error_code: str) -> None:
-        """fail with."""
+        """Configure the service to raise on the next refresh call."""
         self._error = error_code
 
     def refresh(self, **_: object) -> str:
-        """refresh."""
+        """Run the fake news refresh and return a deterministic refresh ID."""
         if self._error is not None:
             raise RuntimeError(self._error)
         return "news-refresh-1"
 
 
 class _FakeDataReadinessService:
-    """FakeDataReadinessService."""
+    """Fake data readiness service returning deterministic readiness decisions."""
 
     def check(self, **_: object) -> str:
         """Return a real readiness decision reference."""
@@ -250,9 +287,10 @@ class _FakeDataReadinessService:
 
 
 class _RetryingDataReadinessService(_FakeDataReadinessService):
-    """Data readiness fake that requires one retry."""
+    """Data readiness fake that requires one retry before reporting sync complete."""
 
     def __init__(self) -> None:
+        """Initialize the retrying service with zero calls."""
         self.calls = 0
 
     def ensure_sync(self, **_: object) -> str:
@@ -269,17 +307,18 @@ class _RetryingDataReadinessService(_FakeDataReadinessService):
 
 
 class _FakeScopeService:
-    """FakeScopeService."""
+    """Fake scope service returning a deterministic frozen scope."""
 
     def resolve(self, **_: object) -> str:
-        """Resolve a frozen scope."""
+        """Resolve and return a frozen scope reference."""
         return "scope-1"
 
 
 class _FakeIndexingRunner:
-    """FakeIndexingRunner."""
+    """Fake indexing runner that processes one bounded batch at a time."""
 
     def __init__(self) -> None:
+        """Initialize the fake indexing runner with zero calls."""
         self.calls = 0
 
     def run_once(self, *, limit: int = 50) -> int:
@@ -289,13 +328,14 @@ class _FakeIndexingRunner:
 
 
 class _FakeContextBuilder:
-    """FakeContextBuilder."""
+    """Fake context builder returning deterministic frozen context IDs."""
 
     def __init__(self) -> None:
+        """Initialize the fake context builder with no context IDs."""
         self.context_ids: tuple[str, ...] = ()
 
     def build(self, **_: object) -> tuple[str, ...]:
-        """Build frozen contexts."""
+        """Build and store deterministic frozen context IDs."""
         self.context_ids = ("context-1",)
         return self.context_ids
 
@@ -306,20 +346,21 @@ class _FakeContextBuilder:
 
 @dataclass(frozen=True)
 class _FakeReviewSummary:
-    """Fake review summary."""
+    """Fake review summary carrying review and context snapshot IDs."""
 
     review_ids: tuple[str, ...] = ("review-1",)
     context_snapshot_ids: tuple[str, ...] = ("context-1",)
 
 
 class _FakeAIReviewService:
-    """FakeAIReviewService."""
+    """Fake AI review service returning a deterministic review summary."""
 
     def __init__(self) -> None:
+        """Initialize the fake AI review service with no summary."""
         self.summary: _FakeReviewSummary | None = None
 
     def review(self, **_: object) -> _FakeReviewSummary:
-        """Review frozen contexts."""
+        """Review frozen contexts and return a deterministic summary."""
         self.summary = _FakeReviewSummary()
         return self.summary
 
@@ -330,10 +371,10 @@ class _FakeAIReviewService:
 
 
 class _FakePublisher:
-    """FakePublisher."""
+    """Fake publisher returning deterministic assessment and dashboard IDs."""
 
     def publish(self, **_: object) -> str:
-        """Publish effective assessments."""
+        """Publish and return a deterministic effective assessment ID."""
         return "assessment-1"
 
     def refresh_dashboard(self, **_: object) -> str:

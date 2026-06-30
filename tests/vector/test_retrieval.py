@@ -1,4 +1,9 @@
-"""Tests for hybrid retrieval, reranking, and the retrieval tool."""
+"""Tests for hybrid retrieval, reranking, and the retrieval tool.
+
+Covers ``HybridRetriever`` vector+keyword fusion with PIT and symbol constraints,
+``Reranker`` result reordering, ``RetrievalTool`` high-level search, and an
+end-to-end chunking-indexing-retrieval pipeline from document events.
+"""
 
 from __future__ import annotations
 

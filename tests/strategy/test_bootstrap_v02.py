@@ -1,4 +1,9 @@
-"""Idempotent production configuration bootstrap tests."""
+"""Idempotent production configuration bootstrap tests.
+
+This module validates that the strategy bootstrap service creates default
+configuration idempotently, handles missing required providers gracefully,
+and tolerates optional provider health failures.
+"""
 
 from __future__ import annotations
 
@@ -23,7 +28,17 @@ from margin.strategy.service import StrategyService
 def test_bootstrap_creates_one_executable_default_scope_idempotently(
     database_url: str,
 ) -> None:
-    """Bootstrap produces active base config and does not duplicate versions."""
+    """Verify bootstrap produces an active base config without duplicating versions.
+
+    Running bootstrap twice with the same inputs must yield the same scope
+    version and exactly one of each configuration entity.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        None.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     secret_store = SecretStore(
@@ -70,7 +85,14 @@ def test_bootstrap_creates_one_executable_default_scope_idempotently(
 
 
 def test_bootstrap_does_not_activate_scope_when_required_provider_is_missing() -> None:
-    """A partial Provider setup remains visible but is not executable."""
+    """Verify a partial Provider setup remains visible but is not executable.
+
+    When a required provider is absent, the scope version must not be created
+    and the missing provider names must be reported.
+
+    Returns:
+        None.
+    """
     repository = MemoryStrategyRepository()
     bootstrap = StrategyBootstrapService(
         repository=repository,
@@ -91,7 +113,17 @@ def test_bootstrap_does_not_activate_scope_when_required_provider_is_missing() -
 def test_optional_provider_health_failure_does_not_abort_bootstrap(
     database_url: str,
 ) -> None:
-    """A failed optional adapter stays in review while base config remains usable."""
+    """Verify a failed optional adapter stays in review while base config remains usable.
+
+    A failing optional provider health check must not abort the bootstrap;
+    the provider config should remain in review state.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        None.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     secret_store = SecretStore(

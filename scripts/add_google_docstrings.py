@@ -16,11 +16,13 @@ import sys
 
 
 def _get_indent(line: str) -> str:
+    """Return the leading whitespace of a line."""
     m = re.match(r"^(\s*)", line)
     return m.group(1) if m else ""
 
 
 def _has_docstring(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> bool:
+    """Return True when the node body starts with a string expression."""
     if not node.body:
         return False
     first = node.body[0]
@@ -58,6 +60,7 @@ def _flat_args(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[tuple[str, 
 
 
 def _return_type(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    """Return the return-type annotation string, or empty when absent/None."""
     if node.returns:
         try:
             rt = ast.unparse(node.returns)
@@ -293,6 +296,12 @@ def process_file(filepath: str, dry_run: bool = False) -> bool:
 
 
 def main() -> None:
+    """Walk Python source trees and add missing Google-style docstrings.
+
+    Walks ``src/margin/``, ``tests/`` and ``alembic/`` by default, or the
+    paths provided on the command line, inserting docstrings for every public
+    or private function/class that lacks one.
+    """
     dry_run = "--dry-run" in sys.argv
 
     # Determine paths

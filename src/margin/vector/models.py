@@ -163,7 +163,21 @@ def make_stable_chunk_id(
     parser_version: str,
     chunk_index: int,
 ) -> str:
-    """Create a symbol-independent stable chunk identifier."""
+    """Create a symbol-independent stable chunk identifier.
+
+    The identifier is derived from the document ID, content hash, parser
+    version, and chunk index so that re-indexing the same document produces
+    the same chunk IDs.
+
+    Args:
+        document_id: Identifier of the parent document.
+        content_hash: Hash of the document content.
+        parser_version: Version label of the parser that produced the chunk.
+        chunk_index: Zero-based position of the chunk within the document.
+
+    Returns:
+        A ``chk_``-prefixed stable identifier string.
+    """
     payload = "|".join([document_id, content_hash, parser_version, str(chunk_index)])
     return "chk_" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
 

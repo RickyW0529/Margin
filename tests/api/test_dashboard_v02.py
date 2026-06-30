@@ -15,7 +15,7 @@ DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 
 
 def test_research_list_returns_paged_items_and_facets() -> None:
-    """research list returns paged items and facets."""
+    """Test that the research list returns paged items and facets."""
     client, _, _ = _client_with_seeded_v2_data()
 
     response = client.get(
@@ -35,7 +35,7 @@ def test_research_list_returns_paged_items_and_facets() -> None:
     assert body["items"][0]["current_review_outcome"] == "update_assessment"
 
 def test_research_item_detail_returns_current_and_effective_context() -> None:
-    """v2 item detail separates current review from effective assessment."""
+    """Test that v2 item detail separates current review from effective assessment."""
     client, _, item_id = _client_with_seeded_v2_data()
 
     response = client.get(f"/api/v1/research/items/{item_id}")
@@ -59,7 +59,7 @@ def test_research_item_detail_returns_current_and_effective_context() -> None:
 
 
 def test_copilot_rejects_mutating_intent() -> None:
-    """read-only Copilot rejects refresh or rerun requests."""
+    """Test that the read-only Copilot rejects refresh or rerun requests."""
     client, _, _ = _client_with_seeded_v2_data()
 
     response = client.post(
@@ -72,7 +72,7 @@ def test_copilot_rejects_mutating_intent() -> None:
 
 
 def test_copilot_answer_contains_business_api_references() -> None:
-    """read-only Copilot answers with business API references."""
+    """Test that the read-only Copilot answers with business API references."""
     client, _, _ = _client_with_seeded_v2_data()
 
     response = client.post(
@@ -87,6 +87,7 @@ def test_copilot_answer_contains_business_api_references() -> None:
 
 
 def _client_with_seeded_v2_data() -> tuple[TestClient, str, str]:
+    """Build a test client seeded with v2 dashboard data."""
     dashboard_repository = MemoryDashboardRepository()
     bundle = DashboardServiceBundle.in_memory(
         dashboard_repository=dashboard_repository,

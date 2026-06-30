@@ -365,7 +365,15 @@ class StructuredChunker:
     """v0.2 locator-preserving chunker with symbol-independent chunk IDs."""
 
     def __init__(self, parser_version: str, max_chars: int = 1_000) -> None:
-        """Initialize the instance."""
+        """Initialize the structured chunker.
+
+        Args:
+            parser_version: Version label of the parser that produced the blocks.
+            max_chars: Maximum number of characters per chunk. Must be positive.
+
+        Raises:
+            ValueError: If ``max_chars`` is not positive.
+        """
         if max_chars <= 0:
             raise ValueError("max_chars must be positive")
         self.parser_version = parser_version
@@ -383,7 +391,25 @@ class StructuredChunker:
         doc_type: DocType = DocType.UNKNOWN,
         **metadata,  # noqa: ANN003
     ) -> ChunkingResult:
-        """Chunk parsed blocks without crossing unrecoverable structural boundaries."""
+        """Chunk parsed blocks without crossing unrecoverable structural boundaries.
+
+        Blocks are grouped by structural boundary (page, section, table) and
+        merged until ``max_chars`` is reached. Each chunk receives a
+        symbol-independent stable ID and a merged source locator.
+
+        Args:
+            document_id: Identifier of the parent document.
+            content_hash: Hash of the document content.
+            blocks: Parsed blocks with locator metadata.
+            security_ids: Security symbols to link to each chunk.
+            trust_level: Prompt-safety trust label for the chunks.
+            source_level: Source reliability level. Defaults to L4.
+            doc_type: Document category. Defaults to UNKNOWN.
+            **metadata: Additional Chunk fields to forward.
+
+        Returns:
+            A ``ChunkingResult`` containing the chunks and security links.
+        """
         from margin.news.models import SourceLevel
 
         resolved_source_level = source_level or SourceLevel.L4
@@ -436,7 +462,7 @@ class StructuredChunker:
         self,
         blocks: list[VectorParsedBlock],
     ) -> list[list[VectorParsedBlock]]:
-        """group blocks."""
+        """Group parsed blocks by structural boundary without exceeding max_chars."""
         groups: list[list[VectorParsedBlock]] = []
         current: list[VectorParsedBlock] = []
         current_key: tuple[str | None, int | None, str | None] | None = None
@@ -459,14 +485,14 @@ class StructuredChunker:
 
     @staticmethod
     def _boundary_key(block: VectorParsedBlock) -> tuple[str | None, int | None, str | None]:
-        """boundary key."""
+        """Compute a structural boundary key for a parsed block."""
         locator = block.locator
         structural_type = "table" if block.block_type == "table_row" else "text"
         return (structural_type, locator.page, locator.table_id or locator.section)
 
     @staticmethod
     def _merged_locator(blocks: list[VectorParsedBlock]) -> SourceLocator:
-        """merged locator."""
+        """Merge locators from a group of blocks into a single source locator."""
         first = blocks[0].locator
         if len(blocks) == 1:
             return first

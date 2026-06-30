@@ -130,14 +130,39 @@ class PersistentIndexingPipeline:
         embedding_dimension: int,
         batch_size: int = 64,
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the persistent indexing pipeline.
+
+        Args:
+            repository: Persistent repository for chunks and embeddings.
+            embedding_provider: Provider used to generate embeddings. Must expose
+                ``embed_batch`` and optional ``name``, ``model_name``, ``version``
+                attributes.
+            embedding_dimension: Expected dimensionality of embedding vectors.
+            batch_size: Number of chunks to embed and persist per batch.
+        """
         self.repository = repository
         self.embedding_provider = embedding_provider
         self.embedding_dimension = embedding_dimension
         self.batch_size = batch_size
 
     def embed_and_persist(self, chunks: list[Chunk]) -> list[str]:
-        """Embed chunks and persist vectors only after the whole batch validates."""
+        """Embed chunks and persist vectors only after the whole batch validates.
+
+        Chunks are processed in batches of ``batch_size``. Each batch is embedded
+        and validated against ``embedding_dimension`` before being persisted. If
+        any vector in a batch has the wrong dimension, a ``ValueError`` is raised
+        before any persistence occurs.
+
+        Args:
+            chunks: Chunks to embed and persist.
+
+        Returns:
+            A list of embedding key hashes for the persisted vectors.
+
+        Raises:
+            ValueError: If any embedding vector does not match
+                ``embedding_dimension``.
+        """
         embedding_keys: list[str] = []
         provider_name = str(getattr(self.embedding_provider, "name", "embedding"))
         model_name = str(getattr(self.embedding_provider, "model_name", provider_name))

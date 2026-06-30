@@ -16,7 +16,12 @@ NO_PROXY_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 def main() -> int:
-    """main."""
+    """Run the P1 valuation-discovery refresh API smoke.
+
+    Returns:
+        int: 0 on success, 2 when admin secrets are missing or the API returns
+            an error.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scope-version-id", required=True)
     parser.add_argument("--decision-at", required=True)
@@ -77,7 +82,7 @@ def main() -> int:
 
 
 def _parse_datetime(value: str) -> datetime:
-    """parse datetime."""
+    """Parse a timezone-aware ISO 8601 datetime string."""
     normalized = value.replace("Z", "+00:00")
     parsed = datetime.fromisoformat(normalized)
     if parsed.utcoffset() is None:
@@ -86,7 +91,7 @@ def _parse_datetime(value: str) -> datetime:
 
 
 def _safe_error_body(exc: urllib.error.HTTPError) -> dict[str, Any]:
-    """safe error body."""
+    """Best-effort parse of an HTTPError JSON body, falling back to reason."""
     try:
         return json.loads(exc.read().decode("utf-8"))
     except Exception:  # noqa: BLE001
@@ -99,7 +104,7 @@ def _is_local_api_url(url: str) -> bool:
 
 
 def _emit_failure(code: str, details: dict[str, Any]) -> int:
-    """emit failure."""
+    """Print a JSON failure payload and return exit code 2."""
     print(
         json.dumps(
             {

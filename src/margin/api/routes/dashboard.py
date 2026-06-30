@@ -47,7 +47,13 @@ class FeedbackCreate(BaseModel):
 
 
 class CopilotRequest(BaseModel):
-    """Read-only dashboard Copilot request."""
+    """Read-only dashboard Copilot request.
+
+    Attributes:
+        scope_version_id: Identifier of the frozen research scope.
+        message: User question text (1-2000 characters).
+        universe: Universe code filter. Defaults to ``ALL_A``.
+    """
 
     scope_version_id: str = Field(min_length=1)
     message: str = Field(min_length=1, max_length=2000)
@@ -69,7 +75,25 @@ def list_research_candidates_v2(
     sort_field: str = "final_score",
     sort_direction: str = "desc",
 ) -> ResearchCandidateListResponse:
-    """Return one v0.2 server-paginated research candidate page."""
+    """Return one v0.2 server-paginated research candidate page.
+
+    Args:
+        services: Dashboard service bundle used to query candidates.
+        scope_version_id: Identifier of the frozen research scope.
+        universe: Universe code filter.
+        limit: Maximum number of candidates to return.
+        cursor: Optional pagination cursor from a previous response.
+        screening_status: Optional screening status filter.
+        data_status: Optional data status filter.
+        review_required: Optional review-required filter.
+        assessment_freshness: Optional assessment freshness filter.
+        query: Optional free-text search query.
+        sort_field: Field to sort by.
+        sort_direction: Sort direction (``asc`` or ``desc``).
+
+    Returns:
+        ResearchCandidateListResponse containing one page of candidates.
+    """
     return services.query.list_research_candidates_v2(
         scope_version_id=scope_version_id,
         universe_code=universe,
@@ -91,7 +115,16 @@ def get_research_item_detail_v2(
     item_id: str,
     services: Services,
 ) -> ResearchItemDetailV2 | JSONResponse:
-    """Return v0.2 company detail aggregate for one research item."""
+    """Return v0.2 company detail aggregate for one research item.
+
+    Args:
+        item_id: Unique identifier of the research item.
+        services: Dashboard service bundle used to load the detail.
+
+    Returns:
+        ResearchItemDetailV2 for the requested item, or a 404 JSONResponse
+        if the item cannot be found.
+    """
     try:
         return services.query.get_item_detail_v2(item_id)
     except KeyError:
@@ -103,7 +136,20 @@ def research_read_only_copilot(
     request: CopilotRequest,
     services: Services,
 ) -> ReadOnlyCopilotResponse | JSONResponse:
-    """Answer dashboard questions using only read-only BFF data."""
+    """Answer dashboard questions using only read-only BFF data.
+
+    Mutating intents (refresh, rerun, save, trade) are rejected with a 403
+    response. Otherwise, the top PASS candidates are listed as the answer.
+
+    Args:
+        request: Validated Copilot request containing scope, message, and
+            universe.
+        services: Dashboard service bundle used to query candidates.
+
+    Returns:
+        ReadOnlyCopilotResponse with a read-only answer, or a 403 JSONResponse
+        when a mutating intent is detected.
+    """
     if _has_mutating_intent(request.message):
         message = (
             "Copilot is read-only and cannot refresh, rerun, mutate settings, "

@@ -35,6 +35,7 @@ The shared / core layer of the current Margin implementation provides the founda
 - **Resilience**: Token-bucket rate limiting and configurable exponential-backoff retry.
 - **Secret management**: Resolving credential references from environment variables or local secret files without storing plain-text values in code or configuration.
 - **Background execution**: Scheduling recurring holdings monitoring and document indexing jobs.
+- **Document normalization pipeline**: `margin.documents` exposes a shared Docling interface that converts PDF/HTML/DOCX/XLSX/CSV/JSON/Text into Markdown, then runs Review / Repair / Verifier / Slimming to emit final Markdown, JSON, and RAG chunks. RAG chunking preserves paragraph/table-line boundaries where possible and hard-splits any single oversized block so every chunk stays within the configured `max_chunk_chars`; this prevents embedding providers from rejecting overlong inputs. PDF conversion enables RapidOCR by default and pins the backend to `onnxruntime`; visual verification runs only when the verifier supports multimodal inputs and page images exist, otherwise it is skipped with an explicit status.
 
 ---
 
@@ -53,6 +54,8 @@ The shared / core layer of the current Margin implementation provides the founda
 | `src/margin/core/registry.py` | Central provider registry with retry, fallback, audit, and cost tracking. |
 | `src/margin/core/resilience.py` | Rate limiter, retry configuration, and retry wrapper. |
 | `src/margin/core/secret.py` | Reference-based secret manager. |
+| `src/margin/documents/markdown.py` | Shared Docling Markdown conversion interface: format routing, request/result models, Docling backend, PDF OCR configuration, and lightweight fallback. |
+| `src/margin/documents/pipeline.py` | Shared document normalization pipeline: Review/Repair/Verifier/Slimming agent protocols and default rule-based implementations, final Markdown/JSON/RAG chunks with oversized-block splitting under `max_chunk_chars`, and multimodal visual-verification fallback. |
 
 ---
 

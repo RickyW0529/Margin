@@ -11,7 +11,7 @@ from margin.core.models import AuditLogRecord
 
 
 def test_redaction_removes_nested_tokens_and_known_values() -> None:
-    """redaction removes nested tokens and known values."""
+    """Test that redaction removes nested tokens and known secret values."""
     processor = SecretRedactingProcessor(secret_values=("secret-token-123",))
     original = {
         "headers": {
@@ -34,7 +34,7 @@ def test_redaction_removes_nested_tokens_and_known_values() -> None:
 
 
 def test_redaction_handles_cookie_traceback_and_exception_values() -> None:
-    """redaction handles cookie traceback and exception values."""
+    """Test that redaction handles cookie, traceback, and exception values."""
     processor = SecretRedactingProcessor(secret_values=("credential-value",))
 
     event = processor(
@@ -58,7 +58,7 @@ def test_redaction_handles_cookie_traceback_and_exception_values() -> None:
 
 
 def test_audit_repository_redacts_payload_before_persistence() -> None:
-    """audit repository redacts payload before persistence."""
+    """Test that the audit repository redacts payload before persistence."""
     repository = MemoryAuditRepository(
         redactor=SecretRedactingProcessor(secret_values=("audit-secret-value",))
     )
@@ -80,7 +80,7 @@ def test_audit_repository_redacts_payload_before_persistence() -> None:
 
 
 def test_configured_logging_redacts_exception_traceback(capsys) -> None:
-    """configured logging redacts exception traceback."""
+    """Test that configured logging redacts exception tracebacks."""
     configure_logging(
         log_level="INFO",
         log_format="json",

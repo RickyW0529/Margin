@@ -1,4 +1,10 @@
-"""v0.2 research service entrypoint tests."""
+"""v0.2 research service entrypoint tests.
+
+This module verifies that the research service runs the delta review graph
+from a frozen context snapshot ID and that a repeated request for the same
+context replays the immutable terminal review without running the graph
+again.
+"""
 
 from __future__ import annotations
 
@@ -16,7 +22,13 @@ DECISION_AT = datetime(2026, 6, 23, tzinfo=UTC)
 
 
 def test_v02_service_runs_by_context_snapshot_id() -> None:
-    """v0.2 service runs the delta review graph from a frozen context ID."""
+    """Verify the v0.2 service runs the delta review graph from a frozen context ID.
+
+    Adds a carry-forward context snapshot to the context repository, runs the
+    delta review, and asserts that the result has a generated graph run ID,
+    the correct context snapshot ID, a ``CARRY_FORWARD_VERIFIED`` outcome, the
+    preserved effective assessment, and zero LLM calls.
+    """
     context_repository = MemoryResearchContextRepository()
     context_repository.add(
         ResearchContextSnapshot(
@@ -52,7 +64,12 @@ def test_v02_service_runs_by_context_snapshot_id() -> None:
 
 
 def test_v02_service_replays_terminal_review_without_running_graph_again() -> None:
-    """A repeated context request returns the immutable terminal review."""
+    """Verify a repeated context request returns the immutable terminal review.
+
+    Runs the delta review twice for the same context snapshot and asserts that
+    the second result is identical to the first and that the terminal review
+    is persisted in the delta repository.
+    """
     context_repository = MemoryResearchContextRepository()
     delta_repository = MemoryResearchDeltaRepository()
     context_repository.add(

@@ -66,7 +66,7 @@ class WarehouseFactAdapter:
     """
 
     def __init__(self, warehouse: SQLAlchemyWarehouseRepository) -> None:
-        """init  ."""
+        """Initialize the adapter with a SQLAlchemy warehouse repository."""
         self._warehouse = warehouse
 
     def get_latest_fact(
@@ -131,7 +131,12 @@ class SQLAlchemyScopeBindingProvider:
         strategy_repository: SQLAlchemyStrategyRepository,
         company_pool_repository: Any | None = None,
     ) -> None:
-        """init  ."""
+        """Initialize the provider with strategy and optional company pool repos.
+
+        Args:
+            strategy_repository: Strategy repository for scope version loading.
+            company_pool_repository: Optional company pool repository for ALL_A.
+        """
         self._strategy = strategy_repository
         self._company_pool = company_pool_repository
 
@@ -542,7 +547,16 @@ class QuantAdapter:
         ) = None,
         market_window_days: int = 252,
     ) -> None:
-        """init  ."""
+        """Initialize the adapter with quant service and supporting dependencies.
+
+        Args:
+            quant_service: The quant screening service.
+            snapshot_builder: Builder for frozen quant input snapshots.
+            scope_provider: Provider for frozen scope bindings.
+            quant_repository: Repository for quant run and result persistence.
+            feature_mart_pipeline: Optional feature mart ETL pipeline.
+            market_window_days: Number of calendar days for the market window.
+        """
         self._quant_service = quant_service
         self._snapshot_builder = snapshot_builder
         self._scope_provider = scope_provider
@@ -556,7 +570,15 @@ class QuantAdapter:
         scope_version_id: str,
         decision_at: datetime,
     ) -> QuantInputSnapshot:
-        """Resolve the scope and persist its frozen PIT quant input."""
+        """Resolve the scope and persist its frozen PIT quant input.
+
+        Args:
+            scope_version_id: The frozen scope version to resolve.
+            decision_at: Timezone-aware decision timestamp.
+
+        Returns:
+            A frozen ``QuantInputSnapshot`` bound to its feature snapshot.
+        """
         scope = self._scope_provider.get_scope_binding(scope_version_id)
         snapshot = self._snapshot_builder.build(
             scope=scope,
@@ -583,6 +605,7 @@ class QuantAdapter:
         Args:
             scope_version_id: The frozen scope version to screen.
             decision_at: Timezone-aware decision timestamp.
+            input_snapshot: Optional pre-built snapshot; built if not supplied.
 
         Returns:
             QuantAdapterResult with the quant run ID and persisted results.
@@ -601,14 +624,34 @@ class QuantAdapter:
         )
 
     def load_input(self, snapshot_id: str) -> QuantInputSnapshot:
-        """Reload a persisted frozen input snapshot by output reference."""
+        """Reload a persisted frozen input snapshot by output reference.
+
+        Args:
+            snapshot_id: The persisted snapshot ID.
+
+        Returns:
+            The reloaded ``QuantInputSnapshot``.
+
+        Raises:
+            KeyError: If the snapshot is not found.
+        """
         snapshot = self._snapshot_builder.get(snapshot_id)
         if snapshot is None:
             raise KeyError(f"quant input snapshot not found: {snapshot_id}")
         return snapshot
 
     def load_run(self, quant_run_id: str) -> QuantAdapterResult:
-        """Reload a persisted quant run and its complete result set."""
+        """Reload a persisted quant run and its complete result set.
+
+        Args:
+            quant_run_id: The persisted quant run ID.
+
+        Returns:
+            QuantAdapterResult with the quant run ID and persisted results.
+
+        Raises:
+            KeyError: If the quant run is not found.
+        """
         quant_run = self._quant_repository.get_run(quant_run_id)
         if quant_run is None:
             raise KeyError(f"quant run not found: {quant_run_id}")

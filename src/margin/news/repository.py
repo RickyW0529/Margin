@@ -14,16 +14,29 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from margin.news.agentic_models import (
+    NewsAgentRun,
+    NewsAgentRunStatus,
+    NewsAgentTask,
+    NewsArticleFinding,
+    NewsSearchPlan,
+    NewsSecurityBrief,
+)
 from margin.news.db_models import (
     DedupRecordRow,
     DocumentEventRow,
     DocumentMaterialityScoreRow,
     DocumentOutboxRow,
     DocumentSecurityLinkRow,
+    NewsAgentRunRow,
+    NewsAgentTaskRow,
+    NewsArticleFindingRow,
     NewsContextBundleRow,
     NewsContextDocumentRow,
     NewsRefreshRunRow,
     NewsRefreshTargetRow,
+    NewsSearchPlanRow,
+    NewsSecurityBriefRow,
     RawSnapshotRow,
     RepostEdgeRow,
     SearchQueryRow,
@@ -52,8 +65,12 @@ from margin.news.websearch import SearchQueryRecord, SearchResult
 from margin.sql.news_queries import (
     claimable_news_targets,
     delete_search_results_by_query,
+    document_events_by_ids,
     materiality_score_by_event_security_version,
+    news_article_findings_by_run,
     news_context_documents,
+    news_search_plans_by_run,
+    news_security_briefs_by_run,
     news_target_count_by_run,
     news_target_dedupe_keys_by_run,
     news_target_statuses_by_run_security,
@@ -315,7 +332,17 @@ class NewsRepository:
         status: str = "pending",
         claimed_at: datetime | None = None,
     ) -> int:
-        """Insert or update a document outbox row for worker replay."""
+        """Insert or update a document outbox row for worker replay.
+
+        Args:
+            event_id: Foreign key to the document event being published.
+            topic: Destination topic or queue name.
+            status: Initial delivery status for the outbox row.
+            claimed_at: Optional timestamp when the row was claimed.
+
+        Returns:
+            The primary key of the inserted or updated outbox row.
+        """
         with self._session_factory.begin() as session:
             existing = session.scalar(
                 outbox_by_event_topic(event_id, topic)
@@ -337,7 +364,15 @@ class NewsRepository:
             return int(row.outbox_id)
 
     def get_outbox_by_event(self, event_id: str, topic: str) -> OutboxMessage | None:
-        """Return one outbox row by event/topic."""
+        """Return one outbox row by event/topic.
+
+        Args:
+            event_id: Identifier of the document event.
+            topic: Destination topic to look up.
+
+        Returns:
+            The matching ``OutboxMessage``, or None if no row exists.
+        """
         with self._session_factory() as session:
             row = session.scalar(
                 outbox_by_event_topic(event_id, topic)
@@ -362,7 +397,18 @@ class NewsRepository:
         now: datetime | None = None,
         lease_seconds: int = 300,
     ) -> list[OutboxMessage]:
-        """Claim pending/retryable/expired processing outbox rows."""
+        """Claim pending/retryable/expired processing outbox rows.
+
+        Args:
+            topic: Destination topic to claim messages for.
+            limit: Maximum number of messages to claim.
+            now: Optional timestamp for lease cutoff; defaults to current UTC time.
+            lease_seconds: Lease duration in seconds; claimed rows whose lease has expired
+                become eligible again.
+
+        Returns:
+            List of claimed outbox messages with status set to "processing".
+        """
         now = now or utc_now()
         cutoff = now - timedelta(seconds=lease_seconds)
         with self._session_factory.begin() as session:
@@ -388,7 +434,11 @@ class NewsRepository:
             return messages
 
     def mark_outbox_succeeded(self, outbox_id: int) -> None:
-        """Mark an outbox row succeeded."""
+        """Mark an outbox row succeeded.
+
+        Args:
+            outbox_id: Primary key of the outbox row to update.
+        """
         with self._session_factory.begin() as session:
             row = session.get(DocumentOutboxRow, outbox_id)
             if row is not None:
@@ -396,7 +446,12 @@ class NewsRepository:
                 row.delivered_at = utc_now()
 
     def mark_outbox_retryable(self, outbox_id: int, error: str) -> None:
-        """Mark an outbox row retryable."""
+        """Mark an outbox row retryable.
+
+        Args:
+            outbox_id: Primary key of the outbox row to update.
+            error: Error message to record for audit.
+        """
         with self._session_factory.begin() as session:
             row = session.get(DocumentOutboxRow, outbox_id)
             if row is not None:
@@ -404,7 +459,12 @@ class NewsRepository:
                 row.last_error = error
 
     def mark_outbox_failed_final(self, outbox_id: int, error: str) -> None:
-        """Mark an outbox row terminal failed."""
+        """Mark an outbox row terminal failed.
+
+        Args:
+            outbox_id: Primary key of the outbox row to update.
+            error: Error message to record for audit.
+        """
         with self._session_factory.begin() as session:
             row = session.get(DocumentOutboxRow, outbox_id)
             if row is not None:
@@ -579,7 +639,14 @@ class NewsRepository:
         quant_run_id: str,
         decision_at: datetime,
     ) -> None:
-        """Create a target-driven refresh run idempotently."""
+        """Create a target-driven refresh run idempotently.
+
+        Args:
+            run_id: Unique identifier for the run.
+            scope_version_id: Identifier of the scope version that produced the quant run.
+            quant_run_id: Identifier of the quant run being refreshed.
+            decision_at: Decision timestamp used to scope the quant run.
+        """
         with self._session_factory.begin() as session:
             if session.get(NewsRefreshRunRow, run_id) is None:
                 now = utc_now()
@@ -599,7 +666,14 @@ class NewsRepository:
                 )
 
     def get_news_refresh_run(self, run_id: str) -> NewsRefreshRun | None:
-        """Fetch a durable news refresh run summary."""
+        """Fetch a durable news refresh run summary.
+
+        Args:
+            run_id: Unique identifier of the refresh run.
+
+        Returns:
+            The ``NewsRefreshRun`` summary, or None if not found.
+        """
         with self._session_factory() as session:
             row = session.get(NewsRefreshRunRow, run_id)
             return _news_refresh_run_from_row(row) if row is not None else None
@@ -611,7 +685,13 @@ class NewsRepository:
         status: NewsRefreshStatus,
         error_summary: dict[str, object] | None = None,
     ) -> None:
-        """Update a refresh run status without altering target completeness."""
+        """Update a refresh run status without altering target completeness.
+
+        Args:
+            run_id: Unique identifier of the refresh run.
+            status: New durable status to persist.
+            error_summary: Optional structured error summary for the run.
+        """
         with self._session_factory.begin() as session:
             row = session.get(NewsRefreshRunRow, run_id)
             if row is not None:
@@ -622,7 +702,12 @@ class NewsRepository:
     def upsert_news_targets(self, run_id: str, targets: list[NewsTarget]) -> int:
         """Persist all targets for a run before any external provider calls.
 
-        Returns the total unique target count for the run after the operation.
+        Args:
+            run_id: Identifier of the parent refresh run.
+            targets: List of news targets to persist.
+
+        Returns:
+            The total unique target count for the run after the operation.
         """
         with self._session_factory.begin() as session:
             existing_keys = set(
@@ -663,7 +748,12 @@ class NewsRepository:
             )
 
     def set_news_refresh_target_count(self, run_id: str, target_count: int) -> None:
-        """Set the complete target count for a run."""
+        """Set the complete target count for a run.
+
+        Args:
+            run_id: Identifier of the parent refresh run.
+            target_count: Total number of targets to persist.
+        """
         with self._session_factory.begin() as session:
             row = session.get(NewsRefreshRunRow, run_id)
             if row is not None:
@@ -676,7 +766,16 @@ class NewsRepository:
         limit: int,
         now: datetime,
     ) -> list[NewsTargetWorkItem]:
-        """Claim eligible pending/retry targets for processing."""
+        """Claim eligible pending/retry targets for processing.
+
+        Args:
+            run_id: Identifier of the parent refresh run.
+            limit: Maximum number of targets to claim.
+            now: Timestamp used for claim eligibility and lease assignment.
+
+        Returns:
+            List of claimed ``NewsTargetWorkItem`` objects.
+        """
         with self._session_factory.begin() as session:
             rows = session.scalars(
                 claimable_news_targets(
@@ -714,7 +813,12 @@ class NewsRepository:
         target_id: str,
         event_ids: list[str] | tuple[str, ...] = (),
     ) -> None:
-        """Mark a target as completed and retain linked event ids for audit."""
+        """Mark a target as completed and retain linked event ids for audit.
+
+        Args:
+            target_id: Identifier of the target to mark completed.
+            event_ids: List or tuple of document event ids linked to the target.
+        """
         with self._session_factory.begin() as session:
             row = session.get(NewsRefreshTargetRow, target_id)
             if row is not None:
@@ -732,7 +836,14 @@ class NewsRepository:
         error_message: str,
         next_attempt_at: datetime,
     ) -> None:
-        """Return a claimed target to retry/backoff state."""
+        """Return a claimed target to retry/backoff state.
+
+        Args:
+            target_id: Identifier of the target to mark retryable.
+            error_code: Stable error code from the failure.
+            error_message: Human-readable error message.
+            next_attempt_at: Timestamp when the target becomes eligible for retry.
+        """
         with self._session_factory.begin() as session:
             row = session.get(NewsRefreshTargetRow, target_id)
             if row is not None:
@@ -748,7 +859,13 @@ class NewsRepository:
         error_code: str,
         error_message: str,
     ) -> None:
-        """Mark a target as terminal failed."""
+        """Mark a target as terminal failed.
+
+        Args:
+            target_id: Identifier of the target to mark failed.
+            error_code: Stable error code from the failure.
+            error_message: Human-readable error message.
+        """
         with self._session_factory.begin() as session:
             row = session.get(NewsRefreshTargetRow, target_id)
             if row is not None:
@@ -758,7 +875,14 @@ class NewsRepository:
                 row.completed_at = utc_now()
 
     def reconcile_news_refresh_run(self, run_id: str) -> TargetReconciliation:
-        """Reconcile target counts and update the run terminal status when possible."""
+        """Reconcile target counts and update the run terminal status when possible.
+
+        Args:
+            run_id: Identifier of the parent refresh run.
+
+        Returns:
+            A ``TargetReconciliation`` with current target counts and terminal state.
+        """
         with self._session_factory.begin() as session:
             rows = session.scalars(
                 news_targets_by_run(run_id)
@@ -797,7 +921,11 @@ class NewsRepository:
             return reconciliation
 
     def add_document_security_link(self, link: DocumentSecurityLink) -> None:
-        """Persist a document/security relation idempotently."""
+        """Persist a document/security relation idempotently.
+
+        Args:
+            link: Document-security link to persist.
+        """
         with self._session_factory.begin() as session:
             row = session.get(
                 DocumentSecurityLinkRow,
@@ -820,7 +948,14 @@ class NewsRepository:
                 row.source = link.source
 
     def add_document_materiality_score(self, score: DocumentMaterialityScore) -> None:
-        """Persist deterministic materiality score for an event/security pair."""
+        """Persist deterministic materiality score for an event/security pair.
+
+        Args:
+            score: Materiality score to persist.
+
+        Raises:
+            ValueError: If ``score.event_id`` is None.
+        """
         if score.event_id is None:
             raise ValueError("event_id is required to persist materiality score")
         with self._session_factory.begin() as session:
@@ -852,7 +987,15 @@ class NewsRepository:
         security_id: str,
         max_documents: int,
     ) -> list[NewsContextDocument]:
-        """List ranked context candidates for a security."""
+        """List ranked context candidates for a security.
+
+        Args:
+            security_id: Identifier of the security to list documents for.
+            max_documents: Maximum number of documents to return.
+
+        Returns:
+            List of ``NewsContextDocument`` objects ordered by rank.
+        """
         with self._session_factory() as session:
             rows = session.execute(
                 news_context_documents(security_id, max_documents)
@@ -878,7 +1021,15 @@ class NewsRepository:
         run_id: str,
         security_id: str,
     ) -> list[NewsTargetStatus]:
-        """List target statuses for one security in a refresh run."""
+        """List target statuses for one security in a refresh run.
+
+        Args:
+            run_id: Identifier of the parent refresh run.
+            security_id: Identifier of the security to filter by.
+
+        Returns:
+            List of ``NewsTargetStatus`` values for the security in the run.
+        """
         with self._session_factory() as session:
             rows = session.scalars(
                 news_target_statuses_by_run_security(run_id, security_id)
@@ -886,7 +1037,11 @@ class NewsRepository:
             return [NewsTargetStatus(row) for row in rows]
 
     def add_news_context_bundle(self, bundle: NewsContextBundle) -> None:
-        """Persist a context bundle and its ordered document list idempotently."""
+        """Persist a context bundle and its ordered document list idempotently.
+
+        Args:
+            bundle: News context bundle to persist, including ordered documents.
+        """
         with self._session_factory.begin() as session:
             if session.get(NewsContextBundleRow, bundle.bundle_id) is None:
                 session.add(
@@ -918,6 +1073,201 @@ class NewsRepository:
                             selection_reason=document.selection_reason,
                         )
                     )
+
+    def add_news_agent_run(self, run: NewsAgentRun) -> None:
+        """Persist one agentic news acquisition run idempotently.
+
+        Args:
+            run: Agentic news acquisition run to persist.
+        """
+        with self._session_factory.begin() as session:
+            row = session.get(NewsAgentRunRow, run.run_id)
+            if row is None:
+                session.add(_news_agent_run_to_row(run))
+            else:
+                row.status = run.status.value
+                row.target_count = run.target_count
+                row.include_near_threshold = run.include_near_threshold
+                row.config_hash = run.config_hash
+                row.started_at = run.started_at
+                row.finished_at = run.finished_at
+                row.error_summary = run.error_summary
+
+    def update_news_agent_run_status(
+        self,
+        run_id: str,
+        *,
+        status: NewsAgentRunStatus,
+        error_summary: dict[str, object] | None = None,
+    ) -> None:
+        """Update an agentic run status and optional error summary.
+
+        Args:
+            run_id: Unique identifier of the agentic run.
+            status: New durable status to persist.
+            error_summary: Optional structured error summary for the run.
+        """
+        with self._session_factory.begin() as session:
+            row = session.get(NewsAgentRunRow, run_id)
+            if row is not None:
+                row.status = status.value
+                if error_summary is not None:
+                    row.error_summary = dict(error_summary)
+                if status in {
+                    NewsAgentRunStatus.COMPLETED,
+                    NewsAgentRunStatus.COMPLETED_EMPTY,
+                    NewsAgentRunStatus.PARTIAL,
+                    NewsAgentRunStatus.FAILED,
+                }:
+                    row.finished_at = utc_now()
+
+    def get_news_agent_run(self, run_id: str) -> NewsAgentRun | None:
+        """Fetch one agentic news acquisition run.
+
+        Args:
+            run_id: Unique identifier of the agentic run.
+
+        Returns:
+            The ``NewsAgentRun``, or None if not found.
+        """
+        with self._session_factory() as session:
+            row = session.get(NewsAgentRunRow, run_id)
+            return _news_agent_run_from_row(row) if row is not None else None
+
+    def add_news_agent_task(self, task: NewsAgentTask) -> None:
+        """Persist one agentic task audit row idempotently.
+
+        Args:
+            task: Agentic task to persist.
+        """
+        with self._session_factory.begin() as session:
+            row = session.get(NewsAgentTaskRow, task.task_id)
+            if row is None:
+                session.add(_news_agent_task_to_row(task))
+            else:
+                row.status = task.status.value
+                row.response_hash = task.response_hash
+                row.error_code = task.error_code
+                row.error_message = task.error_message
+                row.payload = task.payload
+                row.completed_at = task.completed_at
+
+    def add_news_search_plan(self, plan: NewsSearchPlan) -> None:
+        """Persist a reviewed security-level search plan.
+
+        Args:
+            plan: Search plan to persist.
+        """
+        with self._session_factory.begin() as session:
+            row = session.get(NewsSearchPlanRow, plan.plan_id)
+            if row is None:
+                session.add(_news_search_plan_to_row(plan))
+            else:
+                row.queries = list(plan.queries)
+                row.review_status = plan.review_status
+                row.fallback_used = plan.fallback_used
+                row.prompt_version = plan.prompt_version
+                row.prompt_hash = plan.prompt_hash
+                row.response_hash = plan.response_hash
+
+    def list_news_search_plans(self, run_id: str) -> list[NewsSearchPlan]:
+        """List reviewed search plans for one agentic run.
+
+        Args:
+            run_id: Identifier of the parent agentic run.
+
+        Returns:
+            List of ``NewsSearchPlan`` objects for the run.
+        """
+        with self._session_factory() as session:
+            rows = session.scalars(news_search_plans_by_run(run_id)).all()
+            return [_news_search_plan_from_row(row) for row in rows]
+
+    def add_news_article_finding(self, finding: NewsArticleFinding) -> None:
+        """Persist an article-level finding.
+
+        Args:
+            finding: Article finding to persist.
+        """
+        with self._session_factory.begin() as session:
+            row = session.get(NewsArticleFindingRow, finding.finding_id)
+            if row is None:
+                session.add(_news_article_finding_to_row(finding))
+            else:
+                row.key_points = list(finding.key_points)
+                row.materiality = finding.materiality
+                row.sentiment = finding.sentiment
+                row.risk_flags = list(finding.risk_flags)
+                row.cited_spans = list(finding.cited_spans)
+                row.review_status = finding.review_status
+                row.confidence = finding.confidence
+                row.response_hash = finding.response_hash
+
+    def list_news_article_findings(
+        self,
+        run_id: str,
+        security_id: str | None = None,
+    ) -> list[NewsArticleFinding]:
+        """List article findings for one agentic run.
+
+        Args:
+            run_id: Identifier of the parent agentic run.
+            security_id: Optional security id to filter by.
+
+        Returns:
+            List of ``NewsArticleFinding`` objects for the run.
+        """
+        with self._session_factory() as session:
+            rows = session.scalars(
+                news_article_findings_by_run(run_id, security_id)
+            ).all()
+            return [_news_article_finding_from_row(row) for row in rows]
+
+    def add_news_security_brief(self, brief: NewsSecurityBrief) -> None:
+        """Persist a derived security-level news brief.
+
+        Args:
+            brief: Security brief to persist.
+        """
+        with self._session_factory.begin() as session:
+            row = session.get(NewsSecurityBriefRow, brief.brief_id)
+            if row is None:
+                session.add(_news_security_brief_to_row(brief))
+            else:
+                row.summary = brief.summary
+                row.finding_ids = list(brief.finding_ids)
+                row.source_event_ids = list(brief.source_event_ids)
+                row.is_derived = brief.is_derived
+                row.trust_level = brief.trust_level
+                row.response_hash = brief.response_hash
+
+    def list_news_security_briefs(self, run_id: str) -> list[NewsSecurityBrief]:
+        """List derived security-level briefs for one run.
+
+        Args:
+            run_id: Identifier of the parent agentic run.
+
+        Returns:
+            List of ``NewsSecurityBrief`` objects for the run.
+        """
+        with self._session_factory() as session:
+            rows = session.scalars(news_security_briefs_by_run(run_id)).all()
+            return [_news_security_brief_from_row(row) for row in rows]
+
+    def list_document_events_by_ids(self, event_ids: list[str]) -> list[DocumentEvent]:
+        """List document events by IDs.
+
+        Args:
+            event_ids: List of event identifiers to fetch.
+
+        Returns:
+            List of ``DocumentEvent`` objects matching the given IDs.
+        """
+        if not event_ids:
+            return []
+        with self._session_factory() as session:
+            rows = session.scalars(document_events_by_ids(event_ids)).all()
+            return [_event_from_row(row) for row in rows]
 
 
 def _snapshot_to_row(snapshot: RawSnapshot) -> RawSnapshotRow:
@@ -1184,4 +1534,184 @@ def _materiality_score_to_row(
         is_untrusted_external_text=score.is_untrusted_external_text,
         can_directly_change_research_state=score.can_directly_change_research_state,
         created_at=score.created_at,
+    )
+
+
+def _news_agent_run_to_row(run: NewsAgentRun) -> NewsAgentRunRow:
+    """Map an agentic run domain object to a row."""
+    return NewsAgentRunRow(
+        run_id=run.run_id,
+        scope_version_id=run.scope_version_id,
+        quant_run_id=run.quant_run_id,
+        decision_at=run.decision_at,
+        status=run.status.value,
+        target_count=run.target_count,
+        include_near_threshold=run.include_near_threshold,
+        config_hash=run.config_hash,
+        created_at=run.created_at,
+        started_at=run.started_at,
+        finished_at=run.finished_at,
+        error_summary=run.error_summary,
+    )
+
+
+def _news_agent_run_from_row(row: NewsAgentRunRow) -> NewsAgentRun:
+    """Map an agentic run row to its domain object."""
+    return NewsAgentRun(
+        run_id=row.run_id,
+        scope_version_id=row.scope_version_id,
+        quant_run_id=row.quant_run_id,
+        decision_at=row.decision_at,
+        status=NewsAgentRunStatus(row.status),
+        target_count=row.target_count,
+        include_near_threshold=row.include_near_threshold,
+        config_hash=row.config_hash,
+        created_at=row.created_at,
+        started_at=row.started_at,
+        finished_at=row.finished_at,
+        error_summary=row.error_summary or {},
+    )
+
+
+def _news_agent_task_to_row(task: NewsAgentTask) -> NewsAgentTaskRow:
+    """Map an agentic task domain object to a row."""
+    return NewsAgentTaskRow(
+        task_id=task.task_id,
+        run_id=task.run_id,
+        security_id=task.security_id,
+        task_type=task.task_type,
+        status=task.status.value,
+        attempt=task.attempt,
+        prompt_version=task.prompt_version,
+        prompt_hash=task.prompt_hash,
+        schema_hash=task.schema_hash,
+        request_hash=task.request_hash,
+        response_hash=task.response_hash,
+        error_code=task.error_code,
+        error_message=task.error_message,
+        payload=task.payload,
+        created_at=task.created_at,
+        completed_at=task.completed_at,
+    )
+
+
+def _news_search_plan_to_row(plan: NewsSearchPlan) -> NewsSearchPlanRow:
+    """Map a search plan domain object to a row."""
+    return NewsSearchPlanRow(
+        plan_id=plan.plan_id,
+        run_id=plan.run_id,
+        security_id=plan.security_id,
+        symbol=plan.symbol,
+        name=plan.name,
+        queries=list(plan.queries),
+        review_status=plan.review_status,
+        fallback_used=plan.fallback_used,
+        prompt_version=plan.prompt_version,
+        prompt_hash=plan.prompt_hash,
+        response_hash=plan.response_hash,
+        created_at=plan.created_at,
+    )
+
+
+def _news_search_plan_from_row(row: NewsSearchPlanRow) -> NewsSearchPlan:
+    """Map a search plan row to a domain object."""
+    return NewsSearchPlan(
+        plan_id=row.plan_id,
+        run_id=row.run_id,
+        security_id=row.security_id,
+        symbol=row.symbol,
+        name=row.name,
+        queries=tuple(row.queries),
+        review_status=row.review_status,
+        fallback_used=row.fallback_used,
+        prompt_version=row.prompt_version,
+        prompt_hash=row.prompt_hash,
+        response_hash=row.response_hash,
+        created_at=row.created_at,
+    )
+
+
+def _news_article_finding_to_row(
+    finding: NewsArticleFinding,
+) -> NewsArticleFindingRow:
+    """Map an article finding domain object to a row."""
+    return NewsArticleFindingRow(
+        finding_id=finding.finding_id,
+        run_id=finding.run_id,
+        security_id=finding.security_id,
+        event_id=finding.event_id,
+        title=finding.title,
+        source_url=finding.source_url,
+        key_points=list(finding.key_points),
+        materiality=finding.materiality,
+        sentiment=finding.sentiment,
+        risk_flags=list(finding.risk_flags),
+        cited_spans=list(finding.cited_spans),
+        review_status=finding.review_status,
+        confidence=finding.confidence,
+        prompt_version=finding.prompt_version,
+        prompt_hash=finding.prompt_hash,
+        response_hash=finding.response_hash,
+        created_at=finding.created_at,
+    )
+
+
+def _news_article_finding_from_row(
+    row: NewsArticleFindingRow,
+) -> NewsArticleFinding:
+    """Map an article finding row to a domain object."""
+    return NewsArticleFinding(
+        finding_id=row.finding_id,
+        run_id=row.run_id,
+        security_id=row.security_id,
+        event_id=row.event_id,
+        title=row.title,
+        source_url=row.source_url,
+        key_points=tuple(row.key_points),
+        materiality=row.materiality,
+        sentiment=row.sentiment,
+        risk_flags=tuple(row.risk_flags),
+        cited_spans=tuple(row.cited_spans),
+        review_status=row.review_status,
+        confidence=row.confidence,
+        prompt_version=row.prompt_version,
+        prompt_hash=row.prompt_hash,
+        response_hash=row.response_hash,
+        created_at=row.created_at,
+    )
+
+
+def _news_security_brief_to_row(brief: NewsSecurityBrief) -> NewsSecurityBriefRow:
+    """Map a security brief domain object to a row."""
+    return NewsSecurityBriefRow(
+        brief_id=brief.brief_id,
+        run_id=brief.run_id,
+        security_id=brief.security_id,
+        summary=brief.summary,
+        finding_ids=list(brief.finding_ids),
+        source_event_ids=list(brief.source_event_ids),
+        is_derived=brief.is_derived,
+        trust_level=brief.trust_level,
+        prompt_version=brief.prompt_version,
+        prompt_hash=brief.prompt_hash,
+        response_hash=brief.response_hash,
+        created_at=brief.created_at,
+    )
+
+
+def _news_security_brief_from_row(row: NewsSecurityBriefRow) -> NewsSecurityBrief:
+    """Map a security brief row to a domain object."""
+    return NewsSecurityBrief(
+        brief_id=row.brief_id,
+        run_id=row.run_id,
+        security_id=row.security_id,
+        summary=row.summary,
+        finding_ids=tuple(row.finding_ids),
+        source_event_ids=tuple(row.source_event_ids),
+        is_derived=row.is_derived,
+        trust_level=row.trust_level,
+        prompt_version=row.prompt_version,
+        prompt_hash=row.prompt_hash,
+        response_hash=row.response_hash,
+        created_at=row.created_at,
     )

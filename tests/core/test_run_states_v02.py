@@ -11,12 +11,12 @@ from margin.core.run_states import RunState, StepAttempt, StepState
 
 
 def _started_at() -> datetime:
-    """started at."""
+    """Return a fixed started-at datetime for test determinism."""
     return datetime(2026, 6, 22, 12, 0, tzinfo=UTC)
 
 
 def test_step_attempt_is_frozen_and_hashes_input_deterministically() -> None:
-    """step attempt is frozen and hashes input deterministically."""
+    """Test that a step attempt is frozen and hashes input deterministically."""
     first = StepAttempt(
         run_id="run-1",
         step_id="quant",
@@ -47,7 +47,7 @@ def test_step_attempt_is_frozen_and_hashes_input_deterministically() -> None:
 
 
 def test_step_attempt_appends_state_event_without_consuming_retry() -> None:
-    """step attempt appends state event without consuming retry."""
+    """Test that appending a state event does not consume a retry attempt."""
     running = StepAttempt(
         run_id="run-1",
         step_id="news",
@@ -73,7 +73,7 @@ def test_step_attempt_appends_state_event_without_consuming_retry() -> None:
 
 
 def test_waiting_states_are_not_terminal() -> None:
-    """waiting states are not terminal."""
+    """Test that waiting states are not terminal while succeeded and failed are."""
     assert StepState.WAITING_RATE_LIMIT.is_terminal is False
     assert StepState.WAITING_BUDGET.is_terminal is False
     assert StepState.SUCCEEDED.is_terminal is True
@@ -81,7 +81,7 @@ def test_waiting_states_are_not_terminal() -> None:
 
 
 def test_run_state_values_match_contract() -> None:
-    """run state values match contract."""
+    """Test that run state values match the expected contract."""
     assert RunState.FAILED_RETRYABLE.value == "failed_retryable"
     assert RunState.SUCCEEDED_WITH_DEGRADATION.value == "succeeded_with_degradation"
     assert RunState.CANCELLED.is_terminal is True
@@ -96,7 +96,12 @@ def test_step_attempt_rejects_invalid_sequence_numbers(
     attempt_no: int,
     state_seq: int,
 ) -> None:
-    """step attempt rejects invalid sequence numbers."""
+    """Test that step attempt rejects invalid sequence numbers.
+
+    Args:
+        attempt_no: The attempt number to validate.
+        state_seq: The state sequence number to validate.
+    """
     with pytest.raises(ValidationError):
         StepAttempt(
             run_id="run-1",

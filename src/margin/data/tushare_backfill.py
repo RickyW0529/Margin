@@ -41,7 +41,15 @@ class TushareClient(Protocol):
     """Minimal dynamic Tushare Pro client contract."""
 
     def query(self, api_name: str, **params: Any) -> Any:
-        """Return a pandas-compatible frame."""
+        """Return a pandas-compatible frame.
+
+        Args:
+            api_name: The Tushare API name to call.
+            **params: Additional request parameters.
+
+        Returns:
+            A pandas DataFrame-like object.
+        """
 
 
 class TushareSourceRepository(Protocol):
@@ -51,16 +59,38 @@ class TushareSourceRepository(Protocol):
         """Persist the versioned endpoint closure."""
 
     def start_run(self, request: DataSyncRequest, *, endpoint_count: int) -> str:
-        """Start an audited source run."""
+        """Start an audited source run.
+
+        Args:
+            request: The sync request describing the provider and scope.
+            endpoint_count: The number of endpoints included in the run.
+
+        Returns:
+            The source-system run ID.
+        """
 
     def insert_records(self, records: Iterable[TushareLandingRecord]) -> int:
-        """Insert one endpoint batch."""
+        """Insert one endpoint batch.
+
+        Args:
+            records: Landing records for a single endpoint.
+
+        Returns:
+            The number of newly inserted rows.
+        """
 
     def record_quality_decisions(
         self,
         decisions: Iterable[SourceQualityDecision],
     ) -> int:
-        """Persist quality decisions."""
+        """Persist quality decisions.
+
+        Args:
+            decisions: Quality decisions to persist.
+
+        Returns:
+            The number of newly inserted decision rows.
+        """
 
     def finish_run(
         self,
@@ -69,7 +99,13 @@ class TushareSourceRepository(Protocol):
         completed_count: int,
         failed_endpoints: dict[str, str],
     ) -> None:
-        """Finish the audited source run."""
+        """Finish the audited source run.
+
+        Args:
+            run_id: The sync run ID to finalize.
+            completed_count: The number of successfully completed endpoints.
+            failed_endpoints: Mapping of failed endpoint name to error message.
+        """
 
 
 class TushareWarehousePublication(Protocol):
@@ -83,7 +119,17 @@ class TushareWarehousePublication(Protocol):
         run_id: str,
         decision_at: datetime,
     ) -> int:
-        """Publish accepted rows and return inserted fact count."""
+        """Publish accepted rows and return inserted fact count.
+
+        Args:
+            api_name: The Tushare API name being published.
+            records: Quality-accepted source rows to publish.
+            run_id: The source-system sync run ID.
+            decision_at: The point-in-time decision timestamp.
+
+        Returns:
+            The number of facts inserted into the warehouse.
+        """
 
 
 class CompanyPoolMaterialization(Protocol):
@@ -96,7 +142,16 @@ class CompanyPoolMaterialization(Protocol):
         business_at: datetime,
         known_at: datetime,
     ) -> Any:
-        """Freeze the current non-ST serving view."""
+        """Freeze the current non-ST serving view.
+
+        Args:
+            source_run_id: The source run that produced the serving view.
+            business_at: The business date the snapshot represents.
+            known_at: The system time at which the snapshot became known.
+
+        Returns:
+            The materialized company-pool snapshot.
+        """
 
 
 class TushareBackfillConfig(BaseModel):
@@ -166,7 +221,18 @@ class TushareBackfillService:
         warehouse_publisher: TushareWarehousePublication | None = None,
         company_pool_repository: CompanyPoolMaterialization | None = None,
     ) -> None:
-        """Initialize source extraction dependencies."""
+        """Initialize source extraction dependencies.
+
+        Args:
+            client: The Tushare Pro API client.
+            repository: The source-system persistence boundary.
+            quality_screen: Optional custom quality screen.
+            requirements: Optional custom quant requirement catalog.
+            queries: Optional custom Tushare query catalog.
+            warehouse_publisher: Optional warehouse publication boundary.
+            company_pool_repository: Optional company-pool materialization
+                boundary.
+        """
         self._client = client
         self._repository = repository
         self._quality = quality_screen or TushareQualityScreen()
@@ -176,7 +242,18 @@ class TushareBackfillService:
         self._company_pool_repository = company_pool_repository
 
     def run(self, config: TushareBackfillConfig) -> TushareBackfillReport:
-        """Run the selected endpoint closure and continue safely after endpoint failures."""
+        """Run the selected endpoint closure and continue safely after endpoint failures.
+
+        Args:
+            config: The frozen rolling-window extraction policy.
+
+        Returns:
+            A ``TushareBackfillReport`` with per-endpoint coverage and exclusion
+            counts.
+
+        Raises:
+            ValueError: If the config references unknown Tushare endpoints.
+        """
         started_at = datetime.now(UTC)
         endpoints = config.endpoints or self._queries.api_names()
         unknown = set(endpoints).difference(self._queries.api_names())
@@ -411,6 +488,7 @@ class TushareBackfillService:
         config: TushareBackfillConfig,
         eligible_symbols: set[str],
     ) -> TushareEndpointCoverage:
+        """Persist landing rows, screen quality, and optionally publish to warehouse."""
         endpoint = self._requirements.endpoint("tushare", api_name)
         fetched_at = datetime.now(UTC)
         landing = [
@@ -468,6 +546,7 @@ class TushareBackfillService:
         industry_codes: tuple[str, ...],
         eligible_symbols: set[str],
     ) -> list[dict[str, Any]]:
+        """Build the bounded list of API request parameters for one endpoint."""
         mode = self._queries.get(api_name).query_mode
         start = config.window_start.strftime("%Y%m%d")
         end = config.window_end.strftime("%Y%m%d")
@@ -541,6 +620,7 @@ def _filter_company_rows(
     rows: list[dict[str, Any]],
     eligible_symbols: set[str],
 ) -> list[dict[str, Any]]:
+    """Filter endpoint rows to only those whose symbol is in the company pool."""
     if api_name not in _COMPANY_SYMBOL_ENDPOINTS:
         return rows
     symbol_field = "con_code" if api_name in {"index_member", "index_weight"} else "ts_code"
@@ -552,6 +632,7 @@ def _filter_company_rows(
 
 
 def _sanitize(value: Any) -> Any:
+    """Convert NaN floats and numpy scalars to plain Python values."""
     if value is None:
         return None
     if isinstance(value, float) and math.isnan(value):
@@ -562,6 +643,7 @@ def _sanitize(value: Any) -> Any:
 
 
 def _parse_date(value: Any) -> date | None:
+    """Parse a Tushare YYYYMMDD string into a date, or ``None``."""
     normalized = str(value or "").strip()
     if not normalized:
         return None
@@ -572,6 +654,7 @@ def _parse_date(value: Any) -> date | None:
 
 
 def _calendar_dates(start: date, end: date) -> list[date]:
+    """Return inclusive calendar dates between two dates."""
     values: list[date] = []
     current = start
     while current <= end:
@@ -581,6 +664,7 @@ def _calendar_dates(start: date, end: date) -> list[date]:
 
 
 def _quarter_ends(start: date, end: date) -> list[str]:
+    """Return quarter-end dates in YYYYMMDD format within the bounds."""
     values: list[str] = []
     for year in range(start.year, end.year + 1):
         for month, day in ((3, 31), (6, 30), (9, 30), (12, 31)):

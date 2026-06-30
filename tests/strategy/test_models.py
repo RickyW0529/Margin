@@ -1,4 +1,8 @@
-"""Tests for strategy configuration domain models."""
+"""Tests for strategy configuration domain models.
+
+This module validates default values, immutability, and guardrail validation
+of the strategy configuration domain models.
+"""
 
 from __future__ import annotations
 
@@ -6,13 +10,21 @@ from margin.strategy.models import StrategyConfig, StrategyState, StrategyVersio
 
 
 def test_strategy_ai_default_model_is_deepseek_pro():
-    """strategy ai default model is deepseek pro."""
+    """Verify the default AI model for a strategy config is deepseek-v4-pro.
+
+    Returns:
+        None.
+    """
     config = StrategyConfig()
     assert config.ai.model == "deepseek-v4-pro"
 
 
 def test_strategy_version_is_immutable():
-    """strategy version is immutable."""
+    """Verify a strategy version is created in the draft state by default.
+
+    Returns:
+        None.
+    """
     version = StrategyVersion(
         strategy_id="st_001",
         version_id="sv_001",
@@ -24,13 +36,21 @@ def test_strategy_version_is_immutable():
 
 
 def test_strategy_config_validates_prohibited_outputs():
-    """strategy config validates prohibited outputs."""
+    """Verify strategy config accepts and stores prohibited output declarations.
+
+    Returns:
+        None.
+    """
     config = StrategyConfig(decision={"prohibited_outputs": ["GUARANTEED_RETURN"]})
     assert "GUARANTEED_RETURN" in config.decision.prohibited_outputs
 
 
 def test_strategy_version_freeze_rejects_mutation():
-    """strategy version freeze rejects mutation."""
+    """Verify a frozen strategy version rejects direct state mutation.
+
+    Returns:
+        None.
+    """
     version = StrategyVersion(
         strategy_id="st_001",
         version_id="sv_001",

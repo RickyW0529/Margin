@@ -147,7 +147,11 @@ class BaseProvider(ABC):
 
 @runtime_checkable
 class MarketDataProvider(Protocol):
-    """Protocol for A-share market data Providers."""
+    """Protocol for A-share market data Providers.
+
+    Defines the structural contract for Providers that supply securities,
+    OHLCV bars, adjustment factors, financials, and index membership.
+    """
 
     def get_securities(self, as_of: datetime) -> list[dict[str, Any]]:
         """Return the universe of available securities as of a given date.
@@ -231,7 +235,11 @@ class MarketDataProvider(Protocol):
 
 @runtime_checkable
 class WebSearchProvider(Protocol):
-    """Protocol for web search Providers."""
+    """Protocol for web search Providers.
+
+    Defines the structural contract for Providers that execute web search
+    queries and return ranked result records.
+    """
 
     def search(self, query: str, max_results: int = 10) -> list[dict[str, Any]]:
         """Execute a web search.

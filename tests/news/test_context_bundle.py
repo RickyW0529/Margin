@@ -63,7 +63,7 @@ def news_repository(database_url: str) -> Iterator[NewsRepository]:
 
 
 def _target() -> NewsTarget:
-    """target."""
+    """Return a deterministic news target fixture for context bundle tests."""
     return NewsTarget(
         scope_version_id="scope-1",
         quant_run_id="quant-1",
@@ -82,7 +82,13 @@ def _seed_context_fixture(
     *,
     complete: bool,
 ) -> None:
-    """seed context fixture."""
+    """Seed a refresh run, target, document event, and materiality score.
+
+    Args:
+        repo: The news repository to seed.
+        run_id: The refresh run identifier to create.
+        complete: Whether to mark the target as completed or retried.
+    """
     repo.create_news_refresh_run(
         run_id=run_id,
         scope_version_id="scope-1",

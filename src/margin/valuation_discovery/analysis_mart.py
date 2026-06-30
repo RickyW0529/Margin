@@ -216,6 +216,7 @@ class MemoryAnalysisMartRepository:
     """In-memory Analysis Mart repository for unit tests."""
 
     def __init__(self) -> None:
+        """Initialize an empty in-memory Analysis Mart repository."""
         self._feature_snapshots: dict[str, QuantFeatureSnapshot] = {}
         self._feature_rows: dict[str, QuantFeatureRow] = {}
         self._snapshots: dict[str, AnalysisSnapshot] = {}
@@ -375,6 +376,7 @@ class SQLAlchemyAnalysisMartRepository:
     """SQLAlchemy-backed Analysis Mart repository."""
 
     def __init__(self, session_factory: SessionFactory) -> None:
+        """Initialize the repository with a SQLAlchemy session factory."""
         self._session_factory = session_factory
 
     def upsert_feature_snapshot(
@@ -527,6 +529,7 @@ class SQLAlchemyAnalysisMartRepository:
         mapper: Callable[[Any], Any],
         label: str,
     ) -> None:
+        """Insert a row idempotently or reject conflicting replays."""
         existing = session.get(row_type, row_id)
         if existing is not None:
             if mapper(existing) != mapper(row):
@@ -544,6 +547,12 @@ class AnalysisMartPublisher:
         *,
         analysis_version: str = "analysis-mart-v0.3.0",
     ) -> None:
+        """Initialize the publisher with a repository and analysis version.
+
+        Args:
+            repository: Persistence boundary for Analysis Mart bundles.
+            analysis_version: Version label for published analysis snapshots.
+        """
         self._repository = repository
         self._analysis_version = analysis_version
 
@@ -662,6 +671,7 @@ class AnalysisMartPublisher:
 
 
 def _validate_bundle(bundle: AnalysisMartBundle) -> None:
+    """Validate that all child rows reference the bundle's snapshot ID."""
     snapshot_id = bundle.snapshot.analysis_snapshot_id
     for metric in bundle.metrics:
         if metric.analysis_snapshot_id != snapshot_id:
@@ -679,6 +689,7 @@ def _metric_specs(
     scores: dict[str, Any],
     raw_factors: dict[str, Any],
 ) -> tuple[tuple[str, str, str, float | None, dict[str, Any]], ...]:
+    """Build metric specification tuples from quant scores and raw factors."""
     specs: list[tuple[str, str, str, float | None, dict[str, Any]]] = [
         ("final_score", "Final Score", "quant_score", quant_result.final_score, {}),
         ("quality_score", "Quality Score", "factor_group", quant_result.quality_score, {}),
@@ -721,6 +732,7 @@ def _metric(
     source_id: str,
     detail: dict[str, Any],
 ) -> AnalysisMetric:
+    """Build an ``AnalysisMetric`` with a deterministic metric ID."""
     metric_id = "am_" + _hash_payload(
         {
             "snapshot_id": snapshot.analysis_snapshot_id,
@@ -753,6 +765,7 @@ def _quant_finding(
     quant_result: QuantResult,
     evidence_ids: tuple[str, ...],
 ) -> AnalysisFinding:
+    """Build a quant screening ``AnalysisFinding`` with a deterministic ID."""
     finding_id = "af_" + _hash_payload(
         {
             "snapshot_id": snapshot.analysis_snapshot_id,
@@ -804,6 +817,7 @@ def _lineage_links(
     input_snapshot_id: str | None,
     evidence_ids: tuple[str, ...],
 ) -> tuple[AnalysisEvidenceLink, ...]:
+    """Build lineage and evidence link rows for one analysis snapshot."""
     links: list[AnalysisEvidenceLink] = [
         _link(
             snapshot=snapshot,
@@ -864,6 +878,7 @@ def _link(
     source_id: str,
     role: str,
 ) -> AnalysisEvidenceLink:
+    """Build an ``AnalysisEvidenceLink`` with a deterministic link ID."""
     link_id = "al_" + _hash_payload(
         {
             "snapshot_id": snapshot.analysis_snapshot_id,
@@ -890,6 +905,7 @@ def _link(
 
 
 def _quality_flags(quant_result: QuantResult) -> tuple[str, ...]:
+    """Build quality flag tags from a quant result's data and risk state."""
     flags = ["data_status:" + quant_result.data_status.value]
     flags.extend(f"risk:{flag}" for flag in quant_result.risk_flags)
     if quant_result.review_required:
@@ -898,6 +914,7 @@ def _quality_flags(quant_result: QuantResult) -> tuple[str, ...]:
 
 
 def _metric_direction(code: str) -> str:
+    """Return whether a metric code is lower or higher is better."""
     if code.startswith(("raw_pe", "raw_pb", "raw_ps")):
         return "lower_is_better"
     if code.startswith("raw_volatility") or code.startswith("raw_max_drawdown"):
@@ -906,6 +923,7 @@ def _metric_direction(code: str) -> str:
 
 
 def _finding_confidence(quant_result: QuantResult) -> float:
+    """Return a clamped 0-1 confidence value from a quant result."""
     base = min(max(quant_result.final_score / 100.0, 0.0), 1.0)
     if quant_result.data_status.value != "ok":
         return min(base, 0.4)
@@ -915,10 +933,12 @@ def _finding_confidence(quant_result: QuantResult) -> float:
 
 
 def _dict(value: Any) -> dict[str, Any]:
+    """Return a dict copy or an empty dict for non-dict values."""
     return dict(value) if isinstance(value, dict) else {}
 
 
 def _optional_float(value: Any) -> float | None:
+    """Convert a value to float, returning None for bool, NaN, or non-numeric."""
     if value is None or isinstance(value, bool):
         return None
     try:
@@ -928,6 +948,7 @@ def _optional_float(value: Any) -> float | None:
 
 
 def _hash_payload(payload: dict[str, Any]) -> str:
+    """Hash a payload dict to a deterministic SHA-256 digest string."""
     encoded = json.dumps(
         payload,
         sort_keys=True,
@@ -944,6 +965,7 @@ def _ensure_same_or_absent(
     value: Any,
     label: str,
 ) -> None:
+    """Reject conflicting replays when a key already holds a different value."""
     current = store.get(key)
     if current is not None and current != value:
         raise ValueError(f"conflicting {label}")
@@ -953,6 +975,7 @@ def _validate_feature_snapshot(
     snapshot: QuantFeatureSnapshot,
     rows: tuple[QuantFeatureRow, ...],
 ) -> None:
+    """Validate that feature rows match the snapshot's row count and ID."""
     if snapshot.row_count != len(rows):
         raise ValueError("feature snapshot row_count does not match rows")
     for row in rows:
@@ -961,6 +984,7 @@ def _validate_feature_snapshot(
 
 
 def _feature_snapshot_to_row(snapshot: QuantFeatureSnapshot) -> QuantFeatureSnapshotRow:
+    """Convert a ``QuantFeatureSnapshot`` to its database row."""
     return QuantFeatureSnapshotRow(
         feature_snapshot_id=snapshot.feature_snapshot_id,
         scope_version_id=snapshot.scope_version_id,
@@ -981,6 +1005,7 @@ def _feature_snapshot_to_row(snapshot: QuantFeatureSnapshot) -> QuantFeatureSnap
 
 
 def _feature_snapshot_from_row(row: QuantFeatureSnapshotRow) -> QuantFeatureSnapshot:
+    """Convert a feature snapshot row to the immutable domain model."""
     return QuantFeatureSnapshot(
         feature_snapshot_id=row.feature_snapshot_id,
         scope_version_id=row.scope_version_id,
@@ -1001,6 +1026,7 @@ def _feature_snapshot_from_row(row: QuantFeatureSnapshotRow) -> QuantFeatureSnap
 
 
 def _feature_row_to_row(row: QuantFeatureRow) -> QuantFeatureRowRow:
+    """Convert a ``QuantFeatureRow`` to its database row."""
     return QuantFeatureRowRow(
         row_id=row.row_id,
         feature_snapshot_id=row.feature_snapshot_id,
@@ -1016,6 +1042,7 @@ def _feature_row_to_row(row: QuantFeatureRow) -> QuantFeatureRowRow:
 
 
 def _feature_row_from_row(row: QuantFeatureRowRow) -> QuantFeatureRow:
+    """Convert a feature row row to the immutable domain model."""
     return QuantFeatureRow(
         row_id=row.row_id,
         feature_snapshot_id=row.feature_snapshot_id,
@@ -1031,6 +1058,7 @@ def _feature_row_from_row(row: QuantFeatureRowRow) -> QuantFeatureRow:
 
 
 def _snapshot_to_row(snapshot: AnalysisSnapshot) -> AnalysisSnapshotRow:
+    """Convert an ``AnalysisSnapshot`` to its database row."""
     return AnalysisSnapshotRow(
         analysis_snapshot_id=snapshot.analysis_snapshot_id,
         security_id=snapshot.security_id,
@@ -1053,6 +1081,7 @@ def _snapshot_to_row(snapshot: AnalysisSnapshot) -> AnalysisSnapshotRow:
 
 
 def _snapshot_from_row(row: AnalysisSnapshotRow) -> AnalysisSnapshot:
+    """Convert an analysis snapshot row to the immutable domain model."""
     return AnalysisSnapshot(
         analysis_snapshot_id=row.analysis_snapshot_id,
         security_id=row.security_id,
@@ -1075,6 +1104,7 @@ def _snapshot_from_row(row: AnalysisSnapshotRow) -> AnalysisSnapshot:
 
 
 def _metric_to_row(metric: AnalysisMetric) -> AnalysisMetricRow:
+    """Convert an ``AnalysisMetric`` to its database row."""
     return AnalysisMetricRow(
         metric_id=metric.metric_id,
         analysis_snapshot_id=metric.analysis_snapshot_id,
@@ -1095,6 +1125,7 @@ def _metric_to_row(metric: AnalysisMetric) -> AnalysisMetricRow:
 
 
 def _metric_from_row(row: AnalysisMetricRow) -> AnalysisMetric:
+    """Convert an analysis metric row to the immutable domain model."""
     return AnalysisMetric(
         metric_id=row.metric_id,
         analysis_snapshot_id=row.analysis_snapshot_id,
@@ -1115,6 +1146,7 @@ def _metric_from_row(row: AnalysisMetricRow) -> AnalysisMetric:
 
 
 def _finding_to_row(finding: AnalysisFinding) -> AnalysisFindingRow:
+    """Convert an ``AnalysisFinding`` to its database row."""
     return AnalysisFindingRow(
         finding_id=finding.finding_id,
         analysis_snapshot_id=finding.analysis_snapshot_id,
@@ -1131,6 +1163,7 @@ def _finding_to_row(finding: AnalysisFinding) -> AnalysisFindingRow:
 
 
 def _finding_from_row(row: AnalysisFindingRow) -> AnalysisFinding:
+    """Convert an analysis finding row to the immutable domain model."""
     return AnalysisFinding(
         finding_id=row.finding_id,
         analysis_snapshot_id=row.analysis_snapshot_id,
@@ -1147,6 +1180,7 @@ def _finding_from_row(row: AnalysisFindingRow) -> AnalysisFinding:
 
 
 def _link_to_row(link: AnalysisEvidenceLink) -> AnalysisEvidenceLinkRow:
+    """Convert an ``AnalysisEvidenceLink`` to its database row."""
     return AnalysisEvidenceLinkRow(
         link_id=link.link_id,
         analysis_snapshot_id=link.analysis_snapshot_id,
@@ -1162,6 +1196,7 @@ def _link_to_row(link: AnalysisEvidenceLink) -> AnalysisEvidenceLinkRow:
 
 
 def _link_from_row(row: AnalysisEvidenceLinkRow) -> AnalysisEvidenceLink:
+    """Convert an analysis evidence link row to the immutable domain model."""
     return AnalysisEvidenceLink(
         link_id=row.link_id,
         analysis_snapshot_id=row.analysis_snapshot_id,

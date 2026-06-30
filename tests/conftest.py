@@ -19,7 +19,16 @@ DEFAULT_TEST_DATABASE_URL = (
 
 
 def resolve_test_database_url() -> str:
-    """Resolve and validate the dedicated PostgreSQL test database URL."""
+    """Resolve and validate the dedicated PostgreSQL test database URL.
+
+    Returns:
+        The validated test database URL.
+
+    Raises:
+        RuntimeError: If the database name contains unsupported characters or
+            does not follow the required ``_test`` suffix / ``test_`` prefix
+            convention.
+    """
     url = os.getenv("MARGIN_TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
     database_name = make_url(url).database or ""
     if not re.fullmatch(r"[A-Za-z0-9_]+", database_name):

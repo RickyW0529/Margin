@@ -19,6 +19,15 @@ from margin.sql.raw_statements import (
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Inspect or apply index_weight metadata repair from DB landing rows.
+
+    Args:
+        argv: Optional argument list. When ``None``, arguments are read from
+            ``sys.argv``.
+
+    Returns:
+        int: 0 on success.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--write",
@@ -40,6 +49,15 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def inspect_repair(engine) -> dict[str, Any]:
+    """Report index_weight repair coverage without writing changes.
+
+    Args:
+        engine: SQLAlchemy engine connected to the target database.
+
+    Returns:
+        dict[str, Any]: Dry-run coverage report with missing, safe-match and
+            ambiguous counts grouped by index code.
+    """
     with engine.connect() as conn:
         match_row = dict(conn.execute(INDEX_WEIGHT_MATCH).mappings().one())
         by_index = [dict(row) for row in conn.execute(INDEX_WEIGHT_VERIFY).mappings()]
@@ -53,6 +71,19 @@ def inspect_repair(engine) -> dict[str, Any]:
 
 
 def apply_repair(engine) -> dict[str, Any]:
+    """Apply the index_weight metadata repair and return before/after stats.
+
+    Args:
+        engine: SQLAlchemy engine connected to the target database.
+
+    Returns:
+        dict[str, Any]: Write-mode report with facts/canonical update counts
+            and before/after coverage snapshots.
+
+    Raises:
+        SystemExit: When ambiguous matches are detected and a safe repair is
+            not possible.
+    """
     before = inspect_repair(engine)
     if before["ambiguous_count"]:
         raise SystemExit(

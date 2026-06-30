@@ -1,4 +1,9 @@
-"""Tests for strategy service."""
+"""Tests for strategy service.
+
+This module validates strategy creation from templates, custom creation,
+version updates with deep merge, lifecycle transitions, prompt generation,
+and template listing.
+"""
 
 from __future__ import annotations
 
@@ -10,12 +15,16 @@ from margin.strategy.service import StrategyService
 
 
 def _service() -> StrategyService:
-    """service."""
+    """Build a StrategyService backed by an in-memory repository."""
     return StrategyService(repository=MemoryStrategyRepository())
 
 
 def test_service_creates_strategy_from_template():
-    """service creates strategy from template."""
+    """Verify the service creates a strategy from a built-in template.
+
+    Returns:
+        None.
+    """
     service = _service()
     profile = service.create_from_template("user_1", "value_quality")
     assert profile.active_version_id == ""
@@ -24,7 +33,11 @@ def test_service_creates_strategy_from_template():
 
 
 def test_service_creates_custom_strategy():
-    """service creates custom strategy."""
+    """Verify the service creates a custom strategy with a user-provided config.
+
+    Returns:
+        None.
+    """
     service = _service()
     config = StrategyConfig(universe=["000001.SZ"])
     profile = service.create_custom("user_1", config, "My Strategy")
@@ -33,7 +46,11 @@ def test_service_creates_custom_strategy():
 
 
 def test_service_update_creates_new_version():
-    """service update creates new version."""
+    """Verify updating a strategy creates a new version.
+
+    Returns:
+        None.
+    """
     service = _service()
     profile = service.create_from_template("user_1", "value_quality")
     updated = service.update_strategy(
@@ -44,7 +61,11 @@ def test_service_update_creates_new_version():
 
 
 def test_service_update_deep_merges_nested_config_delta():
-    """service update deep merges nested config delta."""
+    """Verify updating a strategy deep-merges nested config deltas.
+
+    Returns:
+        None.
+    """
     service = _service()
     profile = service.create_from_template("user_1", "value_quality")
 
@@ -59,7 +80,11 @@ def test_service_update_deep_merges_nested_config_delta():
 
 
 def test_service_validate_version_transitions_to_validating():
-    """service validate version transitions to validating."""
+    """Verify validating a version transitions it to the backtesting state.
+
+    Returns:
+        None.
+    """
     service = _service()
     profile = service.create_from_template("user_1", "value_quality")
     version = profile.versions[0]
@@ -68,7 +93,11 @@ def test_service_validate_version_transitions_to_validating():
 
 
 def test_service_activate_version_sets_active():
-    """service activate version sets active."""
+    """Verify activating a version sets it as the active version.
+
+    Returns:
+        None.
+    """
     service = _service()
     profile = service.create_from_template("user_1", "value_quality")
     version = profile.versions[0]
@@ -83,7 +112,11 @@ def test_service_activate_version_sets_active():
 
 
 def test_service_get_prompt_returns_string():
-    """service get prompt returns string."""
+    """Verify get_prompt returns a string containing guardrail content.
+
+    Returns:
+        None.
+    """
     service = _service()
     profile = service.create_from_template("user_1", "value_quality")
     prompt = service.get_prompt(profile.strategy_id, profile.versions[0].version_id)
@@ -92,14 +125,22 @@ def test_service_get_prompt_returns_string():
 
 
 def test_service_list_templates():
-    """service list templates."""
+    """Verify list_templates returns the expected number of built-in templates.
+
+    Returns:
+        None.
+    """
     service = _service()
     templates = service.list_templates()
     assert len(templates) == 6
 
 
 def test_service_missing_strategy_raises():
-    """service missing strategy raises."""
+    """Verify requesting a missing strategy raises a KeyError.
+
+    Returns:
+        None.
+    """
     service = _service()
     with pytest.raises(KeyError):
         service.get_profile("missing")

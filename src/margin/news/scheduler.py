@@ -56,7 +56,16 @@ class IncrementalAcquisitionRunner:
         *,
         limit: int = 100,
     ) -> AcquisitionRunResult:
-        """Run one restart-safe incremental acquisition pass."""
+        """Run one restart-safe incremental acquisition pass.
+
+        Args:
+            source_name: Identifier of the registered source.
+            connector: Discovery connector used to list documents incrementally.
+            limit: Maximum number of documents to discover and acquire.
+
+        Returns:
+            An ``AcquisitionRunResult`` summarizing discovered, published, and failed counts.
+        """
         cursor = self._repository.get_cursor(source_name, self._cursor_key)
         discovered = connector.discover(cursor=cursor, limit=limit)
         published = 0

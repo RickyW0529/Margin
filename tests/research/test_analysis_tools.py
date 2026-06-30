@@ -1,4 +1,10 @@
-"""Analysis Mart scoped tool tests."""
+"""Analysis Mart scoped tool tests.
+
+This module verifies that the Analysis Mart scoped read tools are correctly
+registered, enforce per-security isolation, and are wired into the default
+research tool factory so that AI research nodes can inspect fourth-layer
+analysis rows.
+"""
 
 from __future__ import annotations
 
@@ -27,7 +33,13 @@ DECISION_AT = datetime(2026, 6, 24, 8, 0, tzinfo=UTC)
 
 
 def test_analysis_mart_tools_read_snapshot_metrics_and_findings() -> None:
-    """Scoped tools expose fourth-layer analysis rows to AI nodes."""
+    """Verify scoped tools expose fourth-layer analysis rows to AI nodes.
+
+    Registers Analysis Mart tools against an in-memory repository, creates a
+    scoped tool session with ``QUANT_READ`` grants, and asserts that the
+    snapshot, metrics, findings, quant feature snapshot, and quant feature
+    rows tools all return the expected seeded data.
+    """
     repository = _repository()
     registry = ToolDefinitionRegistry()
     register_analysis_mart_tools(registry, repository=repository)
@@ -108,7 +120,12 @@ def test_analysis_mart_tools_read_snapshot_metrics_and_findings() -> None:
 
 
 def test_analysis_mart_tools_deny_cross_security() -> None:
-    """Existing scoped policy blocks tools from reading another security."""
+    """Verify the scoped policy blocks tools from reading another security.
+
+    Creates a session scoped to ``000001.SZ`` and asserts that calls targeting
+    ``600000.SH`` are rejected with a ``security_scope_violation`` error code
+    for both the analysis snapshot and quant feature rows tools.
+    """
     repository = _repository()
     registry = ToolDefinitionRegistry()
     register_analysis_mart_tools(registry, repository=repository)
@@ -149,7 +166,13 @@ def test_analysis_mart_tools_deny_cross_security() -> None:
 
 
 def test_default_research_tool_factory_registers_analysis_tools() -> None:
-    """Production default tool factory exposes Analysis Mart tools when provided."""
+    """Verify the production default tool factory exposes Analysis Mart tools.
+
+    Builds a ``ResearchContextSnapshot`` and invokes the default tool factory
+    with an Analysis Mart repository, then asserts that the resulting session
+    manifest includes the ``analysis_snapshot_get`` and
+    ``quant_feature_rows_list`` tools.
+    """
     repository = _repository()
     context = ResearchContextSnapshot(
         context_snapshot_id="context-analysis-tools",
@@ -177,11 +200,16 @@ def test_default_research_tool_factory_registers_analysis_tools() -> None:
 
 
 def test_valuation_analysis_node_can_read_analysis_mart() -> None:
-    """Valuation analysis needs QUANT_READ to inspect Analysis Mart metrics."""
+    """Verify the valuation analysis node holds the ``QUANT_READ`` grant.
+
+    Asserts that ``QUANT_READ`` is present in the node grants for
+    ``valuation_analysis``, ensuring it can inspect Analysis Mart metrics.
+    """
     assert ToolCapability.QUANT_READ in NODE_GRANTS["valuation_analysis"]
 
 
 def _repository() -> MemoryAnalysisMartRepository:
+    """Build an in-memory Analysis Mart repository seeded with test data."""
     repository = MemoryAnalysisMartRepository()
     repository.upsert_feature_snapshot(
         QuantFeatureSnapshot(

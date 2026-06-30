@@ -16,7 +16,7 @@ from margin.valuation_discovery.repository import ValuationDiscoveryRepository
 
 
 def _normalize_datetime(value: datetime) -> datetime:
-    """normalize datetime."""
+    """Normalize a datetime to timezone-aware UTC."""
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
@@ -72,7 +72,12 @@ class UniverseResolver:
         *,
         security_source: SecurityListingSource | None = None,
     ) -> None:
-        """init  ."""
+        """Initialize the resolver with a repository and optional security source.
+
+        Args:
+            repository: Persistence boundary for universe snapshots and memberships.
+            security_source: Optional PIT source for ALL_A security listings.
+        """
         self._repository = repository
         self._security_source = security_source
 
@@ -125,7 +130,7 @@ class UniverseResolver:
         business_at: datetime,
         known_at: datetime,
     ) -> UniverseSnapshot:
-        """snapshot membership pool."""
+        """Build a universe snapshot from visible index memberships."""
         memberships = [
             membership
             for membership in self._repository.list_universe_memberships(
@@ -153,7 +158,7 @@ class UniverseResolver:
         business_at: datetime,
         known_at: datetime,
     ) -> UniverseSnapshot:
-        """snapshot all a."""
+        """Build a universe snapshot from listed securities for ALL_A."""
         if self._security_source is None:
             listings: tuple[SecurityListing, ...] = ()
         else:

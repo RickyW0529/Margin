@@ -1,4 +1,8 @@
-"""Tests for strategy repository."""
+"""Tests for strategy repository.
+
+This module validates the in-memory strategy repository's ability to store,
+list, and update strategy profiles.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +11,11 @@ from margin.strategy.repository import MemoryStrategyRepository
 
 
 def test_memory_repository_stores_profile():
-    """memory repository stores profile."""
+    """Verify the memory repository stores and retrieves a strategy profile.
+
+    Returns:
+        None.
+    """
     repo = MemoryStrategyRepository()
     profile = StrategyProfile(owner_id="user_1", name="Test")
     repo.add_profile(profile)
@@ -15,7 +23,11 @@ def test_memory_repository_stores_profile():
 
 
 def test_memory_repository_lists_profiles_for_owner():
-    """memory repository lists profiles for owner."""
+    """Verify the memory repository lists profiles filtered by owner.
+
+    Returns:
+        None.
+    """
     repo = MemoryStrategyRepository()
     p1 = StrategyProfile(owner_id="user_1", name="A")
     p2 = StrategyProfile(owner_id="user_1", name="B")
@@ -28,7 +40,11 @@ def test_memory_repository_lists_profiles_for_owner():
 
 
 def test_memory_repository_updates_profile():
-    """memory repository updates profile."""
+    """Verify the memory repository updates an existing profile with new versions.
+
+    Returns:
+        None.
+    """
     repo = MemoryStrategyRepository()
     profile = StrategyProfile(owner_id="user_1", name="Test")
     repo.add_profile(profile)

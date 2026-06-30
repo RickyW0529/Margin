@@ -30,7 +30,7 @@ from margin.strategy.repository import MemoryStrategyRepository
 
 
 def test_build_llm_provider_uses_centralized_settings():
-    """build llm provider uses centralized settings."""
+    """Test that build_llm_provider uses centralized settings."""
     settings = MarginSettings(
         _env_file=None,
         llm_api_key="test-key",
@@ -46,7 +46,7 @@ def test_build_llm_provider_uses_centralized_settings():
 
 
 def test_build_embedding_provider_uses_centralized_settings():
-    """build embedding provider uses centralized settings."""
+    """Test that build_embedding_provider uses centralized settings."""
     settings = MarginSettings(
         _env_file=None,
         embedding_api_key="test-key",
@@ -63,7 +63,7 @@ def test_build_embedding_provider_uses_centralized_settings():
 
 
 def test_provider_factories_fail_closed_when_unconfigured():
-    """provider factories fail closed when unconfigured."""
+    """Test that provider factories fail closed when unconfigured."""
     settings = MarginSettings(_env_file=None)
 
     assert build_llm_provider(settings) is None
@@ -71,7 +71,7 @@ def test_provider_factories_fail_closed_when_unconfigured():
 
 
 def test_provider_factories_fail_closed_for_empty_container_secrets():
-    """provider factories fail closed for empty container secrets."""
+    """Test that provider factories fail closed for empty container secrets."""
     settings = MarginSettings(
         _env_file=None,
         llm_api_key="",
@@ -85,7 +85,7 @@ def test_provider_factories_fail_closed_for_empty_container_secrets():
 
 
 def test_provider_status_providers_report_missing_optional_external_providers():
-    """provider status providers report missing optional external providers."""
+    """Test that provider status reports missing optional external providers."""
     settings = MarginSettings(
         _env_file=None,
         llm_api_key="test-key",
@@ -107,7 +107,7 @@ def test_provider_status_providers_report_missing_optional_external_providers():
 
 
 def test_build_data_warehouse_stack_uses_centralized_settings(database_url, tmp_path):
-    """build data warehouse stack uses centralized settings."""
+    """Test that build_data_warehouse_stack uses centralized settings."""
     settings = MarginSettings(
         _env_file=None,
         database_url=database_url,
@@ -123,7 +123,7 @@ def test_runtime_factory_dependency_uses_active_versioned_config(
     database_url: str,
     monkeypatch,
 ) -> None:
-    """Production runtime construction must not read Provider secrets from env."""
+    """Test that production runtime construction reads versioned config, not env."""
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     secret_store = SecretStore(

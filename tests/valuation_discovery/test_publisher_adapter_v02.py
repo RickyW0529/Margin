@@ -1,4 +1,10 @@
-"""Production valuation publisher behavior tests."""
+"""Production valuation publisher behavior tests.
+
+This module validates that the valuation publisher adapter uses persisted AI
+reviews without inventing identifiers, is replay-idempotent, handles
+first-run abstention correctly, and refreshes the dashboard from persisted
+pointers.
+"""
 
 from __future__ import annotations
 
@@ -19,14 +25,23 @@ DECISION_AT = datetime(2026, 6, 23, 8, 30, tzinfo=UTC)
 
 @dataclass(frozen=True)
 class ReviewSummary:
-    """Minimal persisted-review summary consumed by the publisher."""
+    """Minimal persisted-review summary consumed by the publisher.
+
+    Attributes:
+        review_ids: Tuple of persisted review identifiers.
+        context_snapshot_ids: Tuple of frozen context snapshot identifiers.
+    """
 
     review_ids: tuple[str, ...]
     context_snapshot_ids: tuple[str, ...] = ()
 
 
 def test_update_review_publishes_real_assessment_evidence_and_pointer() -> None:
-    """Publisher uses the persisted AI review without inventing identifiers."""
+    """Verify the publisher uses the persisted AI review without inventing identifiers.
+
+    Returns:
+        None.
+    """
     reviews = MemoryResearchDeltaRepository()
     valuations = MemoryValuationDiscoveryRepository()
     review = _review(
@@ -73,7 +88,11 @@ def test_update_review_publishes_real_assessment_evidence_and_pointer() -> None:
 
 
 def test_publisher_replay_is_idempotent() -> None:
-    """Retrying the publication step does not duplicate immutable records."""
+    """Verify retrying the publication step does not duplicate immutable records.
+
+    Returns:
+        None.
+    """
     reviews = MemoryResearchDeltaRepository()
     valuations = MemoryValuationDiscoveryRepository()
     review = _review(
@@ -114,7 +133,11 @@ def test_publisher_replay_is_idempotent() -> None:
 
 
 def test_abstain_without_previous_assessment_does_not_create_fake_pointer() -> None:
-    """A first-run abstention remains review-only until an assessment exists."""
+    """Verify a first-run abstention remains review-only until an assessment exists.
+
+    Returns:
+        None.
+    """
     reviews = MemoryResearchDeltaRepository()
     valuations = MemoryValuationDiscoveryRepository()
     review = _review(
@@ -147,7 +170,11 @@ def test_abstain_without_previous_assessment_does_not_create_fake_pointer() -> N
 
 
 def test_dashboard_refresh_reports_persisted_effective_projection() -> None:
-    """Dashboard refresh reflects persisted pointers rather than a no-op string."""
+    """Verify dashboard refresh reflects persisted pointers rather than a no-op string.
+
+    Returns:
+        None.
+    """
     reviews = MemoryResearchDeltaRepository()
     valuations = MemoryValuationDiscoveryRepository()
     review = _review(
@@ -190,6 +217,7 @@ def _review(
     conclusion: str,
     evidence_ids: tuple[str, ...],
 ) -> ResearchDeltaReview:
+    """Build one deterministic ResearchDeltaReview for publisher adapter tests."""
 
     return ResearchDeltaReview(
         review_id=review_id,

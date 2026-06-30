@@ -50,7 +50,14 @@ class ToolDefinition:
         return self.input_model.model_json_schema()
 
     def validate_args(self, args: dict[str, Any]) -> dict[str, Any]:
-        """Validate and normalize tool arguments before execution."""
+        """Validate and normalize tool arguments before execution.
+
+        Args:
+            args: Raw argument dictionary to validate.
+
+        Returns:
+            Validated and normalized arguments as a plain dict.
+        """
         return self.input_model.model_validate(args).model_dump(mode="python")
 
 
@@ -62,16 +69,34 @@ class ToolDefinitionRegistry:
         self._definitions: dict[str, ToolDefinition] = {}
 
     def register(self, definition: ToolDefinition) -> None:
-        """Register a definition, rejecting incompatible replacement."""
+        """Register a definition, rejecting incompatible replacement.
+
+        Args:
+            definition: Immutable tool definition to register.
+
+        Raises:
+            ValueError: If a different definition with the same name exists.
+        """
         current = self._definitions.get(definition.name)
         if current is not None and current != definition:
             raise ValueError(f"tool definition '{definition.name}' is immutable")
         self._definitions[definition.name] = definition
 
     def get(self, name: str) -> ToolDefinition | None:
-        """Return a definition by name."""
+        """Return a definition by name.
+
+        Args:
+            name: Tool name to look up.
+
+        Returns:
+            The matching ``ToolDefinition`` or ``None``.
+        """
         return self._definitions.get(name)
 
     def list_definitions(self) -> tuple[ToolDefinition, ...]:
-        """Return definitions in stable name order."""
+        """Return definitions in stable name order.
+
+        Returns:
+            A tuple of all registered definitions sorted by name.
+        """
         return tuple(self._definitions[name] for name in sorted(self._definitions))

@@ -20,7 +20,11 @@ class TushareWarehousePublisher:
     """Translate quality-accepted source rows into existing warehouse contracts."""
 
     def __init__(self, stack: Any) -> None:
-        """Initialize with the production warehouse ingestion stack."""
+        """Initialize with the production warehouse ingestion stack.
+
+        Args:
+            stack: The ``DataWarehouseIngestionStack`` used to persist rows.
+        """
         self._stack = stack
 
     def publish(
@@ -31,7 +35,17 @@ class TushareWarehousePublisher:
         run_id: str,
         decision_at: datetime,
     ) -> int:
-        """Publish one accepted endpoint batch and return inserted fact count."""
+        """Publish one accepted endpoint batch and return inserted fact count.
+
+        Args:
+            api_name: The Tushare API name being published.
+            records: Quality-accepted source rows to publish.
+            run_id: The source-system sync run ID.
+            decision_at: The point-in-time decision timestamp.
+
+        Returns:
+            The number of facts inserted into the warehouse.
+        """
         if not records:
             return 0
         observed_at = ensure_utc(decision_at)
@@ -98,6 +112,7 @@ class TushareWarehousePublisher:
         records: list[dict[str, Any]],
         fetched_at: datetime,
     ) -> list[dict[str, Any]]:
+        """Map accepted source rows to warehouse indicator records by API."""
         if api_name == "adj_factor":
             return [
                 _map_adjustment_row(
@@ -234,6 +249,7 @@ class TushareWarehousePublisher:
 
 
 def _financial_base(row: dict[str, Any], fetched_at: datetime) -> dict[str, Any]:
+    """Return shared financial record fields from one source row."""
     announced = row.get("f_ann_date") or row.get("ann_date") or row.get("end_date")
     return {
         "symbol": row.get("ts_code"),
@@ -246,6 +262,7 @@ def _financial_base(row: dict[str, Any], fetched_at: datetime) -> dict[str, Any]
 
 
 def _balance_record(row: dict[str, Any], fetched_at: datetime) -> dict[str, Any]:
+    """Map one balance-sheet row to warehouse indicator fields."""
     assets = _number(row.get("total_assets"))
     liabilities = _number(row.get("total_liab"))
     equity = _number(row.get("total_hldr_eqy_exc_min_int"))
@@ -262,22 +279,26 @@ def _balance_record(row: dict[str, Any], fetched_at: datetime) -> dict[str, Any]
 
 
 def _divide(numerator: float | None, denominator: float | None) -> float | None:
+    """Return a safe ratio, or ``None`` when the denominator is missing or zero."""
     if numerator is None or denominator in (None, 0):
         return None
     return numerator / denominator
 
 
 def _number(value: Any) -> float | None:
+    """Convert a provider value to a float, or ``None`` when blank."""
     if value is None or value == "":
         return None
     return float(value)
 
 
 def _percent_ratio(value: Any) -> float | None:
+    """Normalize a percentage field to a decimal ratio."""
     number = _number(value)
     return number / 100.0 if number is not None else None
 
 
 def _scaled_number(value: Any, multiplier: float) -> float | None:
+    """Return a numeric value scaled by a multiplier, or ``None``."""
     number = _number(value)
     return number * multiplier if number is not None else None

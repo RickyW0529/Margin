@@ -146,6 +146,37 @@ def quant_input_snapshot_id_for_run(quant_run_id: str) -> Select:
     )
 
 
+def quant_news_candidate_results(
+    quant_run_id: str,
+    *,
+    include_near_threshold: bool = False,
+    scope_version_id: str | None = None,
+) -> Select:
+    """Return quant results eligible for agentic news acquisition."""
+    statuses = ["pass"]
+    if include_near_threshold:
+        statuses.append("near_threshold")
+    statement = (
+        select(QuantScreenResultRow)
+        .join(
+            QuantScreenRunRow,
+            QuantScreenRunRow.quant_run_id == QuantScreenResultRow.quant_run_id,
+        )
+        .where(
+            QuantScreenResultRow.quant_run_id == quant_run_id,
+            QuantScreenResultRow.screening_status.in_(statuses),
+        )
+    )
+    if scope_version_id is not None:
+        statement = statement.where(
+            QuantScreenRunRow.scope_version_id == scope_version_id
+        )
+    return statement.order_by(
+        QuantScreenResultRow.screening_status.desc(),
+        QuantScreenResultRow.security_id.asc(),
+    )
+
+
 def previous_quant_result(
     security_id: str,
     scope_version_id: str,

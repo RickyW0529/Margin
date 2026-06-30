@@ -34,7 +34,7 @@ class GraphContextSnapshot(BaseModel):
     @field_validator("decision_at")
     @classmethod
     def normalize_decision_at(cls, value: datetime) -> datetime:
-        """normalize decision at."""
+        """Normalize the decision timestamp to UTC."""
         return ensure_utc(value)
 
 
@@ -42,11 +42,22 @@ class ContextPrecheckNode:
     """Validate identity, PIT, quant input, news completion, and budget."""
 
     def __init__(self, context: GraphContextSnapshot) -> None:
-        """Initialize the instance."""
+        """Initialize the precheck node.
+
+        Args:
+            context: Frozen context snapshot for identity and quality validation.
+        """
         self._context = context
 
     def run(self, state: AIDeltaGraphState) -> AIDeltaGraphState:
-        """Return a state routed to ABSTAIN/DEFERRED or ready for change-set."""
+        """Return a state routed to ABSTAIN/DEFERRED or ready for change-set.
+
+        Args:
+            state: Current graph state.
+
+        Returns:
+            Updated state with review mode and degradation flags set.
+        """
         identity_errors = _identity_errors(state, self._context)
         if identity_errors:
             return state.with_updates(
@@ -92,11 +103,22 @@ class ChangeSetBuilderNode:
     """Build deterministic change flags and select FULL/DELTA/CARRY."""
 
     def __init__(self, context: GraphContextSnapshot) -> None:
-        """Initialize the instance."""
+        """Initialize the change-set builder.
+
+        Args:
+            context: Frozen context snapshot with change flags.
+        """
         self._context = context
 
     def run(self, state: AIDeltaGraphState) -> AIDeltaGraphState:
-        """Compare frozen references and assign ReviewMode when deterministic."""
+        """Compare frozen references and assign ReviewMode when deterministic.
+
+        Args:
+            state: Current graph state.
+
+        Returns:
+            Updated state with change set and review mode assigned.
+        """
         if state.review_mode in {ReviewMode.ABSTAIN, ReviewMode.REVIEW_DEFERRED}:
             return state
         changes = {
@@ -138,11 +160,22 @@ class CarryForwardRuleNode:
     """Apply the verified zero-LLM carry-forward rule."""
 
     def __init__(self, context: GraphContextSnapshot) -> None:
-        """Initialize the instance."""
+        """Initialize the carry-forward rule node.
+
+        Args:
+            context: Frozen context snapshot for precheck and change-set.
+        """
         self._context = context
 
     def run(self, state: AIDeltaGraphState) -> AIDeltaGraphState:
-        """Route unchanged, complete context to the fast path."""
+        """Route unchanged, complete context to the fast path.
+
+        Args:
+            state: Current graph state.
+
+        Returns:
+            State routed through precheck and change-set builder.
+        """
         checked = ContextPrecheckNode(self._context).run(state)
         if checked.review_mode is not None:
             return checked
@@ -153,7 +186,7 @@ def _identity_errors(
     state: AIDeltaGraphState,
     context: GraphContextSnapshot,
 ) -> list[str]:
-    """identity errors."""
+    """Return field mismatch error codes between state and frozen context."""
     checks = {
         "context_snapshot_id": (
             state.context_snapshot_id,

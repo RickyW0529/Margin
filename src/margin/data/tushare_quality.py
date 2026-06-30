@@ -40,7 +40,16 @@ def select_current_non_st_securities(
     *,
     as_of: datetime | date | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
-    """Filter stock-basic rows before persistence and report exclusion counts."""
+    """Filter stock-basic rows before persistence and report exclusion counts.
+
+    Args:
+        records: Raw ``stock_basic`` rows from Tushare.
+        as_of: Optional reference date for listing-date filtering.
+
+    Returns:
+        A tuple of ``(accepted_rows, excluded_counts)`` where ``excluded_counts``
+        breaks down exclusions by ``st``, ``not_listed``, and ``invalid_symbol``.
+    """
     accepted: list[dict[str, Any]] = []
     excluded = {"st": 0, "not_listed": 0, "invalid_symbol": 0}
     as_of_date = _normalize_date(as_of)
@@ -104,7 +113,18 @@ class TushareQualityScreen:
         eligible_symbols: set[str],
         checked_at: datetime | None = None,
     ) -> SourceQualityDecision:
-        """Return accepted, quarantined, or rejected with stable issue codes."""
+        """Return accepted, quarantined, or rejected with stable issue codes.
+
+        Args:
+            record: The landing record to evaluate.
+            window_start: The rolling-window start boundary.
+            window_end: The rolling-window end boundary.
+            eligible_symbols: The set of company-pool eligible symbols.
+            checked_at: Optional override for the decision timestamp.
+
+        Returns:
+            A ``SourceQualityDecision`` with the admission verdict and score.
+        """
         start = ensure_utc(window_start).date()
         end = ensure_utc(window_end).date()
         issues: list[str] = []

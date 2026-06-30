@@ -13,7 +13,7 @@ from margin.core.models import AuditLogRecord
 
 
 def test_audit_repository_appends_record():
-    """audit repository appends record."""
+    """Test that the audit repository appends a record."""
     repo = MemoryAuditRepository()
     record = AuditLogRecord(
         record_type="research_signal",
@@ -27,7 +27,7 @@ def test_audit_repository_appends_record():
 
 
 def test_audit_repository_rejects_duplicate_record_id():
-    """audit repository rejects duplicate record id."""
+    """Test that the audit repository rejects duplicate record ids."""
     repo = MemoryAuditRepository()
     record = AuditLogRecord(
         record_id="ar_immutable",

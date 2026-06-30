@@ -60,6 +60,13 @@ class QuantFeatureMartETLPipeline:
         source_loader: Callable[[QuantInputSnapshot], pd.DataFrame],
         snapshot_persister: Callable[[QuantInputSnapshot], None] | None = None,
     ) -> None:
+        """Initialize the ETL pipeline with repository, loader, and persister.
+
+        Args:
+            repository: Persistence boundary for feature snapshots and rows.
+            source_loader: Callable that loads a PIT-safe cross-section.
+            snapshot_persister: Optional callable to persist the bound snapshot.
+        """
         self._repository = repository
         self._source_loader = source_loader
         self._snapshot_persister = snapshot_persister
@@ -93,6 +100,12 @@ class SQLAlchemyQuantFeatureMartETLPipeline:
         *,
         source_loader: Callable[[QuantInputSnapshot], pd.DataFrame],
     ) -> None:
+        """Initialize the SQLAlchemy ETL pipeline with a session factory.
+
+        Args:
+            session_factory: Callable that returns a SQLAlchemy ``Session``.
+            source_loader: Callable that loads a PIT-safe cross-section.
+        """
         self._session_factory = session_factory
         self._source_loader = source_loader
 
@@ -142,6 +155,12 @@ class AnalysisResultMartETLPipeline:
         *,
         analysis_version: str = "analysis-mart-v0.3.0",
     ) -> None:
+        """Initialize the ETL entry point with a repository and version.
+
+        Args:
+            repository: Persistence boundary for Analysis Mart bundles.
+            analysis_version: Version label for published analysis snapshots.
+        """
         self._publisher = AnalysisMartPublisher(
             repository,
             analysis_version=analysis_version,
@@ -180,7 +199,16 @@ def publish_quant_feature_snapshot(
     snapshot: QuantInputSnapshot,
     frame: pd.DataFrame,
 ) -> QuantFeatureSnapshot:
-    """Materialize a quant cross-section into fourth-layer feature rows."""
+    """Materialize a quant cross-section into fourth-layer feature rows.
+
+    Args:
+        repository: Persistence boundary for feature snapshots and rows.
+        snapshot: Frozen quant input snapshot with lineage metadata.
+        frame: PIT-safe cross-section DataFrame.
+
+    Returns:
+        The persisted ``QuantFeatureSnapshot``.
+    """
     feature_snapshot, rows = build_quant_feature_payload(
         snapshot=snapshot,
         frame=frame,
@@ -194,7 +222,15 @@ def build_quant_feature_payload(
     snapshot: QuantInputSnapshot,
     frame: pd.DataFrame,
 ) -> tuple[QuantFeatureSnapshot, tuple[QuantFeatureRow, ...]]:
-    """Build the atomic fourth-layer feature snapshot payload."""
+    """Build the atomic fourth-layer feature snapshot payload.
+
+    Args:
+        snapshot: Frozen quant input snapshot with lineage metadata.
+        frame: PIT-safe cross-section DataFrame.
+
+    Returns:
+        A tuple of (feature snapshot, feature rows).
+    """
     normalized = frame.copy(deep=True)
     if "security_id" not in normalized.columns:
         normalized["security_id"] = normalized.index.astype(str)
@@ -281,7 +317,15 @@ def bind_feature_snapshot(
     snapshot: QuantInputSnapshot,
     feature_snapshot_id: str,
 ) -> QuantInputSnapshot:
-    """Return a quant input snapshot bound to its fourth-layer feature snapshot."""
+    """Return a quant input snapshot bound to its fourth-layer feature snapshot.
+
+    Args:
+        snapshot: The original frozen quant input snapshot.
+        feature_snapshot_id: The feature snapshot ID to bind.
+
+    Returns:
+        A new ``QuantInputSnapshot`` with the feature snapshot ID set.
+    """
     payload = snapshot.model_dump()
     payload["feature_snapshot_id"] = feature_snapshot_id
     payload.pop("input_hash", None)
@@ -291,7 +335,14 @@ def bind_feature_snapshot(
 def build_feature_mart_cross_section_loader(
     repository: AnalysisMartRepository,
 ) -> Callable[[QuantInputSnapshot], pd.DataFrame]:
-    """Return a cross-section loader backed by fourth-layer feature rows."""
+    """Return a cross-section loader backed by fourth-layer feature rows.
+
+    Args:
+        repository: Persistence boundary for feature snapshots and rows.
+
+    Returns:
+        A callable that loads a PIT-safe cross-section from QuantFeatureMart.
+    """
 
     def loader(snapshot: QuantInputSnapshot) -> pd.DataFrame:
         """Load a materialized PIT-safe cross-section from QuantFeatureMart."""
@@ -327,6 +378,7 @@ def _upsert_quant_input_snapshot(
     session: Session,
     snapshot: QuantInputSnapshot,
 ) -> None:
+    """Insert a quant input snapshot idempotently or reject conflicting replays."""
     existing = session.get(QuantInputSnapshotRow, snapshot.snapshot_id)
     if existing is not None:
         fact_rows = session.scalars(
@@ -352,6 +404,7 @@ def _upsert_quant_input_snapshot(
 def _persisted_quant_input_projection(
     snapshot: QuantInputSnapshot,
 ) -> QuantInputSnapshot:
+    """Return a projection of a snapshot with non-persisted fields cleared."""
     payload = snapshot.model_dump()
     payload["quant_feature_set"] = None
     payload["user_indicator_view"] = None
@@ -366,6 +419,7 @@ def _upsert_sqlalchemy_row(
     mapper: Callable[[Any], Any],
     label: str,
 ) -> None:
+    """Insert a row idempotently or reject conflicting replays."""
     existing = session.get(row_type, row_id)
     if existing is not None:
         if mapper(existing) != mapper(row):
@@ -375,6 +429,7 @@ def _upsert_sqlalchemy_row(
 
 
 def _hash_feature_payload(payload: dict[str, Any]) -> str:
+    """Hash a payload dict to a deterministic SHA-256 digest string."""
     encoded = json.dumps(
         payload,
         sort_keys=True,
@@ -388,6 +443,7 @@ def _hash_feature_payload(payload: dict[str, Any]) -> str:
 def _fact_refs_by_security(
     snapshot: QuantInputSnapshot,
 ) -> dict[str, tuple[dict[str, Any], ...]]:
+    """Group fact references by security_id for feature row lineage."""
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for ref in snapshot.fact_refs:
         security_id = ref.get("security_id")
@@ -399,6 +455,7 @@ def _fact_refs_by_security(
 
 
 def _optional_text(value: Any) -> str | None:
+    """Convert a value to a stripped string, returning None for empty or NaN."""
     if value is None:
         return None
     if isinstance(value, float) and pd.isna(value):
@@ -408,6 +465,7 @@ def _optional_text(value: Any) -> str | None:
 
 
 def _jsonable_feature(value: Any) -> Any:
+    """Convert a value to a JSON-serializable form, handling pandas and dates."""
     if value is None:
         return None
     if isinstance(value, float) and pd.isna(value):
@@ -424,6 +482,7 @@ def _jsonable_feature(value: Any) -> Any:
 
 
 def _row_quality_flags(row: pd.Series) -> tuple[str, ...]:
+    """Build quality flag tags from ST and suspension indicators in a row."""
     flags: list[str] = []
     if _truthy_feature(row.get("is_st")):
         flags.append("st_security")
@@ -433,6 +492,7 @@ def _row_quality_flags(row: pd.Series) -> tuple[str, ...]:
 
 
 def _truthy_feature(value: Any) -> bool:
+    """Return whether a feature value is truthy, handling None and NaN."""
     if value is None:
         return False
     if isinstance(value, float) and pd.isna(value):

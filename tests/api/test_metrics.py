@@ -12,7 +12,7 @@ from margin.api.main import create_app
 
 
 def test_metrics_endpoint_exposes_http_requests():
-    """metrics endpoint exposes http requests."""
+    """Test that the metrics endpoint exposes HTTP request counters."""
     app = create_app()
     client = TestClient(app)
     # Make at least one request so the HTTP counter is non-zero and visible.
@@ -23,7 +23,7 @@ def test_metrics_endpoint_exposes_http_requests():
 
 
 def test_metrics_endpoint_exposes_v02_orchestration_metrics():
-    """metrics endpoint exposes v02 orchestration metrics."""
+    """Test that the metrics endpoint exposes v0.2 orchestration metrics."""
     client = TestClient(create_app())
 
     response = client.get("/metrics")

@@ -112,6 +112,7 @@ def main() -> int:
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the AI delta-review smoke."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--mode",
@@ -127,6 +128,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _context_for_mode(mode: str) -> ResearchContextSnapshot:
+    """Build a deterministic research context snapshot for the given smoke mode."""
     decision_at = datetime(2026, 6, 23, tzinfo=UTC)
     base_payload = {
         "quant_input_valid": True,
@@ -171,11 +173,25 @@ class _RealLLMDecisionHandler:
     """Use a configured OpenAI-compatible LLM for the decision node."""
 
     def __init__(self) -> None:
+        """Initialize the real-LLM decision handler with a fresh provider."""
         self._provider = LLMProvider(name="smoke_llm", timeout=30.0)
         self.success = False
         self.call_count = 0
 
     def __call__(self, state) -> dict[str, Any]:
+        """Invoke the real LLM and return a structured decision output.
+
+        Args:
+            state: Current research graph state carrying the change set and
+                evidence package IDs.
+
+        Returns:
+            dict[str, Any]: Decision output with outcome, confidence,
+                evidence IDs and changed assumptions.
+
+        Raises:
+            RuntimeError: When the LLM provider returns a failed response.
+        """
         self.call_count += 1
         evidence_ids = _evidence_ids_from_state(state)
         prompt = _build_real_llm_decision_prompt(state, evidence_ids)
@@ -193,6 +209,7 @@ class _RealLLMDecisionHandler:
 
 
 def _evidence_ids_from_state(state) -> list[str]:
+    """Extract evidence IDs from the state's evidence packages or IDs."""
     evidence_ids: list[str] = []
     for package in state.node_outputs.get("evidence_packages", {}).values():
         summary = package.get("summary", {}) if isinstance(package, dict) else {}
@@ -201,6 +218,7 @@ def _evidence_ids_from_state(state) -> list[str]:
 
 
 def _llm_configured() -> bool:
+    """Return True when the required LLM env vars are set."""
     return bool(os.getenv("MARGIN_LLM_API_KEY") and os.getenv("MARGIN_LLM_BASE_URL"))
 
 
@@ -215,6 +233,7 @@ def _print_result(
     evidence_packages: int,
     external_blocker: str | None = None,
 ) -> None:
+    """Print the smoke result as a single key=value line."""
     parts = [
         f"mode={mode}",
         f"status={status}",

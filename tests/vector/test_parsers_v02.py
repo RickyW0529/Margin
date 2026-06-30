@@ -1,4 +1,8 @@
-"""v0.2 structured parser locator tests."""
+"""v0.2 structured parser locator tests.
+
+Verifies that HTML, CSV, JSON, and plain-text parsers emit ``ParsedBlock`` objects
+with correct source locators (DOM path, table row, paragraph index, quote span).
+"""
 
 from __future__ import annotations
 
@@ -8,7 +12,11 @@ from margin.vector.parsers.text import PlainTextParser
 
 
 def test_html_parser_emits_heading_and_dom_locator() -> None:
-    """html parser emits heading and dom locator."""
+    """HTML parser must emit heading text and a DOM-path locator.
+
+    Verifies that ``HtmlParser`` produces blocks with heading text, a DOM path
+    ending in the heading tag, and a section attribute matching the heading.
+    """
     parser = HtmlParser(parser_version="html-v0.2.0")
 
     blocks = parser.parse(
@@ -22,7 +30,11 @@ def test_html_parser_emits_heading_and_dom_locator() -> None:
 
 
 def test_csv_parser_emits_table_row_and_column_locator() -> None:
-    """csv parser emits table row and column locator."""
+    """CSV parser must emit table-row blocks with row and column locators.
+
+    Verifies that ``CsvParser`` assigns table and row IDs and formats row content
+    as ``column=value`` pairs.
+    """
     parser = CsvParser(parser_version="csv-v0.2.0")
 
     blocks = parser.parse("项目,金额\n收入,100\n利润,20\n".encode())
@@ -33,7 +45,11 @@ def test_csv_parser_emits_table_row_and_column_locator() -> None:
 
 
 def test_json_parser_flattens_scalar_fields() -> None:
-    """json parser flattens scalar fields."""
+    """JSON parser must flatten nested scalar fields into key-path blocks.
+
+    Verifies that ``JsonParser`` produces one block per scalar field with
+    dot-separated key paths and matching row IDs.
+    """
     parser = JsonParser(parser_version="json-v0.2.0")
 
     blocks = parser.parse(b'{"revenue": 100, "nested": {"profit": 20}}')
@@ -43,7 +59,11 @@ def test_json_parser_flattens_scalar_fields() -> None:
 
 
 def test_text_parser_keeps_paragraph_quote_span() -> None:
-    """text parser keeps paragraph quote span."""
+    """Plain-text parser must preserve paragraph index and quote span.
+
+    Verifies that ``PlainTextParser`` assigns sequential paragraph indices and
+    computes quote spans covering the full paragraph text.
+    """
     parser = PlainTextParser(parser_version="text-v0.2.0")
 
     blocks = parser.parse("第一段。\n\n第二段。".encode())

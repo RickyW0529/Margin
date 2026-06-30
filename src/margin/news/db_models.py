@@ -10,6 +10,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -47,7 +48,22 @@ class SourceCursorRow(Base):
 
 
 class NewsRefreshRunRow(Base):
-    """Durable target-driven news refresh run."""
+    """Durable target-driven news refresh run.
+
+    Attributes:
+        run_id: Unique identifier for the run.
+        scope_version_id: Identifier of the scope version that produced the quant run.
+        quant_run_id: Identifier of the quant run being refreshed.
+        decision_at: Decision timestamp used to scope the quant run.
+        status: Current durable status of the run.
+        target_count: Total number of targets in the run.
+        completed_count: Number of targets that completed successfully.
+        failed_final_count: Number of targets that failed terminally.
+        created_at: Timestamp when the run was created.
+        started_at: Timestamp when the run started processing, if any.
+        finished_at: Timestamp when the run finished, if any.
+        error_summary: Structured error summary for failed or partial runs.
+    """
 
     __tablename__ = "news_refresh_runs"
 
@@ -66,7 +82,27 @@ class NewsRefreshRunRow(Base):
 
 
 class NewsRefreshTargetRow(Base):
-    """One persisted research target in a news refresh run."""
+    """One persisted research target in a news refresh run.
+
+    Attributes:
+        target_id: Unique identifier for the target.
+        run_id: Foreign key to the parent refresh run.
+        dedupe_key: Stable deduplication key for the target.
+        security_id: Identifier of the target security.
+        symbol: Ticker symbol of the target security.
+        name: Display name of the target security.
+        trigger_type: Why the security entered the target set.
+        priority: Numeric priority used for claim ordering.
+        status: Current durable processing state of the target.
+        attempts: Number of processing attempts made.
+        next_attempt_at: Scheduled time for the next retry, if any.
+        last_error_code: Stable error code from the last failure, if any.
+        last_error_message: Human-readable error message from the last failure, if any.
+        payload: Full target payload as JSON for audit and reconstruction.
+        created_at: Timestamp when the target was created.
+        claimed_at: Timestamp when the target was last claimed, if any.
+        completed_at: Timestamp when the target was completed, if any.
+    """
 
     __tablename__ = "news_refresh_targets"
     __table_args__ = (
@@ -348,7 +384,16 @@ class RepostEdgeRow(Base):
 
 
 class DocumentSecurityLinkRow(Base):
-    """Many-to-many security relation for a document event."""
+    """Many-to-many security relation for a document event.
+
+    Attributes:
+        event_id: Foreign key to the document event; part of the primary key.
+        security_id: Identifier of the related security; part of the primary key.
+        symbol: Ticker symbol of the related security.
+        relation_type: Type of relation (e.g., mentioned, targeted_search).
+        source: Source of the link (e.g., deterministic_mapper, news_refresh).
+        created_at: Timestamp when the link was created.
+    """
 
     __tablename__ = "document_security_links"
     __table_args__ = (
@@ -367,7 +412,25 @@ class DocumentSecurityLinkRow(Base):
 
 
 class DocumentMaterialityScoreRow(Base):
-    """Deterministic materiality score per document/security/scoring version."""
+    """Deterministic materiality score per document/security/scoring version.
+
+    Attributes:
+        score_id: Auto-incrementing primary key.
+        event_id: Foreign key to the document event being scored.
+        security_id: Identifier of the security the score applies to.
+        relevance_score: Relevance score in the range [0, 1].
+        materiality_score: Materiality score in the range [0, 1].
+        novelty_score: Novelty score in the range [0, 1].
+        trigger_type: Semantic trigger type (e.g., regulatory_penalty, major_contract).
+        risk_polarity: Risk polarity (positive, negative, neutral).
+        is_material: Whether the document is material enough to influence research.
+        reason_codes: List of reason codes supporting the score.
+        scoring_version: Version of the scoring rules used.
+        is_untrusted_external_text: Whether the source is untrusted external text (L4/L5).
+        can_directly_change_research_state: Whether the score may directly change research
+            state.
+        created_at: Timestamp when the score was created.
+    """
 
     __tablename__ = "document_materiality_scores"
     __table_args__ = (
@@ -409,7 +472,19 @@ class DocumentMaterialityScoreRow(Base):
 
 
 class NewsContextBundleRow(Base):
-    """Persisted context bundle handed to RAG/AI modules."""
+    """Persisted context bundle handed to RAG/AI modules.
+
+    Attributes:
+        bundle_id: Unique identifier for the bundle.
+        run_id: Foreign key to the parent refresh run.
+        security_id: Identifier of the security the bundle covers.
+        target_completion_state: Completion state of the target set (complete, partial,
+            failed).
+        can_support_verified_carry_forward: Whether the bundle can support verified
+            carry-forward.
+        incomplete_reason_codes: List of reason codes when the bundle is incomplete.
+        created_at: Timestamp when the bundle was created.
+    """
 
     __tablename__ = "news_context_bundles"
 
@@ -431,7 +506,14 @@ class NewsContextBundleRow(Base):
 
 
 class NewsContextDocumentRow(Base):
-    """Ordered document membership for a news context bundle."""
+    """Ordered document membership for a news context bundle.
+
+    Attributes:
+        bundle_id: Foreign key to the parent context bundle; part of the primary key.
+        event_id: Foreign key to the document event; part of the primary key.
+        rank: Zero-based rank of the document within the bundle.
+        selection_reason: Reason the document was selected for the bundle.
+    """
 
     __tablename__ = "news_context_documents"
     __table_args__ = (
@@ -452,3 +534,222 @@ class NewsContextDocumentRow(Base):
     )
     rank: Mapped[int] = mapped_column(Integer, nullable=False)
     selection_reason: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class NewsAgentRunRow(Base):
+    """Top-level agentic news acquisition run.
+
+    Attributes:
+        run_id: Unique identifier for the run.
+        scope_version_id: Identifier of the scope version that produced the quant run.
+        quant_run_id: Identifier of the quant run being acquired for.
+        decision_at: Decision timestamp used to scope the quant run.
+        status: Current durable status of the run.
+        target_count: Total number of targets in the run.
+        include_near_threshold: Whether near-threshold securities were included.
+        config_hash: Stable hash of the run configuration for audit.
+        created_at: Timestamp when the run was created.
+        started_at: Timestamp when the run started processing, if any.
+        finished_at: Timestamp when the run finished, if any.
+        error_summary: Structured error summary for failed or partial runs.
+    """
+
+    __tablename__ = "news_agent_runs"
+    __table_args__ = (
+        Index("ix_news_agent_runs_scope_decision", "scope_version_id", "decision_at"),
+        Index("ix_news_agent_runs_quant_run", "quant_run_id"),
+        Index("ix_news_agent_runs_status", "status"),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    scope_version_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    quant_run_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    decision_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    include_near_threshold: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    config_hash: Mapped[str] = mapped_column(String(96), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_summary: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class NewsAgentTaskRow(Base):
+    """One agentic LLM/deterministic task audit row.
+
+    Attributes:
+        task_id: Unique identifier for the task.
+        run_id: Foreign key to the parent agentic run.
+        security_id: Identifier of the security the task operates on, if any.
+        task_type: Semantic type of the task.
+        status: Current durable status of the task.
+        attempt: Number of attempts made.
+        prompt_version: Version of the prompt template used.
+        prompt_hash: Hash of the rendered prompt for audit.
+        schema_hash: Hash of the output JSON schema for audit.
+        request_hash: Hash of the full request payload for audit.
+        response_hash: Hash of the LLM response, if any.
+        error_code: Stable error code when the task fails.
+        error_message: Human-readable error message when the task fails.
+        payload: Structured task-specific payload.
+        created_at: Timestamp when the task was created.
+        completed_at: Timestamp when the task completed, if any.
+    """
+
+    __tablename__ = "news_agent_tasks"
+    __table_args__ = (
+        Index("ix_news_agent_tasks_run_type", "run_id", "task_type"),
+        Index("ix_news_agent_tasks_security", "security_id", "run_id"),
+    )
+
+    task_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("news_agent_runs.run_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    security_id: Mapped[str | None] = mapped_column(String(32))
+    task_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    prompt_version: Mapped[str] = mapped_column(String(96), nullable=False, default="")
+    prompt_hash: Mapped[str] = mapped_column(String(96), nullable=False, default="")
+    schema_hash: Mapped[str] = mapped_column(String(96), nullable=False, default="")
+    request_hash: Mapped[str] = mapped_column(String(96), nullable=False, default="")
+    response_hash: Mapped[str | None] = mapped_column(String(96))
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class NewsSearchPlanRow(Base):
+    """Reviewed security-level WebSearch query plan.
+
+    Attributes:
+        plan_id: Unique identifier for the plan.
+        run_id: Foreign key to the parent agentic run.
+        security_id: Identifier of the security the plan targets.
+        symbol: Ticker symbol of the target security.
+        name: Display name of the target security.
+        queries: List of WebSearch query strings.
+        review_status: Review outcome (approved or fallback).
+        fallback_used: Whether a deterministic fallback was used.
+        prompt_version: Version of the prompt template used.
+        prompt_hash: Hash of the rendered prompt for audit.
+        response_hash: Hash of the LLM response, if any.
+        created_at: Timestamp when the plan was created.
+    """
+
+    __tablename__ = "news_search_plans"
+    __table_args__ = (
+        Index("ix_news_search_plans_run_security", "run_id", "security_id"),
+    )
+
+    plan_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("news_agent_runs.run_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    security_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    queries: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    review_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    fallback_used: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    prompt_version: Mapped[str] = mapped_column(String(96), nullable=False, default="")
+    prompt_hash: Mapped[str] = mapped_column(String(96), nullable=False, default="")
+    response_hash: Mapped[str | None] = mapped_column(String(96))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NewsArticleFindingRow(Base):
+    """Reviewed article-level finding extracted from one document event.
+
+    Attributes:
+        finding_id: Unique identifier for the finding.
+        run_id: Foreign key to the parent agentic run.
+        security_id: Identifier of the security the finding relates to.
+        event_id: Identifier of the source document event.
+        title: Title of the source document.
+        source_url: URL of the source document.
+        key_points: List of evidence-bound key points.
+        materiality: Materiality classification, if any.
+        sentiment: Sentiment classification, if any.
+        risk_flags: List of risk flag strings.
+        cited_spans: List of cited source span dictionaries.
+        review_status: Review outcome (approved or rejected).
+        confidence: Confidence score in the range [0, 1].
+        prompt_version: Version of the prompt template used.
+        prompt_hash: Hash of the rendered prompt for audit.
+        response_hash: Hash of the LLM response, if any.
+        created_at: Timestamp when the finding was created.
+    """
+
+    __tablename__ = "news_article_findings"
+    __table_args__ = (
+        Index("ix_news_article_findings_run_security", "run_id", "security_id"),
+        Index("ix_news_article_findings_event", "event_id"),
+    )
+
+    finding_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("news_agent_runs.run_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    security_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    event_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    source_url: Mapped[str] = mapped_column(Text, nullable=False)
+    key_points: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    materiality: Mapped[str | None] = mapped_column(String(32))
+    sentiment: Mapped[str | None] = mapped_column(String(32))
+    risk_flags: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    cited_spans: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)
+    review_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(96), nullable=False, default="")
+    prompt_hash: Mapped[str] = mapped_column(String(96), nullable=False, default="")
+    response_hash: Mapped[str | None] = mapped_column(String(96))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NewsSecurityBriefRow(Base):
+    """Derived security-level news brief.
+
+    Attributes:
+        brief_id: Unique identifier for the brief.
+        run_id: Foreign key to the parent agentic run.
+        security_id: Identifier of the security the brief covers.
+        summary: Summarized news brief text.
+        finding_ids: List of finding identifiers that contributed to the brief.
+        source_event_ids: List of source document event identifiers.
+        is_derived: Whether the brief is derived rather than from an original source.
+        trust_level: Trust level label for the brief.
+        prompt_version: Version of the prompt template used.
+        prompt_hash: Hash of the rendered prompt for audit.
+        response_hash: Hash of the LLM response, if any.
+        created_at: Timestamp when the brief was created.
+    """
+
+    __tablename__ = "news_security_briefs"
+    __table_args__ = (
+        Index("ix_news_security_briefs_run_security", "run_id", "security_id"),
+    )
+
+    brief_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("news_agent_runs.run_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    security_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    finding_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    source_event_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    is_derived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    trust_level: Mapped[str] = mapped_column(String(64), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(96), nullable=False, default="")
+    prompt_hash: Mapped[str] = mapped_column(String(96), nullable=False, default="")
+    response_hash: Mapped[str | None] = mapped_column(String(96))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

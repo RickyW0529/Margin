@@ -1,4 +1,12 @@
-"""v0.2 node runner and bounded reflection tests."""
+"""v0.2 node runner and bounded reflection tests.
+
+This module verifies that the node execution runner always runs deterministic
+validation, that forced critic reflection allows at most one revision, that
+``needs_evidence`` actions do not let the critic add facts, that the critic
+cannot replace evidence IDs, that an LLM accept cannot override failed
+deterministic validation, and that the LLM service records hash-only audit
+metadata.
+"""
 
 from __future__ import annotations
 
@@ -17,7 +25,12 @@ from margin.research.prompts.models import PromptSection, RenderedPrompt
 
 
 def test_runner_always_runs_deterministic_validation() -> None:
-    """runner always runs deterministic validation."""
+    """Verify the runner always runs deterministic validation before accepting output.
+
+    Runs an LLM node with a conditional reflection policy and asserts that the
+    validator is called once, the output is returned, and only one LLM call
+    was made.
+    """
     llm = FakeLLM([{"analysis": "ok", "evidence_ids": ["ev-1"]}])
     validator = FakeValidator()
     runner = NodeExecutionRunner(llm=llm, validator=validator)
@@ -36,7 +49,13 @@ def test_runner_always_runs_deterministic_validation() -> None:
 
 
 def test_forced_critic_allows_one_revision() -> None:
-    """forced critic allows one revision."""
+    """Verify forced critic reflection allows exactly one revision.
+
+    Runs an LLM node with a forced reflection policy where the critic requests
+    a revision, and asserts that the reflection action is ``REVISE``, one
+    revision was made, the revised output is returned, and three LLM calls
+    were made (draft, critic, revision).
+    """
     llm = FakeLLM(
         [
             {"analysis": "draft", "evidence_ids": ["ev-1"]},
@@ -68,7 +87,12 @@ def test_forced_critic_allows_one_revision() -> None:
 
 
 def test_needs_evidence_does_not_allow_critic_to_add_facts() -> None:
-    """needs evidence does not allow critic to add facts."""
+    """Verify a ``needs_evidence`` critic action does not allow adding facts.
+
+    Runs an LLM node where the critic requests evidence and asserts that an
+    evidence gap is requested, no revision is made, and exactly two LLM calls
+    occur (draft and critic).
+    """
     llm = FakeLLM(
         [
             {"analysis": "draft", "evidence_ids": ["ev-1"]},
@@ -95,7 +119,12 @@ def test_needs_evidence_does_not_allow_critic_to_add_facts() -> None:
 
 
 def test_critic_cannot_replace_evidence_ids() -> None:
-    """critic cannot replace evidence ids."""
+    """Verify the critic cannot replace evidence IDs with invented ones.
+
+    Runs an LLM node where the critic attempts to revise with a different
+    evidence ID and asserts that the runner abstains with a
+    ``reflection_evidence_violation`` error code and no revisions are made.
+    """
     llm = FakeLLM(
         [
             {"analysis": "draft", "evidence_ids": ["ev-1"]},
@@ -122,7 +151,12 @@ def test_critic_cannot_replace_evidence_ids() -> None:
 
 
 def test_critic_accept_cannot_override_failed_deterministic_validation() -> None:
-    """An LLM critic cannot waive deterministic schema/evidence validation."""
+    """Verify an LLM critic cannot waive deterministic schema/evidence validation.
+
+    Runs an LLM node where the deterministic validator fails and the critic
+    accepts, and asserts that the runner abstains with a
+    ``deterministic_validation_failed`` error code.
+    """
     llm = FakeLLM(
         [
             {"analysis": "draft", "evidence_ids": ["ev-invented"]},
@@ -148,7 +182,12 @@ def test_critic_accept_cannot_override_failed_deterministic_validation() -> None
 
 
 def test_llm_service_records_hash_only_audit_metadata() -> None:
-    """llm service records hash only audit metadata."""
+    """Verify the LLM service records hash-only audit metadata.
+
+    Runs a structured completion through the LLM service and asserts that the
+    audit record contains SHA-256 prompt and schema hashes, the correct model
+    name, and does not expose raw prompt or response text.
+    """
     audit = MemoryLLMCallAuditRepository()
     service = LLMService(
         DeterministicLLMProvider(response={"analysis": "ok"}),
@@ -177,14 +216,31 @@ def test_llm_service_records_hash_only_audit_metadata() -> None:
 
 
 class FakeLLM:
-    """FakeLLM."""
+    """Fake LLM service that returns pre-configured outputs in sequence.
+
+    Attributes:
+        outputs: List of output dictionaries to return in order.
+        call_count: Number of times ``complete_structured`` was called.
+    """
+
     def __init__(self, outputs: list[dict]) -> None:
-        """Initialize the instance."""
+        """Initialize the fake LLM with a queue of outputs.
+
+        Args:
+            outputs: List of output dictionaries to return in sequence.
+        """
         self.outputs = list(outputs)
         self.call_count = 0
 
     def complete_structured(self, **kwargs) -> StructuredLLMResponse:
-        """complete structured."""
+        """Return the next pre-configured output and increment the call counter.
+
+        Args:
+            **kwargs: Keyword arguments including ``task_type``.
+
+        Returns:
+            A ``StructuredLLMResponse`` with the next queued output.
+        """
         self.call_count += 1
         output = self.outputs.pop(0)
         return StructuredLLMResponse(
@@ -198,14 +254,33 @@ class FakeLLM:
 
 
 class FakeValidator:
-    """FakeValidator."""
+    """Fake deterministic validator that returns a configurable validation result.
+
+    Attributes:
+        valid: Whether the validation should pass.
+        calls: Number of times ``validate`` was called.
+    """
+
     def __init__(self, *, valid: bool = True) -> None:
-        """Initialize the instance."""
+        """Initialize the fake validator with a pass/fail configuration.
+
+        Args:
+            valid: Whether validation should pass.
+        """
         self.valid = valid
         self.calls = 0
 
     def validate(self, *, node_name, output, output_schema) -> DeterministicValidation:
-        """validate."""
+        """Return a deterministic validation result and increment the call counter.
+
+        Args:
+            node_name: The name of the node being validated.
+            output: The output to validate.
+            output_schema: The JSON schema to validate against.
+
+        Returns:
+            A ``DeterministicValidation`` with the configured validity.
+        """
         del node_name, output, output_schema
         self.calls += 1
         return DeterministicValidation(
@@ -215,7 +290,7 @@ class FakeValidator:
 
 
 def _prompt() -> RenderedPrompt:
-    """prompt."""
+    """Build a minimal rendered prompt for use in node runner tests."""
     return RenderedPrompt(
         node_name="test",
         kind="draft",

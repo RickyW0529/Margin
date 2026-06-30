@@ -33,7 +33,11 @@ from margin.strategy.service import StrategyService
 
 @pytest.fixture
 def admin_headers() -> dict[str, str]:
-    """admin headers."""
+    """Return admin authentication headers for protected API calls.
+
+    Returns:
+        A dict with Authorization and X-CSRF-Token headers.
+    """
     return {
         "Authorization": "Bearer admin-test-token",
         "X-CSRF-Token": "valid",
@@ -45,7 +49,15 @@ def strategy_config_client(
     database_url: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> TestClient:
-    """strategy config client."""
+    """Return an authenticated strategy config API client with seeded data.
+
+    Args:
+        database_url: The PostgreSQL test database URL fixture.
+        monkeypatch: Pytest fixture for patching environment variables.
+
+    Returns:
+        A ``TestClient`` with seeded provider config and research scope.
+    """
     monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin-test-token")
     monkeypatch.setenv("MARGIN_CSRF_TOKEN", "valid")
     get_settings.cache_clear()
@@ -97,7 +109,7 @@ def test_write_secret_returns_only_metadata(
     strategy_config_client: TestClient,
     admin_headers: dict[str, str],
 ) -> None:
-    """write secret returns only metadata."""
+    """Test that writing a secret returns only safe metadata, never plaintext."""
     response = strategy_config_client.put(
         "/api/v1/provider-configs/provider-tushare-1/secret",
         json={"secret_name": "api_token", "secret_value": "abcdef1234567890"},
@@ -120,7 +132,7 @@ def test_list_provider_configs_returns_safe_secret_metadata(
     strategy_config_client: TestClient,
     admin_headers: dict[str, str],
 ) -> None:
-    """list provider configs returns safe secret metadata."""
+    """Test that listing provider configs returns safe secret metadata."""
     written = strategy_config_client.put(
         "/api/v1/provider-configs/provider-tushare-1/secret",
         json={"secret_name": "api_token", "secret_value": "abcdef1234567890"},
@@ -145,7 +157,7 @@ def test_list_provider_configs_works_without_secret_master_key(
     database_url: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Read-only config discovery must not require decrypt authority."""
+    """Test that read-only config discovery does not require decrypt authority."""
     monkeypatch.delenv("MARGIN_SECRET_MASTER_KEY", raising=False)
     get_settings.cache_clear()
     engine = create_database_engine(DatabaseSettings(url=database_url))
@@ -190,7 +202,7 @@ def test_list_provider_configs_works_without_secret_master_key(
 
 
 def test_quant_strategy_defaults_expose_three_pool_manual_presets() -> None:
-    """quant strategy defaults expose the three user-selectable pools."""
+    """Test that quant strategy defaults expose the three user-selectable pools."""
     app = create_app(
         strategy_service=StrategyService(repository=MemoryStrategyRepository())
     )
@@ -224,7 +236,7 @@ def test_duplicate_secret_write_is_idempotent_and_audited_once(
     admin_headers: dict[str, str],
     database_url: str,
 ) -> None:
-    """duplicate secret write is idempotent and audited once."""
+    """Test that duplicate secret writes are idempotent and audited exactly once."""
     headers = {
         **admin_headers,
         "Idempotency-Key": "idem-secret-replay",
@@ -285,7 +297,7 @@ def test_duplicate_provider_config_create_replays_prior_result(
     admin_headers: dict[str, str],
     database_url: str,
 ) -> None:
-    """duplicate provider config create replays prior result."""
+    """Test that duplicate provider config creation replays the prior result."""
     headers = {
         **admin_headers,
         "Idempotency-Key": "idem-provider-create",
@@ -332,7 +344,7 @@ def test_duplicate_provider_config_create_replays_prior_result(
 def test_write_secret_requires_admin_and_csrf(
     strategy_config_client: TestClient,
 ) -> None:
-    """write secret requires admin and csrf."""
+    """Test that writing a secret requires admin token and CSRF header."""
     response = strategy_config_client.put(
         "/api/v1/provider-configs/provider-tushare-1/secret",
         json={"secret_name": "api_token", "secret_value": "abcdef"},
@@ -346,7 +358,7 @@ def test_activate_scope_rejects_missing_idempotency_key(
     strategy_config_client: TestClient,
     admin_headers: dict[str, str],
 ) -> None:
-    """activate scope rejects missing idempotency key."""
+    """Test that activating a scope rejects requests missing the idempotency key."""
     response = strategy_config_client.post(
         "/api/v1/research-scopes/scope-1/activate",
         headers=admin_headers,

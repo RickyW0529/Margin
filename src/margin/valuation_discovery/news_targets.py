@@ -33,7 +33,12 @@ class NewsTargetSelector:
             ResearchGuardrail.THESIS_RECHECK_REQUIRED,
         ),
     ) -> None:
-        """init  ."""
+        """Initialize the selector with eligibility and guardrail filters.
+
+        Args:
+            include_near_threshold: Whether near-threshold results are eligible.
+            allowed_guardrails: Guardrails that permit news refresh.
+        """
         self._include_near_threshold = include_near_threshold
         self._allowed_guardrails = allowed_guardrails
 
@@ -45,7 +50,18 @@ class NewsTargetSelector:
         results: Iterable[QuantResult],
         decision_at: datetime | None = None,
     ) -> tuple[NewsTarget, ...]:
-        """Return every eligible news target sorted by priority descending."""
+        """Return every eligible news target sorted by priority descending.
+
+        Args:
+            scope_version_id: The frozen scope version.
+            quant_run_id: The quant run that produced the results.
+            results: Iterable of ``QuantResult`` objects.
+            decision_at: Optional decision timestamp; defaults to result
+                creation time.
+
+        Returns:
+            Tuple of ``NewsTarget`` objects sorted by priority descending.
+        """
         targets = [
             self._target_for(
                 scope_version_id=scope_version_id,
@@ -61,7 +77,7 @@ class NewsTargetSelector:
         )
 
     def _is_eligible(self, result: QuantResult) -> bool:
-        """is eligible."""
+        """Return whether a quant result is eligible for news refresh."""
         if result.research_guardrail not in self._allowed_guardrails:
             return False
         if result.screening_status == ScreeningStatus.PASS:
@@ -79,7 +95,7 @@ class NewsTargetSelector:
         result: QuantResult,
         decision_at: datetime,
     ) -> NewsTarget:
-        """target for."""
+        """Build a ``NewsTarget`` from one eligible quant result."""
         priority, _, trigger_type = _priority_and_reasons(result)
         details = result.factor_details
         name = str(details.get("name") or result.security_id)
@@ -107,7 +123,7 @@ class NewsTargetSelector:
 def _priority_and_reasons(
     result: QuantResult,
 ) -> tuple[int, tuple[str, ...], TargetTriggerType]:
-    """priority and reasons."""
+    """Compute priority, reasons, and trigger type from a quant result."""
     priority = 100 if result.screening_status == ScreeningStatus.PASS else 60
     reasons: list[str] = [f"quant_{result.screening_status.value}"]
     trigger_type = (

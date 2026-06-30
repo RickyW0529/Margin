@@ -7,7 +7,7 @@ from margin.data.schema_discovery import SchemaDiscoveryService
 
 
 def test_same_payload_reuses_content_object(tmp_path) -> None:
-    """same payload reuses content object."""
+    """Test that identical payloads share the same compressed snapshot content."""
     store = CompressedSnapshotStore(tmp_path)
 
     first = store.write_json("akshare", {"x": 1})
@@ -19,7 +19,7 @@ def test_same_payload_reuses_content_object(tmp_path) -> None:
 
 
 def test_missing_field_requires_consecutive_observations() -> None:
-    """missing field requires consecutive observations."""
+    """Test that a field stays active until the missing threshold is reached."""
     state = SchemaDiscoveryService(missing_threshold=3)
 
     state.observe("daily_bar", {"a": 1})
@@ -30,7 +30,7 @@ def test_missing_field_requires_consecutive_observations() -> None:
 
 
 def test_field_becomes_missing_after_threshold() -> None:
-    """field becomes missing after threshold."""
+    """Test that a field transitions to missing after enough consecutive absences."""
     state = SchemaDiscoveryService(missing_threshold=3)
 
     state.observe("daily_bar", {"a": 1})

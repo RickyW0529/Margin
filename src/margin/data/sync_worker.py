@@ -30,7 +30,17 @@ class DataSyncWorker:
         retry_delay_seconds: int = 60,
         max_attempts: int = 3,
     ) -> None:
-        """Initialize the worker with configured provider instances."""
+        """Initialize the worker with configured provider instances.
+
+        Args:
+            stack: The production data warehouse ingestion stack.
+            providers: Mapping of provider code to adapter instance.
+            provider_config_version_ids: Optional provider config lineage.
+            worker_id: The unique worker identifier for lease claims.
+            lease_seconds: Lease duration before an item can be reclaimed.
+            retry_delay_seconds: Delay before a retryable item becomes eligible.
+            max_attempts: Maximum execution attempts before final failure.
+        """
         self._stack = stack
         self._providers = {name.lower(): provider for name, provider in providers.items()}
         self._provider_config_version_ids = {
@@ -44,12 +54,20 @@ class DataSyncWorker:
 
     @property
     def providers(self) -> dict[str, Any]:
-        """Return a copy of configured executable Provider adapters."""
+        """Return a copy of configured executable Provider adapters.
+
+        Returns:
+            A copy of the provider dictionary keyed by lowercased name.
+        """
         return dict(self._providers)
 
     @property
     def provider_config_version_ids(self) -> dict[str, str]:
-        """Return frozen Provider config lineage by provider code."""
+        """Return frozen Provider config lineage by provider code.
+
+        Returns:
+            A copy of the config version ID dictionary.
+        """
         return dict(self._provider_config_version_ids)
 
     def run_once(
@@ -59,7 +77,16 @@ class DataSyncWorker:
         now: datetime | None = None,
         run_id: str | None = None,
     ) -> int:
-        """Process up to ``max_items`` currently executable work items."""
+        """Process up to ``max_items`` currently executable work items.
+
+        Args:
+            max_items: Maximum number of items to process in this call.
+            now: Optional override for the observation timestamp.
+            run_id: Optional sync run to restrict claiming to.
+
+        Returns:
+            The number of items actually processed.
+        """
         processed = 0
         observed_at = ensure_utc(now or utc_now())
         while processed < max_items:

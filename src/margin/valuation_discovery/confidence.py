@@ -23,7 +23,7 @@ class ConfidenceCalibrator:
     """
 
     def __init__(self, *, version: str = "confidence-v0.2.0") -> None:
-        """init  ."""
+        """Initialize the calibrator with a calibration version label."""
         self._version = version
 
     def score(
@@ -36,7 +36,20 @@ class ConfidenceCalibrator:
         risk_counter_score: float,
         valuation_sensitivity: float,
     ) -> ConfidenceResult:
-        """Return deterministic confidence, band, drivers, and penalties."""
+        """Return deterministic confidence, band, drivers, and penalties.
+
+        Args:
+            quant_discount: Clamped 0-1 discount driver from quant screening.
+            quality_stability: Clamped 0-1 quality stability driver.
+            data_completeness: Clamped 0-1 data completeness driver.
+            evidence_consistency: Clamped 0-1 evidence consistency driver.
+            risk_counter_score: Clamped 0-1 risk counter-score driver.
+            valuation_sensitivity: Clamped 0-1 valuation sensitivity driver.
+
+        Returns:
+            ConfidenceResult with calibrated confidence, band, drivers, and
+            penalties.
+        """
         drivers = {
             "quant_discount": _clamp(quant_discount),
             "quality_stability": _clamp(quality_stability),
@@ -76,7 +89,7 @@ def _penalties(
     risk_counter_score: float,
     valuation_sensitivity: float,
 ) -> dict[str, float]:
-    """penalties."""
+    """Compute deterministic penalty deductions from weak driver values."""
     penalties: dict[str, float] = {}
     if evidence_consistency < 0.60:
         penalties["evidence_conflict_penalty"] = (0.60 - evidence_consistency) * 0.20
@@ -90,7 +103,7 @@ def _penalties(
 
 
 def _band(confidence: float) -> str:
-    """band."""
+    """Map a 0-1 confidence value to a high/medium/low band."""
     if confidence >= 0.75:
         return "high"
     if confidence >= 0.45:
@@ -99,5 +112,5 @@ def _band(confidence: float) -> str:
 
 
 def _clamp(value: float) -> float:
-    """clamp."""
+    """Clamp a value to the 0-1 range."""
     return min(1.0, max(0.0, float(value)))

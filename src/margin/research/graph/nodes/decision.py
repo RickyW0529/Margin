@@ -48,11 +48,15 @@ class DeltaDecisionComposerNode:
     """Compose one structured delta decision after analysis joins."""
 
     def __init__(self, handler: DecisionHandler) -> None:
-        """Initialize the instance."""
+        """Initialize the node.
+
+        Args:
+            handler: Decision handler that composes the delta decision.
+        """
         self._handler = handler
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Call the instance."""
+        """Compose a structured delta decision from joined analysis outputs."""
         try:
             draft = DecisionDraft.model_validate(self._handler(state))
             if draft.outcome in {
@@ -90,11 +94,15 @@ class CitationValidationNode:
     """Validate only references already present in the draft decision."""
 
     def __init__(self, validator: CitationValidationHandler) -> None:
-        """Initialize the instance."""
+        """Initialize the node.
+
+        Args:
+            validator: Citation validation handler to invoke.
+        """
         self._validator = validator
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Call the instance."""
+        """Validate citation references and return a structured report."""
         try:
             report = CitationReview.model_validate(
                 self._validator(state.draft_decision, state)
@@ -117,7 +125,7 @@ class RepairDecisionNode:
     """Remove invalid references once; never add facts or evidence IDs."""
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Call the instance."""
+        """Remove invalid evidence references once without adding new facts."""
         report = CitationReview.model_validate(state.citation_report)
         draft = DecisionDraft.model_validate(state.draft_decision)
         base_update: dict[str, Any] = {
@@ -176,7 +184,7 @@ class CarryForwardDecisionNode:
     """Produce verified carry-forward without an LLM call."""
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Call the instance."""
+        """Produce a verified carry-forward outcome without an LLM call."""
         return {
             "current_review_outcome": ReviewOutcome.CARRY_FORWARD_VERIFIED,
             "effective_assessment_id": state.previous_effective_assessment_id,
@@ -190,7 +198,7 @@ class ReviewDeferredNode:
     """Preserve the previous effective assessment during temporary deferral."""
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Call the instance."""
+        """Preserve the previous assessment during a temporary deferral."""
         return {
             "current_review_outcome": ReviewOutcome.REVIEW_DEFERRED,
             "effective_assessment_id": state.previous_effective_assessment_id,
@@ -204,7 +212,7 @@ class AbstainNode:
     """Preserve the previous effective assessment when this review abstains."""
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Call the instance."""
+        """Preserve the previous assessment when this review abstains."""
         return {
             "current_review_outcome": ReviewOutcome.ABSTAIN,
             "effective_assessment_id": state.previous_effective_assessment_id,
@@ -218,7 +226,7 @@ class FinalizeNode:
     """Apply effective-assessment semantics and emit a terminal result."""
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Call the instance."""
+        """Apply effective-assessment semantics and emit a terminal result."""
         outcome = state.current_review_outcome or _draft_outcome(state)
         effective_assessment_id = state.effective_assessment_id
         freshness = state.assessment_freshness
@@ -271,7 +279,7 @@ class FinalizeNode:
 
 
 def _draft_outcome(state: AIDeltaGraphState) -> ReviewOutcome:
-    """draft outcome."""
+    """Coerce the draft decision outcome into a ReviewOutcome enum member."""
     value = state.draft_decision.get("outcome", ReviewOutcome.ABSTAIN)
     return value if isinstance(value, ReviewOutcome) else ReviewOutcome(value)
 
@@ -280,7 +288,7 @@ def _assessment_id(
     state: AIDeltaGraphState,
     outcome: ReviewOutcome,
 ) -> str:
-    """assessment id."""
+    """Derive a deterministic effective assessment ID from the graph run."""
     payload = {
         "graph_run_id": state.graph_run_id,
         "outcome": outcome.value,

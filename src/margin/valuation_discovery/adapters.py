@@ -214,7 +214,7 @@ class NewsRefreshAdapter:
     """
 
     def __init__(self, refresh_service: NewsRefreshService) -> None:
-        """init  ."""
+        """Initialize the adapter with a news refresh service."""
         self._refresh_service = refresh_service
 
     def refresh(
@@ -286,7 +286,16 @@ class ResearchContextBuilderAdapter:
         evidence_repository: EvidenceRepository | None = None,
         analysis_mart_repository: AnalysisMartRepository | None = None,
     ) -> None:
-        """init  ."""
+        """Initialize the adapter with session and optional service boundaries.
+
+        Args:
+            session_factory: Callable that returns a SQLAlchemy ``Session``.
+            news_bundle_builder: Optional news context bundle builder.
+            retrieval_tool: Optional RAG retrieval tool.
+            evidence_package_builder: Optional evidence package builder.
+            evidence_repository: Optional evidence repository for block loading.
+            analysis_mart_repository: Optional Analysis Mart repository.
+        """
         self._session_factory = session_factory
         self._news_bundle_builder = news_bundle_builder
         self._retrieval_tool = retrieval_tool
@@ -689,7 +698,7 @@ def _build_context_snapshot(
 
 
 def _hash_payload(payload: dict[str, Any]) -> str:
-    """hash payload."""
+    """Hash a payload dict to a deterministic SHA-256 digest string."""
     rendered = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
     return "sha256:" + hashlib.sha256(rendered.encode("utf-8")).hexdigest()
 
@@ -741,7 +750,12 @@ class AIReviewAdapter:
         *,
         session_factory: SessionFactory | None = None,
     ) -> None:
-        """init  ."""
+        """Initialize the adapter with a research service and optional session.
+
+        Args:
+            research_service: The research service for delta reviews.
+            session_factory: Optional session factory for review recovery.
+        """
         self._research_service = research_service
         self._session_factory = session_factory
 
@@ -841,7 +855,13 @@ class ValuationPublisherAdapter:
         review_repository: ResearchDeltaRepository,
         valuation_repository: ValuationDiscoveryRepository,
     ) -> None:
-        """init  ."""
+        """Initialize the publisher with assessment and repository dependencies.
+
+        Args:
+            assessment_service: Service for building effective assessment pointers.
+            review_repository: Repository for loading immutable AI reviews.
+            valuation_repository: Repository for publishing assessment results.
+        """
         self._assessment_service = assessment_service
         self._review_repository = review_repository
         self._valuation_repository = valuation_repository

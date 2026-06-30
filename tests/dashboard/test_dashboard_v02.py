@@ -1,4 +1,9 @@
-"""v0.2 dashboard BFF DTO and pagination tests."""
+"""v0.2 dashboard BFF DTO and pagination tests.
+
+Verifies that the candidate list response separates current and effective
+assessment fields, and that the memory repository paginates candidates with
+an opaque safe cursor.
+"""
 
 from __future__ import annotations
 
@@ -19,7 +24,7 @@ DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 
 
 def test_candidate_list_response_separates_current_and_effective() -> None:
-    """candidate list response separates current and effective assessment."""
+    """Test that the candidate list response separates current and effective assessment."""
     item = ResearchCandidateListItemV2(
         item_id="item-1",
         security_id="000001.SZ",
@@ -58,7 +63,7 @@ def test_candidate_list_response_separates_current_and_effective() -> None:
 
 
 def test_memory_repository_paginates_candidates_with_opaque_cursor() -> None:
-    """memory repository returns one server page and an opaque safe cursor."""
+    """Test that the memory repository returns one server page and an opaque safe cursor."""
     repository = MemoryDashboardRepository()
     run = ResearchRun(
         run_id="run-v02",

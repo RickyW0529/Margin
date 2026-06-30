@@ -29,8 +29,9 @@ It implements the acquisition, web search, deduplication, and source-leveling bo
 | Incremental discovery | Discover URLs/API records from exchange announcement connectors and resume safely using persisted cursors. |
 | v0.2 target queue | Persist the complete daily quant-selected research target set before external calls; batch size limits throughput only, not company coverage. |
 | v0.2 refresh runs | Track target completeness, priority, claim, retry/backoff, partial/final failures, and reconciliation in `news_refresh_runs` / `news_refresh_targets`. |
+| v0.3 agentic news acquisition | Load quant PASS targets, backfill company name/industry from the company pool, generate/review report-oriented search keywords, run controlled WebSearch, extract reviewed findings, and build derived briefs. Keywords prioritize annual reports, quarterly reports, earnings forecasts/flash reports, earnings briefings, official announcements, and authoritative text news; market-price, quote, rating, forum, and technical-analysis queries are rejected. |
 | Download & snapshot | Download original content through connectors and persist immutable raw snapshots with content hashes. |
-| Format detection & parsing | Detect content type (PDF, HTML, JSON, CSV, XML, text) and extract title, body text, and structured blocks. |
+| Format detection & parsing | Detect PDF, HTML, DOCX, XLSX, JSON, CSV, XML, and text. Verified WebSearch originals are normalized through the shared `margin.documents` pipeline: Docling conversion, Review, Repair, Verifier, and Slimming, producing final Markdown, JSON, and RAG chunks. RAG chunking hard-splits single oversized paragraphs/table blocks under `max_chunk_chars` before embedding. PDF conversion enables RapidOCR by default and pins the OCR backend to `onnxruntime`; non-multimodal verifiers automatically skip screenshot/page-image verification. |
 | Security mapping | Extract security symbols from titles and body text using exchange code patterns. |
 | Web search | Execute user-configured web searches, persist query audit records, and verify accessible original content. |
 | Materiality & context bundles | Score deterministic relevance/materiality/novelty and expose incomplete-target semantics to downstream RAG/AI. |
@@ -61,7 +62,13 @@ It implements the acquisition, web search, deduplication, and source-leveling bo
 | `src/margin/news/__init__.py` | Package exports. Re-exports public classes and functions from acquisition, deduplication, models, and web search modules. |
 | `src/margin/news/acquirer.py` | Source registry, connectors, downloader, snapshot store, document parser, security mapper, and the `FilingAcquirer` integration class. |
 | `src/margin/news/target_queue.py` | v0.2 target queue: complete enqueue, idempotent target keys, batch claim, retry/backoff, terminal reconciliation. |
-| `src/margin/news/query_templates.py` | v0.2 query templates with template hash and target dedupe lineage. |
+| `src/margin/news/query_templates.py` | Deterministic WebSearch templates with template hash and target dedupe lineage; fallback queries prioritize official annual/quarterly/earnings disclosures. |
+| `src/margin/news/agentic_models.py` | v0.3 agentic run, task, search plan, article finding, and security brief domain models. |
+| `src/margin/news/quant_targets.py` | Scoped quant-result reader for news targets; defaults to PASS only, optionally includes NEAR_THRESHOLD, and backfills missing name/industry from latest included company-pool members. |
+| `src/margin/news/agentic_prompts.py` | Structured prompts and JSON schemas for keyword writing/review, article extraction/review, and brief generation; keyword prompts forbid market/trading queries. |
+| `src/margin/news/keyword_workflow.py` | Keyword writer/reviewer loop with a local guardrail for wrong-company, missing ticker/name, missing event terms, and trading/market terms; falls back to deterministic templates. |
+| `src/margin/news/article_workflow.py` | Article finding extraction/review and derived security brief generation. |
+| `src/margin/news/agentic_acquisition.py` | Agentic orchestration: target loading, query plan persistence, controlled WebSearch, finding/brief persistence, and provider-waiting status handling. |
 | `src/margin/news/refresh_service.py` | v0.2 target-driven WebSearch orchestration: persist all targets first, then call providers; rate limits move runs to waiting state. |
 | `src/margin/news/official_sync.py` | v0.2 official filing sync: source-level cursors advance only after durable `DocumentEvent` persistence. |
 | `src/margin/news/materiality.py` | Deterministic materiality scoring for penalties, trading-status changes, major contracts, litigation, and control changes. |
@@ -80,8 +87,11 @@ It implements the acquisition, web search, deduplication, and source-leveling bo
 | `src/margin/news/robots.py` | `RobotsChecker` and `RobotsRules` for robots.txt longest-prefix Allow/Disallow compliance. |
 | `src/margin/news/scheduler.py` | `IncrementalAcquisitionRunner` and `AcquisitionRunResult` for restart-safe incremental acquisition. |
 | `src/margin/news/websearch.py` | Web search models, `WebSearchProvider`, `ComplianceChecker`, `OriginalContentVerifier`, and `WebSearchService`. |
-| `src/margin/api/routes/news.py` | v0.2 News API: `POST /api/v1/news/refresh`, `GET /api/v1/news/runs/{run_id}`. |
+| `src/margin/documents/markdown.py` | Shared Docling Markdown conversion interface: `DocumentFormatRouter`, `DoclingMarkdownConverter`, and `MarkdownConversionResult`; PDF OCR defaults to RapidOCR/`onnxruntime`; reused by news acquisition and future research-report imports. |
+| `src/margin/documents/pipeline.py` | Shared document normalization pipeline: Review/Repair/Verifier/Slimming after Docling, final Markdown/JSON/RAG chunks with oversized-block splitting under `max_chunk_chars`, and optional multimodal page-image verification with automatic text-only fallback. |
+| `src/margin/api/routes/news.py` | News API: `POST /api/v1/news/refresh`, `GET /api/v1/news/runs/{run_id}`, and `POST /api/v1/news/agentic-refresh`. |
 | `scripts/smoke_news_websearch.py` | Real Tavily smoke that prints status, result count, query ID, and snapshot count only. |
+| `scripts/smoke_agentic_news.py` | Token-safe v0.3 agentic news smoke that prints run/count/outbox counters only. |
 
 ---
 
@@ -415,12 +425,12 @@ Enforces web search compliance boundaries.
 
 ### `OriginalContentVerifier`
 
-Verifies that search results resolve to accessible original content and persists snapshots.
+Verifies that search results resolve to accessible original content, persists snapshots, and normalizes PDF/HTML/DOCX/XLSX/CSV/JSON/Text into final Markdown through `DocumentNormalizationPipeline`. The pipeline runs Docling conversion, Review, Repair, Verifier, and Slimming; PDF conversion uses RapidOCR/`onnxruntime` by default, and visual verification runs only when a multimodal verifier and page images are available.
 
 | Method | Signature | Description |
 | --- | --- | --- |
-| `__init__` | `(registry: SourceRegistry, snapshot_store: SnapshotStore) -> None` | Initialize verifier with downloader, snapshot store, parser, and compliance checker. |
-| `verify_and_snapshot` | `(result: SearchResult) -> VerifiedContent \| None` | Download, parse, and verify a single result; return `None` if inaccessible or non-compliant. |
+| `__init__` | `(registry: SourceRegistry, snapshot_store: SnapshotStore, markdown_converter: Any \| None = None, normalization_pipeline: Any \| None = None) -> None` | Initialize verifier with downloader, snapshot store, compliance checker, and the shared normalization pipeline; `markdown_converter` remains injectable for compatibility and tests. |
+| `verify_and_snapshot` | `(result: SearchResult) -> VerifiedContent \| None` | Download, check paywalls, run the document normalization pipeline, and verify a single result; return `None` if inaccessible, non-compliant, or empty after verification. |
 | `verify_batch` | `(results: list[SearchResult]) -> list[VerifiedContent \| None]` | Verify a batch of search results. |
 
 ### `WebSearchService`
@@ -429,9 +439,9 @@ Integration service combining provider, compliance checks, and original content 
 
 | Method | Signature | Description |
 | --- | --- | --- |
-| `__init__` | `(provider: WebSearchProvider, registry: SourceRegistry, snapshot_store: SnapshotStore, repository: NewsRepository \| None = None) -> None` | Initialize the service. |
+| `__init__` | `(provider: WebSearchProvider, registry: SourceRegistry, snapshot_store: SnapshotStore, repository: NewsRepository \| None = None, quality_policy: SearchResultQualityPolicy \| None = None, markdown_converter: Any \| None = None) -> None` | Initialize the service with optional result-quality and Markdown-conversion overrides. |
 | `search` | `(query: str, max_results: int = 10) -> SearchQueryRecord` | Execute a search and return the query record. |
-| `search_and_acquire` | `(query: str, max_results: int = 10, source_level: SourceLevel = SourceLevel.L4, searched_at: datetime \| None = None) -> tuple[SearchQueryRecord, list[DocumentEvent]]` | Search, verify, persist audit record, and return document events for verified results. |
+| `search_and_acquire` | `(query: str, max_results: int = 10, source_level: SourceLevel = SourceLevel.L4, searched_at: datetime \| None = None) -> tuple[SearchQueryRecord, list[DocumentEvent]]` | Search, filter/rank official report and authoritative text-news results, verify originals, convert them to Markdown, persist audit records, and return document events. |
 
 ### `TavilySearchAdapter`
 
@@ -807,3 +817,25 @@ service = WebSearchService(provider, registry, snapshot_store)
 
 record, events = service.search_and_acquire("平安银行 公告", max_results=5)
 ```
+
+### Typical Agentic News Flow
+
+```text
+SQLAlchemyQuantNewsTargetRepository.list_targets()
+        +-- company_pool_members backfill for name / industry
+        v
+AgenticNewsAcquisitionService.run_for_quant_run()
+        +-- KeywordWorkflow: writer -> review -> local guardrail -> fallback if needed
+        +-- WebSearchService.search_and_acquire()
+        |       +-- official/report-oriented result filtering
+        |       +-- original-content access validation
+        |       +-- Docling Markdown conversion
+        +-- ArticleWorkflow.extract_findings()
+        +-- ArticleWorkflow.build_brief()
+        v
+news_search_plans / news_article_findings / news_security_briefs
+```
+
+The agentic layer never writes vector tables directly. Raw documents still enter downstream indexing through `document_outbox(topic=vector_index)`. Production provider construction prefers active strategy providers; local smoke runs may fall back to direct `.env` LLM/WebSearch providers when the secret store is absent. Agentic news is not a LangGraph run, so its LLM service does not use the SQL audit repository with the `ai_graph_runs` foreign key; news-specific prompt/response hashes are persisted on news run/plan/finding records. Stable WebSearch budget, paygo, or auth errors move the run to `waiting_provider` with token-safe error metadata.
+
+Latest local 50-sample evaluation: target context `OK=50/50`, keyword quality `OK=50/50`. Tavily currently returns HTTP 432 (`provider_budget_exceeded`), so search-result, article-finding, brief, and outbox quality still need a provider-budget-restored rerun.

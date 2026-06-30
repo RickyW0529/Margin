@@ -139,9 +139,19 @@ def test_verified_original_persists_snapshot_event_and_index_outbox(
 
         @property
         def source_name(self) -> str:
+            """Return the source identifier used by the registry."""
             return "websearch"
 
         def fetch(self, url, **kwargs) -> tuple[bytes, str, int]:
+            """Return public plain-text content with HTTP 200.
+
+            Args:
+                url: The URL being fetched (ignored).
+                **kwargs: Additional fetch options (ignored).
+
+            Returns:
+                A tuple of raw bytes, content type, and HTTP status code.
+            """
             del url, kwargs
             return "公司收入增长 20%".encode(), "text/plain", 200
 

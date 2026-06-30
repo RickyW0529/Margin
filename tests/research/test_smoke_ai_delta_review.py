@@ -1,4 +1,10 @@
-"""Command-contract tests for the module 06 AI delta-review smoke script."""
+"""Command-contract tests for the module 06 AI delta-review smoke script.
+
+This module verifies that the smoke script outputs token-safe contract lines
+for each review mode, that the real-LLM smoke fails closed when LLM config
+is incomplete without leaking secrets, and that the real-LLM decision prompt
+contains the deterministic decision contract.
+"""
 
 from __future__ import annotations
 
@@ -12,7 +18,13 @@ from scripts import smoke_ai_delta_review
 
 
 def test_ai_delta_review_smoke_outputs_token_safe_contract_lines() -> None:
-    """ai delta review smoke outputs one token-safe contract line per mode."""
+    """Verify the smoke script outputs one token-safe contract line per mode.
+
+    Runs the smoke script for each of the ``carry``, ``delta``, and ``full``
+    modes as a subprocess and asserts that the stdout contains the expected
+    contract fields, the correct mode and status, and that no API keys or
+    prompt text leak into the output.
+    """
     for mode in ("carry", "delta", "full"):
         result = subprocess.run(
             [sys.executable, "scripts/smoke_ai_delta_review.py", "--mode", mode],
@@ -49,7 +61,12 @@ def test_ai_delta_review_smoke_outputs_token_safe_contract_lines() -> None:
 
 
 def test_ai_delta_review_real_llm_smoke_blocks_without_llm_config() -> None:
-    """required real LLM smoke fails closed when LLM config is incomplete."""
+    """Verify the required real-LLM smoke fails closed when LLM config is incomplete.
+
+    Runs the smoke script with ``--require-real-llm`` and an incomplete LLM
+    configuration, and asserts that the script exits with code 2, reports the
+    missing config blocker, and does not leak the API key.
+    """
     result = subprocess.run(
         [
             sys.executable,
@@ -76,7 +93,12 @@ def test_ai_delta_review_real_llm_smoke_blocks_without_llm_config() -> None:
 
 
 def test_real_llm_smoke_prompt_contains_deterministic_decision_contract() -> None:
-    """real LLM smoke prompt contains the deterministic decision contract."""
+    """Verify the real-LLM smoke prompt contains the deterministic decision contract.
+
+    Builds the real-LLM decision prompt from a simple namespace state and
+    asserts that it includes the material news change flag, the required
+    outcome directive, and the evidence ID.
+    """
     state = SimpleNamespace(
         security_id="000001.SZ",
         decision_at=datetime(2026, 6, 23, tzinfo=UTC),

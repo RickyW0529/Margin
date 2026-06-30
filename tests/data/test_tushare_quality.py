@@ -13,6 +13,7 @@ from margin.data.tushare_source import TushareLandingRecord
 
 
 def _record(api_name: str, payload: dict[str, object]) -> TushareLandingRecord:
+    """Build a ``TushareLandingRecord`` fixture from a raw payload."""
     return TushareLandingRecord.from_payload(
         endpoint=QuantDataRequirementCatalog.default().endpoint("tushare", api_name),
         payload=payload,

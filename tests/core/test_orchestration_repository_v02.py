@@ -25,12 +25,12 @@ from margin.storage.database import (
 
 
 def _now() -> datetime:
-    """now."""
+    """Return a fixed datetime for test determinism."""
     return datetime(2026, 6, 22, 12, 0, tzinfo=UTC)
 
 
 def _run() -> OrchestrationRun:
-    """run."""
+    """Build a sample orchestration run for repository tests."""
     return OrchestrationRun(
         run_id="run-repository-1",
         run_type="valuation_discovery",
@@ -45,7 +45,7 @@ def _run() -> OrchestrationRun:
 
 
 def _running_event() -> StepAttempt:
-    """running event."""
+    """Build a sample running step attempt event for repository tests."""
     return StepAttempt(
         event_id="step-event-running",
         run_id="run-repository-1",
@@ -61,7 +61,7 @@ def _running_event() -> StepAttempt:
 
 
 def test_memory_repository_derives_latest_event_without_mutating_history() -> None:
-    """memory repository derives laevent without mutating history."""
+    """Test that the memory repository derives latest event without mutating history."""
     repository = MemoryOrchestrationRepository()
     repository.create_run(_run())
     running = _running_event()
@@ -83,7 +83,7 @@ def test_memory_repository_derives_latest_event_without_mutating_history() -> No
 
 
 def test_memory_repository_rejects_duplicate_event_or_sequence() -> None:
-    """memory repository rejects duplicate event or sequence."""
+    """Test that the memory repository rejects duplicate events or sequences."""
     repository = MemoryOrchestrationRepository()
     repository.create_run(_run())
     running = _running_event()
@@ -99,7 +99,7 @@ def test_memory_repository_rejects_duplicate_event_or_sequence() -> None:
 
 
 def test_postgres_repository_round_trips_append_only_step_events(database_url: str) -> None:
-    """postgres repository round trips append only step events."""
+    """Test that the PostgreSQL repository round-trips append-only step events."""
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)

@@ -25,7 +25,15 @@ class SchemaDiscoveryService:
     """Track source fields, type changes, and consecutive missing observations."""
 
     def __init__(self, *, missing_threshold: int = 3) -> None:
-        """Initialize the instance."""
+        """Initialize the service.
+
+        Args:
+            missing_threshold: Number of consecutive missing observations
+                before a field is marked ``missing``.
+
+        Raises:
+            ValueError: If ``missing_threshold`` is less than 1.
+        """
         if missing_threshold < 1:
             raise ValueError("missing_threshold must be positive")
         self._missing_threshold = missing_threshold
@@ -38,7 +46,13 @@ class SchemaDiscoveryService:
         *,
         observed_at: datetime | None = None,
     ) -> None:
-        """Observe a provider payload and update field lifecycle state."""
+        """Observe a provider payload and update field lifecycle state.
+
+        Args:
+            endpoint_code: The endpoint code being observed.
+            payload: The raw provider payload dictionary.
+            observed_at: Optional override for the observation timestamp.
+        """
         timestamp = observed_at or datetime.now(UTC)
         endpoint = endpoint_code.strip().lower()
         observed_fields = set(payload)
@@ -80,7 +94,18 @@ class SchemaDiscoveryService:
             )
 
     def field(self, endpoint_code: str, field_name: str) -> SourceFieldState:
-        """Return current lifecycle state for an endpoint field."""
+        """Return current lifecycle state for an endpoint field.
+
+        Args:
+            endpoint_code: The endpoint code.
+            field_name: The source field name.
+
+        Returns:
+            The current ``SourceFieldState``.
+
+        Raises:
+            KeyError: If the field has never been observed.
+        """
         key = (endpoint_code.strip().lower(), field_name)
         try:
             return self._fields[key]
@@ -89,7 +114,7 @@ class SchemaDiscoveryService:
 
 
 def _infer_type(value: Any) -> str:
-    """infer type."""
+    """Infer a coarse type name from a single observed value."""
     if value is None:
         return "null"
     if isinstance(value, bool):

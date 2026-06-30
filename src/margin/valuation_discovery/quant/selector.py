@@ -27,7 +27,7 @@ class MultiFactorSelector:
     """Select research candidates from quant results."""
 
     def __init__(self, config: SelectorConfig) -> None:
-        """init  ."""
+        """Initialize the selector with candidate filtering configuration."""
         self._config = config
 
     def select(self, results: Iterable[QuantResult]) -> tuple[QuantResult, ...]:

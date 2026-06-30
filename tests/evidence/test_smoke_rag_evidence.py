@@ -1,4 +1,8 @@
-"""Command-contract tests for the module 05 RAG evidence smoke script."""
+"""Command-contract tests for the module 05 RAG evidence smoke script.
+
+Verifies that ``scripts/smoke_rag_evidence.py`` is idempotent and outputs only
+the contract fields expected by the deployment pipeline.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +18,11 @@ from scripts.verify_migrations import verify_clean_database
 def test_rag_evidence_smoke_is_idempotent_and_outputs_only_contract_fields(
     database_url: str,
 ) -> None:
-    """rag evidence smoke is idempotent and outputs only contract fields."""
+    """Test that the RAG evidence smoke script is idempotent and outputs only contract fields.
+
+    Args:
+        database_url: Connection string for the PostgreSQL test server.
+    """
     url = make_url(database_url)
     database_name = f"{url.database}_rag_smoke"
     verify_clean_database(
@@ -67,7 +75,7 @@ def test_rag_evidence_smoke_is_idempotent_and_outputs_only_contract_fields(
 
 
 def _run(command: list[str]) -> subprocess.CompletedProcess[str]:
-    """run."""
+    """Run a subprocess command and capture its output."""
     return subprocess.run(
         command,
         cwd=Path(__file__).resolve().parents[2],

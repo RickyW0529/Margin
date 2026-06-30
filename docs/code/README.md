@@ -25,11 +25,11 @@ docs/code/
 
 | 编号 | 模块（英文 slug） | 中文名 | 代码说明文档 | 对应源码路径 |
 |------|-------------------|--------|--------------|--------------|
-| 00 | shared | 共享与核心横切组件 | [00-shared.md](./00-shared.md) | `src/margin/settings.py`、`src/margin/worker.py`、`src/margin/storage/`、`src/margin/api/`、`src/margin/core/provider.py`、`src/margin/core/registry.py`、`src/margin/core/resilience.py`、`src/margin/core/secret.py` |
+| 00 | shared | 共享与核心横切组件 | [00-shared.md](./00-shared.md) | `src/margin/settings.py`、`src/margin/worker.py`、`src/margin/storage/`、`src/margin/api/`、`src/margin/core/provider.py`、`src/margin/core/registry.py`、`src/margin/core/resilience.py`、`src/margin/core/secret.py`、`src/margin/documents/` |
 | 01 | data_provider | 数据 Provider 模块 | [01-data_provider.md](./01-data_provider.md) | `src/margin/data/`、`src/margin/core/provider.py`、`src/margin/core/registry.py` |
 | 03 | filing_websearch | 公告与 WebSearch 模块 | [03-filing_websearch.md](./03-filing_websearch.md) | `src/margin/news/` |
 | 04 | text_indexing | 文本索引模块 | [04-text_indexing.md](./04-text_indexing.md) | `src/margin/vector/` |
-| 05 | rag_evidence | RAG 证据模块 | [05-rag_evidence.md](./05-rag_evidence.md) | `src/margin/evidence/` |
+| 05 | rag_evidence | RAG 证据模块 | [05-rag_evidence.md](./05-rag_evidence.md) | `src/margin/evidence/`、`src/margin/research/evidence_tools.py` |
 | 06 | multi_agent_research | 多 Agent 研究流程模块 | [06-multi_agent_research.md](./06-multi_agent_research.md) | `src/margin/research/` |
 | 07 | strategy_config | 策略配置模块 | [07-strategy_config.md](./07-strategy_config.md) | `src/margin/strategy/`、`src/margin/core/secret_store.py`、`src/margin/api/routes/strategy.py`、`src/margin/api/routes/strategy_config.py`、`web/components/provider-settings-panel.tsx` |
 | 08 | research_candidate_dashboard | 研究候选面板模块 | [08-research_candidate_dashboard.md](./08-research_candidate_dashboard.md) | `src/margin/dashboard/`、`src/margin/api/routes/dashboard.py`、`src/margin/api/routes/valuation_discovery.py`、`web/app/layout.tsx`、`web/app/page.tsx`、`web/app/research/`、`web/app/settings/`、`web/components/research-*.tsx`、`web/components/current-vs-effective-panel.tsx`、`web/components/evidence-locator-list.tsx`、`web/components/read-only-copilot-panel.tsx`、`web/components/provider-settings-panel.tsx` |
@@ -53,7 +53,7 @@ docs/code/
 
 - `01-data_provider` 已新增 Tushare 独立源系统、量化 endpoint 准入目录、滚动采集策略、质量筛选层、warehouse publisher 和真实两年行情/财务/benchmark 回填脚本。
 - `11-valuation_discovery` 已接入数据层公司池快照，并新增第四层 Quant Feature Mart + Analysis Mart；第三层 ETL 事务性发布 `quant_feature_snapshots/rows` 供量化只读，量化结果再事务性发布为 `analysis_snapshots`、metrics、findings 和 lineage。最新真实量化 run `qr_df48cd92fdf1424d` 使用 5304 家非 ST/非退市/非未来上市公司，输出 3 家 pass、54 家 near-threshold。
-- `06-multi_agent_research` 已注册 `analysis_snapshot_get`、`analysis_metrics_list`、`analysis_findings_list`、`quant_feature_snapshot_get`、`quant_feature_rows_list` 五个 scoped read tools，`valuation_analysis` 节点可按 security/scope/PIT 读取第四层特征与分析结果。
+- `06-multi_agent_research` 已注册 `analysis_snapshot_get`、`analysis_metrics_list`、`analysis_findings_list`、`quant_feature_snapshot_get`、`quant_feature_rows_list` 五个 scoped read tools；新增 `rag_evidence_retrieve`/`evidence_retrieve` RAG evidence 工具，向上给 Agent 返回可定位 `evidence_blocks`，并可冻结写入 EvidencePackage。
 - `/settings/data` 与 `/api/v1/data-policies` 暴露近两年滚动窗口等数据采集策略配置。
 
 ## 更新说明

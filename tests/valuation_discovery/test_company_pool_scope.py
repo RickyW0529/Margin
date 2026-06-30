@@ -1,4 +1,8 @@
-"""Company-pool to quant-scope integration tests."""
+"""Company-pool to quant-scope integration tests.
+
+This module validates that the quant scope binding provider consumes the
+frozen company-pool snapshot rather than stale static config members.
+"""
 
 from __future__ import annotations
 
@@ -11,7 +15,10 @@ from margin.valuation_discovery.quant_adapter import SQLAlchemyScopeBindingProvi
 
 
 class _Strategy:
+    """Fake strategy repository exposing active v0.2 scope and config entities."""
+
     def get_research_scope(self, _version_id: str):
+        """Return a frozen research scope namespace."""
         return SimpleNamespace(
             version_id="scope-v1",
             quant_feature_set_version_id="features-v1",
@@ -22,6 +29,7 @@ class _Strategy:
         )
 
     def get_quant_feature_set(self, _version_id: str):
+        """Return a frozen quant feature set namespace."""
         return SimpleNamespace(
             version_id="features-v1",
             required_indicators=("net_profit_ttm", "pe_ttm"),
@@ -30,6 +38,7 @@ class _Strategy:
         )
 
     def get_quant_strategy(self, _version_id: str):
+        """Return a frozen quant strategy namespace."""
         return SimpleNamespace(
             version_id="strategy-v1",
             strategy_family="default",
@@ -39,6 +48,7 @@ class _Strategy:
         )
 
     def get_indicator_view(self, _version_id: str):
+        """Return a frozen indicator view namespace."""
         return SimpleNamespace(
             version_id="view-v1",
             mode=IndicatorSelectionMode.ALL,
@@ -47,6 +57,7 @@ class _Strategy:
         )
 
     def get_universe_definition(self, _version_id: str):
+        """Return a stale universe definition with a static member."""
         return SimpleNamespace(
             version_id="universe-v1",
             universe_code="ALL_A",
@@ -55,7 +66,10 @@ class _Strategy:
 
 
 class _CompanyPool:
+    """Fake company-pool repository returning a single non-ST member."""
+
     def latest(self):
+        """Return the latest company-pool snapshot with one non-ST security."""
         now = datetime(2026, 6, 23, tzinfo=UTC)
         return build_company_pool_snapshot(
             [
@@ -72,7 +86,11 @@ class _CompanyPool:
 
 
 def test_all_a_scope_uses_latest_non_st_company_pool_snapshot() -> None:
-    """Quant snapshots consume the frozen company-pool view, not stale config members."""
+    """Verify quant snapshots consume the frozen company-pool view, not stale config members.
+
+    Returns:
+        None.
+    """
     provider = SQLAlchemyScopeBindingProvider(
         _Strategy(),
         company_pool_repository=_CompanyPool(),

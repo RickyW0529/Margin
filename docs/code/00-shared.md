@@ -74,6 +74,7 @@
 - **Provider 抽象与注册中心**：统一 Provider 元数据、健康检查、调用结果、重试/限流/降级/审计。
 - **弹性组件**：令牌桶限流器、指数退避重试、Provider 错误类型。
 - **密钥管理**：基于引用名称的 Secret 解析器，支持环境变量与本地文件两种来源，避免明文落盘。
+- **文档标准化流水线**：`margin.documents` 提供共享 Docling 接口，将 PDF/HTML/DOCX/XLSX/CSV/JSON/Text 统一转换为 Markdown；随后执行 Review / Repair / Verifier / Slimming，输出最终 Markdown、JSON 和 RAG chunks。RAG chunking 默认保留段落/表格行边界，并对单个超长 block 做硬切分，保证任一 chunk 不超过配置的 `max_chunk_chars`，避免 embedding provider 因输入过长拒绝请求。PDF 默认启用 RapidOCR，并固定使用 `onnxruntime` 后端；视觉校验仅在 verifier 支持多模态且存在 page images 时执行，否则自动跳过并记录状态。
 
 ---
 
@@ -92,6 +93,8 @@
 | `src/margin/core/registry.py` | Provider 注册中心，封装注册、发现、健康检查、限流、重试、降级、审计。 |
 | `src/margin/core/resilience.py` | 限流器、重试配置与带重试/限流的通用调用包装函数。 |
 | `src/margin/core/secret.py` | 引用式 Secret 管理器，支持环境变量与本地密钥文件。 |
+| `src/margin/documents/markdown.py` | 共享 Docling Markdown 转换接口：格式路由、转换请求/结果模型、Docling 后端、PDF OCR 配置与轻量 fallback。 |
+| `src/margin/documents/pipeline.py` | 共享文档标准化流水线：Review/Repair/Verifier/Slimming agent 协议与默认规则实现，输出 final Markdown/JSON/RAG chunks；chunking 对超长 block 二次切分并遵守 `max_chunk_chars`，同时支持多模态视觉校验自动降级。 |
 
 ---
 

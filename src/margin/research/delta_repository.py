@@ -60,19 +60,48 @@ class ResearchDeltaRepository(Protocol):
     """Persistence contract for terminal delta reviews."""
 
     def persist_final_review(self, review: ResearchDeltaReview) -> None:
-        """Persist a final review and enqueue its publication event."""
+        """Persist a final review and enqueue its publication event.
+
+        Args:
+            review: Immutable terminal delta-review to persist.
+
+        Raises:
+            ValueError: If a conflicting review already exists for the graph run.
+        """
 
     def get_review(self, review_id: str) -> ResearchDeltaReview | None:
-        """Load a review by ID."""
+        """Load a review by ID.
+
+        Args:
+            review_id: Unique review identifier.
+
+        Returns:
+            The matching ``ResearchDeltaReview`` or ``None``.
+        """
 
     def get_review_by_graph_run(
         self,
         graph_run_id: str,
     ) -> ResearchDeltaReview | None:
-        """Load the terminal review for one graph run."""
+        """Load the terminal review for one graph run.
+
+        Args:
+            graph_run_id: Graph run identifier.
+
+        Returns:
+            The terminal ``ResearchDeltaReview`` for the run, or ``None``.
+        """
 
     def count_outbox_events(self, graph_run_id: str, event_type: str) -> int:
-        """Count outbox events for one graph run and event type."""
+        """Count outbox events for one graph run and event type.
+
+        Args:
+            graph_run_id: Graph run identifier.
+            event_type: Outbox event type to count.
+
+        Returns:
+            The number of matching outbox events.
+        """
 
 
 class MemoryResearchDeltaRepository:
@@ -85,7 +114,14 @@ class MemoryResearchDeltaRepository:
         self._outbox: dict[tuple[str, str], dict[str, Any]] = {}
 
     def persist_final_review(self, review: ResearchDeltaReview) -> None:
-        """Persist a final review and enqueue its publication event."""
+        """Persist a final review and enqueue its publication event.
+
+        Args:
+            review: Immutable terminal delta-review to persist.
+
+        Raises:
+            ValueError: If a conflicting review already exists for the graph run.
+        """
         existing_id = self._review_by_graph_run.get(review.graph_run_id)
         if existing_id is not None:
             existing = self._reviews[existing_id]
@@ -105,19 +141,41 @@ class MemoryResearchDeltaRepository:
         )
 
     def get_review(self, review_id: str) -> ResearchDeltaReview | None:
-        """Load a review by ID."""
+        """Load a review by ID.
+
+        Args:
+            review_id: Unique review identifier.
+
+        Returns:
+            The matching ``ResearchDeltaReview`` or ``None``.
+        """
         return self._reviews.get(review_id)
 
     def get_review_by_graph_run(
         self,
         graph_run_id: str,
     ) -> ResearchDeltaReview | None:
-        """Load the terminal review for one graph run."""
+        """Load the terminal review for one graph run.
+
+        Args:
+            graph_run_id: Graph run identifier.
+
+        Returns:
+            The terminal ``ResearchDeltaReview`` for the run, or ``None``.
+        """
         review_id = self._review_by_graph_run.get(graph_run_id)
         return self._reviews.get(review_id) if review_id is not None else None
 
     def count_outbox_events(self, graph_run_id: str, event_type: str) -> int:
-        """Count outbox events for one graph run and event type."""
+        """Count outbox events for one graph run and event type.
+
+        Args:
+            graph_run_id: Graph run identifier.
+            event_type: Outbox event type to count.
+
+        Returns:
+            The number of matching outbox events.
+        """
         return int((graph_run_id, event_type) in self._outbox)
 
 
@@ -130,12 +188,24 @@ class SQLAlchemyResearchDeltaRepository:
         *,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
-        """Initialize the repository."""
+        """Initialize the repository.
+
+        Args:
+            session_factory: Callable that returns a new SQLAlchemy ``Session``.
+            clock: Optional clock callable for timestamps.
+        """
         self._session_factory = session_factory
         self._clock = clock or (lambda: datetime.now(UTC))
 
     def persist_final_review(self, review: ResearchDeltaReview) -> None:
-        """Persist final review, terminal run state, and outbox in one transaction."""
+        """Persist final review, terminal run state, and outbox in one transaction.
+
+        Args:
+            review: Immutable terminal delta-review to persist.
+
+        Raises:
+            ValueError: If the graph run does not exist or a conflicting review is detected.
+        """
         with self._session_factory.begin() as session:
             graph_run = session.get(AIGraphRunRow, review.graph_run_id)
             if graph_run is None:
@@ -160,7 +230,14 @@ class SQLAlchemyResearchDeltaRepository:
             self._ensure_outbox(session, review)
 
     def get_review(self, review_id: str) -> ResearchDeltaReview | None:
-        """Load a review by ID."""
+        """Load a review by ID.
+
+        Args:
+            review_id: Unique review identifier.
+
+        Returns:
+            The matching ``ResearchDeltaReview`` or ``None``.
+        """
         with self._session_factory() as session:
             row = session.get(ResearchDeltaReviewRow, review_id)
             return _review_from_row(row) if row is not None else None
@@ -169,7 +246,14 @@ class SQLAlchemyResearchDeltaRepository:
         self,
         graph_run_id: str,
     ) -> ResearchDeltaReview | None:
-        """Load the terminal review for one graph run."""
+        """Load the terminal review for one graph run.
+
+        Args:
+            graph_run_id: Graph run identifier.
+
+        Returns:
+            The terminal ``ResearchDeltaReview`` for the run, or ``None``.
+        """
         with self._session_factory() as session:
             row = session.scalars(
                 delta_review_by_graph_run(graph_run_id)
@@ -177,7 +261,15 @@ class SQLAlchemyResearchDeltaRepository:
             return _review_from_row(row) if row is not None else None
 
     def count_outbox_events(self, graph_run_id: str, event_type: str) -> int:
-        """Count outbox events for one graph run and event type."""
+        """Count outbox events for one graph run and event type.
+
+        Args:
+            graph_run_id: Graph run identifier.
+            event_type: Outbox event type to count.
+
+        Returns:
+            The number of matching outbox events.
+        """
         with self._session_factory() as session:
             return int(
                 session.scalar(
@@ -197,13 +289,7 @@ class SQLAlchemyResearchDeltaRepository:
         graph_run: AIGraphRunRow,
         review: ResearchDeltaReview,
     ) -> None:
-        """_mark_graph_run_completed.
-
-        Args:
-        session (Session): Description.
-        graph_run (AIGraphRunRow): Description.
-        review (ResearchDeltaReview): Description.
-        """
+        """Mark the graph run as completed with terminal review metadata."""
         graph_run.status = "completed"
         graph_run.review_mode = review.review_mode.value
         graph_run.outcome = review.outcome.value
@@ -218,15 +304,7 @@ class SQLAlchemyResearchDeltaRepository:
         session: Session,
         review: ResearchDeltaReview,
     ) -> None:
-        """_ensure_outbox.
-
-        Args:
-        session (Session): Description.
-        review (ResearchDeltaReview): Description.
-
-        Raises:
-        ValueError: Description.
-        """
+        """Ensure a publication outbox event exists for the review."""
         payload = _outbox_payload(review)
         payload_hash = _hash_json(payload)
         existing = session.scalars(
@@ -258,14 +336,7 @@ class SQLAlchemyResearchDeltaRepository:
 
 
 def _review_to_row(review: ResearchDeltaReview) -> ResearchDeltaReviewRow:
-    """_review_to_row.
-
-    Args:
-        review (ResearchDeltaReview): Description.
-
-    Returns:
-        ResearchDeltaReviewRow: Description.
-    """
+    """Convert a delta review model to a SQLAlchemy row."""
     return ResearchDeltaReviewRow(
         review_id=review.review_id,
         graph_run_id=review.graph_run_id,
@@ -294,14 +365,7 @@ def _review_to_row(review: ResearchDeltaReview) -> ResearchDeltaReviewRow:
 
 
 def _review_from_row(row: ResearchDeltaReviewRow) -> ResearchDeltaReview:
-    """_review_from_row.
-
-    Args:
-        row (ResearchDeltaReviewRow): Description.
-
-    Returns:
-        ResearchDeltaReview: Description.
-    """
+    """Convert a SQLAlchemy row to a delta review model."""
     return ResearchDeltaReview(
         review_id=row.review_id,
         graph_run_id=row.graph_run_id,
@@ -330,14 +394,7 @@ def _review_from_row(row: ResearchDeltaReviewRow) -> ResearchDeltaReview:
 
 
 def _outbox_payload(review: ResearchDeltaReview) -> dict[str, Any]:
-    """_outbox_payload.
-
-    Args:
-        review (ResearchDeltaReview): Description.
-
-    Returns:
-        dict[str, Any]: Description.
-    """
+    """Build the publication event payload for a terminal review."""
     return {
         "review_id": review.review_id,
         "graph_run_id": review.graph_run_id,
@@ -351,14 +408,7 @@ def _outbox_payload(review: ResearchDeltaReview) -> dict[str, Any]:
 
 
 def _hash_json(payload: dict[str, Any]) -> str:
-    """_hash_json.
-
-    Args:
-        payload (dict[str, Any]): Description.
-
-    Returns:
-        str: Description.
-    """
+    """Return a deterministic SHA-256 hash for a JSON-serializable payload."""
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
         "utf-8"
     )

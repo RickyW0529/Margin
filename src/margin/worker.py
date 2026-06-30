@@ -123,7 +123,15 @@ def build_data_ingestion_stack(
     *,
     default_provider: str = "tushare",
 ) -> DataWarehouseIngestionStack:
-    """Build the production data warehouse ingestion stack."""
+    """Build the production data warehouse ingestion stack.
+
+    Args:
+        settings: Optional application settings. Defaults to ``get_settings()``.
+        default_provider: Default data provider name. Defaults to ``tushare``.
+
+    Returns:
+        A configured ``DataWarehouseIngestionStack`` ready for ingestion.
+    """
     resolved = settings or get_settings()
     engine = create_database_engine(
         DatabaseSettings(
@@ -142,7 +150,17 @@ def build_data_ingestion_stack(
 def build_worker_provider_runtime_factory(
     settings: MarginSettings,
 ) -> ProviderRuntimeFactory:
-    """Build the worker's strict active-config Provider factory."""
+    """Build the worker's strict active-config Provider factory.
+
+    Args:
+        settings: Application settings containing database and secret configuration.
+
+    Returns:
+        A ``ProviderRuntimeFactory`` wired to the active versioned strategy config.
+
+    Raises:
+        RuntimeError: If ``MARGIN_SECRET_MASTER_KEY`` is not configured.
+    """
     if settings.secret_master_key is None:
         raise RuntimeError("MARGIN_SECRET_MASTER_KEY is not configured")
     engine = create_database_engine(
@@ -168,7 +186,20 @@ def build_worker_provider_runtime_factory(
 def build_data_sync_worker(
     settings: MarginSettings | None = None,
 ) -> DataSyncWorker:
-    """Build the production durable data-sync worker and configured providers."""
+    """Build the production durable data-sync worker and configured providers.
+
+    Attempts to build both Tushare and AKShare providers from the active
+    strategy config. At least one provider must be successfully configured.
+
+    Args:
+        settings: Optional application settings. Defaults to ``get_settings()``.
+
+    Returns:
+        A configured ``DataSyncWorker`` with active market-data providers.
+
+    Raises:
+        RuntimeError: If no active market-data Provider is configured.
+    """
     resolved = settings or get_settings()
     factory = build_worker_provider_runtime_factory(resolved)
     providers: dict[str, object] = {}

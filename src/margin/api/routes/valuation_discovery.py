@@ -19,7 +19,12 @@ router = APIRouter(prefix="/api/v1/valuation-discovery", tags=["valuation-discov
 
 
 class StartRefreshRequest(BaseModel):
-    """Request body for starting a valuation discovery refresh."""
+    """Request body for starting a valuation discovery refresh.
+
+    Attributes:
+        scope_version_id: Identifier of the frozen research scope.
+        decision_at: Timestamp of the refresh decision.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -28,7 +33,13 @@ class StartRefreshRequest(BaseModel):
 
 
 class StartRefreshResponse(BaseModel):
-    """Accepted refresh response."""
+    """Accepted refresh response.
+
+    Attributes:
+        run_id: Unique identifier of the created refresh run.
+        status: Initial status of the run.
+        http_status: HTTP status code associated with the response.
+    """
 
     run_id: str
     status: str
@@ -36,7 +47,14 @@ class StartRefreshResponse(BaseModel):
 
 
 class RefreshStatusResponse(BaseModel):
-    """Valuation discovery refresh run status."""
+    """Valuation discovery refresh run status.
+
+    Attributes:
+        run_id: Unique identifier of the refresh run.
+        state: Current state of the run.
+        scope_version_id: Identifier of the frozen research scope.
+        steps: List of step status dictionaries for each orchestration step.
+    """
 
     run_id: str
     state: str
@@ -45,7 +63,16 @@ class RefreshStatusResponse(BaseModel):
 
 
 class RefreshSummaryResponse(BaseModel):
-    """One refresh run row in the list view."""
+    """One refresh run row in the list view.
+
+    Attributes:
+        run_id: Unique identifier of the refresh run.
+        state: Current state of the run.
+        scope_version_id: Identifier of the frozen research scope.
+        created_at: UTC timestamp when the run was created.
+        started_at: UTC timestamp when the run started, if started.
+        finished_at: UTC timestamp when the run finished, if finished.
+    """
 
     run_id: str
     state: str
@@ -56,7 +83,13 @@ class RefreshSummaryResponse(BaseModel):
 
 
 class RefreshListResponse(BaseModel):
-    """Paginated refresh run list response."""
+    """Paginated refresh run list response.
+
+    Attributes:
+        items: List of refresh run summary responses.
+        next_cursor: Cursor for the next page, or None if no more pages.
+        page_size: Number of items in the current page.
+    """
 
     items: list[RefreshSummaryResponse]
     next_cursor: str | None
@@ -89,7 +122,17 @@ def start_refresh(
         Depends(get_valuation_discovery_service_for_api),
     ],
 ) -> StartRefreshResponse:
-    """Start a valuation discovery refresh."""
+    """Start a valuation discovery refresh.
+
+    Args:
+        request: Validated refresh request containing scope and decision time.
+        idempotency_key: Idempotency key for the mutation.
+        _actor_id: Authenticated actor identifier (unused).
+        service: Valuation discovery service used to start the refresh.
+
+    Returns:
+        StartRefreshResponse with the run id, status, and HTTP status code.
+    """
     response = service.start_refresh(
         scope_version_id=request.scope_version_id,
         decision_at=request.decision_at,

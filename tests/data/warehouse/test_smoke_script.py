@@ -9,7 +9,7 @@ import sys
 
 
 def test_smoke_script_dry_run_masks_configured_tokens(database_url, tmp_path) -> None:
-    """smoke script dry run masks configured tokens."""
+    """Test that the dry-run smoke script output masks configured API tokens."""
     env = {
         **os.environ,
         "PYTHONPATH": "src",

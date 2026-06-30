@@ -45,7 +45,17 @@ class SnapshotEntry:
 
 @dataclass(frozen=True)
 class CompressedSnapshotEntry:
-    """Pointer to a compressed content-addressed provider payload."""
+    """Pointer to a compressed content-addressed provider payload.
+
+    Attributes:
+        provider: Normalized provider name.
+        storage_uri: Relative URI where the compressed snapshot is stored.
+        payload_hash: SHA-256 hash of the canonical JSON payload.
+        compression: Compression algorithm used (``zstd``).
+        raw_size: Size of the uncompressed serialized payload in bytes.
+        compressed_size: Size of the compressed payload in bytes.
+        created_at: UTC timestamp when the snapshot was created.
+    """
 
     provider: str
     storage_uri: str
@@ -75,7 +85,21 @@ class CompressedSnapshotStore:
         self._compressor = zstd.ZstdCompressor(level=compression_level)
 
     def write_json(self, provider: str, payload: Any) -> CompressedSnapshotEntry:
-        """Write a canonical JSON payload and return its content-addressed pointer."""
+        """Write a canonical JSON payload and return its content-addressed pointer.
+
+        The same canonical JSON payload is stored only once per provider and
+        always resolves to the same URI/hash pair.
+
+        Args:
+            provider: Provider name used to namespace the snapshot file.
+            payload: JSON-serializable payload to store.
+
+        Returns:
+            A CompressedSnapshotEntry describing the persisted snapshot.
+
+        Raises:
+            ValueError: When the provider name is empty.
+        """
         normalized_provider = provider.strip().lower()
         if not normalized_provider:
             raise ValueError("provider must be non-empty")

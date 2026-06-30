@@ -12,7 +12,11 @@ class HtmlParser:
     """Parse simple HTML into heading/paragraph blocks with DOM paths."""
 
     def __init__(self, parser_version: str = "html-v0.2.0") -> None:
-        """Initialize the instance."""
+        """Initialize the HTML parser.
+
+        Args:
+            parser_version: Version label recorded in parsed block metadata.
+        """
         self.parser_version = parser_version
 
     def parse(
@@ -21,14 +25,22 @@ class HtmlParser:
         *,
         source_url: str | None = None,
     ) -> list[ParsedBlock]:
-        """Parse the input and return extracted content."""
+        """Parse HTML content into heading and paragraph blocks with DOM paths.
+
+        Args:
+            content: Raw HTML bytes to parse.
+            source_url: Optional URL of the original source.
+
+        Returns:
+            A list of ``ParsedBlock`` instances with DOM path and section locators.
+        """
         parser = _BlockHtmlParser(source_url=source_url)
         parser.feed(content.decode("utf-8", errors="replace"))
         return parser.blocks
 
 
 class _BlockHtmlParser(HTMLParser):
-    """BlockHtmlParser."""
+    """Internal HTML parser that emits heading and paragraph blocks with DOM paths."""
     def __init__(self, *, source_url: str | None) -> None:
         """Initialize the instance."""
         super().__init__()

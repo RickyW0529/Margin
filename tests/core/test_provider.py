@@ -38,15 +38,11 @@ class FakeProvider(BaseProvider):
 
     @property
     def descriptor(self) -> ProviderDescriptor:
-        """Returns:
-            The configured provider descriptor.
-        """
+        """Return the configured provider descriptor."""
         return self._descriptor
 
     def healthcheck(self) -> HealthCheckResult:
-        """Returns:
-            A healthy status for this provider.
-        """
+        """Return a healthy status for this provider."""
         return HealthCheckResult(
             provider_name=self._descriptor.name,
             status=ProviderStatus.HEALTHY,
@@ -54,23 +50,23 @@ class FakeProvider(BaseProvider):
         )
 
     def get_securities(self, as_of):
-        """get securities."""
+        """Return a stub list of securities for the given date."""
         return [{"symbol": "000001.SZ"}]
 
     def get_bars(self, symbols, start, end, frequency="1d"):
-        """get bars."""
+        """Return stub bar data for the given symbols."""
         return [{"symbol": s, "close": 100.0} for s in symbols]
 
     def get_adjustment_factors(self, symbols, start, end):
-        """get adjustment factors."""
+        """Return stub adjustment factors for the given symbols."""
         return [{"symbol": s, "factor": 1.0} for s in symbols]
 
     def get_financials(self, symbols, start, end):
-        """get financials."""
+        """Return stub financial data for the given symbols."""
         return [{"symbol": s, "revenue": 1e8} for s in symbols]
 
     def get_index_members(self, index_code, as_of):
-        """get index members."""
+        """Return stub index members for the given index code."""
         return [{"symbol": "000001.SZ", "index": index_code}]
 
 
@@ -78,7 +74,7 @@ class TestProviderDescriptor:
     """Tests covering ``ProviderDescriptor`` immutability and default values."""
 
     def test_descriptor_is_frozen(self):
-        """A ``ProviderDescriptor`` cannot be modified after creation."""
+        """Test that a ``ProviderDescriptor`` cannot be modified after creation."""
         desc = ProviderDescriptor(
             name="akshare",
             version="1.0.0",
@@ -88,7 +84,7 @@ class TestProviderDescriptor:
             desc.name = "changed"
 
     def test_descriptor_defaults(self):
-        """Optional descriptor fields default to empty containers when omitted."""
+        """Test that optional descriptor fields default to empty containers."""
         desc = ProviderDescriptor(
             name="x", version="1", provider_type=ProviderType.LLM
         )
@@ -101,25 +97,25 @@ class TestBaseProvider:
     """Tests covering protocol conformance of a concrete ``BaseProvider``."""
 
     def test_fake_provider_descriptor(self):
-        """The stub provider exposes the expected name and type."""
+        """Test that the stub provider exposes the expected name and type."""
         p = FakeProvider()
         assert p.descriptor.name == "fake"
         assert p.descriptor.provider_type == ProviderType.MARKET_DATA
 
     def test_fake_provider_healthcheck(self):
-        """The stub provider reports itself as healthy."""
+        """Test that the stub provider reports itself as healthy."""
         p = FakeProvider()
         result = p.healthcheck()
         assert result.status == ProviderStatus.HEALTHY
         assert result.provider_name == "fake"
 
     def test_market_data_provider_protocol(self):
-        """A complete market-data implementation satisfies the ``MarketDataProvider`` protocol."""
+        """Test that a complete market-data implementation satisfies the protocol."""
         p = FakeProvider()
         assert isinstance(p, MarketDataProvider)
 
     def test_non_market_data_provider_fails_protocol(self):
-        """An incomplete provider does not satisfy the ``MarketDataProvider`` protocol."""
+        """Test that an incomplete provider does not satisfy the protocol."""
         class NonMarketProvider(BaseProvider):
             """A provider that does not satisfy the MarketDataProvider protocol."""
 

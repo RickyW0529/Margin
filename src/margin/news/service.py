@@ -13,7 +13,19 @@ from margin.news.repository import NewsRepository
 
 
 class NewsRunStatus(BaseModel):
-    """Read model returned by the news refresh status API."""
+    """Read model returned by the news refresh status API.
+
+    Attributes:
+        run_id: Unique identifier for the run.
+        status: Current durable status of the run.
+        target_count: Total number of targets in the run.
+        pending_count: Number of targets waiting to be claimed.
+        claimed_count: Number of targets currently claimed by workers.
+        retry_count: Number of targets scheduled for retry.
+        completed_count: Number of targets that completed successfully.
+        failed_final_count: Number of targets that failed terminally.
+        error_summary: Structured error summary for failed or partial runs.
+    """
 
     run_id: str
     status: str
@@ -37,7 +49,12 @@ class NewsService:
         repository: NewsRepository,
         refresh_service: NewsRefreshService,
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the instance.
+
+        Args:
+            repository: Repository used to read persisted run status and target counts.
+            refresh_service: Refresh orchestration service used to start runs.
+        """
         self._repository = repository
         self._refresh_service = refresh_service
 
@@ -50,7 +67,18 @@ class NewsService:
         targets: Sequence[NewsTarget],
         idempotency_key: str,
     ) -> NewsRefreshRun:
-        """Start a refresh synchronously for now; idempotency key is retained for audit."""
+        """Start a refresh synchronously for now; idempotency key is retained for audit.
+
+        Args:
+            scope_version_id: Identifier of the scope version that produced the quant run.
+            quant_run_id: Identifier of the quant run being refreshed.
+            decision_at: Decision timestamp used to scope the quant run.
+            targets: Sequence of news targets to process.
+            idempotency_key: Idempotency key retained for audit (currently unused).
+
+        Returns:
+            A ``NewsRefreshRun`` describing the run status and target counts.
+        """
         _ = idempotency_key
         return self._refresh_service.refresh_for_targets(
             scope_version_id=scope_version_id,
@@ -60,7 +88,17 @@ class NewsService:
         )
 
     def get_run_status(self, run_id: str) -> NewsRunStatus:
-        """Return persisted run status and reconciled target counts."""
+        """Return persisted run status and reconciled target counts.
+
+        Args:
+            run_id: Unique identifier of the refresh run.
+
+        Returns:
+            A ``NewsRunStatus`` with reconciled target counts and error summary.
+
+        Raises:
+            KeyError: If the run does not exist.
+        """
         run = self._repository.get_news_refresh_run(run_id)
         if run is None:
             raise KeyError(run_id)

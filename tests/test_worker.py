@@ -1,4 +1,9 @@
-"""Tests for the persistent scheduler worker."""
+"""Tests for the persistent scheduler worker.
+
+Verifies that the v0.2 worker registers only valuation-discovery pipeline jobs,
+builds a data ingestion stack, refuses hash embeddings without real credentials,
+and uses the versioned provider runtime factory.
+"""
 
 from __future__ import annotations
 
@@ -15,7 +20,7 @@ from margin.worker import (
 
 
 def test_worker_does_not_register_holdings_monitoring_job():
-    """v0.2 worker contains only valuation-discovery pipeline jobs."""
+    """Test that the v0.2 worker contains only valuation-discovery pipeline jobs."""
     scheduler = build_scheduler(
         interval_seconds=300,
         indexing_job=lambda: None,
@@ -26,7 +31,12 @@ def test_worker_does_not_register_holdings_monitoring_job():
 
 
 def test_worker_builds_data_ingestion_stack(database_url, tmp_path):
-    """worker builds data ingestion stack."""
+    """Test that the worker builds a data ingestion stack with a warehouse.
+
+    Args:
+        database_url: Connection string for the PostgreSQL test server.
+        tmp_path: Pytest fixture providing a temporary directory.
+    """
     settings = MarginSettings(
         _env_file=None,
         database_url=database_url,
@@ -42,7 +52,12 @@ def test_worker_refuses_hash_embedding_in_production_path(
     database_url: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Missing real embedding credentials must not create fake searchable data."""
+    """Test that missing real embedding credentials do not create fake searchable data.
+
+    Args:
+        database_url: Connection string for the PostgreSQL test server.
+        monkeypatch: Pytest fixture for modifying settings and environment.
+    """
     settings = MarginSettings(
         _env_file=None,
         database_url=database_url,
@@ -60,29 +75,42 @@ def test_worker_uses_versioned_provider_runtime_factory(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Worker adapters come from active config, not direct environment secrets."""
+    """Test that worker adapters come from active config, not direct environment secrets.
+
+    Args:
+        database_url: Connection string for the PostgreSQL test server.
+        tmp_path: Pytest fixture providing a temporary directory.
+        monkeypatch: Pytest fixture for patching module attributes.
+    """
     class _Embedding:
+        """Stub embedding provider with a fixed dimension."""
+
         dim = 2048
 
     embedding = _Embedding()
     tushare = object()
 
     class _Runtime:
+        """Stub provider runtime holding an adapter and config version ID."""
+
         def __init__(self, adapter, version_id: str) -> None:
+            """Initialize the runtime with an adapter and version ID."""
             self.adapter = adapter
             self.config_version_id = version_id
 
     class _Factory:
+        """Stub factory that builds embedding and Tushare runtimes."""
+
         def build_embedding(self):
-            """build_embedding."""
+            """Build a stub embedding runtime."""
             return _Runtime(embedding, "provider-embedding-v1")
 
         def build_tushare(self):
-            """build_tushare."""
+            """Build a stub Tushare runtime."""
             return _Runtime(tushare, "provider-tushare-v1")
 
         def build_akshare(self):
-            """build_akshare."""
+            """Raise LookupError to simulate an inactive AKShare provider."""
             raise LookupError("not active")
 
     settings = MarginSettings(

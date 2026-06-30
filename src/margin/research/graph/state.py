@@ -123,7 +123,18 @@ class AIDeltaGraphState(BaseModel):
         return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
     def with_updates(self, **updates: Any) -> Self:
-        """Return an updated state while rejecting identity mutation."""
+        """Return an updated state while rejecting identity mutation.
+
+        Args:
+            **updates: Field updates to apply to the frozen state.
+
+        Returns:
+            A new ``AIDeltaGraphState`` with the specified updates applied.
+
+        Raises:
+            ValueError: If unknown fields are supplied or immutable identity
+                fields are changed.
+        """
         unknown = set(updates) - set(type(self).model_fields)
         if unknown:
             raise ValueError(
@@ -197,7 +208,23 @@ def create_initial_state(
     previous_effective_assessment_id: str | None = None,
     news_context_bundle_id: str | None = None,
 ) -> AIDeltaGraphState:
-    """Create a validated initial graph state from frozen context references."""
+    """Create a validated initial graph state from frozen context references.
+
+    Args:
+        graph_run_id: Unique identifier for this graph run.
+        context_snapshot_id: Frozen context snapshot identifier.
+        context_input_hash: Hash of the context payload.
+        scope_version_id: Strategy scope version identifier.
+        security_id: Security under review.
+        decision_at: Point-in-time decision timestamp.
+        quant_input_snapshot_id: Optional quant input snapshot reference.
+        current_quant_result_id: Optional current quant result reference.
+        previous_effective_assessment_id: Optional prior effective assessment.
+        news_context_bundle_id: Optional news context bundle reference.
+
+    Returns:
+        A validated ``AIDeltaGraphState`` ready for graph execution.
+    """
     return AIDeltaGraphState(
         graph_run_id=graph_run_id,
         context_snapshot_id=context_snapshot_id,

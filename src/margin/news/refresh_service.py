@@ -30,7 +30,13 @@ class ProviderRateLimited(RuntimeError):
         retry_after_seconds: int | None = None,
         message: str | None = None,
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the instance.
+
+        Args:
+            provider_name: Name of the rate-limited provider.
+            retry_after_seconds: Optional seconds to wait before retrying.
+            message: Optional human-readable error message.
+        """
         self.provider_name = provider_name
         self.retry_after_seconds = retry_after_seconds
         super().__init__(message or f"{provider_name} rate limited")
@@ -44,7 +50,15 @@ class WebSearchServiceLike(Protocol):
         query: str,
         max_results: int = 10,
     ) -> tuple[object, list[object]]:
-        """Search, verify originals, persist query audit, and return document events."""
+        """Search, verify originals, persist query audit, and return document events.
+
+        Args:
+            query: Search query string.
+            max_results: Maximum number of results to acquire.
+
+        Returns:
+            Tuple of (search query record, list of acquired document events).
+        """
 
 
 class NewsRefreshService:
@@ -60,7 +74,19 @@ class NewsRefreshService:
         repository: NewsRepository | None = None,
         materiality_service: DocumentMaterialityService | None = None,
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the instance.
+
+        Args:
+            queue: Durable target queue that owns refresh target completeness.
+            websearch_provider: WebSearch service used to search and acquire content.
+            query_factory: Optional query template factory. Defaults to a new
+                ``QueryTemplateFactory``.
+            retry_backoff: Backoff duration applied when a target fails and is marked retry.
+            repository: Optional repository for persisting document/security links and
+                materiality scores.
+            materiality_service: Optional materiality scoring service. Defaults to a new
+                ``DocumentMaterialityService``.
+        """
         self._queue = queue
         self._websearch = websearch_provider
         self._query_factory = query_factory or QueryTemplateFactory()
@@ -77,7 +103,18 @@ class NewsRefreshService:
         targets: Sequence[NewsTarget],
         batch_size: int = 20,
     ) -> NewsRefreshRun:
-        """Persist all targets first, then process them in bounded batches."""
+        """Persist all targets first, then process them in bounded batches.
+
+        Args:
+            scope_version_id: Identifier of the scope version that produced the quant run.
+            quant_run_id: Identifier of the quant run being refreshed.
+            decision_at: Decision timestamp used to scope the quant run.
+            targets: Sequence of news targets to process.
+            batch_size: Maximum number of targets to claim per batch.
+
+        Returns:
+            A ``NewsRefreshRun`` describing the final run status and target counts.
+        """
         run_id = self._queue.create_run(scope_version_id, quant_run_id, decision_at)
         self._queue.enqueue_all(run_id, list(targets))
         while True:

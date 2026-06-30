@@ -1,4 +1,10 @@
-"""News target selector and refresh policy tests."""
+"""News target selector and refresh policy tests.
+
+This module validates that the news target selector includes pass and
+near-threshold results, excludes research-blocked results, assigns priority
+correctly, and that the refresh policy classifies price moves and step
+failures appropriately.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +19,11 @@ from margin.valuation_discovery.refresh_policy import RefreshPolicy
 
 
 def test_selector_includes_all_pass_without_top_n_limit() -> None:
-    """selector includes all pass without top n limit."""
+    """Verify the selector includes all pass results without a top-N limit.
+
+    Returns:
+        None.
+    """
     results = [
         _result_with_status(f"000{i:03d}.SZ", ScreeningStatus.PASS)
         for i in range(120)
@@ -34,7 +44,11 @@ def test_selector_includes_all_pass_without_top_n_limit() -> None:
 
 
 def test_selector_includes_near_threshold_only_when_strategy_allows() -> None:
-    """selector includes near threshold only when strategy allows."""
+    """Verify near-threshold results are included only when the strategy allows.
+
+    Returns:
+        None.
+    """
     near = _result_with_status(
         "000001.SZ",
         ScreeningStatus.NEAR_THRESHOLD,
@@ -57,7 +71,11 @@ def test_selector_includes_near_threshold_only_when_strategy_allows() -> None:
 
 
 def test_selector_excludes_research_blocked_results() -> None:
-    """selector excludes research blocked results."""
+    """Verify the selector excludes results with a research-blocked guardrail.
+
+    Returns:
+        None.
+    """
     blocked = _result_with_status(
         "000001.SZ",
         ScreeningStatus.PASS,
@@ -74,7 +92,11 @@ def test_selector_excludes_research_blocked_results() -> None:
 
 
 def test_priority_increases_for_review_due_and_material_events() -> None:
-    """priority increases for review due and material events."""
+    """Verify priority increases for review-due and material event results.
+
+    Returns:
+        None.
+    """
     normal = _result_with_status("000001.SZ", ScreeningStatus.PASS)
     urgent = _result_with_status(
         "000002.SZ",
@@ -94,7 +116,11 @@ def test_priority_increases_for_review_due_and_material_events() -> None:
 
 
 def test_price_change_only_recalculates_discount_without_ai_event() -> None:
-    """price change only recalculates discount without ai event."""
+    """Verify a price change only recalculates discount without triggering an AI event.
+
+    Returns:
+        None.
+    """
     event = RefreshPolicy().classify_price_move(
         security_id="000001.SZ",
         old_discount=0.20,
@@ -108,7 +134,11 @@ def test_price_change_only_recalculates_discount_without_ai_event() -> None:
 
 
 def test_entering_watch_band_creates_news_target() -> None:
-    """entering watch band creates news target."""
+    """Verify entering the watch band creates a news target.
+
+    Returns:
+        None.
+    """
     event = RefreshPolicy().classify_price_move(
         security_id="000001.SZ",
         old_discount=0.20,
@@ -121,7 +151,11 @@ def test_entering_watch_band_creates_news_target() -> None:
 
 
 def test_refresh_policy_failure_semantics() -> None:
-    """refresh policy failure semantics."""
+    """Verify refresh policy classifies step failures with correct downstream semantics.
+
+    Returns:
+        None.
+    """
     policy = RefreshPolicy()
 
     assert policy.classify_step_failure(step="run_quant").stop_downstream is True
@@ -138,7 +172,7 @@ def _result_with_status(
     review_required: bool = False,
     factor_details: dict[str, object] | None = None,
 ) -> QuantResult:
-    """result with status."""
+    """Build one deterministic QuantResult with the given screening status."""
     return QuantResult(
         quant_run_id="quant-1",
         security_id=security_id,

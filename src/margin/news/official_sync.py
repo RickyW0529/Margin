@@ -19,7 +19,16 @@ class OfficialDiscoveryLike(Protocol):
         cursor: str | None,
         limit: int,
     ) -> list[DiscoveredDocument]:
-        """Discover official documents after the provided cursor."""
+        """Discover official documents after the provided cursor.
+
+        Args:
+            cursor: Opaque cursor from a previous discovery pass, or None for the first
+                pass.
+            limit: Maximum number of documents to return.
+
+        Returns:
+            List of discovered official documents.
+        """
 
 
 class FilingAcquirerLike(Protocol):
@@ -31,11 +40,32 @@ class FilingAcquirerLike(Protocol):
         url: str,
         **kwargs: object,
     ) -> DocumentEvent:
-        """Acquire one official filing and return a normalized event."""
+        """Acquire one official filing and return a normalized event.
+
+        Args:
+            source_name: Identifier of the registered source.
+            url: Target URL to acquire.
+            **kwargs: Additional arguments forwarded to the acquirer.
+
+        Returns:
+            A normalized ``DocumentEvent``.
+        """
 
 
 class FilingSyncRun(BaseModel):
-    """Summary of one official filing sync pass."""
+    """Summary of one official filing sync pass.
+
+    Attributes:
+        source_name: Name of the source stream.
+        cursor_key: Logical cursor key within the source.
+        started_cursor: Cursor value at the start of the sync pass.
+        finished_cursor: Cursor value at the end of the sync pass.
+        discovered_records: Number of records discovered by the connector.
+        persisted_events: Number of events successfully persisted.
+        duplicate_records: Number of records that were already persisted.
+        failed_records: Number of records that failed acquisition.
+        status: Final status of the sync pass (completed, partial, or failed).
+    """
 
     source_name: str
     cursor_key: str
@@ -59,7 +89,13 @@ class OfficialFilingSyncService:
         discovery: OfficialDiscoveryLike,
         acquirer: FilingAcquirerLike,
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the sync service.
+
+        Args:
+            repository: Repository used to read and update cursors and persist events.
+            discovery: Discovery connector that lists official documents incrementally.
+            acquirer: Filing acquirer that downloads and normalizes individual filings.
+        """
         self._repository = repository
         self._discovery = discovery
         self._acquirer = acquirer
@@ -71,7 +107,16 @@ class OfficialFilingSyncService:
         cursor_key: str,
         limit: int = 100,
     ) -> FilingSyncRun:
-        """Run one incremental sync batch for an official source."""
+        """Run one incremental sync batch for an official source.
+
+        Args:
+            source_name: Name of the source stream.
+            cursor_key: Logical cursor key within the source.
+            limit: Maximum number of records to discover and acquire.
+
+        Returns:
+            A ``FilingSyncRun`` summarizing the sync pass.
+        """
         started_cursor = self._repository.get_cursor(source_name, cursor_key)
         records = self._discovery.discover(cursor=started_cursor, limit=limit)
         persisted_events = 0

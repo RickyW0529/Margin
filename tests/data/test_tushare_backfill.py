@@ -13,10 +13,14 @@ from margin.data.tushare_backfill import (
 
 
 class _Client:
+    """In-memory Tushare client double returning canned DataFrames per endpoint."""
+
     def __init__(self) -> None:
+        """Initialize the call log."""
         self.calls: list[tuple[str, dict[str, object]]] = []
 
     def query(self, api_name: str, **params: object) -> pd.DataFrame:
+        """Return a canned DataFrame for the requested endpoint and log the call."""
         self.calls.append((api_name, params))
         if params.get("offset", 0) not in (0, None):
             return pd.DataFrame()
@@ -64,14 +68,20 @@ class _Client:
 
 
 class _FlakyDailyClient(_Client):
+    """Client double that raises a timeout for one specific daily date slice."""
+
     def query(self, api_name: str, **params: object) -> pd.DataFrame:
+        """Raise a timeout for the 20260621 daily slice, otherwise delegate."""
         if api_name == "daily" and params.get("trade_date") == "20260621":
             raise TimeoutError("slice timeout")
         return super().query(api_name, **params)
 
 
 class _FlakyIndexWeightClient(_Client):
+    """Client double that raises a timeout for one index-weight month slice."""
+
     def query(self, api_name: str, **params: object) -> pd.DataFrame:
+        """Raise a timeout for the 20260201 index-weight slice, otherwise delegate."""
         self.calls.append((api_name, params))
         if params.get("offset", 0) not in (0, None):
             return pd.DataFrame()
@@ -92,25 +102,32 @@ class _FlakyIndexWeightClient(_Client):
 
 
 class _Repository:
+    """In-memory repository double tracking inserted records and run lifecycle."""
+
     def __init__(self, *, expected_endpoint_count: int = 3) -> None:
+        """Initialize record/decision stores and expected endpoint count."""
         self.records: list[object] = []
         self.decisions: list[object] = []
         self.finished: tuple[int, dict[str, str]] | None = None
         self.expected_endpoint_count = expected_endpoint_count
 
     def seed_catalog(self) -> None:
+        """No-op catalog seeding for the in-memory double."""
         pass
 
     def start_run(self, request: object, *, endpoint_count: int) -> str:
+        """Assert the endpoint count and return a fixed run id."""
         assert endpoint_count == self.expected_endpoint_count
         return "run-1"
 
     def insert_records(self, records: object) -> int:
+        """Collect landing records and return the count inserted."""
         rows = list(records)
         self.records.extend(rows)
         return len(rows)
 
     def record_quality_decisions(self, decisions: object) -> int:
+        """Collect quality decisions and return the count recorded."""
         rows = list(decisions)
         self.decisions.extend(rows)
         return len(rows)
@@ -122,12 +139,16 @@ class _Repository:
         completed_count: int,
         failed_endpoints: dict[str, str],
     ) -> None:
+        """Assert the run id and store the completion summary."""
         assert run_id == "run-1"
         self.finished = (completed_count, failed_endpoints)
 
 
 class _Publisher:
+    """In-memory warehouse publisher double tracking published records per endpoint."""
+
     def __init__(self) -> None:
+        """Initialize the published-records store."""
         self.records: dict[str, list[dict[str, object]]] = {}
 
     def publish(
@@ -138,12 +159,15 @@ class _Publisher:
         run_id: str,
         decision_at: datetime,
     ) -> int:
+        """Assert the run id, store records by endpoint, and return the count."""
         assert run_id == "run-1"
         self.records[api_name] = records
         return len(records)
 
 
 class _Pool:
+    """In-memory company-pool repository double returning a fixed snapshot."""
+
     def materialize(
         self,
         *,
@@ -151,6 +175,7 @@ class _Pool:
         business_at: datetime,
         known_at: datetime,
     ) -> object:
+        """Assert the run id and return a stub pool snapshot."""
         assert source_run_id == "run-1"
         return type(
             "PoolSnapshot",

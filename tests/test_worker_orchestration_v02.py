@@ -1,4 +1,10 @@
-"""DB-backed worker claim, lease recovery, and scheduler-boundary tests."""
+"""DB-backed worker claim, lease recovery, and scheduler-boundary tests.
+
+Verifies that :class:`DBStepWorker` claims pending steps with a lease, retries
+expired leases as new attempts, does not steal live leases, prevents concurrent
+claims in PostgreSQL, and that the scheduler registers orchestration wakeup
+separately from other jobs.
+"""
 
 from __future__ import annotations
 
@@ -26,12 +32,12 @@ from margin.worker import build_scheduler
 
 
 def _now() -> datetime:
-    """now."""
+    """Return a deterministic UTC timestamp for test fixtures."""
     return datetime(2026, 6, 22, 12, 0, tzinfo=UTC)
 
 
 def _repository_with_run() -> MemoryOrchestrationRepository:
-    """repository with run."""
+    """Build an in-memory orchestration repository pre-seeded with a running run."""
     repository = MemoryOrchestrationRepository()
     repository.create_run(
         OrchestrationRun(
@@ -49,7 +55,7 @@ def _repository_with_run() -> MemoryOrchestrationRepository:
 
 
 def test_worker_claims_pending_step_with_lease() -> None:
-    """worker claims pending step with lease."""
+    """Test that a worker claims a pending step and acquires a lease."""
     repository = _repository_with_run()
     pending = StepAttempt(
         event_id="step-pending-1",
@@ -84,7 +90,7 @@ def test_worker_claims_pending_step_with_lease() -> None:
 
 
 def test_worker_retries_expired_running_lease_as_new_attempt() -> None:
-    """worker retries expired running lease as new attempt."""
+    """Test that a worker retries an expired running lease as a new attempt."""
     repository = _repository_with_run()
     expired = StepAttempt(
         event_id="step-expired-1",
@@ -118,7 +124,7 @@ def test_worker_retries_expired_running_lease_as_new_attempt() -> None:
 
 
 def test_worker_does_not_steal_live_lease() -> None:
-    """worker does not steal live lease."""
+    """Test that a worker does not steal a step whose lease is still live."""
     repository = _repository_with_run()
     live = StepAttempt(
         event_id="step-live-1",
@@ -147,7 +153,11 @@ def test_worker_does_not_steal_live_lease() -> None:
 
 
 def test_postgres_workers_do_not_claim_same_live_step(database_url: str) -> None:
-    """postgres workers do not claim same live step."""
+    """Test that two PostgreSQL workers do not claim the same live step.
+
+    Args:
+        database_url: Connection string for the PostgreSQL test server.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -221,7 +231,7 @@ def test_postgres_workers_do_not_claim_same_live_step(database_url: str) -> None
 
 
 def test_scheduler_registers_orchestration_wakeup_separately() -> None:
-    """scheduler registers orchestration wakeup separately."""
+    """Test that the scheduler registers the orchestration wakeup job separately."""
     scheduler = build_scheduler(
         interval_seconds=300,
         orchestration_job=lambda: None,

@@ -10,7 +10,7 @@
 
 - 输入：已冻结的研究上下文快照 ID，不直接抓行情、搜索新闻或读取用户前端临时状态。
 - 编排：LangGraph 图，含路由、证据计划、检索、基本面分析、估值分析、风险复核、反方论证、决策、引用校验、修复与 finalize。
-- 工具：通过 `ScopedToolFactory`、`ToolPolicyEngine`、`ToolExecutor` 按节点生成最小权限工具清单；包含 Analysis Mart 三个只读工具；默认拒绝越权、跨 scope、跨 security、PIT 违规、预算超限和 deadline 过期。
+- 工具：通过 `ScopedToolFactory`、`ToolPolicyEngine`、`ToolExecutor` 按节点生成最小权限工具清单；包含 Analysis Mart 五个只读工具和可选 RAG evidence 检索工具；默认拒绝越权、跨 scope、跨 security、PIT 违规、预算超限和 deadline 过期。
 - Prompt：通过 `PromptFactory` 生成固定 section 顺序的提示词，所有外部文本都进入 untrusted data block。
 - 反思：`NodeExecutionRunner` 对 LLM 节点执行 draft → deterministic validation → critic → 最多一次 revision；critic/revision 不能新增 evidence ID。
 - 输出：`ResearchDeltaReview`，表示本轮 current review outcome 与有效结论指针，不输出 BUY/SELL。
@@ -35,6 +35,7 @@
 | `src/margin/research/tools/executor.py` | 统一工具执行器，执行前校验策略并写审计。 |
 | `src/margin/research/tools/manifests.py` | 面向 LLM 的工具 manifest 结构。 |
 | `src/margin/research/analysis_tools.py` | 注册 `analysis_snapshot_get`、`analysis_metrics_list`、`analysis_findings_list`、`quant_feature_snapshot_get`、`quant_feature_rows_list` 五个第四层 Mart 只读工具。 |
+| `src/margin/research/evidence_tools.py` | 注册 `rag_evidence_retrieve`；把向量检索结果转换为 Agent-ready `evidence_blocks`，并可写入 `05-rag_evidence` EvidencePackage。 |
 | `src/margin/research/checkpoint.py` | PostgreSQL LangGraph checkpoint saver，校验 identity hash 并恢复 pending writes。 |
 | `src/margin/research/delta_repository.py` | `ResearchDeltaReview` 与 `research_delta_outbox` 的内存/PostgreSQL 持久化。 |
 | `src/margin/research/graph_audit_repository.py` | LLM/tool 调用审计 PostgreSQL repository。 |
@@ -135,6 +136,23 @@ ResearchService.run_delta_review(context_snapshot_id)
 | `quant_feature_rows_list` | `QUANT_READ` | `security_id`, `decision_at`, `feature_snapshot_id` | 当前 scoped security 在该 feature snapshot 中的特征行；跨 security 或未来时间被策略拒绝。 |
 
 默认 `ResearchService` 在传入 `session_factory` 且未显式提供 repository 时，会构造 `SQLAlchemyAnalysisMartRepository` 并把这些工具注册进默认 registry。`valuation_analysis` 节点拥有 `QUANT_READ` grant，因此可以读取第四层 Mart；其他节点仍按 node grant 限制。
+
+当前 RAG evidence 工具：
+
+| 工具 | capability | 输入 | 输出 |
+| --- | --- | --- | --- |
+| `rag_evidence_retrieve` | `EVIDENCE_RETRIEVE` | `security_id`, `decision_at`, `query`, `questions`, `evidence_gaps`, `doc_types`, `top_k`, `prefer_official`, `supplemental`, `build_package` | PIT-safe `evidence_blocks`、稳定 `evidence_ids`、检索 query 元数据，以及可选 EvidencePackage 的 `package_id/version/quality_status/coverage`。 |
+| `evidence_retrieve` | `EVIDENCE_RETRIEVE` | 同上；未接入 RAG 依赖时保留旧版 `questions/evidence_gaps/supplemental` 上下文读取输入 | 接入 RAG 依赖时是 `rag_evidence_retrieve` 的兼容别名；未接入时返回冻结 context payload 中已有的 evidence package 引用。 |
+
+`ResearchService` 支持通过 `rag_retrieval_tool`、`rag_evidence_package_builder`
+和 `rag_scope_hash_factory` 注入 RAG 检索依赖。默认图构造时，如果提供
+`rag_retrieval_tool`，`retrieve_evidence` 与 `additional_evidence_retrieval` 节点看到
+`evidence_retrieve` 兼容名和 `rag_evidence_retrieve` 显式名；如果未提供，则继续使用
+旧版冻结 context 读取工具。
+
+RAG 工具自身不直接发起 WebSearch，只读取已经索引入 `04-text_indexing` 的向量块；
+跨证券、未来 `decision_at`、越权节点和超预算调用仍由 `ToolPolicyEngine` 与底层
+`RetrievalTool`/`EvidencePackageBuilder` 共同拒绝或过滤。
 
 ## 6. Prompt 工厂
 

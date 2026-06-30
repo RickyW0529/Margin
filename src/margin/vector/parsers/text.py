@@ -12,7 +12,11 @@ class PlainTextParser:
     """Parse plain text into paragraph blocks with character spans."""
 
     def __init__(self, parser_version: str = "text-v0.2.0") -> None:
-        """Initialize the instance."""
+        """Initialize the plain text parser.
+
+        Args:
+            parser_version: Version label recorded in parsed block metadata.
+        """
         self.parser_version = parser_version
 
     def parse(
@@ -21,7 +25,15 @@ class PlainTextParser:
         *,
         source_url: str | None = None,
     ) -> list[ParsedBlock]:
-        """Parse the input and return extracted content."""
+        """Parse plain text into paragraph blocks with character spans.
+
+        Args:
+            content: Raw text bytes to parse.
+            source_url: Optional URL of the original source.
+
+        Returns:
+            A list of ``ParsedBlock`` instances with paragraph index and quote span.
+        """
         text = content.decode("utf-8", errors="replace")
         blocks: list[ParsedBlock] = []
         for index, match in enumerate(re.finditer(r"\S.*?(?=\n\s*\n|$)", text, re.S)):

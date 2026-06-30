@@ -49,5 +49,12 @@ class StandardizedIndicatorFact(BaseModel):
         return self.provider_code
 
     def is_available_at(self, decision_at: datetime) -> bool:
-        """Return whether the fact is point-in-time legal at ``decision_at``."""
+        """Return whether the fact is point-in-time legal at ``decision_at``.
+
+        Args:
+            decision_at: The point in time at which the decision is made.
+
+        Returns:
+            ``True`` if ``available_at`` is at or before ``decision_at``.
+        """
         return self.available_at <= ensure_utc(decision_at)

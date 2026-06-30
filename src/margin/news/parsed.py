@@ -215,7 +215,16 @@ class StructuredDocumentParser:
         document_id: str,
         source_url: str | None = None,
     ) -> ParsedDocument:
-        """Parse PDF pages into page blocks using pypdf."""
+        """Parse PDF pages into page blocks using pypdf.
+
+        Args:
+            content: PDF content as bytes.
+            document_id: Unique identifier for the parsed document.
+            source_url: Optional URL of the original source.
+
+        Returns:
+            Parsed document containing one block per PDF page.
+        """
         import io
 
         from pypdf import PdfReader

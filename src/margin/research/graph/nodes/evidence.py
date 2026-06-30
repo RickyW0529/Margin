@@ -24,7 +24,7 @@ class EvidencePlanNode:
     """Create deterministic questions and scope constraints."""
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Call the instance."""
+        """Create deterministic research questions and scope constraints."""
         questions = [
             "核心基本面较上一有效结论发生了什么变化？",
             "当前估值假设是否仍然成立？",
@@ -49,11 +49,15 @@ class RetrieveEvidenceNode:
     node_name = "retrieve_evidence"
 
     def __init__(self, tool_factory: ScopedToolFactory) -> None:
-        """Initialize the instance."""
+        """Initialize the node.
+
+        Args:
+            tool_factory: Scoped tool factory for evidence retrieval.
+        """
         self._tool_factory = tool_factory
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Call the instance."""
+        """Retrieve the initial evidence package for the graph."""
         return self._retrieve(state, supplemental=False, node_name=self.node_name)
 
     def _retrieve(
@@ -63,7 +67,7 @@ class RetrieveEvidenceNode:
         supplemental: bool,
         node_name: str,
     ) -> dict[str, Any]:
-        """retrieve."""
+        """Retrieve evidence via a scoped tool session with byte limits."""
         session = self._tool_factory.create_session(
             graph_run_id=state.graph_run_id,
             node_name=node_name,
@@ -117,7 +121,7 @@ class AdditionalEvidenceRetrievalNode(RetrieveEvidenceNode):
     node_name = "additional_evidence_retrieval"
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Call the instance."""
+        """Perform the only allowed targeted supplemental retrieval."""
         if state.retrieval_count != 1 or not state.evidence_gaps:
             return {
                 "errors": ("supplemental_retrieval_not_allowed",),

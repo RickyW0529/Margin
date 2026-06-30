@@ -1,4 +1,8 @@
-"""Factor normalization tests."""
+"""Factor normalization tests.
+
+This module validates that the factor normalizer applies industry percentile
+scoring correctly for both higher-is-better and lower-is-better directions.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +12,11 @@ from margin.valuation_discovery.quant.normalization import FactorNormalizer
 
 
 def test_industry_percentile_direction_higher_is_better() -> None:
-    """industry percentile direction higher is better."""
+    """Verify industry percentile scoring assigns 100 to the highest value.
+
+    Returns:
+        None.
+    """
     frame = pd.DataFrame(
         {
             "security_id": ["a", "b", "c"],
@@ -23,7 +31,11 @@ def test_industry_percentile_direction_higher_is_better() -> None:
 
 
 def test_industry_percentile_direction_lower_is_better() -> None:
-    """industry percentile direction lower is better."""
+    """Verify industry percentile scoring assigns 100 to the lowest value.
+
+    Returns:
+        None.
+    """
     frame = pd.DataFrame(
         {
             "security_id": ["a", "b", "c"],

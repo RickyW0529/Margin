@@ -11,13 +11,13 @@ from margin.core.provider import CallResult
 
 
 def test_degradation_returns_fallback_on_failure():
-    """degradation returns fallback on failure."""
+    """Test that degradation returns the fallback result on primary failure."""
     def failing(**_):
-        """failing."""
+        """Raise an error simulating a provider outage."""
         raise RuntimeError("provider down")
 
     def fallback(**_):
-        """fallback."""
+        """Return a successful fallback CallResult."""
         return CallResult(provider_name="x", provider_version="1", success=True, data="fallback")
 
     result = call_with_fallback(failing, fallback, trace_id="t1", metrics_label="x")
@@ -26,13 +26,13 @@ def test_degradation_returns_fallback_on_failure():
 
 
 def test_degradation_returns_primary_when_successful():
-    """degradation returns primary when successful."""
+    """Test that degradation returns the primary result when it succeeds."""
     def primary(**_):
-        """primary."""
+        """Return a successful primary CallResult."""
         return CallResult(provider_name="x", provider_version="1", success=True, data="primary")
 
     def fallback(**_):
-        """fallback."""
+        """Return a successful fallback CallResult."""
         return CallResult(provider_name="x", provider_version="1", success=True, data="fallback")
 
     result = call_with_fallback(primary, fallback, trace_id="t1", metrics_label="x")
@@ -41,13 +41,13 @@ def test_degradation_returns_primary_when_successful():
 
 
 def test_degradation_returns_failure_when_fallback_also_fails():
-    """degradation returns failure when fallback also fails."""
+    """Test that degradation returns a failure when both primary and fallback fail."""
     def failing(**_):
-        """failing."""
+        """Raise an error simulating a primary provider outage."""
         raise RuntimeError("provider down")
 
     def fallback(**_):
-        """fallback."""
+        """Raise an error simulating a fallback provider outage."""
         raise RuntimeError("fallback down")
 
     result = call_with_fallback(failing, fallback, trace_id="t1", metrics_label="x")

@@ -37,7 +37,12 @@ class ProviderSyncError(RuntimeError):
     """Retryable provider sync error with a stable code."""
 
     def __init__(self, error_code: str, message: str) -> None:
-        """Initialize the instance."""
+        """Initialize the error.
+
+        Args:
+            error_code: A stable machine-readable error code.
+            message: A human-readable error message.
+        """
         super().__init__(message)
         self.error_code = error_code
         self.message = message
@@ -50,7 +55,11 @@ class SQLAlchemyDataSyncRepository:
     """SQLAlchemy-backed repository for data sync runs and work items."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
-        """Initialize the instance."""
+        """Initialize the repository.
+
+        Args:
+            session_factory: Callable returning a SQLAlchemy ``Session``.
+        """
         self._session_factory = session_factory
 
     def create_run(
@@ -59,7 +68,15 @@ class SQLAlchemyDataSyncRepository:
         *,
         endpoints: tuple[ProviderEndpoint, ...],
     ) -> DataSyncRun:
-        """Create a sync run and all endpoint work items in one transaction."""
+        """Create a sync run and all endpoint work items in one transaction.
+
+        Args:
+            request: The sync request describing provider and scope.
+            endpoints: Provider endpoints to enqueue as work items.
+
+        Returns:
+            The newly created ``DataSyncRun`` in the ``pending`` state.
+        """
         run_id = f"dsr_{uuid.uuid4().hex[:12]}"
         now = utc_now()
         with self._session_factory.begin() as session:
@@ -111,7 +128,17 @@ class SQLAlchemyDataSyncRepository:
         now: datetime | None = None,
         lease_seconds: int = 300,
     ) -> EndpointWorkItem | None:
-        """Claim the next pending/retryable endpoint work item."""
+        """Claim the next pending/retryable endpoint work item.
+
+        Args:
+            run_id: The sync run to claim from.
+            worker_id: The claiming worker identifier.
+            now: Optional override for the claim timestamp.
+            lease_seconds: Lease duration before an item can be reclaimed.
+
+        Returns:
+            The claimed ``EndpointWorkItem``, or ``None`` if none is available.
+        """
         claimed_at = ensure_utc(now or utc_now())
         with self._session_factory.begin() as session:
             run_row = session.scalars(
@@ -134,7 +161,16 @@ class SQLAlchemyDataSyncRepository:
         now: datetime | None = None,
         lease_seconds: int = 300,
     ) -> EndpointWorkItem | None:
-        """Claim the next executable item across all non-terminal sync runs."""
+        """Claim the next executable item across all non-terminal sync runs.
+
+        Args:
+            worker_id: The claiming worker identifier.
+            now: Optional override for the claim timestamp.
+            lease_seconds: Lease duration before an item can be reclaimed.
+
+        Returns:
+            The claimed ``EndpointWorkItem``, or ``None`` if none is available.
+        """
         claimed_at = ensure_utc(now or utc_now())
         with self._session_factory.begin() as session:
             run_rows = session.scalars(
@@ -153,13 +189,27 @@ class SQLAlchemyDataSyncRepository:
         return None
 
     def get_run(self, run_id: str) -> DataSyncRun | None:
-        """Return a durable sync run with current counters and status."""
+        """Return a durable sync run with current counters and status.
+
+        Args:
+            run_id: The sync run ID.
+
+        Returns:
+            The matching ``DataSyncRun``, or ``None`` if not found.
+        """
         with self._session_factory() as session:
             row = session.get(DataSyncRunRow, run_id)
             return _run_from_row(row) if row is not None else None
 
     def find_latest_run(self, *, requested_by: str) -> DataSyncRun | None:
-        """Return the newest run created by a durable orchestration requester."""
+        """Return the newest run created by a durable orchestration requester.
+
+        Args:
+            requested_by: The requester identifier to filter by.
+
+        Returns:
+            The latest ``DataSyncRun``, or ``None`` if none exists.
+        """
         with self._session_factory() as session:
             row = session.scalar(
                 sync_run_latest_by_requester(requested_by=requested_by)
@@ -167,7 +217,14 @@ class SQLAlchemyDataSyncRepository:
             return _run_from_row(row) if row is not None else None
 
     def get_work_item(self, work_item_id: str) -> EndpointWorkItem | None:
-        """Fetch a work item by ID."""
+        """Fetch a work item by ID.
+
+        Args:
+            work_item_id: The work item ID.
+
+        Returns:
+            The matching ``EndpointWorkItem``, or ``None`` if not found.
+        """
         with self._session_factory() as session:
             row = session.get(DataSyncWorkItemRow, work_item_id)
             return _work_item_from_row(row) if row is not None else None
@@ -180,7 +237,17 @@ class SQLAlchemyDataSyncRepository:
         error_message: str,
         retry_after: datetime,
     ) -> None:
-        """Mark a work item as retryable without advancing its cursor."""
+        """Mark a work item as retryable without advancing its cursor.
+
+        Args:
+            work_item_id: The work item to mark.
+            error_code: A stable error code.
+            error_message: A human-readable error message.
+            retry_after: When the item becomes eligible for retry.
+
+        Raises:
+            KeyError: If the work item does not exist.
+        """
         with self._session_factory.begin() as session:
             row = session.get(DataSyncWorkItemRow, work_item_id)
             if row is None:
@@ -199,7 +266,16 @@ class SQLAlchemyDataSyncRepository:
         cursor_after: str | None,
         finished_at: datetime,
     ) -> None:
-        """Mark a work item succeeded and store the advanced cursor."""
+        """Mark a work item succeeded and store the advanced cursor.
+
+        Args:
+            work_item_id: The work item to mark.
+            cursor_after: The new cursor value after successful execution.
+            finished_at: The completion timestamp.
+
+        Raises:
+            KeyError: If the work item does not exist.
+        """
         with self._session_factory.begin() as session:
             row = session.get(DataSyncWorkItemRow, work_item_id)
             if row is None:
@@ -232,7 +308,17 @@ class SQLAlchemyDataSyncRepository:
         error_message: str,
         finished_at: datetime,
     ) -> None:
-        """Mark an endpoint permanently failed and reconcile the parent run."""
+        """Mark an endpoint permanently failed and reconcile the parent run.
+
+        Args:
+            work_item_id: The work item to mark.
+            error_code: A stable error code.
+            error_message: A human-readable error message.
+            finished_at: The completion timestamp.
+
+        Raises:
+            KeyError: If the work item does not exist.
+        """
         with self._session_factory.begin() as session:
             row = session.get(DataSyncWorkItemRow, work_item_id)
             if row is None:
@@ -332,7 +418,14 @@ class SyncService:
         handlers: dict[tuple[str, str], SyncHandler],
         retry_delay_seconds: int = 60,
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the service.
+
+        Args:
+            repository: The durable sync repository.
+            handlers: Mapping of ``(provider, endpoint_code)`` to handler
+                callables.
+            retry_delay_seconds: Delay before a retryable item becomes eligible.
+        """
         self._repository = repository
         self._handlers = handlers
         self._retry_delay_seconds = retry_delay_seconds
@@ -343,7 +436,15 @@ class SyncService:
         *,
         now: datetime | None = None,
     ) -> EndpointSyncResult:
-        """Execute one endpoint handler and persist success or retry state."""
+        """Execute one endpoint handler and persist success or retry state.
+
+        Args:
+            item: The work item to execute.
+            now: Optional override for the completion timestamp.
+
+        Returns:
+            The ``EndpointSyncResult`` from the handler or a retryable failure.
+        """
         finished_at = ensure_utc(now or utc_now())
         handler = self._handlers[(item.provider, item.endpoint_code)]
         try:
@@ -375,7 +476,7 @@ class SyncService:
 
 
 def _endpoint_to_row(endpoint: ProviderEndpoint, now: datetime) -> ProviderEndpointRow:
-    """endpoint to row."""
+    """Map a provider endpoint model to its ORM row."""
     return ProviderEndpointRow(
         endpoint_id=endpoint.endpoint_id,
         provider=endpoint.provider,
@@ -392,7 +493,7 @@ def _endpoint_to_row(endpoint: ProviderEndpoint, now: datetime) -> ProviderEndpo
 
 
 def _work_item_from_row(row: DataSyncWorkItemRow) -> EndpointWorkItem:
-    """work item from row."""
+    """Map a work-item ORM row to the public immutable contract."""
     provider, endpoint_code = row.endpoint_id.split(":", 1)
     return EndpointWorkItem(
         work_item_id=row.work_item_id,

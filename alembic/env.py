@@ -1,4 +1,13 @@
-"""Alembic migration environment."""
+"""Alembic migration environment.
+
+Configures the Alembic migration context for the Margin project, importing
+every SQLAlchemy model package so that ``Base.metadata`` reflects all tables
+before autogenerate or migration execution. The database URL is injected from
+application settings at runtime.
+
+Imports of model modules are intentionally side-effect only (marked with
+``noqa: F401``) so Alembic can register them on the shared ``Base.metadata``.
+"""
 
 from __future__ import annotations
 
@@ -27,7 +36,15 @@ target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
-    """Run migrations without creating an Engine."""
+    """Run migrations without creating a live Engine.
+
+    Generates SQL statements from the migration script using literal binds and
+    emits them without an active database connection. Suitable for producing
+    SQL scripts for offline review or external execution.
+
+    Returns:
+        None.
+    """
     context.configure(
         url=config.get_main_option("sqlalchemy.url"),
         target_metadata=target_metadata,
@@ -40,7 +57,15 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations with a live PostgreSQL connection."""
+    """Run migrations against a live PostgreSQL connection.
+
+    Creates a transient SQLAlchemy Engine (``NullPool``) from the Alembic
+    configuration, opens a connection, and executes the migration script
+    inside a single transaction.
+
+    Returns:
+        None.
+    """
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

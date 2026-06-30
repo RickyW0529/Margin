@@ -23,12 +23,12 @@ from margin.storage.database import (
 
 
 def _now() -> datetime:
-    """now."""
+    """Return a fixed datetime for test determinism."""
     return datetime(2026, 6, 22, 12, 0, tzinfo=UTC)
 
 
 def test_outbox_enqueue_is_idempotent() -> None:
-    """outbox enqueue is idempotent."""
+    """Test that outbox enqueue is idempotent."""
     repository = MemoryOutboxRepository()
     outbox = TransactionalOutbox(repository, clock=_now)
 
@@ -48,7 +48,7 @@ def test_outbox_enqueue_is_idempotent() -> None:
 
 
 def test_outbox_reclaims_expired_lease_and_requires_owner_to_ack() -> None:
-    """outbox reclaims expired lease and requires owner to ack."""
+    """Test that expired leases are reclaimed and only the owner can ack."""
     repository = MemoryOutboxRepository()
     outbox = TransactionalOutbox(repository, clock=_now)
     queued = outbox.enqueue_once(
@@ -89,7 +89,7 @@ def test_outbox_reclaims_expired_lease_and_requires_owner_to_ack() -> None:
 
 
 def test_postgres_outbox_is_idempotent_and_recoverable(database_url: str) -> None:
-    """postgres outbox is idempotent and recoverable."""
+    """Test that the PostgreSQL outbox is idempotent and recoverable."""
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -164,7 +164,7 @@ def test_postgres_outbox_is_idempotent_and_recoverable(database_url: str) -> Non
 def test_postgres_outbox_joins_business_transaction_and_rolls_back(
     database_url: str,
 ) -> None:
-    """postgres outbox joins business transaction and rolls back."""
+    """Test that the PostgreSQL outbox joins business transactions and rolls back."""
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)

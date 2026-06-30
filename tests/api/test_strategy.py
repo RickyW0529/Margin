@@ -9,13 +9,13 @@ from margin.strategy.service import StrategyService
 
 
 def _client() -> TestClient:
-    """client."""
+    """Build a test client wired to an in-memory strategy service."""
     app = create_app(strategy_service=StrategyService())
     return TestClient(app)
 
 
 def test_create_strategy_endpoint():
-    """create strategy endpoint."""
+    """Test that the create strategy endpoint returns the expected strategy."""
     client = _client()
     response = client.post(
         "/strategies",
@@ -28,7 +28,7 @@ def test_create_strategy_endpoint():
 
 
 def test_list_templates_endpoint():
-    """list templates endpoint."""
+    """Test that the list templates endpoint returns all available templates."""
     client = _client()
     response = client.get("/strategies/templates")
     assert response.status_code == 200
@@ -36,7 +36,7 @@ def test_list_templates_endpoint():
 
 
 def test_get_strategy_endpoint():
-    """get strategy endpoint."""
+    """Test that the get strategy endpoint returns the requested strategy."""
     client = _client()
     create_resp = client.post(
         "/strategies",
@@ -49,7 +49,7 @@ def test_get_strategy_endpoint():
 
 
 def test_update_strategy_endpoint():
-    """update strategy endpoint."""
+    """Test that the update strategy endpoint creates a new version."""
     client = _client()
     create_resp = client.post(
         "/strategies",
@@ -65,7 +65,7 @@ def test_update_strategy_endpoint():
 
 
 def test_activate_version_endpoint():
-    """activate version endpoint."""
+    """Test that the activate version endpoint sets the active version."""
     client = _client()
     create_resp = client.post(
         "/strategies",
@@ -84,7 +84,7 @@ def test_activate_version_endpoint():
 
 
 def test_get_prompt_endpoint():
-    """get prompt endpoint."""
+    """Test that the get prompt endpoint returns the version prompt."""
     client = _client()
     create_resp = client.post(
         "/strategies",

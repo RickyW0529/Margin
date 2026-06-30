@@ -79,7 +79,15 @@ class DataAcquisitionPolicyVersion(BaseModel):
         return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
     def window_for(self, decision_at: datetime) -> DataWindow:
-        """Compute a calendar-month rolling window ending at ``decision_at``."""
+        """Compute a calendar-month rolling window ending at ``decision_at``.
+
+        Args:
+            decision_at: The point in time at which the window is evaluated.
+
+        Returns:
+            A ``DataWindow`` spanning ``rolling_window_months`` calendar months
+            ending at ``decision_at``.
+        """
         end = ensure_utc(decision_at)
         start = _subtract_calendar_months(end, self.rolling_window_months)
         return DataWindow(
@@ -123,17 +131,38 @@ class MemoryDataAcquisitionPolicyRepository:
         self._versions: dict[str, DataAcquisitionPolicyVersion] = {}
 
     def save(self, version: DataAcquisitionPolicyVersion) -> None:
-        """Append a policy version."""
+        """Append a policy version.
+
+        Args:
+            version: The policy version to persist.
+
+        Raises:
+            ValueError: If the version ID already exists.
+        """
         if version.version_id in self._versions:
             raise ValueError(f"data policy '{version.version_id}' already exists")
         self._versions[version.version_id] = version
 
     def get(self, version_id: str) -> DataAcquisitionPolicyVersion | None:
-        """Return a policy version."""
+        """Return a policy version.
+
+        Args:
+            version_id: The version ID to look up.
+
+        Returns:
+            The matching policy version, or ``None`` if not found.
+        """
         return self._versions.get(version_id)
 
     def list_versions(self, owner_id: str) -> list[DataAcquisitionPolicyVersion]:
-        """List newest policy versions first."""
+        """List newest policy versions first.
+
+        Args:
+            owner_id: The owner whose versions to list.
+
+        Returns:
+            Policy versions sorted by creation time descending.
+        """
         return sorted(
             (
                 version
@@ -145,7 +174,14 @@ class MemoryDataAcquisitionPolicyRepository:
         )
 
     def get_active(self, owner_id: str) -> DataAcquisitionPolicyVersion | None:
-        """Return the single active policy."""
+        """Return the single active policy.
+
+        Args:
+            owner_id: The owner whose active policy to return.
+
+        Returns:
+            The active policy version, or ``None`` if none is active.
+        """
         return next(
             (
                 version
@@ -161,7 +197,15 @@ class MemoryDataAcquisitionPolicyRepository:
         actor_id: str,
         idempotency_key: str,
     ) -> DataAcquisitionPolicyVersion | None:
-        """Return a prior create result for the same actor/key."""
+        """Return a prior create result for the same actor/key.
+
+        Args:
+            actor_id: The actor that created the version.
+            idempotency_key: The idempotency key of the original create.
+
+        Returns:
+            The previously created version, or ``None`` if no replay exists.
+        """
         return next(
             (
                 version
@@ -179,7 +223,19 @@ class MemoryDataAcquisitionPolicyRepository:
         actor_id: str,
         idempotency_key: str,
     ) -> DataAcquisitionPolicyVersion:
-        """Activate one version and deprecate the previous active sibling."""
+        """Activate one version and deprecate the previous active sibling.
+
+        Args:
+            version_id: The version to activate.
+            actor_id: The actor performing the activation.
+            idempotency_key: Idempotency key for replay-safe activation.
+
+        Returns:
+            The activated policy version.
+
+        Raises:
+            KeyError: If ``version_id`` does not exist.
+        """
         replay = next(
             (
                 version
@@ -222,22 +278,44 @@ class SQLAlchemyDataAcquisitionPolicyRepository:
     """PostgreSQL-backed policy repository."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
-        """Initialize the repository."""
+        """Initialize the repository.
+
+        Args:
+            session_factory: Callable returning a SQLAlchemy ``Session``.
+        """
         self._session_factory = session_factory
 
     def save(self, version: DataAcquisitionPolicyVersion) -> None:
-        """Append a policy version."""
+        """Append a policy version.
+
+        Args:
+            version: The policy version to persist.
+        """
         with self._session_factory.begin() as session:
             session.add(_policy_to_row(version))
 
     def get(self, version_id: str) -> DataAcquisitionPolicyVersion | None:
-        """Return a policy version."""
+        """Return a policy version.
+
+        Args:
+            version_id: The version ID to look up.
+
+        Returns:
+            The matching policy version, or ``None`` if not found.
+        """
         with self._session_factory() as session:
             row = session.get(DataAcquisitionPolicyVersionRow, version_id)
         return _policy_from_row(row) if row is not None else None
 
     def list_versions(self, owner_id: str) -> list[DataAcquisitionPolicyVersion]:
-        """List newest policy versions first."""
+        """List newest policy versions first.
+
+        Args:
+            owner_id: The owner whose versions to list.
+
+        Returns:
+            Policy versions sorted by creation time descending.
+        """
         with self._session_factory() as session:
             rows = session.scalars(
                 policy_versions_by_owner(owner_id)
@@ -245,7 +323,14 @@ class SQLAlchemyDataAcquisitionPolicyRepository:
         return [_policy_from_row(row) for row in rows]
 
     def get_active(self, owner_id: str) -> DataAcquisitionPolicyVersion | None:
-        """Return the active policy."""
+        """Return the active policy.
+
+        Args:
+            owner_id: The owner whose active policy to return.
+
+        Returns:
+            The active policy version, or ``None`` if none is active.
+        """
         with self._session_factory() as session:
             row = session.scalar(
                 active_policy_by_owner(
@@ -260,7 +345,15 @@ class SQLAlchemyDataAcquisitionPolicyRepository:
         actor_id: str,
         idempotency_key: str,
     ) -> DataAcquisitionPolicyVersion | None:
-        """Return a prior create result for the same actor/key."""
+        """Return a prior create result for the same actor/key.
+
+        Args:
+            actor_id: The actor that created the version.
+            idempotency_key: The idempotency key of the original create.
+
+        Returns:
+            The previously created version, or ``None`` if no replay exists.
+        """
         with self._session_factory() as session:
             row = session.scalar(
                 policy_by_create_idempotency(actor_id, idempotency_key)
@@ -274,7 +367,19 @@ class SQLAlchemyDataAcquisitionPolicyRepository:
         actor_id: str,
         idempotency_key: str,
     ) -> DataAcquisitionPolicyVersion:
-        """Activate one policy version transactionally."""
+        """Activate one policy version transactionally.
+
+        Args:
+            version_id: The version to activate.
+            actor_id: The actor performing the activation.
+            idempotency_key: Idempotency key for replay-safe activation.
+
+        Returns:
+            The activated policy version.
+
+        Raises:
+            KeyError: If ``version_id`` does not exist.
+        """
         with self._session_factory.begin() as session:
             replay = session.scalar(
                 policy_by_activation_idempotency(actor_id, idempotency_key)
@@ -310,7 +415,12 @@ class DataAcquisitionPolicyService:
         *,
         owner_id: str = "local-admin",
     ) -> None:
-        """Initialize the service."""
+        """Initialize the service.
+
+        Args:
+            repository: The policy persistence repository.
+            owner_id: The default owner for created policies.
+        """
         self._repository = repository
         self._owner_id = owner_id
 
@@ -323,7 +433,18 @@ class DataAcquisitionPolicyService:
         actor_id: str,
         idempotency_key: str,
     ) -> DataAcquisitionPolicyVersion:
-        """Create an append-only draft, replaying duplicate frontend retries."""
+        """Create an append-only draft, replaying duplicate frontend retries.
+
+        Args:
+            rolling_window_months: Rolling window size in months.
+            revision_lookback_days: Revision lookback in days.
+            financial_comparison_years: Financial comparison horizon in years.
+            actor_id: The actor creating the policy.
+            idempotency_key: Idempotency key for replay-safe creation.
+
+        Returns:
+            The newly created or replayed draft policy version.
+        """
         replay = self._repository.find_create_replay(
             actor_id=actor_id,
             idempotency_key=idempotency_key,
@@ -349,7 +470,16 @@ class DataAcquisitionPolicyService:
         actor_id: str,
         idempotency_key: str,
     ) -> DataAcquisitionPolicyVersion:
-        """Activate a policy version."""
+        """Activate a policy version.
+
+        Args:
+            version_id: The version to activate.
+            actor_id: The actor performing the activation.
+            idempotency_key: Idempotency key for replay-safe activation.
+
+        Returns:
+            The activated policy version.
+        """
         return self._repository.activate(
             version_id,
             actor_id=actor_id,
@@ -357,18 +487,36 @@ class DataAcquisitionPolicyService:
         )
 
     def get(self, version_id: str) -> DataAcquisitionPolicyVersion:
-        """Return one version or raise a stable missing-resource error."""
+        """Return one version or raise a stable missing-resource error.
+
+        Args:
+            version_id: The version ID to look up.
+
+        Returns:
+            The matching policy version.
+
+        Raises:
+            KeyError: If ``version_id`` does not exist.
+        """
         version = self._repository.get(version_id)
         if version is None:
             raise KeyError(f"data policy '{version_id}' not found")
         return version
 
     def list_versions(self) -> list[DataAcquisitionPolicyVersion]:
-        """List policy versions for the configured owner."""
+        """List policy versions for the configured owner.
+
+        Returns:
+            Policy versions sorted by creation time descending.
+        """
         return self._repository.list_versions(self._owner_id)
 
     def get_active(self) -> DataAcquisitionPolicyVersion:
-        """Return the active policy or the non-persisted safe default."""
+        """Return the active policy or the non-persisted safe default.
+
+        Returns:
+            The active policy version, or a system default if none is active.
+        """
         return self._repository.get_active(self._owner_id) or DataAcquisitionPolicyVersion(
             version_id="data-policy-default-v0.3",
             owner_id=self._owner_id,
@@ -379,7 +527,15 @@ class DataAcquisitionPolicyService:
 
 
 def _subtract_calendar_months(value: datetime, months: int) -> datetime:
-    """Subtract whole calendar months while clamping end-of-month days."""
+    """Subtract whole calendar months while clamping end-of-month days.
+
+    Args:
+        value: The datetime to subtract from.
+        months: The number of calendar months to subtract.
+
+    Returns:
+        A datetime shifted back by ``months`` calendar months.
+    """
     month_index = value.year * 12 + (value.month - 1) - months
     year, zero_based_month = divmod(month_index, 12)
     month = zero_based_month + 1

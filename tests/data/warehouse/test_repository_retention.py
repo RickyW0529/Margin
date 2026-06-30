@@ -55,7 +55,7 @@ def warehouse_stack(database_url: str):
 
 
 def test_historical_query_requires_decision_at(warehouse_stack) -> None:
-    """historical query requires decision at."""
+    """Test that a canonical query without a decision_at raises a PIT error."""
     repository, _, _ = warehouse_stack
 
     with pytest.raises(PITQueryError):
@@ -149,7 +149,7 @@ def test_freshness_filters_by_endpoint_domain_and_keeps_latest(
 
 
 def test_canonical_query_does_not_return_future_decision(warehouse_stack) -> None:
-    """canonical query does not return future decision."""
+    """Test that canonical values available after the decision time are excluded."""
     repository, _, session_factory = warehouse_stack
     _insert_fact_and_canonical(session_factory, canonical_id="cv-old", value=Decimal("10.00"))
     _insert_fact_and_canonical(
@@ -175,7 +175,7 @@ def test_canonical_query_does_not_return_future_decision(warehouse_stack) -> Non
 
 
 def test_retention_never_deletes_referenced_raw_snapshot(warehouse_stack) -> None:
-    """retention never deletes referenced raw snapshot."""
+    """Test that a raw snapshot referenced by a fact is protected from retention deletion."""
     _, retention, session_factory = warehouse_stack
     _insert_fact_and_canonical(session_factory, canonical_id="cv-retained", value=Decimal("10.00"))
 
@@ -208,7 +208,7 @@ def _insert_fact_and_canonical(
     raw_snapshot_id: str = "raw-1",
     decision_at: datetime = DECISION,
 ) -> None:
-    """insert fact and canonical."""
+    """Insert a raw snapshot, fact, and canonical value row for testing."""
     with session_factory.begin() as session:
         session.add(
             RawDataSnapshotRow(

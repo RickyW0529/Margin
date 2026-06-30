@@ -1,4 +1,10 @@
-"""Industry valuation and confidence calibration tests."""
+"""Industry valuation and confidence calibration tests.
+
+This module validates that the industry valuation registry selects the correct
+model per industry family, reports unavailable reasons for missing inputs,
+and that the confidence calibrator produces deterministic, conflict-penalized
+scores without accepting LLM overrides.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +15,11 @@ from margin.valuation_discovery.valuation import IndustryValuationRegistry
 
 
 def test_registry_uses_bank_model_for_bank_industry() -> None:
-    """registry uses bank model for bank industry."""
+    """Verify the registry uses the bank PB-ROE model for the bank industry family.
+
+    Returns:
+        None.
+    """
     registry = IndustryValuationRegistry.default()
 
     result = registry.value(
@@ -31,7 +41,11 @@ def test_registry_uses_bank_model_for_bank_industry() -> None:
 
 
 def test_non_matching_model_returns_unavailable_reason() -> None:
-    """non matching model returns unavailable reason."""
+    """Verify a non-matching model returns unavailable with a descriptive reason.
+
+    Returns:
+        None.
+    """
     registry = IndustryValuationRegistry.default()
 
     result = registry.value(security_id="000001.SZ", industry_family="bank", inputs={})
@@ -41,7 +55,11 @@ def test_non_matching_model_returns_unavailable_reason() -> None:
 
 
 def test_registry_has_distinct_models_for_core_industry_families() -> None:
-    """registry has distinct models for core industry families."""
+    """Verify the registry has distinct valuation models for core industry families.
+
+    Returns:
+        None.
+    """
     registry = IndustryValuationRegistry.default()
 
     assert registry.model_for("insurance").model_name == "insurance_ev_yield"
@@ -52,7 +70,11 @@ def test_registry_has_distinct_models_for_core_industry_families() -> None:
 
 
 def test_confidence_is_deterministic_and_penalized_by_conflicts() -> None:
-    """confidence is deterministic and penalized by conflicts."""
+    """Verify confidence scoring is deterministic and penalized by evidence conflicts.
+
+    Returns:
+        None.
+    """
     calibrator = ConfidenceCalibrator(version="confidence-v0.2.0")
 
     result = calibrator.score(
@@ -80,7 +102,11 @@ def test_confidence_is_deterministic_and_penalized_by_conflicts() -> None:
 
 
 def test_confidence_does_not_accept_llm_override() -> None:
-    """confidence does not accept llm override."""
+    """Verify the confidence calibrator does not accept an LLM confidence override.
+
+    Returns:
+        None.
+    """
     calibrator = ConfidenceCalibrator(version="confidence-v0.2.0")
 
     with pytest.raises(TypeError):

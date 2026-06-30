@@ -9,7 +9,7 @@ class FactorNormalizer:
     """Winsorize and percentile-normalize factor columns by industry."""
 
     def __init__(self, lower_quantile: float = 0.01, upper_quantile: float = 0.99) -> None:
-        """init  ."""
+        """Initialize the normalizer with winsorization quantile bounds."""
         self._lower_quantile = lower_quantile
         self._upper_quantile = upper_quantile
 
@@ -22,7 +22,21 @@ class FactorNormalizer:
         industry_column: str = "industry_id",
         output_column: str | None = None,
     ) -> pd.DataFrame:
-        """Return a copy with a 0-100 industry percentile score column."""
+        """Return a copy with a 0-100 industry percentile score column.
+
+        Args:
+            frame: Source DataFrame containing the column to score.
+            column: Name of the column to normalize.
+            direction: ``"higher"`` or ``"lower"`` to control ranking order.
+            industry_column: Column used for industry-relative grouping.
+            output_column: Name for the output score column.
+
+        Returns:
+            A copy of ``frame`` with the percentile score column added.
+
+        Raises:
+            ValueError: If ``direction`` is not ``"higher"`` or ``"lower"``.
+        """
         if direction not in {"higher", "lower"}:
             raise ValueError("direction must be 'higher' or 'lower'")
         scored = frame.copy()

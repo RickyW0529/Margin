@@ -1,4 +1,8 @@
-"""Tests for document chunkers."""
+"""Tests for document chunkers.
+
+Covers document-type inference, the immutable ``Chunk`` model, and per-type
+chunking strategies (news, filing, report, IR, user note) dispatched by ``Chunker``.
+"""
 
 from __future__ import annotations
 

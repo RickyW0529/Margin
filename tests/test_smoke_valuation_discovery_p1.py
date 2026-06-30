@@ -1,3 +1,9 @@
+"""Proxy-bypass tests for the valuation-discovery P1 smoke script.
+
+Verifies that ``scripts.smoke_valuation_discovery_p1.main`` posts to the local
+API without using HTTP proxy environment variables.
+"""
+
 from __future__ import annotations
 
 import json
@@ -8,7 +14,10 @@ from scripts import smoke_valuation_discovery_p1
 
 
 class _AcceptedHandler(BaseHTTPRequestHandler):
+    """HTTP handler that accepts POST requests and returns a run-id JSON body."""
+
     def do_POST(self) -> None:  # noqa: N802 - stdlib callback name
+        """Return a 200 JSON response with a deterministic run_id."""
         body = json.dumps({"run_id": "run-local"}).encode("utf-8")
         self.send_response(200)
         self.send_header("content-type", "application/json")
@@ -17,20 +26,26 @@ class _AcceptedHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+        """Suppress default request logging."""
         return
 
 
 class _ProxyFailHandler(BaseHTTPRequestHandler):
+    """HTTP handler that returns 502 on POST to detect proxy usage."""
+
     def do_POST(self) -> None:  # noqa: N802 - stdlib callback name
+        """Return a 502 response indicating the proxy should not be used."""
         self.send_response(502)
         self.end_headers()
         self.wfile.write(b"proxy should not be used")
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+        """Suppress default request logging."""
         return
 
 
 def _serve(handler: type[BaseHTTPRequestHandler]) -> tuple[ThreadingHTTPServer, int]:
+    """Start a local threaded HTTP server with the given handler and return it with its port."""
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -41,6 +56,12 @@ def test_smoke_posts_to_local_api_without_proxy(
     monkeypatch,
     capsys,
 ) -> None:
+    """Test that the smoke script posts to the local API without using a proxy.
+
+    Args:
+        monkeypatch: Pytest fixture for modifying environment variables.
+        capsys: Pytest fixture for capturing stdout/stderr.
+    """
     api_server, api_port = _serve(_AcceptedHandler)
     proxy_server, proxy_port = _serve(_ProxyFailHandler)
     monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin")

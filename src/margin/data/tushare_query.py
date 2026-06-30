@@ -36,17 +36,35 @@ class TushareQueryCatalog:
     """Registry of Tushare calls admitted by active quant requirements."""
 
     def __init__(self, specs: tuple[TushareQuerySpec, ...]) -> None:
-        """Initialize a unique API-name registry."""
+        """Initialize a unique API-name registry.
+
+        Args:
+            specs: Query specifications keyed by unique API name.
+
+        Raises:
+            ValueError: If duplicate API names are provided.
+        """
         self._specs = {spec.api_name: spec for spec in specs}
         if len(self._specs) != len(specs):
             raise ValueError("duplicate Tushare query spec")
 
     def get(self, api_name: str) -> TushareQuerySpec:
-        """Return one query specification."""
+        """Return one query specification.
+
+        Args:
+            api_name: The Tushare API name to look up.
+
+        Returns:
+            The matching ``TushareQuerySpec``.
+        """
         return self._specs[api_name.strip().lower()]
 
     def api_names(self) -> tuple[str, ...]:
-        """Return stable API names."""
+        """Return stable API names.
+
+        Returns:
+            A tuple of API names sorted alphabetically.
+        """
         return tuple(sorted(self._specs))
 
     def probe_params(
@@ -57,7 +75,17 @@ class TushareQueryCatalog:
         sample_symbol: str,
         industry_code: str = "801010.SI",
     ) -> dict[str, Any]:
-        """Build a minimal real-seat probe request."""
+        """Build a minimal real-seat probe request.
+
+        Args:
+            api_name: The Tushare API name to probe.
+            as_of: The reference datetime for the probe request.
+            sample_symbol: A sample symbol for symbol-scoped endpoints.
+            industry_code: The industry index code for membership probes.
+
+        Returns:
+            A parameter dictionary suitable for a low-limit Tushare API call.
+        """
         spec = self.get(api_name)
         end = as_of.strftime("%Y%m%d")
         start = (as_of - timedelta(days=45)).strftime("%Y%m%d")
@@ -99,7 +127,12 @@ class TushareQueryCatalog:
 
     @classmethod
     def default(cls) -> TushareQueryCatalog:
-        """Build the v0.3 quant-only Tushare field and query catalog."""
+        """Build the v0.3 quant-only Tushare field and query catalog.
+
+        Returns:
+            A catalog with 17 query specs covering all admitted Tushare
+            endpoints.
+        """
         return cls(
             (
                 _spec(
@@ -203,6 +236,7 @@ class TushareQueryCatalog:
 
 
 def _spec(api_name: str, query_mode: QueryMode, fields: str) -> TushareQuerySpec:
+    """Build a query spec from a comma-separated field list."""
     return TushareQuerySpec(
         api_name=api_name,
         query_mode=query_mode,

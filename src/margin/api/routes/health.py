@@ -33,7 +33,11 @@ router = APIRouter(tags=["health"])
 
 @router.get("/health")
 def health() -> dict[str, str]:
-    """Simple liveness probe."""
+    """Simple liveness probe.
+
+    Returns:
+        A dictionary with ``status`` set to ``"ok"``.
+    """
     return {"status": "ok"}
 
 
@@ -160,7 +164,12 @@ def _queue_counts() -> dict[str, int]:
 
 @router.get("/health/ready")
 def ready() -> JSONResponse:
-    """Readiness probe: DB, migration head, outbox, config, and worker tables."""
+    """Readiness probe: DB, migration head, outbox, config, and worker tables.
+
+    Returns:
+        A JSONResponse with ``status`` set to ``"ready"`` (200) or
+        ``"not_ready"`` (503) together with per-check details.
+    """
     checks = _ready_checks()
     ready_status = all(check["status"] == "ok" for check in checks.values())
     if ready_status:
@@ -176,7 +185,12 @@ def ready() -> JSONResponse:
 
 @router.get("/health/degraded")
 def degraded() -> dict[str, object]:
-    """Return true if database is not ready or any provider is degraded."""
+    """Return true if database is not ready or any provider is degraded.
+
+    Returns:
+        A dictionary with ``degraded`` flag, provider details, queue counts,
+        and service metadata.
+    """
     settings = get_settings()
     degraded_providers: list[HealthCheckResult] = []
     healthy, error = _database_health()

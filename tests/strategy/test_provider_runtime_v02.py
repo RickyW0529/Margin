@@ -1,4 +1,9 @@
-"""Runtime resolution tests for active versioned Provider configuration."""
+"""Runtime resolution tests for active versioned Provider configuration.
+
+This module validates that the provider runtime resolver and factory return
+only active configurations with frozen secrets, reject draft configs, and
+support secretless providers.
+"""
 
 from __future__ import annotations
 
@@ -28,7 +33,14 @@ from margin.strategy.repository import MemoryStrategyRepository
 
 @pytest.fixture
 def secret_store(database_url: str) -> SecretStore:
-    """Return an isolated encrypted Secret Store."""
+    """Return an isolated encrypted Secret Store.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        A SecretStore backed by a fresh in-memory schema with a random master key.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     repository = SQLAlchemySecretRepository(create_session_factory(engine))
@@ -38,7 +50,14 @@ def secret_store(database_url: str) -> SecretStore:
 def test_runtime_resolves_only_active_config_and_frozen_secret(
     secret_store: SecretStore,
 ) -> None:
-    """Runtime consumers receive the active config and its exact secret version."""
+    """Verify runtime consumers receive the active config and its exact secret version.
+
+    Args:
+        secret_store: Isolated encrypted SecretStore fixture.
+
+    Returns:
+        None.
+    """
     metadata = secret_store.create_or_replace(
         WriteSecretCommand(
             provider_name="llm",
@@ -72,7 +91,14 @@ def test_runtime_resolves_only_active_config_and_frozen_secret(
 def test_runtime_rejects_missing_active_provider(
     secret_store: SecretStore,
 ) -> None:
-    """Draft configuration is not executable."""
+    """Verify a draft configuration is not executable at runtime.
+
+    Args:
+        secret_store: Isolated encrypted SecretStore fixture.
+
+    Returns:
+        None.
+    """
     repository = MemoryStrategyRepository()
     repository.save_provider_config(
         ProviderConfigVersion(
@@ -90,7 +116,14 @@ def test_runtime_rejects_missing_active_provider(
 def test_runtime_supports_explicit_secretless_provider(
     secret_store: SecretStore,
 ) -> None:
-    """Providers such as AKShare may be explicitly configured as secretless."""
+    """Verify providers such as AKShare may be explicitly configured as secretless.
+
+    Args:
+        secret_store: Isolated encrypted SecretStore fixture.
+
+    Returns:
+        None.
+    """
     repository = MemoryStrategyRepository()
     repository.save_provider_config(
         ProviderConfigVersion(
@@ -111,7 +144,14 @@ def test_runtime_supports_explicit_secretless_provider(
 def test_runtime_factory_builds_adapter_with_config_version_lineage(
     secret_store: SecretStore,
 ) -> None:
-    """Factory output preserves the exact active config version used."""
+    """Verify factory output preserves the exact active config version used.
+
+    Args:
+        secret_store: Isolated encrypted SecretStore fixture.
+
+    Returns:
+        None.
+    """
     metadata = secret_store.create_or_replace(
         WriteSecretCommand(
             provider_name="llm",

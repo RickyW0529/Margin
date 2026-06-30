@@ -44,7 +44,20 @@ class CapacityOutcome(StrEnum):
 
 
 class CapacityLimit(BaseModel):
-    """One immutable version of a count, token, or cost limit."""
+    """One immutable version of a count, token, or cost limit.
+
+    Attributes:
+        version_id: Unique identifier derived from the limit key and version.
+        limit_key: Key identifying the limit (e.g. ``tushare_rpm``).
+        window_seconds: Duration of the rolling window in seconds.
+        max_count: Optional maximum request count per window.
+        max_tokens: Optional maximum token count per window.
+        max_cost: Optional maximum cumulative cost per window.
+        version: Version label for the limit.
+        config: Optional provider-specific configuration dictionary.
+        lifecycle: Lifecycle status (``active`` or ``deprecated``).
+        created_at: UTC timestamp when the limit was created.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -61,7 +74,7 @@ class CapacityLimit(BaseModel):
 
     @model_validator(mode="after")
     def validate_limit(self) -> Self:
-        """validate limit."""
+        """Validate timezone-awareness, at-least-one-maximum, and derive version_id."""
         if self.created_at.utcoffset() is None:
             raise ValueError("created_at must be timezone-aware")
         if (
@@ -79,7 +92,7 @@ class CapacityLimit(BaseModel):
 
     @property
     def limit_type(self) -> str:
-        """limit type."""
+        """Return the limit dimension label (``rate``, ``tokens``, ``budget``, or ``composite``)."""
         dimensions = sum(
             value is not None
             for value in (self.max_count, self.max_tokens, self.max_cost)
@@ -94,7 +107,18 @@ class CapacityLimit(BaseModel):
 
 
 class CapacityDecision(BaseModel):
-    """Sanitized decision returned to orchestration workers."""
+    """Sanitized decision returned to orchestration workers.
+
+    Attributes:
+        limit_key: Key identifying the limit that was evaluated.
+        limit_version: Version label of the evaluated limit.
+        outcome: Typed outcome (``allowed``, ``waiting_rate_limit``, or
+            ``waiting_budget``).
+        retry_after_seconds: Seconds to wait before retrying when denied.
+        current_count: Current request count in the window.
+        current_tokens: Current token count in the window.
+        current_cost: Current cumulative cost in the window.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -108,12 +132,19 @@ class CapacityDecision(BaseModel):
 
     @property
     def allowed(self) -> bool:
-        """allowed."""
+        """Return True when the decision outcome is ``ALLOWED``."""
         return self.outcome == CapacityOutcome.ALLOWED
 
 
 class CapacityUsage(BaseModel):
-    """Atomic repository result after checking or recording usage."""
+    """Atomic repository result after checking or recording usage.
+
+    Attributes:
+        allowed: Whether the requested consumption was within the limit.
+        request_count: Total request count in the window after the operation.
+        token_count: Total token count in the window after the operation.
+        cost_amount: Total cumulative cost in the window after the operation.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -124,14 +155,30 @@ class CapacityUsage(BaseModel):
 
 
 class CapacityRepository(Protocol):
-    """Atomic persistence contract for active limits and window counters."""
+    """Atomic persistence contract for active limits and window counters.
+
+    Defines the atomic check-and-record contract used by the capacity
+    governor. Implementations must ensure that concurrent consume calls
+    are serialized per window to prevent over-admission.
+    """
 
     def save_limit(self, limit: CapacityLimit) -> None:
-        """Persist a capacity limit."""
+        """Persist a capacity limit.
+
+        Args:
+            limit: The capacity limit to persist.
+        """
         ...
 
     def get_active_limit(self, limit_key: str) -> CapacityLimit | None:
-        """Retrieve the active limit for a given key."""
+        """Retrieve the active limit for a given key.
+
+        Args:
+            limit_key: Key identifying the limit.
+
+        Returns:
+            The active limit, or None if no limit is configured.
+        """
         ...
 
     def consume(
@@ -145,33 +192,61 @@ class CapacityRepository(Protocol):
         cost: Decimal,
         enforce: bool,
     ) -> CapacityUsage:
-        """Check and optionally record capacity consumption."""
+        """Check and optionally record capacity consumption.
+
+        Args:
+            limit: The capacity limit to enforce against.
+            window_started_at: Start of the current window.
+            window_ends_at: End of the current window.
+            count: Additional request count to consume.
+            tokens: Additional token count to consume.
+            cost: Additional cost to consume.
+            enforce: Whether to reject the request if it exceeds the limit.
+
+        Returns:
+            The resulting CapacityUsage after checking or recording.
+        """
         ...
 
 
 class _Counter(BaseModel):
-    """Counter."""
+    """Internal counter holding request, token, and cost totals for one window."""
     request_count: int = 0
     token_count: int = 0
     cost_amount: Decimal = Decimal("0")
 
 
 class MemoryCapacityRepository:
-    """Thread-safe in-memory repository with the production atomic contract."""
+    """Thread-safe in-memory repository with the production atomic contract.
+
+    Uses an ``RLock`` to serialize concurrent consume calls per window.
+    Intended for tests and single-process deployments.
+    """
 
     def __init__(self) -> None:
-        """init  ."""
+        """Initialize an empty thread-safe in-memory repository."""
         self._lock = RLock()
         self._limits: dict[str, CapacityLimit] = {}
         self._counters: dict[tuple[str, str, datetime], _Counter] = {}
 
     def save_limit(self, limit: CapacityLimit) -> None:
-        """save limit."""
+        """Persist a capacity limit in memory.
+
+        Args:
+            limit: The capacity limit to persist.
+        """
         with self._lock:
             self._limits[limit.limit_key] = limit
 
     def get_active_limit(self, limit_key: str) -> CapacityLimit | None:
-        """get active limit."""
+        """Retrieve the active limit for a given key from memory.
+
+        Args:
+            limit_key: Key identifying the limit.
+
+        Returns:
+            The active limit, or None if no limit is configured.
+        """
         with self._lock:
             return self._limits.get(limit_key)
 
@@ -186,7 +261,20 @@ class MemoryCapacityRepository:
         cost: Decimal,
         enforce: bool,
     ) -> CapacityUsage:
-        """consume."""
+        """Check and optionally record capacity consumption in memory.
+
+        Args:
+            limit: The capacity limit to enforce against.
+            window_started_at: Start of the current window.
+            window_ends_at: End of the current window (unused in memory).
+            count: Additional request count to consume.
+            tokens: Additional token count to consume.
+            cost: Additional cost to consume.
+            enforce: Whether to reject the request if it exceeds the limit.
+
+        Returns:
+            The resulting CapacityUsage after checking or recording.
+        """
         del window_ends_at
         assert limit.version_id is not None
         key = (limit.limit_key, limit.version_id, window_started_at)
@@ -209,14 +297,27 @@ class MemoryCapacityRepository:
 
 
 class SQLAlchemyCapacityRepository:
-    """PostgreSQL capacity repository using row locks for atomic consumption."""
+    """PostgreSQL capacity repository using row locks for atomic consumption.
+
+    Uses ``SELECT ... FOR UPDATE`` on capacity counter rows to serialize
+    concurrent consume calls within a single window, ensuring atomic
+    check-and-record semantics across multiple worker processes.
+    """
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
-        """init  ."""
+        """Initialize the repository with a SQLAlchemy session factory."""
         self._session_factory = session_factory
 
     def save_limit(self, limit: CapacityLimit) -> None:
-        """save limit."""
+        """Persist a capacity limit to PostgreSQL, deprecating prior active versions.
+
+        Args:
+            limit: The capacity limit to persist.
+
+        Raises:
+            ValueError: If an existing version with the same id has conflicting
+                data, or if an activation conflict occurs.
+        """
         assert limit.version_id is not None
         try:
             with self._session_factory.begin() as session:
@@ -243,7 +344,14 @@ class SQLAlchemyCapacityRepository:
             ) from exc
 
     def get_active_limit(self, limit_key: str) -> CapacityLimit | None:
-        """get active limit."""
+        """Retrieve the active limit for a given key from PostgreSQL.
+
+        Args:
+            limit_key: Key identifying the limit.
+
+        Returns:
+            The active limit, or None if no limit is configured.
+        """
         with self._session_factory() as session:
             row = session.scalar(active_capacity_limit(limit_key))
             return _limit_from_row(row) if row is not None else None
@@ -259,7 +367,23 @@ class SQLAlchemyCapacityRepository:
         cost: Decimal,
         enforce: bool,
     ) -> CapacityUsage:
-        """consume."""
+        """Atomically check and optionally record capacity consumption using row locks.
+
+        Args:
+            limit: The capacity limit to enforce against.
+            window_started_at: Start of the current window.
+            window_ends_at: End of the current window.
+            count: Additional request count to consume.
+            tokens: Additional token count to consume.
+            cost: Additional cost to consume.
+            enforce: Whether to reject the request if it exceeds the limit.
+
+        Returns:
+            The resulting CapacityUsage after checking or recording.
+
+        Raises:
+            RuntimeError: If the capacity counter could not be created.
+        """
         assert limit.version_id is not None
         counter_id = _counter_id(limit.limit_key, limit.version_id, window_started_at)
         with self._session_factory.begin() as session:
@@ -301,7 +425,12 @@ class SQLAlchemyCapacityRepository:
 
 
 class CapacityGovernor:
-    """High-level API mapping capacity denials to orchestration wait states."""
+    """High-level API mapping capacity denials to orchestration wait states.
+
+    Wraps a CapacityRepository and translates raw usage results into typed
+    CapacityDecision objects that workers use to select between proceeding,
+    waiting for rate-limit reset, or waiting for budget replenishment.
+    """
 
     def __init__(
         self,
@@ -309,12 +438,21 @@ class CapacityGovernor:
         *,
         clock: Callable[[], datetime] = _utc_now,
     ) -> None:
-        """init  ."""
+        """Initialize the governor with a repository and optional clock.
+
+        Args:
+            repository: Atomic capacity repository used to persist and check limits.
+            clock: Callable returning the current UTC timestamp.
+        """
         self._repository = repository
         self._clock = clock
 
     def set_limits(self, limit: CapacityLimit) -> None:
-        """set limits."""
+        """Persist a capacity limit through the underlying repository.
+
+        Args:
+            limit: The capacity limit to persist.
+        """
         self._repository.save_limit(limit)
 
     def set_daily_budget(
@@ -324,7 +462,13 @@ class CapacityGovernor:
         max_cost: Decimal,
         version: str,
     ) -> None:
-        """set daily budget."""
+        """Configure a daily budget limit with a 24-hour window.
+
+        Args:
+            limit_key: Key identifying the budget limit.
+            max_cost: Maximum cumulative cost allowed per day.
+            version: Version label for the limit.
+        """
         self.set_limits(
             CapacityLimit(
                 limit_key=limit_key,
@@ -341,7 +485,17 @@ class CapacityGovernor:
         count: int = 1,
         tokens: int = 0,
     ) -> CapacityDecision:
-        """try acquire."""
+        """Attempt to acquire count and token capacity, enforcing the active limit.
+
+        Args:
+            limit_key: Key identifying the limit to acquire against.
+            count: Number of requests to consume.
+            tokens: Number of tokens to consume.
+
+        Returns:
+            A CapacityDecision indicating whether the request was allowed or
+            must wait.
+        """
         return self._decide(
             limit_key,
             count=count,
@@ -356,7 +510,16 @@ class CapacityGovernor:
         *,
         estimated_cost: Decimal,
     ) -> CapacityDecision:
-        """try acquire budget."""
+        """Attempt to acquire budget capacity, enforcing the active cost limit.
+
+        Args:
+            limit_key: Key identifying the budget limit to acquire against.
+            estimated_cost: Estimated cost to consume.
+
+        Returns:
+            A CapacityDecision indicating whether the request was allowed or
+            must wait.
+        """
         return self._decide(
             limit_key,
             count=0,
@@ -366,7 +529,15 @@ class CapacityGovernor:
         )
 
     def record_cost(self, limit_key: str, cost: Decimal) -> CapacityDecision:
-        """record cost."""
+        """Record incurred cost without enforcing the limit.
+
+        Args:
+            limit_key: Key identifying the budget limit to record against.
+            cost: Cost to record.
+
+        Returns:
+            A CapacityDecision reflecting the updated usage.
+        """
         return self._decide(
             limit_key,
             count=0,
@@ -384,7 +555,7 @@ class CapacityGovernor:
         cost: Decimal,
         enforce: bool,
     ) -> CapacityDecision:
-        """decide."""
+        """Resolve the active limit, consume capacity, and map the outcome to a decision."""
         if count < 0 or tokens < 0 or cost < 0:
             raise ValueError("capacity consumption cannot be negative")
         limit = self._repository.get_active_limit(limit_key)

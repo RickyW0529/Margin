@@ -33,7 +33,16 @@ class IndustryMembership(BaseModel):
         return ensure_utc(value) if value is not None else None
 
     def is_visible_at(self, *, business_at: date, known_at: datetime) -> bool:
-        """Return whether this membership is valid and known at the given times."""
+        """Return whether this membership is valid and known at the given times.
+
+        Args:
+            business_at: The business date for valid-time checking.
+            known_at: The system time for system-time checking.
+
+        Returns:
+            ``True`` if the membership is valid at ``business_at`` and known
+            at ``known_at``.
+        """
         normalized_known_at = ensure_utc(known_at)
         valid_time_match = self.valid_from <= business_at and (
             self.valid_to is None or business_at < self.valid_to
@@ -48,7 +57,11 @@ class BitemporalIndustryResolver:
     """Resolve industry membership by security, taxonomy, valid time, and system time."""
 
     def __init__(self, memberships: list[IndustryMembership]) -> None:
-        """Initialize the instance."""
+        """Initialize the resolver.
+
+        Args:
+            memberships: All industry membership records to search.
+        """
         self._memberships = tuple(memberships)
 
     def resolve(
@@ -58,7 +71,20 @@ class BitemporalIndustryResolver:
         business_at: date,
         known_at: datetime,
     ) -> IndustryMembership:
-        """Return the unique membership visible at the requested times."""
+        """Return the unique membership visible at the requested times.
+
+        Args:
+            security_id: The security to resolve.
+            taxonomy: The industry taxonomy name.
+            business_at: The business date for valid-time matching.
+            known_at: The system time for system-time matching.
+
+        Returns:
+            The most recent matching ``IndustryMembership``.
+
+        Raises:
+            KeyError: If no membership is visible at the requested times.
+        """
         matches = [
             membership
             for membership in self._memberships

@@ -24,7 +24,18 @@ def score_theme_components(
     breadth_20d: float,
     drawdown_60d: float,
 ) -> float:
-    """Return a 0-100 theme hotness score from PIT market components."""
+    """Return a 0-100 theme hotness score from PIT market components.
+
+    Args:
+        relative_strength_20d: 20-day relative strength signal.
+        relative_strength_60d: 60-day relative strength signal.
+        amount_ratio_20d: 20-day amount ratio signal.
+        breadth_20d: 20-day breadth signal (0-1).
+        drawdown_60d: 60-day drawdown (negative value).
+
+    Returns:
+        A clamped 0-100 theme hotness score.
+    """
     strength_20d = _linear_score(relative_strength_20d, low=-0.05, high=0.20)
     strength_60d = _linear_score(relative_strength_60d, low=-0.10, high=0.40)
     amount_score = _linear_score(amount_ratio_20d, low=0.80, high=2.00)
@@ -45,7 +56,15 @@ def confirmation_states(
     *,
     config: ThemeSignalConfig | None = None,
 ) -> dict[Hashable, bool]:
-    """Return active states after entry/exit hysteresis over ordered scores."""
+    """Return active states after entry/exit hysteresis over ordered scores.
+
+    Args:
+        scores: Ordered iterable of (key, score) pairs.
+        config: Optional hysteresis thresholds.
+
+    Returns:
+        Dict mapping each key to its active state after hysteresis.
+    """
     cfg = config or ThemeSignalConfig()
     active = False
     hot_streak = 0
@@ -73,10 +92,12 @@ def confirmation_states(
 
 
 def _linear_score(value: float, *, low: float, high: float) -> float:
+    """Return a 0-100 linear interpolation score between low and high bounds."""
     if high <= low:
         raise ValueError("high must be greater than low")
     return _clip((float(value) - low) / (high - low) * 100.0, 0.0, 100.0)
 
 
 def _clip(value: float, low: float, high: float) -> float:
+    """Clamp a value to the [low, high] range."""
     return min(high, max(low, float(value)))

@@ -36,15 +36,20 @@ from margin.data.warehouse_repository import SQLAlchemyWarehouseRepository
 from margin.evidence.package_builder import EvidencePackageBuilder
 from margin.evidence.repository import EvidenceRepository
 from margin.news.acquirer import HTTPConnector, SnapshotStore, SourceRegistry
+from margin.news.agentic_acquisition import AgenticNewsAcquisitionService
+from margin.news.article_workflow import ArticleWorkflow
 from margin.news.context_bundle import NewsContextBundleBuilder
+from margin.news.keyword_workflow import KeywordWorkflow
 from margin.news.models import SourceDescriptor, SourceLevel, utc_now
 from margin.news.providers.tavily import TavilySearchAdapter
+from margin.news.quant_targets import SQLAlchemyQuantNewsTargetRepository
 from margin.news.refresh_service import NewsRefreshService
 from margin.news.repository import NewsRepository
 from margin.news.service import NewsService
 from margin.news.target_queue import NewsTargetQueue
 from margin.news.websearch import WebSearchProvider, WebSearchService
 from margin.research.delta_repository import SQLAlchemyResearchDeltaRepository
+from margin.research.execution.llm_service import LLMService
 from margin.research.graph_audit_repository import (
     SQLAlchemyLLMCallAuditRepository,
     SQLAlchemyToolCallAuditRepository,
@@ -106,13 +111,26 @@ from margin.vector.retrieval import RetrievalTool
 
 @dataclass(frozen=True)
 class MissingConfiguredProvider:
-    """Provider-status placeholder for an external provider missing configuration."""
+    """Provider-status placeholder for an external provider missing configuration.
+
+    Represents an unconfigured external provider as a degraded placeholder so
+    the dashboard can surface explicit gaps instead of silently omitting them.
+
+    Attributes:
+        descriptor: Provider descriptor with ``unconfigured`` version.
+        message: Human-readable explanation of the missing configuration.
+    """
 
     descriptor: ProviderDescriptor
     message: str
 
     def healthcheck(self) -> HealthCheckResult:
-        """Return a degraded status without attempting a network call."""
+        """Return a degraded status without attempting a network call.
+
+        Returns:
+            A HealthCheckResult with DEGRADED status and the configured
+            message.
+        """
         return HealthCheckResult(
             provider_name=self.descriptor.name,
             status=ProviderStatus.DEGRADED,
@@ -122,7 +140,14 @@ class MissingConfiguredProvider:
 
 
 def build_database_engine(settings: MarginSettings):
-    """Build the database engine from centralized application settings."""
+    """Build the database engine from centralized application settings.
+
+    Args:
+        settings: Application settings containing the database URL and pool options.
+
+    Returns:
+        A SQLAlchemy engine configured from the provided settings.
+    """
     return create_database_engine(
         DatabaseSettings(
             url=str(settings.database_url),
@@ -133,7 +158,14 @@ def build_database_engine(settings: MarginSettings):
 
 
 def build_llm_provider(settings: MarginSettings) -> LLMProvider | None:
-    """Build the configured OpenAI-compatible LLM provider."""
+    """Build the configured OpenAI-compatible LLM provider.
+
+    Args:
+        settings: Application settings containing LLM credentials and base URL.
+
+    Returns:
+        An LLMProvider instance, or None when credentials are not configured.
+    """
     if settings.llm_api_key is None or settings.llm_base_url is None:
         return None
     api_key = settings.llm_api_key.get_secret_value().strip()
@@ -149,7 +181,15 @@ def build_llm_provider(settings: MarginSettings) -> LLMProvider | None:
 def build_embedding_provider(
     settings: MarginSettings,
 ) -> OpenAIEmbeddingProvider | None:
-    """Build the configured OpenAI-compatible embedding provider."""
+    """Build the configured OpenAI-compatible embedding provider.
+
+    Args:
+        settings: Application settings containing embedding credentials and model.
+
+    Returns:
+        An OpenAIEmbeddingProvider instance, or None when credentials are not
+        configured.
+    """
     if settings.embedding_api_key is None or settings.embedding_base_url is None:
         return None
     api_key = settings.embedding_api_key.get_secret_value().strip()
@@ -164,7 +204,15 @@ def build_embedding_provider(
 
 
 def build_websearch_provider(settings: MarginSettings) -> TavilySearchAdapter | None:
-    """Build the configured Tavily WebSearch provider."""
+    """Build the configured Tavily WebSearch provider.
+
+    Args:
+        settings: Application settings containing the WebSearch API key.
+
+    Returns:
+        A TavilySearchAdapter instance, or None when the API key is not
+        configured.
+    """
     if settings.websearch_api_key is None:
         return None
     api_key = settings.websearch_api_key.get_secret_value().strip()
@@ -174,7 +222,15 @@ def build_websearch_provider(settings: MarginSettings) -> TavilySearchAdapter | 
 
 
 def build_rerank_provider(settings: MarginSettings) -> HTTPRerankProvider | None:
-    """Build the configured HTTP rerank provider."""
+    """Build the configured HTTP rerank provider.
+
+    Args:
+        settings: Application settings containing rerank credentials and base URL.
+
+    Returns:
+        An HTTPRerankProvider instance, or None when credentials are not
+        configured.
+    """
     if settings.rerank_api_key is None or settings.rerank_base_url is None:
         return None
     api_key = settings.rerank_api_key.get_secret_value().strip()
@@ -188,7 +244,15 @@ def build_rerank_provider(settings: MarginSettings) -> HTTPRerankProvider | None
 
 
 def build_data_warehouse_stack(settings: MarginSettings) -> DataWarehouseIngestionStack:
-    """Build the data warehouse ingestion stack from centralized settings."""
+    """Build the data warehouse ingestion stack from centralized settings.
+
+    Args:
+        settings: Application settings containing database and snapshot
+            configuration.
+
+    Returns:
+        A DataWarehouseIngestionStack ready for ingestion operations.
+    """
     engine = build_database_engine(settings)
     return DataWarehouseIngestionStack(
         session_factory=create_session_factory(engine),
@@ -229,6 +293,12 @@ def build_provider_status_providers(settings: MarginSettings) -> list[Any]:
 
     Missing external integrations are represented as degraded placeholders so
     the frontend shows explicit gaps instead of silently omitting them.
+
+    Args:
+        settings: Application settings used to build each provider.
+
+    Returns:
+        A list of provider instances or degraded placeholders.
     """
     llm_provider = build_llm_provider(settings) or _missing_provider(
         name="openai_llm",
@@ -268,7 +338,11 @@ def build_provider_status_providers(settings: MarginSettings) -> list[Any]:
 
 @lru_cache
 def get_strategy_repository() -> SQLAlchemyStrategyRepository:
-    """Return the production PostgreSQL-backed strategy config repository."""
+    """Return the production PostgreSQL-backed strategy config repository.
+
+    Returns:
+        A cached SQLAlchemyStrategyRepository instance.
+    """
     engine = build_database_engine(get_settings())
     return SQLAlchemyStrategyRepository(create_session_factory(engine))
 
@@ -321,7 +395,12 @@ def get_optional_secret_store() -> SecretStore | None:
 
 @lru_cache
 def get_provider_runtime_factory() -> ProviderRuntimeFactory:
-    """Return the strict active-config Provider factory used by business runs."""
+    """Return the strict active-config Provider factory used by business runs.
+
+    Returns:
+        A cached ProviderRuntimeFactory bound to the production strategy
+        repository and secret store.
+    """
     return ProviderRuntimeFactory(
         ProviderRuntimeResolver(
             get_strategy_repository(),
@@ -337,7 +416,16 @@ def get_provider_config_health_service(
     ],
     secret_store: Annotated[SecretStore, Depends(get_secret_store)],
 ) -> ProviderConfigHealthService:
-    """Return provider health service using frozen configs and encrypted secrets."""
+    """Return provider health service using frozen configs and encrypted secrets.
+
+    Args:
+        repository: Strategy config repository for loading frozen provider configs.
+        secret_store: Encrypted secret store for resolving provider credentials.
+
+    Returns:
+        A ProviderConfigHealthService configured with real health adapters and
+        host allowlists.
+    """
     settings = get_settings()
     return ProviderConfigHealthService(
         repository,
@@ -363,25 +451,40 @@ def _build_provider_health_adapters() -> dict[str, HealthCheckCallable]:
     """Build real read-only provider health adapters keyed by config name."""
 
     def tushare_health(config, secret: str) -> None:
-        """tushare health."""
+        """Run a read-only Tushare health check and raise on degraded status.
+
+        Args:
+            config: Frozen provider config containing the base URL.
+            secret: Resolved Tushare API token.
+        """
         endpoint = config.base_url or config.non_sensitive_config.get("http_url")
         _require_healthy(
             TushareProvider(token=secret, http_url=endpoint).healthcheck()
         )
 
     def akshare_health(_config, _secret: str) -> None:
-        """akshare health."""
+        """Run a read-only AKShare health check and raise on degraded status."""
         _require_healthy(AKShareProvider().healthcheck())
 
     def tavily_health(config, secret: str) -> None:
-        """tavily health."""
+        """Run a read-only Tavily health check and raise on degraded status.
+
+        Args:
+            config: Frozen provider config containing an optional base URL.
+            secret: Resolved Tavily API key.
+        """
         kwargs: dict[str, Any] = {"api_key": secret}
         if config.base_url:
             kwargs["base_url"] = config.base_url
         _require_healthy(TavilySearchAdapter(**kwargs).healthcheck())
 
     def llm_health(config, secret: str) -> None:
-        """llm health."""
+        """Run a read-only LLM health check and raise on degraded status.
+
+        Args:
+            config: Frozen provider config containing the base URL and model.
+            secret: Resolved LLM API key.
+        """
         _require_healthy(
             LLMProvider(
                 api_key=secret,
@@ -391,7 +494,13 @@ def _build_provider_health_adapters() -> dict[str, HealthCheckCallable]:
         )
 
     def embedding_health(config, secret: str) -> None:
-        """embedding health."""
+        """Run a read-only embedding health check and raise on degraded status.
+
+        Args:
+            config: Frozen provider config containing the base URL, model,
+                and dimension.
+            secret: Resolved embedding API key.
+        """
         dimension = int(
             config.non_sensitive_config.get("dimension", 1536)
         )
@@ -405,7 +514,12 @@ def _build_provider_health_adapters() -> dict[str, HealthCheckCallable]:
         )
 
     def rerank_health(config, secret: str) -> None:
-        """rerank health."""
+        """Run a read-only rerank health check and raise on degraded status.
+
+        Args:
+            config: Frozen provider config containing the base URL and model.
+            secret: Resolved rerank API key.
+        """
         _require_healthy(
             HTTPRerankProvider(
                 api_key=secret,
@@ -440,7 +554,20 @@ def require_local_admin(
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
     csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
 ) -> str:
-    """Authenticate a local admin mutation and validate its CSRF token."""
+    """Authenticate a local admin mutation and validate its CSRF token.
+
+    Args:
+        authorization: Bearer token from the Authorization header.
+        csrf_token: CSRF token from the X-CSRF-Token header.
+
+    Returns:
+        The string ``"local-admin"`` on successful authentication.
+
+    Raises:
+        HTTPException: 503 when admin authentication is not configured.
+        HTTPException: 401 when the authorization token is missing or invalid.
+        HTTPException: 403 when the CSRF token is missing or invalid.
+    """
     settings = get_settings()
     if settings.admin_api_token is None or settings.csrf_token is None:
         raise HTTPException(
@@ -475,7 +602,17 @@ def require_idempotency_key(
         Header(alias="Idempotency-Key"),
     ] = None,
 ) -> str:
-    """Require a non-empty idempotency key for a mutating request."""
+    """Require a non-empty idempotency key for a mutating request.
+
+    Args:
+        idempotency_key: Value of the Idempotency-Key header.
+
+    Returns:
+        The stripped idempotency key string.
+
+    Raises:
+        HTTPException: 400 when the header is missing or empty.
+    """
     if idempotency_key is None or not idempotency_key.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -620,7 +757,14 @@ def get_valuation_discovery_service() -> ValuationDiscoveryService:
 
 
 def get_valuation_discovery_service_for_api() -> ValuationDiscoveryService:
-    """Return valuation discovery service or a typed API configuration error."""
+    """Return valuation discovery service or a typed API configuration error.
+
+    Returns:
+        The cached ValuationDiscoveryService instance.
+
+    Raises:
+        HTTPException: 503 when a runtime provider configuration gap is detected.
+    """
     try:
         return get_valuation_discovery_service()
     except (LookupError, RuntimeError) as exc:
@@ -651,7 +795,11 @@ def _is_runtime_configuration_error(message: str) -> bool:
 
 @lru_cache
 def get_valuation_discovery_step_worker() -> ValuationDiscoveryStepWorker:
-    """Return the background worker for durable valuation-discovery steps."""
+    """Return the background worker for durable valuation-discovery steps.
+
+    Returns:
+        A cached ValuationDiscoveryStepWorker instance.
+    """
     service = get_valuation_discovery_service()
     return service.create_step_worker(
         worker_id=f"{get_settings().service_name}-valuation-discovery",
@@ -745,6 +893,12 @@ def _build_research_service(
         A ``ResearchService`` with configured LLM and graph audit repositories.
     """
     llm_provider = runtime_factory.build_llm().adapter
+    embedding_provider = runtime_factory.build_embedding().adapter
+    vector_repository = VectorRepository(
+        session_factory,
+        dimension=embedding_provider.dim,
+    )
+    evidence_repository = EvidenceRepository(session_factory)
     return ResearchService(
         llm_provider=llm_provider,
         session_factory=session_factory,
@@ -753,6 +907,16 @@ def _build_research_service(
         ),
         v02_tool_audit_repository=SQLAlchemyToolCallAuditRepository(
             session_factory
+        ),
+        rag_retrieval_tool=RetrievalTool(
+            PersistentEmbeddingPipeline(
+                embedding_provider=embedding_provider,
+                repository=vector_repository,
+            )
+        ),
+        rag_evidence_package_builder=EvidencePackageBuilder(
+            vector_repository,
+            evidence_repository,
         ),
     )
 
@@ -804,14 +968,106 @@ def get_news_service() -> NewsService:
 
 
 @lru_cache
+def get_agentic_news_service() -> AgenticNewsAcquisitionService:
+    """Return production agentic news acquisition service.
+
+    The dependency fails closed when active LLM or WebSearch providers are not available.
+    """
+    settings = get_settings()
+    try:
+        llm_provider, tavily_adapter = _build_agentic_news_providers(settings)
+    except (LookupError, RuntimeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="active LLM or websearch provider is not available",
+        ) from exc
+    engine = build_database_engine(settings)
+    session_factory = create_session_factory(engine)
+    repository = NewsRepository(session_factory)
+    provider = WebSearchProvider(
+        name="tavily_websearch",
+        search_func=tavily_adapter.search,
+    )
+    registry = SourceRegistry()
+    registry.register(
+        SourceDescriptor(
+            name="websearch",
+            source_type="websearch",
+            default_level=SourceLevel.L4,
+            requires_auth=False,
+        ),
+        HTTPConnector("websearch"),
+    )
+    websearch_service = WebSearchService(
+        provider=provider,
+        registry=registry,
+        snapshot_store=SnapshotStore(base_dir=settings.data_snapshot_root.parent / "news"),
+        repository=repository,
+    )
+    llm_service = _build_agentic_news_llm_service(llm_provider)
+    return AgenticNewsAcquisitionService(
+        repository=repository,
+        target_repository=SQLAlchemyQuantNewsTargetRepository(session_factory),
+        keyword_workflow=KeywordWorkflow(llm_service=llm_service),
+        websearch_service=websearch_service,
+        article_workflow=ArticleWorkflow(llm_service=llm_service),
+    )
+
+
+def _build_agentic_news_providers(settings: MarginSettings) -> tuple[Any, Any]:
+    """Build LLM and WebSearch providers for agentic news.
+
+    Prefer active strategy providers so production honors encrypted provider
+    settings. Fall back to direct environment providers for local smoke runs
+    where provider keys are configured but the secret store is intentionally
+    absent.
+    """
+    runtime_error: Exception | None = None
+    try:
+        runtime_factory = get_provider_runtime_factory()
+        return (
+            runtime_factory.build_llm().adapter,
+            runtime_factory.build_websearch().adapter,
+        )
+    except (LookupError, RuntimeError, ValueError) as exc:
+        runtime_error = exc
+
+    llm_provider = build_llm_provider(settings)
+    websearch_provider = build_websearch_provider(settings)
+    if llm_provider is not None and websearch_provider is not None:
+        return llm_provider, websearch_provider
+    raise RuntimeError("active LLM or websearch provider is not available") from runtime_error
+
+
+def _build_agentic_news_llm_service(llm_provider: Any) -> LLMService:
+    """Build the LLM service for agentic news.
+
+    Agentic news uses ``NewsAgentRun`` IDs rather than ``ai_graph_runs`` IDs, so
+    the LangGraph SQL audit repository would violate its graph-run foreign key.
+    The news layer persists prompt/response hashes on its own run/plan/finding
+    tables; keep LLM call audit in memory until a news-specific LLM audit table
+    is introduced.
+    """
+    return LLMService(llm_provider)
+
+
+@lru_cache
 def get_data_warehouse_stack() -> DataWarehouseIngestionStack:
-    """Return the production data warehouse ingestion stack."""
+    """Return the production data warehouse ingestion stack.
+
+    Returns:
+        A cached DataWarehouseIngestionStack built from production settings.
+    """
     return build_data_warehouse_stack(get_settings())
 
 
 @lru_cache
 def get_data_policy_service() -> DataAcquisitionPolicyService:
-    """Return the PostgreSQL-backed rolling-window policy service."""
+    """Return the PostgreSQL-backed rolling-window policy service.
+
+    Returns:
+        A cached DataAcquisitionPolicyService instance.
+    """
     engine = build_database_engine(get_settings())
     repository = SQLAlchemyDataAcquisitionPolicyRepository(
         create_session_factory(engine)
@@ -821,7 +1077,12 @@ def get_data_policy_service() -> DataAcquisitionPolicyService:
 
 @lru_cache
 def get_dashboard_services() -> DashboardServiceBundle:
-    """Return production dashboard services backed by PostgreSQL."""
+    """Return production dashboard services backed by PostgreSQL.
+
+    Returns:
+        A cached DashboardServiceBundle wired with PostgreSQL repositories and
+        provider status probes.
+    """
     engine = build_database_engine(get_settings())
     session_factory = create_session_factory(engine)
     dashboard_repository = SQLAlchemyDashboardRepository(session_factory)

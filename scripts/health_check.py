@@ -12,7 +12,11 @@ import urllib.request
 
 
 def main() -> int:
-    """main."""
+    """Probe the API readiness endpoint and return a process exit code.
+
+    Returns:
+        int: 0 when the API reports HTTP 200, otherwise 1.
+    """
     try:
         with urllib.request.urlopen("http://localhost:8000/health/ready", timeout=5) as resp:
             return 0 if resp.status == 200 else 1

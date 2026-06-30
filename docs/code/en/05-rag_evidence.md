@@ -15,7 +15,7 @@ decision.
 | File | Implemented behavior |
 | --- | --- |
 | `models.py` | Evidence, Claim, EvidencePackage, claim/evidence roles and statuses, conflicts, and source-level restrictions. |
-| `package_builder.py` | Builds frozen packages from retrieval results with security-link and PIT checks plus stable IDs. |
+| `package_builder.py` | Builds frozen packages from retrieval results with security-link and PIT checks, public `make_stable_evidence_id`, and stable package IDs. |
 | `locator.py` | Unified PDF/HTML/table locators, PIT checks, WebSearch snapshot checks, snapshot hash and quote replay. |
 | `validator.py` | Claim evidence, source level, PIT, locator, snapshot, conflict, and minimum-evidence validation. |
 | `conflicts.py` | Deterministic SUPPORTS/REFUTES conflict classification. |
@@ -57,6 +57,31 @@ The builder rejects future evidence and chunks without a
 the same package ID, leaves the parent immutable, and records the parent and
 new evidence IDs. A root-version row lock serializes concurrent PostgreSQL
 supplementation attempts.
+
+### Agent Retrieval Output
+
+`06-multi_agent_research` exposes `src/margin/research/evidence_tools.py` to
+turn PIT-safe `04_text_indexing` retrieval results into agent-ready structures.
+When an `EvidencePackageBuilder` is configured, the tool persists valid results
+through this module before returning them upstream.
+
+Each `evidence_blocks[]` item contains:
+
+```text
+rank / evidence_id / chunk_id / document_id
+source_url / source_name / source_level / doc_type
+content / content_hash
+score / vector_score / keyword_score
+published_at / available_at
+snapshot_id / snapshot_hash
+locator
+```
+
+When package persistence is available, only Evidence that passes this module's
+PIT/security checks and is frozen into the package is returned to agents. When
+package persistence is not configured, the tool still returns deterministic IDs
+from `make_stable_evidence_id` so later evidence-package and audit flows can
+reuse the same identity.
 
 ## 4. Claims and source policy
 

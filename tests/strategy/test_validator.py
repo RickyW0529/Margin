@@ -1,4 +1,8 @@
-"""Tests for strategy configuration validation and guardrails."""
+"""Tests for strategy configuration validation and guardrails.
+
+This module validates that the strategy validator accepts valid configs,
+merges system guardrails, and rejects empty universes.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +11,11 @@ from margin.strategy.validator import StrategyValidator
 
 
 def test_validator_accepts_valid_config():
-    """validator accepts valid config."""
+    """Verify the validator accepts a valid default strategy configuration.
+
+    Returns:
+        None.
+    """
     validator = StrategyValidator()
     config = StrategyConfig()
     ok, errors = validator.validate(config)
@@ -16,7 +24,11 @@ def test_validator_accepts_valid_config():
 
 
 def test_merge_with_guardrails_adds_system_prohibited_outputs():
-    """merge with guardrails adds system prohibited outputs."""
+    """Verify merging with guardrails adds system-level prohibited outputs.
+
+    Returns:
+        None.
+    """
     validator = StrategyValidator()
     config = StrategyConfig(
         decision=DecisionConfig(
@@ -30,7 +42,11 @@ def test_merge_with_guardrails_adds_system_prohibited_outputs():
 
 
 def test_validator_rejects_missing_required_prohibited_outputs_after_merge():
-    """validator rejects missing required prohibited outputs after merge."""
+    """Verify the validator accepts a config that becomes valid after guardrail merge.
+
+    Returns:
+        None.
+    """
     validator = StrategyValidator()
     config = StrategyConfig(
         decision=DecisionConfig(
@@ -45,7 +61,11 @@ def test_validator_rejects_missing_required_prohibited_outputs_after_merge():
 
 
 def test_validator_rejects_empty_universe():
-    """validator rejects empty universe."""
+    """Verify the validator rejects a config with an empty universe.
+
+    Returns:
+        None.
+    """
     validator = StrategyValidator()
     config = StrategyConfig(universe=[])
     ok, errors = validator.validate(config)

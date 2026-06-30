@@ -28,10 +28,23 @@ class PromptRepository(Protocol):
         node_name: str,
         kind: PromptKind,
     ) -> PromptTemplateRecord | None:
-        """Return template metadata."""
+        """Return template metadata.
+
+        Args:
+            node_name: Name of the graph node.
+            kind: Prompt stage (draft, reflection, or revision).
+
+        Returns:
+            The matching ``PromptTemplateRecord`` or ``None``.
+        """
 
     def record_rendered_prompt_hash(self, call_id: str, prompt_hash: str) -> None:
-        """Associate an LLM call with a rendered prompt hash."""
+        """Associate an LLM call with a rendered prompt hash.
+
+        Args:
+            call_id: LLM call identifier.
+            prompt_hash: Deterministic hash of the rendered prompt.
+        """
 
 
 class MemoryPromptRepository:
@@ -50,7 +63,17 @@ class MemoryPromptRepository:
         version: str,
         template_hash: str,
     ) -> None:
-        """Register immutable template metadata."""
+        """Register immutable template metadata.
+
+        Args:
+            node_name: Name of the graph node.
+            kind: Prompt stage (draft, reflection, or revision).
+            version: Template version string.
+            template_hash: Hash of the template content.
+
+        Raises:
+            ValueError: If a conflicting template already exists for the node/kind.
+        """
         key = (node_name, kind)
         record = PromptTemplateRecord(
             node_name=node_name,
@@ -68,11 +91,27 @@ class MemoryPromptRepository:
         node_name: str,
         kind: PromptKind,
     ) -> PromptTemplateRecord | None:
-        """Return template metadata."""
+        """Return template metadata.
+
+        Args:
+            node_name: Name of the graph node.
+            kind: Prompt stage (draft, reflection, or revision).
+
+        Returns:
+            The matching ``PromptTemplateRecord`` or ``None``.
+        """
         return self._templates.get((node_name, kind))
 
     def record_rendered_prompt_hash(self, call_id: str, prompt_hash: str) -> None:
-        """Record only the prompt hash for an LLM call."""
+        """Record only the prompt hash for an LLM call.
+
+        Args:
+            call_id: LLM call identifier.
+            prompt_hash: Deterministic hash of the rendered prompt.
+
+        Raises:
+            ValueError: If a conflicting hash already exists for the call ID.
+        """
         record = {"prompt_hash": prompt_hash}
         current = self._render_audits.get(call_id)
         if current is not None and current != record:
@@ -80,6 +119,13 @@ class MemoryPromptRepository:
         self._render_audits[call_id] = record
 
     def get_render_audit(self, call_id: str) -> dict[str, str] | None:
-        """Return a defensive copy of prompt render metadata."""
+        """Return a defensive copy of prompt render metadata.
+
+        Args:
+            call_id: LLM call identifier.
+
+        Returns:
+            A copy of the render audit dict, or ``None`` if not found.
+        """
         record = self._render_audits.get(call_id)
         return dict(record) if record is not None else None

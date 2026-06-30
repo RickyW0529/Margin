@@ -56,7 +56,11 @@ class ToolCallAuditRepository(Protocol):
     """Persistence boundary used by the scoped executor."""
 
     def add(self, record: ToolCallAuditRecord) -> None:
-        """Persist one immutable audit record."""
+        """Persist one immutable audit record.
+
+        Args:
+            record: Secret-safe audit record to persist.
+        """
 
 
 class MemoryToolCallAuditRepository:
@@ -67,7 +71,7 @@ class MemoryToolCallAuditRepository:
         self._records: dict[str, ToolCallAuditRecord] = {}
 
     def add(self, record: ToolCallAuditRecord) -> None:
-        """add."""
+        """Persist one immutable tool call audit record idempotently."""
         current = self._records.get(record.call_id)
         if current is not None and current != record:
             raise ValueError(f"tool call audit '{record.call_id}' is immutable")
@@ -86,7 +90,11 @@ class ToolExecutor:
         self,
         audit_repository: ToolCallAuditRepository | None = None,
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the executor.
+
+        Args:
+            audit_repository: Optional audit repository for tool call records.
+        """
         self._audit = audit_repository or MemoryToolCallAuditRepository()
 
     def denied(
@@ -98,7 +106,18 @@ class ToolExecutor:
         args: dict[str, Any],
         decision: ToolPolicyDecision,
     ) -> ScopedToolResult:
-        """Audit and return a deterministic policy denial."""
+        """Audit and return a deterministic policy denial.
+
+        Args:
+            graph_run_id: Identifier of the parent graph run.
+            node_name: Name of the calling node.
+            definition: Tool definition that was requested.
+            args: Raw arguments supplied by the node.
+            decision: Policy decision that denied the call.
+
+        Returns:
+            A ``ScopedToolResult`` with the denial reason code.
+        """
         call_id = _call_id()
         self._audit.add(
             _audit_record(
@@ -128,7 +147,18 @@ class ToolExecutor:
         args: dict[str, Any],
         policy_version: str,
     ) -> ScopedToolResult:
-        """Audit and reject a call to an unregistered tool."""
+        """Audit and reject a call to an unregistered tool.
+
+        Args:
+            graph_run_id: Identifier of the parent graph run.
+            node_name: Name of the calling node.
+            tool_name: Name of the unregistered tool.
+            args: Raw arguments supplied by the node.
+            policy_version: Current tool policy version.
+
+        Returns:
+            A ``ScopedToolResult`` with ``tool_not_registered`` error code.
+        """
         call_id = _call_id()
         self._audit.add(
             ToolCallAuditRecord(
@@ -165,7 +195,19 @@ class ToolExecutor:
         decision: ToolPolicyDecision,
         max_result_bytes: int,
     ) -> ScopedToolResult:
-        """Validate args, invoke the handler, enforce bytes, and append audit."""
+        """Validate args, invoke the handler, enforce bytes, and append audit.
+
+        Args:
+            graph_run_id: Identifier of the parent graph run.
+            node_name: Name of the calling node.
+            definition: Tool definition to execute.
+            args: Raw arguments supplied by the node.
+            decision: Policy decision that allowed the call.
+            max_result_bytes: Maximum allowed serialized result size.
+
+        Returns:
+            A ``ScopedToolResult`` with the handler output or an error code.
+        """
         call_id = _call_id()
         started = perf_counter()
         try:
@@ -252,7 +294,7 @@ class ToolExecutor:
         latency_ms: float,
         result_bytes: int = 0,
     ) -> ScopedToolResult:
-        """failure."""
+        """Audit and return a deterministic failure result."""
         self._audit.add(
             _audit_record(
                 call_id=call_id,
@@ -291,7 +333,7 @@ def _audit_record(
     latency_ms: float = 0.0,
     error_code: str | None = None,
 ) -> ToolCallAuditRecord:
-    """audit record."""
+    """Build a secret-safe audit record from execution context."""
     return ToolCallAuditRecord(
         call_id=call_id,
         graph_run_id=graph_run_id,
@@ -314,7 +356,7 @@ def _audit_record(
 
 
 def _hash_payload(payload: Any) -> str:
-    """hash payload."""
+    """Return a deterministic SHA-256 hash for a JSON-serializable payload."""
     encoded = json.dumps(
         payload,
         sort_keys=True,
@@ -325,10 +367,10 @@ def _hash_payload(payload: Any) -> str:
 
 
 def _hash_bytes(payload: bytes) -> str:
-    """hash bytes."""
+    """Return a ``sha256:``-prefixed hex digest for the given bytes."""
     return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
 def _call_id() -> str:
-    """call id."""
+    """Generate a unique tool call identifier."""
     return "tc_" + uuid.uuid4().hex[:24]

@@ -16,7 +16,14 @@ from margin.settings import get_settings
 
 @pytest.fixture
 def data_policy_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    """Return an authenticated API with an isolated policy repository."""
+    """Return an authenticated API client with an isolated policy repository.
+
+    Args:
+        monkeypatch: Pytest fixture for patching environment variables.
+
+    Returns:
+        A ``TestClient`` wired to an in-memory data policy service.
+    """
     monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin-test-token")
     monkeypatch.setenv("MARGIN_CSRF_TOKEN", "valid")
     get_settings.cache_clear()
@@ -29,6 +36,7 @@ def data_policy_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 def _headers(key: str) -> dict[str, str]:
+    """Build authenticated request headers with the given idempotency key."""
     return {
         "Authorization": "Bearer admin-test-token",
         "X-CSRF-Token": "valid",
@@ -39,7 +47,7 @@ def _headers(key: str) -> dict[str, str]:
 def test_frontend_can_create_activate_and_list_rolling_policy(
     data_policy_client: TestClient,
 ) -> None:
-    """The UI contract exposes versioned policy mutations and active state."""
+    """Test that the UI contract exposes versioned policy mutations and active state."""
     created = data_policy_client.post(
         "/api/v1/data-policies",
         json={
@@ -69,7 +77,7 @@ def test_frontend_can_create_activate_and_list_rolling_policy(
 def test_frontend_policy_rejects_more_than_60_months(
     data_policy_client: TestClient,
 ) -> None:
-    """Invalid storage windows fail before persistence."""
+    """Test that invalid storage windows fail before persistence."""
     response = data_policy_client.post(
         "/api/v1/data-policies",
         json={"rolling_window_months": 61},

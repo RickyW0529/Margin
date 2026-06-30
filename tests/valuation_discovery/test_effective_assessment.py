@@ -1,4 +1,9 @@
-"""Effective assessment pointer semantics tests."""
+"""Effective assessment pointer semantics tests.
+
+This module validates that the effective assessment service correctly handles
+review-deferred, invalidate, carry-forward-verified, update, and abstain
+outcomes.
+"""
 
 from __future__ import annotations
 
@@ -10,7 +15,11 @@ from margin.valuation_discovery.assessments import EffectiveAssessmentService
 
 
 def test_review_deferred_keeps_previous_effective_assessment() -> None:
-    """review deferred keeps previous effective assessment."""
+    """Verify a deferred review keeps the previous effective assessment as stale.
+
+    Returns:
+        None.
+    """
     service = EffectiveAssessmentService()
 
     pointer = service.apply_review_result(
@@ -28,7 +37,11 @@ def test_review_deferred_keeps_previous_effective_assessment() -> None:
 
 
 def test_invalidate_creates_new_effective_assessment() -> None:
-    """invalidate creates new effective assessment."""
+    """Verify an invalidate outcome creates a new current effective assessment.
+
+    Returns:
+        None.
+    """
     service = EffectiveAssessmentService()
 
     pointer = service.apply_review_result(
@@ -46,7 +59,11 @@ def test_invalidate_creates_new_effective_assessment() -> None:
 
 
 def test_carry_forward_verified_keeps_previous_and_updates_checks_independently() -> None:
-    """carry forward verified keeps previous and updates checks independently."""
+    """Verify carry-forward-verified keeps the previous assessment and updates check timestamps.
+
+    Returns:
+        None.
+    """
     service = EffectiveAssessmentService()
     data_check_at = datetime(2026, 6, 22, 9, 30, tzinfo=UTC)
     news_check_at = datetime(2026, 6, 22, 10, 0, tzinfo=UTC)
@@ -69,7 +86,11 @@ def test_carry_forward_verified_keeps_previous_and_updates_checks_independently(
 
 
 def test_update_outcome_requires_new_assessment_id() -> None:
-    """update outcome requires new assessment id."""
+    """Verify an update outcome requires a new assessment ID.
+
+    Returns:
+        None.
+    """
     service = EffectiveAssessmentService()
 
     with pytest.raises(ValueError, match="new_assessment_id is required"):
@@ -84,7 +105,11 @@ def test_update_outcome_requires_new_assessment_id() -> None:
 
 
 def test_first_abstention_cannot_create_an_effective_pointer() -> None:
-    """Abstaining without a previous conclusion cannot invent one."""
+    """Verify abstaining without a previous conclusion cannot invent one.
+
+    Returns:
+        None.
+    """
     service = EffectiveAssessmentService()
 
     with pytest.raises(ValueError, match="without a previous assessment"):

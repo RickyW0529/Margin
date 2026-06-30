@@ -1,4 +1,9 @@
-"""v0.2 EvidencePackage model and builder tests."""
+"""v0.2 EvidencePackage model and builder tests.
+
+Verifies that :class:`EvidencePackage` is frozen and tracks
+``max_available_at``, that the builder rejects future-available evidence,
+links news context to evidence, and is idempotent for the same persisted chunk.
+"""
 
 from __future__ import annotations
 
@@ -17,7 +22,7 @@ from margin.vector.models import DocType, RetrievalResult, SourceLocator, make_c
 
 
 def test_evidence_package_is_frozen_and_tracks_max_available_at() -> None:
-    """evidence package is frozen and tracks max available at."""
+    """Test that an evidence package is frozen and tracks max available_at."""
     package = EvidencePackage(
         package_id="pkg-1",
         version=1,
@@ -42,7 +47,7 @@ def test_evidence_package_is_frozen_and_tracks_max_available_at() -> None:
 
 
 def test_builder_rejects_future_available_evidence() -> None:
-    """builder rejects future available evidence."""
+    """Test that the builder rejects evidence available after the decision time."""
     evidence_repository = FakeEvidenceRepository()
     builder = EvidencePackageBuilder(
         FakeVectorRepository({("future", "000001.SZ")}),
@@ -69,7 +74,7 @@ def test_builder_rejects_future_available_evidence() -> None:
 
 
 def test_builder_links_news_context_to_evidence() -> None:
-    """builder links news context to evidence."""
+    """Test that the builder links news context bundles to evidence items."""
     evidence_repository = FakeEvidenceRepository()
     builder = EvidencePackageBuilder(
         FakeVectorRepository({("chunk-1", "000001.SZ")}),
@@ -97,7 +102,7 @@ def test_builder_links_news_context_to_evidence() -> None:
 
 
 def test_builder_is_idempotent_for_the_same_persisted_chunk() -> None:
-    """builder is idempotent for the same persisted chunk."""
+    """Test that the builder is idempotent when building from the same persisted chunk."""
     evidence_repository = FakeEvidenceRepository()
     builder = EvidencePackageBuilder(
         FakeVectorRepository({("chunk-1", "000001.SZ")}),
@@ -125,41 +130,43 @@ def test_builder_is_idempotent_for_the_same_persisted_chunk() -> None:
 
 
 class FakeVectorRepository:
-    """FakeVectorRepository."""
+    """Fake vector repository that checks chunk-security links by membership."""
+
     def __init__(self, links: set[tuple[str, str]]) -> None:
-        """Initialize the instance."""
+        """Initialize the fake repository with a set of known chunk-security links."""
         self.links = links
 
     def chunk_has_security_link(self, chunk_id: str, security_id: str) -> bool:
-        """chunk has security link."""
+        """Return whether the given chunk is linked to the given security."""
         return (chunk_id, security_id) in self.links
 
 
 class FakeEvidenceRepository:
-    """FakeEvidenceRepository."""
+    """Fake evidence repository that stores evidences, packages, and news links in memory."""
+
     def __init__(self) -> None:
-        """Initialize the instance."""
+        """Initialize the fake repository with empty stores."""
         self.evidences = {}
         self.packages = []
         self.news_links = []
 
     def add_evidence(self, evidence) -> None:
-        """add evidence."""
+        """Store an evidence item, rejecting mutation of an existing one."""
         existing = self.evidences.get(evidence.evidence_id)
         if existing is not None and existing != evidence:
             raise ValueError("evidence is immutable")
         self.evidences[evidence.evidence_id] = evidence
 
     def add_evidence_package(self, package: EvidencePackage) -> None:
-        """add evidence package."""
+        """Append an evidence package to the in-memory store."""
         self.packages.append(package)
 
     def link_news_context_evidence(self, bundle_id: str, evidence_id: str) -> None:
-        """link news context evidence."""
+        """Record a news-context to evidence link."""
         self.news_links.append((bundle_id, evidence_id))
 
     def list_news_context_evidence(self, bundle_id: str):
-        """list news context evidence."""
+        """List evidence links for the given news-context bundle."""
         return [
             SimpleNamespace(bundle_id=stored_bundle_id, evidence_id=evidence_id)
             for stored_bundle_id, evidence_id in self.news_links
@@ -168,7 +175,7 @@ class FakeEvidenceRepository:
 
 
 def retrieval_result(chunk_id: str, *, available_at: datetime) -> RetrievalResult:
-    """retrieval result."""
+    """Build a deterministic retrieval result fixture for the given chunk ID."""
     content = f"{chunk_id} 公司公告内容"
     chunk = make_chunk(
         document_id=f"doc-{chunk_id}",

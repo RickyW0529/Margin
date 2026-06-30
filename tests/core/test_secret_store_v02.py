@@ -23,19 +23,34 @@ from margin.strategy.db_models import ProviderSecretVersionRow
 
 @pytest.fixture
 def master_key() -> bytes:
-    """master key."""
+    """Return a random 32-byte master key for encryption tests.
+
+    Returns:
+        A freshly generated 32-byte random key.
+    """
     return os.urandom(32)
 
 
 @pytest.fixture
 def other_master_key() -> bytes:
-    """other master key."""
+    """Return a second random 32-byte master key for decryption failure tests.
+
+    Returns:
+        A freshly generated 32-byte random key distinct from ``master_key``.
+    """
     return os.urandom(32)
 
 
 @pytest.fixture
 def secret_repository(database_url: str) -> SQLAlchemySecretRepository:
-    """secret repository."""
+    """Return a clean SQLAlchemy secret repository for the test database.
+
+    Args:
+        database_url: The PostgreSQL test database URL fixture.
+
+    Returns:
+        A ``SQLAlchemySecretRepository`` with a freshly initialized schema.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -48,7 +63,7 @@ def test_secret_create_returns_metadata_without_plaintext(
     secret_repository: SQLAlchemySecretRepository,
     master_key: bytes,
 ) -> None:
-    """secret create returns metadata without plaintext."""
+    """Test that creating a secret returns metadata without exposing plaintext."""
     store = SecretStore(secret_repository, master_key=master_key)
 
     metadata = store.create_or_replace(
@@ -72,7 +87,7 @@ def test_wrong_master_key_cannot_decrypt(
     master_key: bytes,
     other_master_key: bytes,
 ) -> None:
-    """wrong master key cannot decrypt."""
+    """Test that a wrong master key cannot decrypt a stored secret."""
     store = SecretStore(secret_repository, master_key=master_key)
     metadata = store.create_or_replace(
         WriteSecretCommand(
@@ -91,7 +106,7 @@ def test_wrong_master_key_cannot_decrypt(
 
 
 def test_redactor_removes_secret_from_errors() -> None:
-    """redactor removes secret from errors."""
+    """Test that the redactor removes secret values from error strings."""
     redactor = SecretRedactor(values=("abcdef1234567890",))
 
     assert redactor.redact("token=abcdef1234567890") == "token=[REDACTED]"
@@ -101,7 +116,7 @@ def test_secret_rotation_lists_safe_metadata_and_deactivates_prior_version(
     secret_repository: SQLAlchemySecretRepository,
     master_key: bytes,
 ) -> None:
-    """secret rotation lists safe metadata and deactivates prior version."""
+    """Test that secret rotation lists safe metadata and deactivates prior versions."""
     store = SecretStore(secret_repository, master_key=master_key)
     first = store.create_or_replace(
         WriteSecretCommand(
@@ -140,7 +155,7 @@ def test_secret_can_be_explicitly_deactivated(
     secret_repository: SQLAlchemySecretRepository,
     master_key: bytes,
 ) -> None:
-    """secret can be explicitly deactivated."""
+    """Test that a secret can be explicitly deactivated."""
     store = SecretStore(secret_repository, master_key=master_key)
     metadata = store.create_or_replace(
         WriteSecretCommand(

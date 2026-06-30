@@ -1,4 +1,9 @@
-"""Theme tilt scoring tests."""
+"""Theme tilt scoring tests.
+
+This module validates that theme component scoring rewards strength and
+penalizes drawdown, and that confirmation states apply entry and exit
+hysteresis correctly.
+"""
 
 from __future__ import annotations
 
@@ -10,7 +15,11 @@ from margin.valuation_discovery.quant.theme_tilt import (
 
 
 def test_score_theme_components_rewards_strength_and_penalizes_drawdown() -> None:
-    """Theme score combines relative strength, volume, breadth, and drawdown."""
+    """Verify theme score combines relative strength, volume, breadth, and drawdown.
+
+    Returns:
+        None.
+    """
     strong = score_theme_components(
         relative_strength_20d=0.16,
         relative_strength_60d=0.30,
@@ -31,7 +40,11 @@ def test_score_theme_components_rewards_strength_and_penalizes_drawdown() -> Non
 
 
 def test_confirmation_states_adds_entry_and_exit_hysteresis() -> None:
-    """Theme confirmation requires two hot periods and two weak periods to exit."""
+    """Verify theme confirmation requires two hot periods and two weak periods to exit.
+
+    Returns:
+        None.
+    """
     states = confirmation_states(
         [
             ("2026-01", 72.0),

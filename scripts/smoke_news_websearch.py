@@ -12,7 +12,12 @@ from margin.news.websearch import WebSearchProvider
 
 
 def main() -> int:
-    """main."""
+    """Run a token-safe Tavily WebSearch smoke and return an exit code.
+
+    Returns:
+        int: 0 on success, 2 when the API key is missing, 3 on provider
+            failure.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--query", default="平安银行 公告")
     parser.add_argument("--max-results", type=int, default=3)

@@ -1,4 +1,8 @@
-"""Tests for strategy lifecycle state machine."""
+"""Tests for strategy lifecycle state machine.
+
+This module validates the allowed and rejected state transitions of the
+strategy lifecycle, ensuring versions move through the correct states.
+"""
 
 from __future__ import annotations
 
@@ -9,25 +13,41 @@ from margin.strategy.models import StrategyConfig, StrategyState, StrategyVersio
 
 
 def test_draft_can_validate():
-    """draft can validate."""
+    """Verify a draft strategy version can transition to validating state.
+
+    Returns:
+        None.
+    """
     lifecycle = StrategyLifecycle()
     assert lifecycle.can_transition(StrategyState.DRAFT, StrategyState.VALIDATING)
 
 
 def test_active_can_archive():
-    """active can archive."""
+    """Verify an active strategy version can transition to archived state.
+
+    Returns:
+        None.
+    """
     lifecycle = StrategyLifecycle()
     assert lifecycle.can_transition(StrategyState.ACTIVE, StrategyState.ARCHIVED)
 
 
 def test_draft_cannot_activate():
-    """draft cannot activate."""
+    """Verify a draft strategy version cannot skip directly to active state.
+
+    Returns:
+        None.
+    """
     lifecycle = StrategyLifecycle()
     assert not lifecycle.can_transition(StrategyState.DRAFT, StrategyState.ACTIVE)
 
 
 def test_transition_returns_updated_version():
-    """transition returns updated version."""
+    """Verify transition returns a new version with the updated state.
+
+    Returns:
+        None.
+    """
     lifecycle = StrategyLifecycle()
     version = StrategyVersion(
         strategy_id="st_1",
@@ -41,7 +61,11 @@ def test_transition_returns_updated_version():
 
 
 def test_invalid_transition_raises():
-    """invalid transition raises."""
+    """Verify an invalid state transition raises a ValueError.
+
+    Returns:
+        None.
+    """
     lifecycle = StrategyLifecycle()
     version = StrategyVersion(
         strategy_id="st_1",

@@ -16,7 +16,7 @@ DECISION = datetime(2024, 6, 22, tzinfo=UTC)
 
 
 def test_industry_query_uses_business_and_system_time() -> None:
-    """industry query uses business and system time."""
+    """Test that industry resolution respects both business and system time dimensions."""
     resolver = BitemporalIndustryResolver(
         [
             IndustryMembership(
@@ -51,7 +51,7 @@ def test_industry_query_uses_business_and_system_time() -> None:
 
 
 def test_adjustment_ignores_future_announced_dividend() -> None:
-    """adjustment ignores future announced dividend."""
+    """Test that a dividend announced after the decision time does not adjust prices."""
     prices = [
         PriceBar(security_id=SECURITY, trade_date=date(2024, 6, 21), close=Decimal("10")),
         PriceBar(security_id=SECURITY, trade_date=date(2024, 6, 22), close=Decimal("11")),

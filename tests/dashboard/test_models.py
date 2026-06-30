@@ -1,4 +1,8 @@
-"""Tests for module 08 dashboard domain models."""
+"""Tests for module 08 dashboard domain models.
+
+Verifies default field generation, UTC normalization, and confidence range
+validation for research runs and items.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +18,7 @@ from margin.dashboard.models import (
 
 
 def test_research_run_defaults_and_utc_normalization():
-    """research run defaults and utc normalization."""
+    """Test that a research run gets default ID, status, and UTC-normalized decision_at."""
     run = ResearchRun(
         decision_at=datetime(2026, 6, 19, 9, 30, tzinfo=UTC),
         strategy_id="st_demo",
@@ -29,7 +33,7 @@ def test_research_run_defaults_and_utc_normalization():
 
 
 def test_research_item_validates_confidence_range():
-    """research item validates confidence range."""
+    """Test that a research item rejects confidence values outside [0, 1]."""
     with pytest.raises(ValueError, match="confidence"):
         ResearchItem(
             run_id="dr_1",

@@ -38,7 +38,11 @@ class ToolPolicyEngine:
     """Authorize scoped calls without relying on LLM judgment."""
 
     def __init__(self, policy_version: str = "tool-policy-v0.2.0") -> None:
-        """Initialize the instance."""
+        """Initialize the policy engine.
+
+        Args:
+            policy_version: Version string included in every policy decision.
+        """
         self.policy_version = policy_version
 
     def authorize(
@@ -57,7 +61,25 @@ class ToolPolicyEngine:
         max_result_bytes: int = 65_536,
         deadline: datetime | None = None,
     ) -> ToolPolicyDecision:
-        """Return a fail-closed decision for one requested tool capability."""
+        """Return a fail-closed decision for one requested tool capability.
+
+        Args:
+            node_name: Name of the calling node (unused).
+            capability: Capability requested by the tool call.
+            security_id: Security scoped to this session.
+            decision_at: Point-in-time decision timestamp.
+            node_grants: Capabilities granted to the calling node.
+            requested_security_id: Security ID in the tool arguments, if any.
+            requested_decision_at: Decision time in the tool arguments, if any.
+            call_count: Current number of calls made by this session.
+            max_calls: Maximum allowed calls for this session.
+            estimated_result_bytes: Estimated result size for the tool.
+            max_result_bytes: Maximum allowed result size for this session.
+            deadline: Optional deadline for tool calls.
+
+        Returns:
+            A ``ToolPolicyDecision`` that is allowed only if all checks pass.
+        """
         del node_name
         if capability not in node_grants:
             return self._deny("capability_not_granted")
@@ -89,11 +111,19 @@ class ToolPolicyEngine:
         capability: ToolCapability,
         grants: set[ToolCapability] | frozenset[ToolCapability],
     ) -> bool:
-        """Return whether a capability may appear in a node manifest."""
+        """Return whether a capability may appear in a node manifest.
+
+        Args:
+            capability: Capability to check.
+            grants: Capabilities granted to the node.
+
+        Returns:
+            True if the capability is both granted and allowed by the graph policy.
+        """
         return capability in grants and capability in GRAPH_ALLOWED_CAPABILITIES
 
     def _deny(self, reason_code: str) -> ToolPolicyDecision:
-        """deny."""
+        """Return a denied policy decision with the given reason code."""
         return ToolPolicyDecision(
             allowed=False,
             reason_code=reason_code,
@@ -102,7 +132,7 @@ class ToolPolicyEngine:
 
 
 def _parse_datetime(value: datetime | str) -> datetime:
-    """parse datetime."""
+    """Parse a datetime or ISO string into a UTC-aware datetime."""
     if isinstance(value, datetime):
         return ensure_utc(value)
     return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)

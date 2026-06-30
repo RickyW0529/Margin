@@ -12,7 +12,10 @@ from margin.news.db_models import (
     DocumentMaterialityScoreRow,
     DocumentOutboxRow,
     DocumentSecurityLinkRow,
+    NewsArticleFindingRow,
     NewsRefreshTargetRow,
+    NewsSearchPlanRow,
+    NewsSecurityBriefRow,
     RepostEdgeRow,
     SearchResultRow,
 )
@@ -199,4 +202,48 @@ def news_target_statuses_by_run_security(
             NewsRefreshTargetRow.security_id == security_id,
         )
         .order_by(NewsRefreshTargetRow.priority.desc())
+    )
+
+
+def news_search_plans_by_run(run_id: str) -> Select:
+    """Return reviewed agentic search plans for one run."""
+    return (
+        select(NewsSearchPlanRow)
+        .where(NewsSearchPlanRow.run_id == run_id)
+        .order_by(NewsSearchPlanRow.security_id, NewsSearchPlanRow.plan_id)
+    )
+
+
+def news_article_findings_by_run(
+    run_id: str,
+    security_id: str | None = None,
+) -> Select:
+    """Return article findings for one agentic run."""
+    statement = select(NewsArticleFindingRow).where(
+        NewsArticleFindingRow.run_id == run_id
+    )
+    if security_id is not None:
+        statement = statement.where(NewsArticleFindingRow.security_id == security_id)
+    return statement.order_by(
+        NewsArticleFindingRow.security_id,
+        NewsArticleFindingRow.created_at,
+        NewsArticleFindingRow.finding_id,
+    )
+
+
+def news_security_briefs_by_run(run_id: str) -> Select:
+    """Return security briefs for one agentic run."""
+    return (
+        select(NewsSecurityBriefRow)
+        .where(NewsSecurityBriefRow.run_id == run_id)
+        .order_by(NewsSecurityBriefRow.security_id, NewsSecurityBriefRow.brief_id)
+    )
+
+
+def document_events_by_ids(event_ids: list[str]) -> Select:
+    """Return document events by event ids."""
+    return (
+        select(DocumentEventRow)
+        .where(DocumentEventRow.event_id.in_(event_ids))
+        .order_by(DocumentEventRow.published_at, DocumentEventRow.event_id)
     )

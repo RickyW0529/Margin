@@ -35,13 +35,25 @@ def news_repository(database_url):
 
 
 class FakeConnector:
-    """FakeConnector."""
+    """Fake discovery connector that returns one document on the first call.
+
+    Attributes:
+        cursors: List of cursor values passed to each ``discover`` call.
+    """
     def __init__(self):
-        """Initialize the instance."""
+        """Initialize the fake connector with an empty cursor list."""
         self.cursors: list[str | None] = []
 
     def discover(self, cursor: str | None, limit: int):
-        """discover."""
+        """Return one discovered document or an empty list when cursor matches.
+
+        Args:
+            cursor: The cursor to resume discovery from.
+            limit: Maximum number of documents to return.
+
+        Returns:
+            A list of ``DiscoveredDocument`` instances (zero or one).
+        """
         self.cursors.append(cursor)
         if cursor == "cursor-1":
             return []
@@ -57,9 +69,19 @@ class FakeConnector:
 
 
 class FakeAcquirer:
-    """FakeAcquirer."""
+    """Fake acquirer that returns a durable L1 document event."""
     def acquire(self, source_name: str, url: str, title_override=None, published_at=None):
-        """acquire."""
+        """Return a document event with L1 source level for the given URL.
+
+        Args:
+            source_name: The source name to assign to the event.
+            url: The source URL for the document.
+            title_override: Optional title override; defaults to ``"公告"``.
+            published_at: Optional publication timestamp.
+
+        Returns:
+            A ``DocumentEvent`` with seeded content and symbols.
+        """
         return make_document_event(
             source_url=url,
             source_name=source_name,

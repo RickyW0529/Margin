@@ -67,7 +67,21 @@ class FreshnessCalculator:
         natural_day_available_time: time = time(23, 59),
         financial_disclosure_lag_days: int = 1,
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the calculator.
+
+        Args:
+            trading_days: Set of trading calendar dates. Must be non-empty.
+            timezone: IANA timezone name for local market time.
+            market_available_time: Local time at which market data is
+                considered available.
+            natural_day_available_time: Local time at which natural-day
+                data is considered available.
+            financial_disclosure_lag_days: Number of days to subtract from
+                the current date for financial freshness expectations.
+
+        Raises:
+            ValueError: If ``trading_days`` is empty.
+        """
         if not trading_days:
             raise ValueError("trading_days must not be empty")
         self._trading_days = frozenset(trading_days)
@@ -77,7 +91,15 @@ class FreshnessCalculator:
         self._financial_disclosure_lag_days = financial_disclosure_lag_days
 
     def expected_as_of(self, domain: DataDomain | str, *, now: datetime) -> FreshnessExpectation:
-        """Return the expected data cut-off for a domain at ``now``."""
+        """Return the expected data cut-off for a domain at ``now``.
+
+        Args:
+            domain: The data domain or its string value.
+            now: The reference datetime for the expectation.
+
+        Returns:
+            A ``FreshnessExpectation`` with the expected as-of date and time.
+        """
         normalized_domain = DataDomain(domain)
         local_now = _as_timezone(now, self._timezone)
         if normalized_domain in {DataDomain.MARKET, DataDomain.VALUATION}:
@@ -125,7 +147,19 @@ class FreshnessCalculator:
         syncing: bool = False,
         failed: bool = False,
     ) -> FreshnessState:
-        """Evaluate freshness from an expected cut-off and latest observation."""
+        """Evaluate freshness from an expected cut-off and latest observation.
+
+        Args:
+            domain: The data domain or its string value.
+            now: The reference datetime for the evaluation.
+            latest_observed_at: The most recent observed data timestamp, or
+                ``None`` if no data has been synced.
+            syncing: Whether a sync is currently in progress.
+            failed: Whether the latest sync attempt failed.
+
+        Returns:
+            A ``FreshnessState`` with the computed status and lag.
+        """
         expectation = self.expected_as_of(domain, now=now)
         if failed:
             return _state(expectation, latest_observed_at, FreshnessStatus.FAILED)
@@ -145,7 +179,7 @@ class FreshnessCalculator:
         )
 
     def _expected_market_date(self, local_now: datetime) -> date:
-        """expected market date."""
+        """Return the expected market as-of date for a local datetime."""
         candidate = local_now.date()
         if (
             candidate in self._trading_days
@@ -155,7 +189,7 @@ class FreshnessCalculator:
         return self._previous_trading_day(candidate)
 
     def _previous_trading_day(self, before_or_on: date) -> date:
-        """previous trading day."""
+        """Return the most recent trading day strictly before a date."""
         previous = [trading_day for trading_day in self._trading_days if trading_day < before_or_on]
         if previous:
             return max(previous)
@@ -169,7 +203,7 @@ def _state(
     *,
     lag_seconds: int | None = None,
 ) -> FreshnessState:
-    """state."""
+    """Build a ``FreshnessState`` from an expectation and observed data."""
     return FreshnessState(
         domain=expectation.domain,
         as_of_date=expectation.as_of_date,
@@ -181,7 +215,7 @@ def _state(
 
 
 def _as_timezone(value: datetime, timezone: ZoneInfo) -> datetime:
-    """as timezone."""
+    """Convert a datetime to a target timezone, defaulting naive values to UTC."""
     if value.tzinfo is None:
         value = value.replace(tzinfo=UTC)
     return value.astimezone(timezone)

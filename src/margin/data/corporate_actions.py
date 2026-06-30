@@ -70,7 +70,11 @@ class CorporateActionAdjuster:
     """Build PIT-safe adjusted prices from raw prices and available actions."""
 
     def __init__(self, *, policy_version: str = "adjust-v0.2.0") -> None:
-        """Initialize the instance."""
+        """Initialize the adjuster.
+
+        Args:
+            policy_version: Version tag stamped onto every adjusted price point.
+        """
         self.policy_version = policy_version
 
     def build_as_of(
@@ -80,7 +84,17 @@ class CorporateActionAdjuster:
         *,
         decision_at: datetime,
     ) -> tuple[AdjustedPricePoint, ...]:
-        """Return adjusted price series using only actions available at decision time."""
+        """Return adjusted price series using only actions available at decision time.
+
+        Args:
+            prices: Raw daily price bars sorted by trade date.
+            actions: Corporate actions with point-in-time availability.
+            decision_at: The point in time at which the adjustment is computed.
+
+        Returns:
+            A tuple of ``AdjustedPricePoint`` values, one per input price bar,
+            each carrying the cumulative adjustment factor and input action IDs.
+        """
         normalized_decision_at = ensure_utc(decision_at)
         available_actions = tuple(
             action for action in actions if action.available_at <= normalized_decision_at
@@ -112,7 +126,7 @@ class CorporateActionAdjuster:
 
 
 def _factor_for_action(close: Decimal, action: CorporateAction) -> Decimal:
-    """factor for action."""
+    """Return the cumulative adjustment factor for one action."""
     if action.action_type == "cash_dividend" and action.cash_amount is not None:
         if close <= 0:
             return Decimal("1")

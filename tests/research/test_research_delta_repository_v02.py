@@ -1,4 +1,10 @@
-"""v0.2 persistent delta-review repository tests."""
+"""v0.2 persistent delta-review repository tests.
+
+This module verifies that the SQLAlchemy-backed research delta repository
+persists final reviews transactionally with idempotent outbox events,
+updates the graph run status and outcome, and rejects conflicting idempotency
+replays for the same graph run.
+"""
 
 from __future__ import annotations
 
@@ -32,7 +38,16 @@ DECISION_AT = datetime(2026, 6, 23, tzinfo=UTC)
 def test_finalize_outbox_is_idempotent_and_updates_graph_run(
     database_url: str,
 ) -> None:
-    """final review persistence is transactional and outbox-idempotent."""
+    """Verify final review persistence is transactional and outbox-idempotent.
+
+    Seeds a graph run, persists the same final review twice, and asserts that
+    only one review and one outbox event are stored. Also verifies that the
+    graph run status is updated to ``completed`` with the correct outcome and
+    effective assessment ID.
+
+    Args:
+        database_url: Fixture providing the PostgreSQL integration-test URL.
+    """
     session_factory = _session_factory(database_url)
     graph_run_id = "graph-delta-idempotent"
     _cleanup_graph_rows(session_factory, graph_run_id)
@@ -69,7 +84,15 @@ def test_finalize_outbox_is_idempotent_and_updates_graph_run(
 def test_finalize_rejects_conflicting_replay_for_same_graph_run(
     database_url: str,
 ) -> None:
-    """final review persistence rejects conflicting idempotency replays."""
+    """Verify final review persistence rejects conflicting idempotency replays.
+
+    Seeds a graph run, persists a final review, then attempts to persist a
+    conflicting review with a different ID and hash. Asserts that the second
+    call raises a ``ValueError`` and that only one outbox event exists.
+
+    Args:
+        database_url: Fixture providing the PostgreSQL integration-test URL.
+    """
     session_factory = _session_factory(database_url)
     graph_run_id = "graph-delta-conflict"
     _cleanup_graph_rows(session_factory, graph_run_id)
@@ -98,6 +121,7 @@ def test_finalize_rejects_conflicting_replay_for_same_graph_run(
 
 
 def _review(*, graph_run_id: str) -> ResearchDeltaReview:
+    """Build a ``ResearchDeltaReview`` instance for the given graph run ID."""
     return ResearchDeltaReview(
         review_id=f"review-{graph_run_id}",
         graph_run_id=graph_run_id,
@@ -123,12 +147,14 @@ def _review(*, graph_run_id: str) -> ResearchDeltaReview:
 
 
 def _session_factory(database_url: str):
+    """Create a session factory with all tables initialized on the test database."""
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     return create_session_factory(engine)
 
 
 def _seed_graph_run(session_factory, graph_run_id: str) -> None:
+    """Insert an initial ``AIGraphRunRow`` row for the given graph run ID."""
     now = datetime.now(UTC)
     with session_factory.begin() as session:
         session.add(
@@ -156,6 +182,7 @@ def _seed_graph_run(session_factory, graph_run_id: str) -> None:
 
 
 def _cleanup_graph_rows(session_factory, graph_run_id: str) -> None:
+    """Delete all delta-related rows for the given graph run ID."""
     with session_factory.begin() as session:
         for row in (
             ResearchDeltaOutboxRow,

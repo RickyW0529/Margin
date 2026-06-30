@@ -1,4 +1,8 @@
-"""Factor calculator tests."""
+"""Factor calculator tests.
+
+This module validates that quality, growth, momentum, and risk factor
+calculators produce bounded 0-100 scores and apply expected penalties.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +17,14 @@ from margin.valuation_discovery.quant.factors.risk import RiskFactorCalculator
 
 
 def test_quality_calculator_outputs_0_to_100_score() -> None:
-    """quality calculator outputs 0 to 100 score."""
+    """Verify the quality calculator outputs scores in the 0-100 range.
+
+    A company with strong fundamentals should receive a high quality score
+    while all scores remain within the valid bounds.
+
+    Returns:
+        None.
+    """
     frame = pd.DataFrame(
         {
             "security_id": ["good", "weak"],
@@ -35,7 +46,11 @@ def test_quality_calculator_outputs_0_to_100_score() -> None:
 
 
 def test_growth_calculator_rewards_sustainable_growth() -> None:
-    """Broad, persistent growth outranks weak or negative growth."""
+    """Verify broad, persistent growth outranks weak or negative growth.
+
+    Returns:
+        None.
+    """
     frame = pd.DataFrame(
         {
             "security_id": ["good", "weak"],
@@ -56,7 +71,11 @@ def test_growth_calculator_rewards_sustainable_growth() -> None:
 
 
 def test_momentum_calculator_applies_short_term_overheat_penalty() -> None:
-    """A 20-day surge is recorded and reduces otherwise strong momentum."""
+    """Verify a 20-day surge is recorded and reduces otherwise strong momentum.
+
+    Returns:
+        None.
+    """
     frame = pd.DataFrame(
         {
             "security_id": ["steady", "overheated", "weak"],
@@ -79,7 +98,11 @@ def test_momentum_calculator_applies_short_term_overheat_penalty() -> None:
 
 
 def test_risk_calculator_scores_healthier_balance_and_market_risk_higher() -> None:
-    """Lower volatility, drawdown, and accounting risk produce a higher score."""
+    """Verify lower volatility, drawdown, and accounting risk produce a higher score.
+
+    Returns:
+        None.
+    """
     frame = pd.DataFrame(
         {
             "security_id": ["healthy", "risky"],

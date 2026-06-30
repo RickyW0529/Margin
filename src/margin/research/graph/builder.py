@@ -55,7 +55,15 @@ class GraphDependencies:
 
 
 def build_ai_delta_review_graph(dependencies: GraphDependencies) -> Any:
-    """Build a real LangGraph with centralized retrieval and parallel analyses."""
+    """Build a real LangGraph with centralized retrieval and parallel analyses.
+
+    Args:
+        dependencies: Frozen dependencies including tool factory, handlers,
+            and optional checkpointer.
+
+    Returns:
+        A compiled LangGraph ready for invocation.
+    """
     graph = StateGraph(AIDeltaGraphState)
     graph.add_node("evidence_plan", EvidencePlanNode())
     graph.add_node(
@@ -163,7 +171,7 @@ def build_ai_delta_review_graph(dependencies: GraphDependencies) -> Any:
 
 
 def _route_start(state: AIDeltaGraphState) -> str:
-    """route start."""
+    """Route the initial state to review, carry-forward, deferred, or abstain."""
     if state.review_mode in {ReviewMode.FULL_REVIEW, ReviewMode.DELTA_REVIEW}:
         return "review"
     if state.review_mode == ReviewMode.CARRY_FORWARD_FAST_PATH:
@@ -178,7 +186,7 @@ def _route_gap(
     *,
     allow_supplemental: bool,
 ) -> str:
-    """route gap."""
+    """Route after analysis join to supplemental retrieval or decision."""
     if (
         allow_supplemental
         and state.evidence_gaps
@@ -189,7 +197,7 @@ def _route_gap(
 
 
 def _route_citation(state: AIDeltaGraphState) -> str:
-    """route citation."""
+    """Route after citation validation to finalize, repair, or abstain."""
     if state.citation_report.get("valid") is True:
         return "valid"
     if state.repair_count == 0:
@@ -198,14 +206,14 @@ def _route_citation(state: AIDeltaGraphState) -> str:
 
 
 def _route_after_repair(state: AIDeltaGraphState) -> str:
-    """route after repair."""
+    """Route after repair decision to revalidation or abstain."""
     if state.current_review_outcome == ReviewOutcome.ABSTAIN:
         return "abstain"
     return "revalidate"
 
 
 def _default_decision(state: AIDeltaGraphState) -> dict[str, Any]:
-    """default decision."""
+    """Return a deterministic abstain decision when no handler is configured."""
     del state
     return {
         "outcome": ReviewOutcome.ABSTAIN.value,
@@ -220,7 +228,7 @@ def _default_citation_validation(
     draft: dict[str, Any],
     state: AIDeltaGraphState,
 ) -> dict[str, Any]:
-    """default citation validation."""
+    """Return a default valid citation report when no validator is configured."""
     del draft, state
     return {
         "valid": True,

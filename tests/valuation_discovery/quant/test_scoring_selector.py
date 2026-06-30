@@ -1,4 +1,8 @@
-"""Factor scoring and selector tests."""
+"""Factor scoring and selector tests.
+
+This module validates value scoring, group weight combination, selector
+inclusion rules, status decisions, and quant service persistence and ranking.
+"""
 
 from __future__ import annotations
 
@@ -22,7 +26,11 @@ from margin.valuation_discovery.quant.service import QuantService
 
 
 def test_negative_pe_does_not_get_high_value_score() -> None:
-    """negative pe does not get high value score."""
+    """Verify a negative PE does not receive a high value score.
+
+    Returns:
+        None.
+    """
     frame = pd.DataFrame(
         {
             "security_id": ["loss", "profit"],
@@ -39,7 +47,11 @@ def test_negative_pe_does_not_get_high_value_score() -> None:
 
 
 def test_final_score_uses_configured_group_weights() -> None:
-    """final score uses configured group weights."""
+    """Verify the final score uses configured factor group weights.
+
+    Returns:
+        None.
+    """
     result = FactorScorer().combine(
         FactorGroupScores(
             security_id="000001.SZ",
@@ -56,7 +68,11 @@ def test_final_score_uses_configured_group_weights() -> None:
 
 
 def test_selector_includes_pass_and_near_threshold_without_block_buy() -> None:
-    """selector includes pass and near threshold without block buy."""
+    """Verify the selector includes pass and near-threshold results without block-buy.
+
+    Returns:
+        None.
+    """
     results = (
         QuantResult(
             quant_run_id="qr-1",
@@ -89,7 +105,11 @@ def test_selector_includes_pass_and_near_threshold_without_block_buy() -> None:
 
 
 def test_status_decider_prevents_low_quality_pass() -> None:
-    """status decider prevents low quality pass."""
+    """Verify the status decider prevents a low-quality result from passing.
+
+    Returns:
+        None.
+    """
     combined = FactorScorer().combine(
         FactorGroupScores(
             security_id="000001.SZ",
@@ -113,7 +133,11 @@ def test_status_decider_prevents_low_quality_pass() -> None:
 
 
 def test_quant_service_rejects_invalid_input_snapshot() -> None:
-    """quant service rejects invalid input snapshot."""
+    """Verify the quant service rejects an input snapshot with missing required indicators.
+
+    Returns:
+        None.
+    """
     snapshot = QuantInputSnapshot(
         snapshot_id="qis-invalid",
         scope_version_id="scope-v1",
@@ -132,7 +156,11 @@ def test_quant_service_rejects_invalid_input_snapshot() -> None:
 
 
 def test_filtered_companies_are_still_persisted() -> None:
-    """filtered companies are still persisted."""
+    """Verify filtered companies are still persisted with reject status and reasons.
+
+    Returns:
+        None.
+    """
     snapshot = QuantInputSnapshot(
         snapshot_id="qis-valid",
         scope_version_id="scope-v1",
@@ -165,7 +193,11 @@ def test_filtered_companies_are_still_persisted() -> None:
 
 
 def test_quant_service_assigns_overall_and_industry_ranks() -> None:
-    """quant service assigns overall and industry ranks."""
+    """Verify the quant service assigns overall and industry ranks to results.
+
+    Returns:
+        None.
+    """
     snapshot = QuantInputSnapshot(
         snapshot_id="qis-ranks",
         scope_version_id="scope-v1",
@@ -216,7 +248,11 @@ def test_quant_service_assigns_overall_and_industry_ranks() -> None:
 
 
 def test_quant_service_final_score_uses_confirmed_theme_hotness() -> None:
-    """Confirmed theme hotness changes real quant score, rank, and status."""
+    """Verify confirmed theme hotness changes real quant score, rank, and status.
+
+    Returns:
+        None.
+    """
     theme_only_weights = {
         "value": 0.0,
         "dividend": 0.0,
@@ -288,7 +324,7 @@ def test_quant_service_final_score_uses_confirmed_theme_hotness() -> None:
 
 
 def _quant_row(security_id: str, *, is_st: bool) -> dict[str, object]:
-    """quant row."""
+    """Build one deterministic quant cross-section row for scoring tests."""
     return {
         "security_id": security_id,
         "industry_id": "bank",

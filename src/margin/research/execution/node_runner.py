@@ -64,7 +64,12 @@ class NodeExecutionRunner:
     """Run draft, validation, optional critic, and at most one revision."""
 
     def __init__(self, *, llm: StructuredLLM, validator: OutputValidator) -> None:
-        """Initialize the instance."""
+        """Initialize the runner.
+
+        Args:
+            llm: Structured LLM boundary for draft and revision calls.
+            validator: Deterministic output validator called after each call.
+        """
         self._llm = llm
         self._validator = validator
 
@@ -78,7 +83,22 @@ class NodeExecutionRunner:
         reflection_policy: str,
         deadline: datetime | None = None,
     ) -> NodeExecutionResult:
-        """Execute one bounded LLM node."""
+        """Execute one bounded LLM node.
+
+        Runs a draft call, deterministic validation, an optional critic
+        reflection, and at most one revision.
+
+        Args:
+            graph_run_id: Identifier of the parent graph run.
+            node_name: Name of the node being executed.
+            prompt: Rendered prompt for the draft call.
+            output_schema: JSON schema for structured output validation.
+            reflection_policy: One of ``"forced"``, ``"conditional"``, or ``"none"``.
+            deadline: Optional deadline for LLM calls.
+
+        Returns:
+            A ``NodeExecutionResult`` with output, validation, and reflection state.
+        """
         draft = self._call(
             prompt=prompt,
             output_schema=output_schema,
@@ -234,7 +254,7 @@ class NodeExecutionRunner:
         )
 
     def _call(self, **kwargs: Any) -> StructuredLLMResponse:
-        """call."""
+        """Delegate to the structured LLM boundary."""
         return self._llm.complete_structured(**kwargs)
 
 

@@ -1,4 +1,9 @@
-"""Production research-context adapter integration tests."""
+"""Production research-context adapter integration tests.
+
+This module validates that the research context builder adapter freezes
+quant, news, evidence, and previous state into a durable context snapshot
+and publishes an analysis snapshot atomically.
+"""
 
 from __future__ import annotations
 
@@ -47,7 +52,14 @@ DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 def test_context_builder_freezes_quant_news_evidence_and_previous_state(
     database_url: str,
 ) -> None:
-    """Context snapshots contain only durable inputs required by AI review."""
+    """Verify context snapshots contain only durable inputs required by AI review.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        None.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -135,6 +147,7 @@ class FakeNewsBundleBuilder:
     """Return a complete durable news context."""
 
     def build_for_run(self, *, run_id: str, security_id: str) -> NewsContextBundle:
+        """Build and return a deterministic news context bundle for the given run."""
         assert run_id == "news-run-1"
         return NewsContextBundle(
             bundle_id="bundle-1",
@@ -159,6 +172,7 @@ class FakeRetrievalTool:
     """Record the PIT-constrained evidence retrieval call."""
 
     def search(self, **kwargs):
+        """Return a deterministic retrieval result after asserting PIT constraints."""
         assert kwargs["symbol"] == "000001.SZ"
         assert kwargs["decision_at"] == DECISION_AT
         return ["retrieval-result"]
@@ -168,6 +182,7 @@ class FakeEvidencePackageBuilder:
     """Freeze one evidence package from retrieval output."""
 
     def build(self, **kwargs) -> EvidencePackage:
+        """Build and return a deterministic evidence package from retrieval results."""
         assert kwargs["retrieval_results"] == ["retrieval-result"]
         assert kwargs["news_bundle_id"] == "bundle-1"
         return EvidencePackage(

@@ -44,7 +44,13 @@ class CanonicalResolver:
         resolver_version: str = "canonical-resolver-v0.2.0",
         provider_priority: tuple[str, ...] = ("tushare", "akshare"),
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the canonical resolver.
+
+        Args:
+            resolver_version: Version tag stamped onto every resolution.
+            provider_priority: Provider codes ordered from highest to lowest
+                priority, used to break ties between candidate facts.
+        """
         self.resolver_version = resolver_version
         self.provider_priority = provider_priority
 
@@ -54,7 +60,17 @@ class CanonicalResolver:
         *,
         decision_at: datetime,
     ) -> CanonicalResolution:
-        """Resolve available provider facts into one selected canonical value."""
+        """Resolve available provider facts into one selected canonical value.
+
+        Args:
+            facts: Candidate provider facts for one indicator.
+            decision_at: The point in time at which the decision is made.
+
+        Returns:
+            A ``CanonicalResolution`` with the selected fact and all
+            PIT-legal candidates, or an ``insufficient`` status when no fact
+            is available at ``decision_at``.
+        """
         normalized_decision_at = ensure_utc(decision_at)
         available = tuple(
             sorted(
@@ -86,7 +102,7 @@ class CanonicalResolver:
         self,
         fact: StandardizedIndicatorFact,
     ) -> tuple[float, Decimal, int, float, str]:
-        """candidate key."""
+        """Return the sort key ranking one candidate fact."""
         priority = (
             self.provider_priority.index(fact.provider_code)
             if fact.provider_code in self.provider_priority
@@ -101,7 +117,7 @@ class CanonicalResolver:
         )
 
     def _resolver_hash(self, candidates: tuple[StandardizedIndicatorFact, ...]) -> str:
-        """resolver hash."""
+        """Return a stable SHA-256 hash over the resolver version and candidates."""
         payload = "|".join(
             [
                 self.resolver_version,

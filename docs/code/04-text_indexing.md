@@ -491,6 +491,7 @@ PostgreSQL/pgvector 持久化边界，负责 Chunk、Embedding、审计记录的
 
 - **与 module 03（news）的衔接**：`Chunker.chunk` 接收 `DocumentEvent`，`DocumentIndexingRunner` 消费 `NewsRepository` 的 Outbox，完成文档到索引的转换。
 - **与 module 03（news）的衔接**：v0.2 推荐 `IndexingRunner` 消费文档 outbox，解析原文快照并写入 `chunks`、`chunk_security_links`、`chunk_embeddings` 和 `indexed_documents`。
+- **与共享文档标准化层的衔接**：`margin.documents` 生成的 RAG chunks 会在进入 embedding 前遵守 `max_chunk_chars`，对单个超长段落/表格 block 进行行级/字符级二次切分，避免 provider 对超长输入返回 400。
 - **与 module 06（research）的衔接**：`RetrievalTool`/`HybridRetriever` 是研究智能体获取证据的统一入口，返回带 `source_url`、`snapshot_id`、`SourceLocator`、`source_level` 与 `trust_level` 的 `RetrievalResult`，支持引用溯源与 prompt 安全策略。
 - **PIT 检索**：调用方必须传 `decision_at`；仓库层通过 `ChunkRow.available_at <= decision_at` 防止未来新闻/公告进入历史决策。
 - **持久化切换**：测试可继续使用内存 `EmbeddingPipeline`；生产路径使用 `PersistentIndexingPipeline` / `PersistentEmbeddingPipeline` + `VectorRepository`，配合 `OpenAIEmbeddingProvider` 与 `HTTPRerankProvider`。

@@ -108,14 +108,26 @@ class VectorRepository:
         return len(chunks)
 
     def count_chunk_security_links(self) -> int:
-        """Return persisted chunk-security link count."""
+        """Return persisted chunk-security link count.
+
+        Returns:
+            The total number of chunk-security link rows in the database.
+        """
         with self._session_factory() as session:
             return int(
                 session.scalar(count_chunk_security_links()) or 0
             )
 
     def chunk_has_security_link(self, chunk_id: str, security_id: str) -> bool:
-        """Return whether a chunk is linked to a security through v0.2 links."""
+        """Return whether a chunk is linked to a security through v0.2 links.
+
+        Args:
+            chunk_id: Unique chunk identifier.
+            security_id: Security symbol to check.
+
+        Returns:
+            True if a link row exists for the chunk and security.
+        """
         with self._session_factory() as session:
             return (
                 session.scalar(
@@ -125,14 +137,24 @@ class VectorRepository:
             ) > 0
 
     def count_embeddings(self) -> int:
-        """Return persisted embedding row count."""
+        """Return persisted embedding row count.
+
+        Returns:
+            The total number of embedding rows in the database.
+        """
         with self._session_factory() as session:
             return int(
                 session.scalar(count_embeddings()) or 0
             )
 
     def upsert_indexed_document(self, document: IndexedDocument) -> None:
-        """Persist parser/chunker/indexing audit for a document."""
+        """Persist parser/chunker/indexing audit for a document.
+
+        Inserts a new audit row or updates an existing one by ``document_id``.
+
+        Args:
+            document: The indexed document audit record to persist.
+        """
         with self._session_factory.begin() as session:
             row = session.get(IndexedDocumentRow, document.document_id)
             if row is None:
@@ -155,7 +177,14 @@ class VectorRepository:
                 row.embedding_keys = list(document.embedding_keys)
 
     def get_indexed_document(self, document_id: str) -> IndexedDocument | None:
-        """Fetch indexed document audit by document id."""
+        """Fetch indexed document audit by document id.
+
+        Args:
+            document_id: Unique document identifier.
+
+        Returns:
+            The indexed document audit record if found, otherwise None.
+        """
         with self._session_factory() as session:
             row = session.get(IndexedDocumentRow, document_id)
             if row is None:
@@ -293,7 +322,18 @@ class VectorRepository:
         doc_types: tuple[str, ...] | None = None,
         decision_at: datetime | None = None,
     ) -> list[Chunk]:
-        """Return persisted chunks for keyword fallback retrieval."""
+        """Return persisted chunks for keyword fallback retrieval.
+
+        Args:
+            symbol: Optional ticker/security symbol filter.
+            security_ids: Optional tuple of security IDs to filter by link table.
+            doc_types: Optional tuple of document type values to include.
+            decision_at: Optional point-in-time filter; only chunks with
+                ``available_at <= decision_at`` are returned.
+
+        Returns:
+            A list of ``Chunk`` domain objects matching the filters.
+        """
         statement = list_chunks_statement(
             symbol=symbol,
             security_ids=security_ids,

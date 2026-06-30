@@ -9,10 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from margin.api.dependencies import (
+    get_agentic_news_service,
     get_news_service,
     require_idempotency_key,
     require_local_admin,
 )
+from margin.news.agentic_acquisition import AgenticNewsAcquisitionService
 from margin.news.models import NewsTarget, TargetTriggerType
 from margin.news.service import NewsService
 
@@ -20,7 +22,17 @@ router = APIRouter(prefix="/api/v1/news", tags=["news"])
 
 
 class NewsTargetRequest(BaseModel):
-    """Request DTO for one news refresh target."""
+    """Request DTO for one news refresh target.
+
+    Attributes:
+        security_id: Unique identifier of the security.
+        symbol: Standardized symbol (e.g. ``000001.SZ``).
+        name: Display name of the company.
+        trigger_type: Type of trigger that selected this target.
+        priority: Priority value (0-1000, higher is more urgent).
+        aliases: Tuple of alternative names for keyword search.
+        industry_terms: Tuple of industry-specific search terms.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -34,7 +46,14 @@ class NewsTargetRequest(BaseModel):
 
 
 class NewsRefreshRequest(BaseModel):
-    """Request body for starting a target-driven news refresh."""
+    """Request body for starting a target-driven news refresh.
+
+    Attributes:
+        scope_version_id: Identifier of the frozen research scope.
+        quant_run_id: Identifier of the quant run that selected the targets.
+        decision_at: Timestamp of the quant decision.
+        targets: List of news refresh target requests.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -45,7 +64,13 @@ class NewsRefreshRequest(BaseModel):
 
 
 class NewsRefreshResponse(BaseModel):
-    """Accepted refresh response."""
+    """Accepted refresh response.
+
+    Attributes:
+        run_id: Unique identifier of the created refresh run.
+        status: Initial status of the run.
+        target_count: Number of targets in the refresh run.
+    """
 
     run_id: str
     status: str
@@ -53,7 +78,19 @@ class NewsRefreshResponse(BaseModel):
 
 
 class NewsRunStatusResponse(BaseModel):
-    """Refresh run reconciliation response."""
+    """Refresh run reconciliation response.
+
+    Attributes:
+        run_id: Unique identifier of the refresh run.
+        status: Current status of the run.
+        target_count: Total number of targets in the run.
+        pending_count: Number of targets not yet claimed.
+        claimed_count: Number of targets currently claimed by workers.
+        retry_count: Number of targets in retry state.
+        completed_count: Number of targets successfully completed.
+        failed_final_count: Number of targets that failed permanently.
+        error_summary: Summary of errors grouped by code.
+    """
 
     run_id: str
     status: str
@@ -64,6 +101,42 @@ class NewsRunStatusResponse(BaseModel):
     completed_count: int
     failed_final_count: int
     error_summary: dict[str, object]
+
+
+class AgenticNewsRefreshRequest(BaseModel):
+    """Request body for starting agentic news acquisition from a quant run.
+
+    Attributes:
+        scope_version_id: Identifier of the frozen research scope.
+        quant_run_id: Identifier of the quant run to acquire news for.
+        decision_at: Timestamp of the quant decision.
+        include_near_threshold: Whether to include near-threshold candidates.
+        max_workers: Maximum number of parallel acquisition workers (1-16).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    scope_version_id: str = Field(min_length=1, max_length=64)
+    quant_run_id: str = Field(min_length=1, max_length=64)
+    decision_at: datetime
+    include_near_threshold: bool = False
+    max_workers: int = Field(default=4, ge=1, le=16)
+
+
+class AgenticNewsRefreshResponse(BaseModel):
+    """Accepted agentic refresh response.
+
+    Attributes:
+        run_id: Unique identifier of the created acquisition run.
+        status: Initial status of the run.
+        target_count: Number of targets in the acquisition run.
+        include_near_threshold: Whether near-threshold candidates were included.
+    """
+
+    run_id: str
+    status: str
+    target_count: int
+    include_near_threshold: bool
 
 
 @router.post(
@@ -77,7 +150,17 @@ def start_news_refresh(
     _actor_id: Annotated[str, Depends(require_local_admin)],
     service: Annotated[NewsService, Depends(get_news_service)],
 ) -> NewsRefreshResponse:
-    """Start a target-driven news refresh for the provided quant-selected companies."""
+    """Start a target-driven news refresh for the provided quant-selected companies.
+
+    Args:
+        request: Validated refresh request containing scope, quant run, and targets.
+        idempotency_key: Idempotency key for the mutation.
+        _actor_id: Authenticated actor identifier (unused).
+        service: News service used to start the refresh.
+
+    Returns:
+        NewsRefreshResponse with the run id, status, and target count.
+    """
     targets = [
         NewsTarget(
             scope_version_id=request.scope_version_id,
@@ -107,12 +190,63 @@ def start_news_refresh(
     )
 
 
+@router.post(
+    "/agentic-refresh",
+    response_model=AgenticNewsRefreshResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def start_agentic_news_refresh(
+    request: AgenticNewsRefreshRequest,
+    _idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+    _actor_id: Annotated[str, Depends(require_local_admin)],
+    service: Annotated[
+        AgenticNewsAcquisitionService,
+        Depends(get_agentic_news_service),
+    ],
+) -> AgenticNewsRefreshResponse:
+    """Start agentic news acquisition for a quant run.
+
+    Args:
+        request: Validated agentic refresh request containing scope and quant run.
+        _idempotency_key: Idempotency key for the mutation (unused).
+        _actor_id: Authenticated actor identifier (unused).
+        service: Agentic news acquisition service used to start the run.
+
+    Returns:
+        AgenticNewsRefreshResponse with the run id, status, and target count.
+    """
+    run = service.run_for_quant_run(
+        scope_version_id=request.scope_version_id,
+        quant_run_id=request.quant_run_id,
+        decision_at=request.decision_at,
+        include_near_threshold=request.include_near_threshold,
+        max_workers=request.max_workers,
+    )
+    return AgenticNewsRefreshResponse(
+        run_id=run.run_id,
+        status=run.status.value,
+        target_count=run.target_count,
+        include_near_threshold=run.include_near_threshold,
+    )
+
+
 @router.get("/runs/{run_id}", response_model=NewsRunStatusResponse)
 def get_news_refresh_status(
     run_id: str,
     service: Annotated[NewsService, Depends(get_news_service)],
 ) -> NewsRunStatusResponse:
-    """Return target reconciliation and provider wait/failure details."""
+    """Return target reconciliation and provider wait/failure details.
+
+    Args:
+        run_id: Unique identifier of the news refresh run.
+        service: News service used to load run status.
+
+    Returns:
+        NewsRunStatusResponse with reconciliation counts and error summary.
+
+    Raises:
+        HTTPException: 404 if the refresh run cannot be found.
+    """
     try:
         run = service.get_run_status(run_id)
     except KeyError as exc:

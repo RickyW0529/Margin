@@ -25,7 +25,21 @@ class EvidenceConflictClassifier:
         package_id: str,
         version: int,
     ) -> list[EvidenceConflict]:
-        """Return conflicts implied by support/refute role combinations."""
+        """Return conflicts implied by support/refute role combinations.
+
+        A conflict is recorded when the same claim has both a SUPPORTS and a
+        REFUTES evidence link. The conflict severity is always HIGH.
+
+        Args:
+            claim: The claim whose evidence links are being classified.
+            links: Sequence of claim-evidence role links to inspect.
+            package_id: Identifier of the frozen evidence package.
+            version: Version number of the frozen evidence package.
+
+        Returns:
+            A list of ``EvidenceConflict`` instances. Empty when no support/refute
+            pair is found.
+        """
         supports = [link for link in links if link.role == ClaimEvidenceRole.SUPPORTS]
         refutes = [link for link in links if link.role == ClaimEvidenceRole.REFUTES]
         if not supports or not refutes:
@@ -51,6 +65,6 @@ class EvidenceConflictClassifier:
 
 
 def _conflict_id(claim_id: str, evidence_id: str, conflicting_evidence_id: str) -> str:
-    """conflict id."""
+    """Compute a deterministic conflict ID from claim and evidence identifiers."""
     payload = "|".join([claim_id, evidence_id, conflicting_evidence_id])
     return "conf_" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]

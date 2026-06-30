@@ -52,7 +52,12 @@ def register_analysis_mart_tools(
     *,
     repository: AnalysisMartRepository,
 ) -> None:
-    """Register read-only Analysis Mart tools in a tool registry."""
+    """Register read-only Analysis Mart tools in a tool registry.
+
+    Args:
+        registry: Tool definition registry to populate.
+        repository: Analysis Mart repository used by tool handlers.
+    """
     registry.register(
         ToolDefinition(
             name="analysis_snapshot_get",
@@ -118,6 +123,7 @@ def _get_snapshot(
     repository: AnalysisMartRepository,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
+    """Return the latest analysis snapshot for one security and scope."""
     snapshot = repository.latest_snapshot(
         security_id=str(payload["security_id"]),
         scope_version_id=str(payload["scope_version_id"]),
@@ -130,6 +136,7 @@ def _list_metrics(
     repository: AnalysisMartRepository,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
+    """List structured metrics for one authorized analysis snapshot."""
     snapshot = _authorized_snapshot(repository, payload)
     if snapshot is None:
         return {"metrics": []}
@@ -146,6 +153,7 @@ def _list_findings(
     repository: AnalysisMartRepository,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
+    """List structured findings for one authorized analysis snapshot."""
     snapshot = _authorized_snapshot(repository, payload)
     if snapshot is None:
         return {"findings": []}
@@ -162,6 +170,7 @@ def _get_feature_snapshot(
     repository: AnalysisMartRepository,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
+    """Return the latest quant feature snapshot metadata for one scope."""
     snapshot = repository.latest_feature_snapshot(
         scope_version_id=str(payload["scope_version_id"]),
         as_of=payload["decision_at"],
@@ -175,6 +184,7 @@ def _list_feature_rows(
     repository: AnalysisMartRepository,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
+    """List quant feature rows for the scoped security within one snapshot."""
     snapshot = repository.get_feature_snapshot(str(payload["feature_snapshot_id"]))
     if snapshot is None or snapshot.decision_at > payload["decision_at"]:
         return {"feature_rows": []}
@@ -193,6 +203,7 @@ def _authorized_snapshot(
     repository: AnalysisMartRepository,
     payload: dict[str, Any],
 ):
+    """Return the snapshot only if it matches the scoped security and decision time."""
     snapshot = repository.get_snapshot(str(payload["analysis_snapshot_id"]))
     if snapshot is None:
         return None
@@ -204,6 +215,7 @@ def _authorized_snapshot(
 
 
 def _serialize(value) -> dict[str, Any]:
+    """Convert a dataclass value to a JSON-safe dict with tuple-to-list coercion."""
     data = asdict(value)
     for key, item in list(data.items()):
         if isinstance(item, tuple):

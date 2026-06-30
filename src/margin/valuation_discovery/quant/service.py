@@ -53,7 +53,13 @@ class QuantService:
         config: QuantConfig | None = None,
         strategy_version_id: str = "quant-v0.2",
     ) -> None:
-        """init  ."""
+        """Initialize the quant service with repository and configuration.
+
+        Args:
+            repository: Persistence boundary for quant runs and results.
+            config: Optional hard-filter and scoring thresholds.
+            strategy_version_id: Default strategy version identifier.
+        """
         self._repository = repository
         self._config = config or QuantConfig()
         self._strategy_version_id = strategy_version_id
@@ -69,7 +75,18 @@ class QuantService:
         )
 
     def run(self, snapshot: QuantInputSnapshot, *, decision_at: datetime) -> QuantRun:
-        """Run quant screening for a frozen input snapshot and persist results."""
+        """Run quant screening for a frozen input snapshot and persist results.
+
+        Args:
+            snapshot: Frozen PIT-safe quant input snapshot.
+            decision_at: Timezone-aware decision timestamp.
+
+        Returns:
+            The persisted ``QuantRun`` with completed status.
+
+        Raises:
+            ValueError: If the snapshot is not valid for publishable results.
+        """
         if not snapshot.is_valid:
             raise ValueError("invalid quant input snapshot")
 
@@ -123,7 +140,7 @@ class QuantService:
         snapshot: QuantInputSnapshot,
         decision_at: datetime,
     ) -> pd.DataFrame:
-        """prepare cross section."""
+        """Prepare a cross-section DataFrame with security_id index and missing rows."""
         prepared = frame.copy(deep=True)
         if prepared.empty:
             prepared = pd.DataFrame({"security_id": list(snapshot.security_ids)})
@@ -163,7 +180,7 @@ class QuantService:
         manual_config: ManualAllAConfig,
         manual_final_enabled: bool,
     ) -> dict[str, pd.Series]:
-        """score allowed."""
+        """Score all filter-allowed securities and return scored rows by ID."""
         allowed_ids = [
             security_id
             for security_id, result in filter_result.by_security.items()
@@ -192,7 +209,7 @@ class QuantService:
         filter_result: SecurityFilterResult,
         scored_row: pd.Series | None,
     ) -> QuantResult:
-        """build result."""
+        """Build a ``QuantResult`` from filter and scored row data."""
         if not filter_result.allowed_for_scoring or scored_row is None:
             return self._blocked_result(
                 quant_run=quant_run,
@@ -263,7 +280,7 @@ class QuantService:
         security_id: str,
         filter_result: SecurityFilterResult,
     ) -> QuantResult:
-        """blocked result."""
+        """Build a rejected ``QuantResult`` for blocked or missing securities."""
         blocker_codes = _reason_codes(filter_result, severity="blocker")
         review_reasons = _dedupe(
             blocker_codes
@@ -293,7 +310,7 @@ class QuantService:
         )
 
     def _config_hash(self) -> str:
-        """config hash."""
+        """Return a deterministic SHA-256 hash of the quant configuration."""
         rendered = json.dumps(
             self._config.model_dump(mode="json"),
             ensure_ascii=False,
@@ -306,7 +323,7 @@ def _ordered_security_ids(
     snapshot: QuantInputSnapshot,
     cross_section: pd.DataFrame,
 ) -> tuple[str, ...]:
-    """ordered security ids."""
+    """Return snapshot security IDs followed by any cross-section extras."""
     snapshot_ids = tuple(str(security_id) for security_id in snapshot.security_ids)
     extras = tuple(
         security_id
@@ -407,6 +424,7 @@ def _combined_with_manual_final_score(
 
 
 def _optional_score(value: Any) -> float | None:
+    """Convert a value to a clamped 0-100 float, returning None for NaN."""
     try:
         numeric = float(value)
     except (TypeError, ValueError):
@@ -417,6 +435,7 @@ def _optional_score(value: Any) -> float | None:
 
 
 def _number_or_fallback(value: Any, fallback: float) -> float:
+    """Convert a value to float, returning the fallback for NaN or non-numeric."""
     try:
         numeric = float(value)
     except (TypeError, ValueError):
@@ -431,32 +450,33 @@ def _reason_codes(
     *,
     severity: str,
 ) -> tuple[str, ...]:
-    """reason codes."""
+    """Return reason codes of a specific severity from a filter result."""
     return tuple(
         reason.code for reason in filter_result.reasons if reason.severity == severity
     )
 
 
 def _dedupe(values: tuple[str, ...]) -> tuple[str, ...]:
-    """dedupe."""
+    """Remove duplicate strings while preserving order."""
     return tuple(dict.fromkeys(values))
 
 
 def _float(value: Any) -> float:
-    """float."""
+    """Convert a value to float, returning 0.0 for None or NaN."""
     if value is None or bool(pd.isna(value)):
         return 0.0
     return float(value)
 
 
 def _bool_value(value: Any) -> bool:
+    """Convert a value to bool, returning False for None or NaN."""
     if value is None or bool(pd.isna(value)):
         return False
     return bool(value)
 
 
 def _is_short_term_overheated(row: pd.Series) -> bool:
-    """is short term overheated."""
+    """Return whether a scored row indicates short-term price overheat."""
     if bool(row.get("short_term_overheat", False)):
         return True
     value = row.get("return_20d")
@@ -469,7 +489,7 @@ def _score_reason_summary(
     scores: Any,
     status: ScreeningStatus,
 ) -> str:
-    """score reason summary."""
+    """Build a human-readable score and status summary string."""
     return (
         f"Quant screen {status.value}: final_score={scores.final_score:.2f}, "
         f"quality={scores.quality_score:.2f}, value={scores.value_score:.2f}, "
@@ -479,7 +499,7 @@ def _score_reason_summary(
 
 
 def _blocked_reason_summary(filter_result: SecurityFilterResult) -> str:
-    """blocked reason summary."""
+    """Build a human-readable rejection summary from filter reasons."""
     if not filter_result.reasons:
         return "Rejected before scoring because required cross-section data is unavailable."
     codes = ", ".join(reason.code for reason in filter_result.reasons)
@@ -490,7 +510,7 @@ def _assign_ranks(
     results: tuple[QuantResult, ...],
     cross_section: pd.DataFrame,
 ) -> tuple[QuantResult, ...]:
-    """assign ranks."""
+    """Assign overall and industry ranks to quant results."""
     overall = {
         result.security_id: rank
         for rank, result in enumerate(
@@ -533,7 +553,7 @@ def _assign_ranks(
 
 
 def _industry_by_security(cross_section: pd.DataFrame) -> dict[str, str]:
-    """industry by security."""
+    """Build a security_id to industry_id mapping from a cross-section."""
     mapping: dict[str, str] = {}
     for _, row in cross_section.iterrows():
         security_id = str(row.get("security_id", ""))

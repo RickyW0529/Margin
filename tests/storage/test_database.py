@@ -1,7 +1,8 @@
 """Tests for database configuration and connectivity.
 
-This module verifies that database settings are read correctly from the environment
-and that SQLAlchemy engines and session factories can connect to PostgreSQL.
+This module verifies that database settings are read correctly from the
+environment and from ``MarginSettings``, and that SQLAlchemy engines and
+session factories can connect to PostgreSQL and execute simple queries.
 """
 
 from __future__ import annotations
@@ -38,7 +39,12 @@ def test_database_settings_reads_environment(monkeypatch):
 
 
 def test_database_settings_can_be_built_from_margin_settings():
-    """database settings can be built from margin settings."""
+    """Verify ``DatabaseSettings`` can be constructed from a ``MarginSettings`` instance.
+
+    Builds a ``MarginSettings`` with explicit database fields and asserts that
+    ``DatabaseSettings.from_settings`` returns a settings object with the
+    matching URL, echo, and pool pre-ping values.
+    """
     margin_settings = MarginSettings(
         _env_file=None,
         database_url="postgresql+psycopg://margin:margin@localhost:5432/margin",

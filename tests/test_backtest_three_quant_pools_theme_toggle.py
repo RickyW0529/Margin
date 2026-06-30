@@ -1,4 +1,8 @@
-"""Backtest script theme-toggle behavior tests."""
+"""Backtest script theme-toggle behavior tests.
+
+Verifies that the theme-hotness factor can be isolated via the ``theme_enabled``
+flag, ensuring candidates differ only when the additive theme factor is active.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +13,11 @@ from margin.valuation_discovery.quant.pool_defaults import QuantPoolStrategyPres
 
 
 def test_run_pool_backtest_can_disable_theme_hotness(monkeypatch) -> None:
-    """Theme toggle isolates the additive theme-hotness factor."""
+    """Test that the theme toggle isolates the additive theme-hotness factor.
+
+    Args:
+        monkeypatch: Pytest fixture for patching module-level preset defaults.
+    """
     rebalance_date = pd.Timestamp("2026-01-31")
     next_date = pd.Timestamp("2026-02-28")
     preset = QuantPoolStrategyPreset(
@@ -88,6 +96,7 @@ def test_run_pool_backtest_can_disable_theme_hotness(monkeypatch) -> None:
 
 
 def _prices(rebalance_date: pd.Timestamp, next_date: pd.Timestamp) -> dict[str, object]:
+    """Build a deterministic price and feature panel fixture for two dates."""
     securities = ["300308.SZ", "plain.SZ"]
     index = pd.DatetimeIndex([rebalance_date, next_date])
     feature_panel = pd.DataFrame(
@@ -111,6 +120,7 @@ def _prices(rebalance_date: pd.Timestamp, next_date: pd.Timestamp) -> dict[str, 
 
 
 def _daily_basic(security_id: str, trade_date: pd.Timestamp) -> dict[str, object]:
+    """Build a deterministic daily-basic row fixture for one security and date."""
     return {
         "security_id": security_id,
         "trade_date": trade_date,

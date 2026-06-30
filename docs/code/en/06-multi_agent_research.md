@@ -10,7 +10,7 @@ Current boundaries:
 
 - Input: a frozen context snapshot ID. The module does not fetch live market data, perform live news search, or read transient frontend state.
 - Orchestration: LangGraph topology with context routing, evidence planning, retrieval, fundamental analysis, valuation analysis, risk review, counter-argument review, decision, citation validation, optional repair, and finalize.
-- Tools: `ScopedToolFactory`, `ToolPolicyEngine`, and `ToolExecutor` expose only node-specific minimal tool manifests, including the three read-only Analysis Mart tools. Cross-scope, cross-security, PIT-invalid, over-budget, over-deadline, and unauthorized calls are denied by default.
+- Tools: `ScopedToolFactory`, `ToolPolicyEngine`, and `ToolExecutor` expose only node-specific minimal tool manifests, including five read-only Analysis Mart tools and an optional RAG evidence retrieval tool. Cross-scope, cross-security, PIT-invalid, over-budget, over-deadline, and unauthorized calls are denied by default.
 - Prompts: `PromptFactory` produces fixed-section prompts. External text is always placed in an untrusted data block.
 - Reflection: `NodeExecutionRunner` performs draft → deterministic validation → critic → at most one revision. Critic/revision cannot introduce new evidence IDs.
 - Output: `ResearchDeltaReview`, which records the current review outcome and effective-assessment pointer. It never emits BUY/SELL instructions.
@@ -35,6 +35,7 @@ Current boundaries:
 | `src/margin/research/tools/executor.py` | Audited tool executor. |
 | `src/margin/research/tools/manifests.py` | LLM-facing tool manifest DTOs. |
 | `src/margin/research/analysis_tools.py` | Registers five read-only fourth-layer Mart tools: `analysis_snapshot_get`, `analysis_metrics_list`, `analysis_findings_list`, `quant_feature_snapshot_get`, and `quant_feature_rows_list`. |
+| `src/margin/research/evidence_tools.py` | Registers `rag_evidence_retrieve`, converts vector retrieval results into agent-ready `evidence_blocks`, and can persist valid results into `05-rag_evidence` packages. |
 | `src/margin/research/checkpoint.py` | PostgreSQL LangGraph checkpointer with identity-hash validation and pending-write recovery. |
 | `src/margin/research/delta_repository.py` | Memory/PostgreSQL persistence for `ResearchDeltaReview` and `research_delta_outbox`. |
 | `src/margin/research/graph_audit_repository.py` | PostgreSQL repositories for LLM/tool call audits. |
@@ -109,6 +110,24 @@ Fourth-layer Mart tools are read-only over `quant_feature_*` and `analysis_*` ta
 | `quant_feature_rows_list` | `QUANT_READ` | `security_id`, `decision_at`, `feature_snapshot_id` | Feature rows for the scoped security in that feature snapshot; cross-security or future-time reads are denied by policy. |
 
 When `ResearchService` receives a `session_factory` and no explicit repository, it builds a `SQLAlchemyAnalysisMartRepository` and registers these tools in the default registry. The `valuation_analysis` node has the `QUANT_READ` grant, so it can read fourth-layer marts while other nodes remain constrained by their node grants.
+
+Current RAG evidence tools:
+
+| Tool | Capability | Input | Output |
+| --- | --- | --- | --- |
+| `rag_evidence_retrieve` | `EVIDENCE_RETRIEVE` | `security_id`, `decision_at`, `query`, `questions`, `evidence_gaps`, `doc_types`, `top_k`, `prefer_official`, `supplemental`, `build_package` | PIT-safe `evidence_blocks`, stable `evidence_ids`, retrieval query metadata, and optional EvidencePackage `package_id/version/quality_status/coverage`. |
+| `evidence_retrieve` | `EVIDENCE_RETRIEVE` | Same input when RAG dependencies are configured; the legacy `questions/evidence_gaps/supplemental` context-read input otherwise | Compatibility alias for `rag_evidence_retrieve` when RAG dependencies are injected; otherwise it returns evidence-package references already frozen in the context payload. |
+
+`ResearchService` accepts `rag_retrieval_tool`,
+`rag_evidence_package_builder`, and `rag_scope_hash_factory`. When
+`rag_retrieval_tool` is present, the default graph exposes both
+`evidence_retrieve` and `rag_evidence_retrieve` to evidence-retrieval nodes.
+When it is absent, the old frozen-context evidence reader remains active.
+
+The RAG tool does not perform live WebSearch. It reads vector chunks already
+indexed by `04_text_indexing`; cross-security, future-time, unauthorized-node,
+and over-budget calls are still rejected or filtered by `ToolPolicyEngine`,
+`RetrievalTool`, and `EvidencePackageBuilder`.
 
 ## 6. Prompt Factory
 

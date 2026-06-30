@@ -22,12 +22,26 @@ _DELISTING_NAME = re.compile(r"^退市", re.IGNORECASE)
 
 
 def is_st_security_name(name: str) -> bool:
-    """Return whether a current A-share name carries an ST designation."""
+    """Return whether a current A-share name carries an ST designation.
+
+    Args:
+        name: The security name string to inspect.
+
+    Returns:
+        ``True`` if the name starts with an ST, *ST, or S*ST prefix.
+    """
     return bool(_ST_NAME.match(name.strip()))
 
 
 def is_delisting_security_name(name: str) -> bool:
-    """Return whether a current A-share name indicates delisting transition."""
+    """Return whether a current A-share name indicates delisting transition.
+
+    Args:
+        name: The security name string to inspect.
+
+    Returns:
+        ``True`` if the name starts with a delisting-transition prefix.
+    """
     return bool(_DELISTING_NAME.match(name.strip()))
 
 
@@ -35,25 +49,53 @@ class TushareSourceCatalog:
     """Map quant-admitted Tushare APIs to dedicated source tables."""
 
     def __init__(self, requirements: QuantDataRequirementCatalog) -> None:
-        """Initialize from the quant endpoint admission catalog."""
+        """Initialize from the quant endpoint admission catalog.
+
+        Args:
+            requirements: The catalog of quant-admitted Tushare endpoints.
+        """
         self._endpoints = {
             endpoint.api_name: endpoint
             for endpoint in requirements.enabled_endpoints("tushare")
         }
 
     def endpoint(self, api_name: str) -> ProviderEndpointRequirement:
-        """Return an admitted Tushare endpoint."""
+        """Return an admitted Tushare endpoint.
+
+        Args:
+            api_name: The Tushare API name to look up.
+
+        Returns:
+            The matching ``ProviderEndpointRequirement``.
+
+        Raises:
+            KeyError: If the API name is not admitted.
+        """
         return self._endpoints[api_name.strip().lower()]
 
     def table_name(self, api_name: str) -> str:
-        """Return the fully-qualified dedicated landing table name."""
+        """Return the fully-qualified dedicated landing table name.
+
+        Args:
+            api_name: The Tushare API name.
+
+        Returns:
+            The schema-qualified table name, e.g. ``source_tushare.ts_daily``.
+
+        Raises:
+            KeyError: If the API name is not admitted.
+        """
         normalized = api_name.strip().lower()
         if normalized not in self._endpoints:
             raise KeyError(f"Tushare endpoint is not admitted: {api_name}")
         return f"{TUSHARE_SOURCE_SCHEMA}.ts_{normalized}"
 
     def table_names(self) -> tuple[str, ...]:
-        """Return all admitted source table names in stable order."""
+        """Return all admitted source table names in stable order.
+
+        Returns:
+            A tuple of schema-qualified table names sorted by API name.
+        """
         return tuple(self.table_name(name) for name in sorted(self._endpoints))
 
 
@@ -93,7 +135,18 @@ class TushareLandingRecord(BaseModel):
         sync_run_id: str,
         raw_snapshot_id: str | None = None,
     ) -> TushareLandingRecord:
-        """Build stable natural-key and revision identities from one API row."""
+        """Build stable natural-key and revision identities from one API row.
+
+        Args:
+            endpoint: The admitted endpoint requirement describing the row.
+            payload: The raw provider row dictionary.
+            fetched_at: The timestamp at which the row was fetched.
+            sync_run_id: The source-system sync run that produced the row.
+            raw_snapshot_id: Optional raw snapshot reference for lineage.
+
+        Returns:
+            An immutable ``TushareLandingRecord`` with deterministic IDs.
+        """
         normalized_fetched_at = ensure_utc(fetched_at)
         natural_key = {
             field: _json_scalar(payload.get(field))
@@ -137,12 +190,14 @@ class TushareLandingRecord(BaseModel):
 
 
 def _symbol(payload: dict[str, Any]) -> str | None:
+    """Extract and normalize the security symbol from a provider row."""
     value = payload.get("ts_code") or payload.get("con_code")
     normalized = str(value or "").strip().upper()
     return normalized or None
 
 
 def _business_date(payload: dict[str, Any]) -> date | None:
+    """Return the first parseable business date from known payload fields."""
     for field in (
         "trade_date",
         "end_date",
@@ -160,6 +215,7 @@ def _business_date(payload: dict[str, Any]) -> date | None:
 
 
 def _published_at(payload: dict[str, Any]) -> datetime | None:
+    """Return the first parseable publication timestamp from known fields."""
     for field in ("f_ann_date", "ann_date", "trade_date", "cal_date"):
         parsed = _parse_date(payload.get(field))
         if parsed is not None:
@@ -168,6 +224,7 @@ def _published_at(payload: dict[str, Any]) -> datetime | None:
 
 
 def _parse_date(value: Any) -> date | None:
+    """Parse a Tushare date string in YYYYMMDD or ISO format."""
     normalized = str(value or "").strip()
     if not normalized:
         return None
@@ -180,6 +237,7 @@ def _parse_date(value: Any) -> date | None:
 
 
 def _json_scalar(value: Any) -> Any:
+    """Coerce a payload value into a JSON-serializable scalar."""
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     if isinstance(value, (date, datetime)):
@@ -188,6 +246,7 @@ def _json_scalar(value: Any) -> Any:
 
 
 def _hash_json(payload: Any, *, prefix: str = "sha256") -> str:
+    """Return a deterministic SHA-256 hash of a JSON-serializable payload."""
     encoded = json.dumps(
         payload,
         sort_keys=True,

@@ -1,4 +1,8 @@
-"""Migration verifier tests for v0.2 deployment audit."""
+"""Migration verifier tests for v0.2 deployment audit.
+
+Verifies that the full Alembic migration sequence runs cleanly from an empty
+database and produces the expected v0.2 schema head and table set.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +12,11 @@ from scripts.verify_migrations import verify_clean_database
 
 
 def test_migration_sequence_from_clean_database(database_url: str) -> None:
-    """migration sequence from clean database."""
+    """Test that the full migration sequence runs from a clean database.
+
+    Args:
+        database_url: Connection string for the PostgreSQL test server.
+    """
     url = make_url(database_url)
     clean_database_name = f"{url.database}_migration_v02"
 
@@ -19,7 +27,7 @@ def test_migration_sequence_from_clean_database(database_url: str) -> None:
     )
 
     assert result.current_head == result.expected_head
-    assert result.current_head == "20260625_0044_dead_schema"
+    assert result.current_head == "20260629_0045_agentic_news"
     assert result.failed_revision is None
     assert {
         "orchestration_runs",
@@ -67,6 +75,11 @@ def test_migration_sequence_from_clean_database(database_url: str) -> None:
         "analysis_evidence_links",
         "quant_feature_snapshots",
         "quant_feature_rows",
+        "news_agent_runs",
+        "news_agent_tasks",
+        "news_search_plans",
+        "news_article_findings",
+        "news_security_briefs",
     } <= set(result.tables)
     assert {
         "portfolios",

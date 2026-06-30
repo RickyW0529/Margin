@@ -192,6 +192,7 @@ def default_factor_weights(universe_code: str = "ALL_A") -> dict[str, float]:
 
 
 def _normalized_weights(weights: dict[str, float]) -> dict[str, float]:
+    """Return weights normalized to sum to 1.0, falling back to the input."""
     total = sum(value for value in weights.values() if value > 0)
     if total <= 0:
         return dict(weights)

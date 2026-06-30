@@ -16,11 +16,22 @@ class SQLAlchemyLLMCallAuditRepository:
     """Persist hash-only LLM call audit records idempotently."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
-        """Initialize the repository."""
+        """Initialize the repository.
+
+        Args:
+            session_factory: Callable that returns a new SQLAlchemy ``Session``.
+        """
         self._session_factory = session_factory
 
     def add(self, record: LLMCallAuditRecord) -> None:
-        """Persist one immutable LLM call audit record."""
+        """Persist one immutable LLM call audit record.
+
+        Args:
+            record: Hash-only audit record to persist.
+
+        Raises:
+            ValueError: If a conflicting record with the same billing key exists.
+        """
         with self._session_factory.begin() as session:
             existing = session.scalars(
                 llm_call_by_billing_key(record.billing_key)
@@ -36,11 +47,22 @@ class SQLAlchemyToolCallAuditRepository:
     """Persist scoped tool call audit records idempotently."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
-        """Initialize the repository."""
+        """Initialize the repository.
+
+        Args:
+            session_factory: Callable that returns a new SQLAlchemy ``Session``.
+        """
         self._session_factory = session_factory
 
     def add(self, record: ToolCallAuditRecord) -> None:
-        """Persist one immutable scoped-tool audit record."""
+        """Persist one immutable scoped-tool audit record.
+
+        Args:
+            record: Secret-safe audit record to persist.
+
+        Raises:
+            ValueError: If a conflicting record with the same call ID exists.
+        """
         with self._session_factory.begin() as session:
             existing = session.get(ToolCallRecordRow, record.call_id)
             if existing is not None:

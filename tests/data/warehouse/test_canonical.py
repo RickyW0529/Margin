@@ -18,7 +18,7 @@ def fact(
     available_at: datetime = DECISION,
     event_at: datetime = DECISION,
 ) -> StandardizedIndicatorFact:
-    """fact."""
+    """Build a ``StandardizedIndicatorFact`` fixture with overridable attributes."""
     return StandardizedIndicatorFact(
         fact_id=f"fact-{provider_code}-{quality_score}",
         provider_code=provider_code,
@@ -39,7 +39,7 @@ def fact(
 
 
 def test_canonical_keeps_all_provider_candidates() -> None:
-    """canonical keeps all provider candidates."""
+    """Test that the canonical resolver retains all provider candidates and selects the best."""
     resolver = CanonicalResolver()
 
     result = resolver.resolve(
@@ -60,7 +60,7 @@ def test_canonical_keeps_all_provider_candidates() -> None:
 
 
 def test_future_fact_is_not_candidate() -> None:
-    """future fact is not candidate."""
+    """Test that a fact available after the decision time is excluded from candidates."""
     resolver = CanonicalResolver()
 
     result = resolver.resolve(

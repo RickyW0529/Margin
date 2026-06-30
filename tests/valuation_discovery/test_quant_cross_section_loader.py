@@ -1,4 +1,9 @@
-"""Production quant cross-section adapter tests."""
+"""Production quant cross-section adapter tests.
+
+This module validates that the cross-section loader derives PIT metadata and
+market features, the feature mart loader reads materialized cross sections,
+and the ETL pipeline binds the snapshot before quant reads.
+"""
 
 from __future__ import annotations
 
@@ -112,7 +117,11 @@ class FakeWarehouse:
 
 
 def test_loader_builds_pit_metadata_and_market_features() -> None:
-    """Loader derives real quant inputs and marks stale market histories."""
+    """Verify the loader derives real quant inputs and marks stale market histories.
+
+    Returns:
+        None.
+    """
     warehouse = FakeWarehouse()
     snapshot = QuantInputSnapshot(
         scope_version_id="scope-v1",
@@ -147,7 +156,11 @@ def test_loader_builds_pit_metadata_and_market_features() -> None:
 
 
 def test_feature_mart_loader_reads_materialized_cross_section() -> None:
-    """Third-layer ETL writes fourth-layer features consumed by quant."""
+    """Verify third-layer ETL writes fourth-layer features consumed by quant.
+
+    Returns:
+        None.
+    """
     warehouse = FakeWarehouse()
     repository = MemoryAnalysisMartRepository()
     snapshot = QuantInputSnapshot(
@@ -186,7 +199,11 @@ def test_feature_mart_loader_reads_materialized_cross_section() -> None:
 
 
 def test_feature_mart_etl_pipeline_binds_snapshot_before_quant_read() -> None:
-    """Managed ETL returns a quant input bound to the fourth-layer feature set."""
+    """Verify managed ETL returns a quant input bound to the fourth-layer feature set.
+
+    Returns:
+        None.
+    """
     warehouse = FakeWarehouse()
     repository = MemoryAnalysisMartRepository()
     snapshot = QuantInputSnapshot(

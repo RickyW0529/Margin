@@ -63,7 +63,16 @@ class DataWarehouseIngestionStack:
         endpoint_registry: ProviderEndpointRegistry | None = None,
         default_provider: str = "tushare",
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the ingestion stack.
+
+        Args:
+            session_factory: Callable returning a SQLAlchemy ``Session``.
+            snapshot_root: Filesystem root for compressed raw snapshots.
+            standardizer: Optional custom field standardizer.
+            resolver: Optional custom canonical resolver.
+            endpoint_registry: Optional custom endpoint registry.
+            default_provider: Default provider code when a request omits one.
+        """
         self._session_factory = session_factory
         self._snapshot_store = CompressedSnapshotStore(snapshot_root)
         self._standardizer = standardizer or Standardizer(mapping_version="mapping-v0.2.0")
@@ -103,7 +112,15 @@ class DataWarehouseIngestionStack:
         return self._sync_repository
 
     def endpoint(self, provider: str, code: str) -> ProviderEndpoint:
-        """Return the versioned endpoint policy used by workers."""
+        """Return the versioned endpoint policy used by workers.
+
+        Args:
+            provider: The provider name.
+            code: The endpoint code.
+
+        Returns:
+            The matching ``ProviderEndpoint``.
+        """
         return self._endpoint_registry.get(provider, code)
 
     def _resolve_endpoints(
@@ -129,7 +146,19 @@ class DataWarehouseIngestionStack:
         decision_at: datetime,
         frequency: str = "1d",
     ) -> EndpointSyncResult:
-        """Fetch daily bars through a provider and persist warehouse outputs."""
+        """Fetch daily bars through a provider and persist warehouse outputs.
+
+        Args:
+            provider: The provider adapter instance.
+            symbols: Standard-format symbols to fetch.
+            start: Inclusive start of the requested range.
+            end: Inclusive end of the requested range.
+            decision_at: The point-in-time decision timestamp.
+            frequency: Bar frequency; defaults to ``"1d"``.
+
+        Returns:
+            The ``EndpointSyncResult`` from the executed sync item.
+        """
         provider_name = _provider_name(provider)
         endpoint = ProviderEndpoint(provider=provider_name, code="daily_bar", domain="market")
         run = self._sync_repository.create_run(
@@ -171,7 +200,18 @@ class DataWarehouseIngestionStack:
         raw_records: list[dict[str, Any]],
         decision_at: datetime,
     ) -> EndpointSyncResult:
-        """Persist raw payload, facts, and canonical values for provider records."""
+        """Persist raw payload, facts, and canonical values for provider records.
+
+        Args:
+            work_item: The durable work item being executed.
+            provider: The provider code.
+            endpoint_code: The endpoint code being ingested.
+            raw_records: Raw provider records to standardize and persist.
+            decision_at: The point-in-time decision timestamp.
+
+        Returns:
+            An ``EndpointSyncResult`` with fact and canonical counts.
+        """
         normalized_decision_at = ensure_utc(decision_at)
         snapshot = self._snapshot_store.write_json(
             provider,
@@ -234,7 +274,17 @@ class DataWarehouseIngestionStack:
         raw_records: list[dict[str, Any]],
         decision_at: datetime,
     ) -> EndpointSyncResult:
-        """Persist a provider security master with raw and bitemporal lineage."""
+        """Persist a provider security master with raw and bitemporal lineage.
+
+        Args:
+            work_item: The durable work item being executed.
+            provider: The provider code.
+            raw_records: Raw security-master records from the provider.
+            decision_at: The point-in-time decision timestamp.
+
+        Returns:
+            An ``EndpointSyncResult`` with the raw snapshot reference.
+        """
         normalized_decision_at = ensure_utc(decision_at)
         snapshot = self._snapshot_store.write_json(
             provider,
@@ -353,7 +403,19 @@ class DataWarehouseIngestionStack:
         decision_at: datetime,
         indicator_prefix: str = "",
     ) -> EndpointSyncResult:
-        """Persist arbitrary numeric or text provider records as PIT facts."""
+        """Persist arbitrary numeric or text provider records as PIT facts.
+
+        Args:
+            work_item: The durable work item being executed.
+            provider: The provider code.
+            endpoint_code: The endpoint code being ingested.
+            raw_records: Raw provider records to persist as indicator facts.
+            decision_at: The point-in-time decision timestamp.
+            indicator_prefix: Optional prefix prepended to each indicator ID.
+
+        Returns:
+            An ``EndpointSyncResult`` with fact and canonical counts.
+        """
         normalized_decision_at = ensure_utc(decision_at)
         snapshot = self._snapshot_store.write_json(
             provider,
@@ -507,7 +569,11 @@ class DataWarehouseIngestionStack:
         )
 
     def active_security_ids(self) -> tuple[str, ...]:
-        """Return all active A-share security IDs in deterministic order."""
+        """Return all active A-share security IDs in deterministic order.
+
+        Returns:
+            A tuple of security ID strings sorted by the database.
+        """
         with self._session_factory() as session:
             return tuple(
                 session.scalars(active_security_ids()).all()
@@ -519,14 +585,14 @@ class DataWarehouseIngestionStack:
         raw_records: list[dict[str, Any]],
         provider: str,
     ) -> list[StandardDataEvent]:
-        """standardize."""
+        """Standardize raw records for a supported data endpoint."""
         if endpoint_code == "daily_bar":
             return self._standardizer.standardize_bars(raw_records, provider)
         raise ValueError(f"unsupported data endpoint for ingestion: {endpoint_code}")
 
 
 def _provider_name(provider: Any) -> str:
-    """provider name."""
+    """Return a lowercased provider name from an adapter instance."""
     name = getattr(provider, "name", None)
     if isinstance(name, str) and name.strip():
         return name.strip().lower()
@@ -554,7 +620,7 @@ def _events_to_facts(
     endpoint_code: str,
     raw_snapshot_id: str,
 ) -> list[StandardizedIndicatorFact]:
-    """events to facts."""
+    """Convert standardized market-bar events into indicator facts."""
     facts: list[StandardizedIndicatorFact] = []
     for event in events:
         if event.domain is not StandardDataDomain.MARKET_BAR or event.symbol is None:
@@ -604,7 +670,7 @@ def _upsert_raw_snapshot(
     snapshot,
     decision_at: datetime,
 ) -> None:
-    """upsert raw snapshot."""
+    """Insert a raw snapshot row if the payload hash is not yet persisted."""
     existing = session.scalar(
         raw_snapshot_by_payload_hash(provider, endpoint_code, snapshot.payload_hash)
     )
@@ -636,7 +702,7 @@ def _upsert_schema_fields(
     raw_records: list[dict[str, Any]],
     observed_at: datetime,
 ) -> None:
-    """upsert schema fields."""
+    """Upsert observed source-field lifecycle rows for schema drift tracking."""
     fields: dict[str, list[Any]] = defaultdict(list)
     for record in raw_records:
         for field_name, value in record.items():
@@ -669,7 +735,7 @@ def _upsert_schema_fields(
 
 
 def _insert_facts(session: Session, facts: list[StandardizedIndicatorFact]) -> int:
-    """insert facts."""
+    """Batch-insert standardized indicator facts and return the inserted count."""
     inserted = 0
     payloads = [
         {
@@ -705,7 +771,7 @@ def _insert_facts(session: Session, facts: list[StandardizedIndicatorFact]) -> i
 
 
 def _insert_canonical_values(session: Session, resolutions) -> int:
-    """insert canonical values."""
+    """Batch-insert canonical indicator values and return the inserted count."""
     payloads: list[dict[str, Any]] = []
     for resolution in resolutions:
         if resolution.selected is None:
@@ -747,12 +813,12 @@ def _insert_canonical_values(session: Session, resolutions) -> int:
 
 
 def _raw_snapshot_id(payload_hash: str) -> str:
-    """raw snapshot id."""
+    """Return a deterministic raw-snapshot ID from a payload hash."""
     return "raw_" + payload_hash.removeprefix("sha256:")[:20]
 
 
 def _schema_field_id(provider: str, endpoint_code: str, field_name: str) -> str:
-    """schema field id."""
+    """Return a deterministic schema-field ID for drift tracking."""
     payload = f"{provider}|{endpoint_code}|{field_name}"
     return "sf_" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:20]
 
@@ -772,7 +838,7 @@ def _fact_id(
     event_at: datetime,
     raw_snapshot_id: str,
 ) -> str:
-    """fact id."""
+    """Return a deterministic fact ID for one provider indicator event."""
     payload = "|".join(
         [
             provider,
@@ -793,7 +859,7 @@ def _canonical_id(
     decision_at: datetime,
     resolver_version: str,
 ) -> str:
-    """canonical id."""
+    """Return a deterministic canonical-value ID for one resolution."""
     payload = "|".join(
         [
             security_id,
@@ -806,7 +872,7 @@ def _canonical_id(
 
 
 def _infer_type(values: list[Any]) -> str:
-    """infer type."""
+    """Infer a coarse type name from a list of observed values."""
     for value in values:
         if value is None:
             continue
@@ -823,7 +889,7 @@ def _infer_type(values: list[Any]) -> str:
 
 
 def _unit_for_indicator(indicator_id: str) -> str:
-    """unit for indicator."""
+    """Return the canonical unit for a market indicator ID."""
     if indicator_id in {"open", "high", "low", "close"}:
         return "CNY"
     if indicator_id == "volume":

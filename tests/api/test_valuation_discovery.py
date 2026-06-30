@@ -15,7 +15,7 @@ from margin.settings import get_settings
 def test_start_valuation_discovery_refresh_returns_accepted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """start valuation discovery refresh returns accepted."""
+    """Test that starting a valuation discovery refresh returns 202 Accepted."""
     monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin-test-token")
     monkeypatch.setenv("MARGIN_CSRF_TOKEN", "valid")
     get_settings.cache_clear()
@@ -45,9 +45,10 @@ def test_start_valuation_discovery_refresh_returns_accepted(
 def test_valuation_discovery_dependency_maps_provider_config_error_to_503(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """valuation discovery dependency maps provider config errors to 503."""
+    """Test that provider config errors are mapped to a 503 service error."""
 
     def broken_service() -> object:
+        """Raise a LookupError simulating a missing active provider config."""
         raise LookupError("active provider config not found: tavily")
 
     monkeypatch.setattr(
@@ -64,15 +65,17 @@ def test_valuation_discovery_dependency_maps_provider_config_error_to_503(
 
 
 class _FakeValuationService:
-    """FakeValuationService."""
+    """Fake valuation discovery service stub for API tests."""
+
     def start_refresh(self, **_: object) -> _FakeRefreshResponse:
-        """start refresh."""
+        """Return a fake accepted refresh response."""
         return _FakeRefreshResponse(run_id="vdr-api-1")
 
 
 @dataclass(frozen=True)
 class _FakeRefreshResponse:
-    """FakeRefreshResponse."""
+    """Fake refresh response returned by the valuation discovery stub."""
+
     run_id: str
     status: str = "accepted"
     http_status: int = 202

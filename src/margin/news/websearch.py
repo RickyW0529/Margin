@@ -27,8 +27,11 @@ Compliance constraints (architecture §6.2.1):
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field
 
@@ -39,6 +42,8 @@ from margin.core.provider import (
     ProviderStatus,
     ProviderType,
 )
+from margin.documents.markdown import DoclingMarkdownConverter
+from margin.documents.pipeline import DocumentNormalizationPipeline, DocumentPipelineRequest
 from margin.news.acquirer import (
     ComplianceError,
     DocumentParser,
@@ -58,7 +63,78 @@ from margin.news.models import (
 )
 
 if TYPE_CHECKING:
+    from margin.documents.markdown import MarkdownConversionResult
+    from margin.documents.pipeline import DocumentPipelineResult
     from margin.news.repository import NewsRepository
+
+
+def _domain(url: str) -> str:
+    """Return the normalized host for a URL."""
+    return urlparse(url).netloc.lower()
+
+
+def _matches_domain(domain: str, candidates: tuple[str, ...]) -> bool:
+    """Return whether domain equals or belongs to one of the candidates."""
+    return any(domain == candidate or domain.endswith(f".{candidate}") for candidate in candidates)
+
+
+def _title_from_conversion(
+    conversion: MarkdownConversionResult,
+    fallback: str,
+) -> str:
+    """Return a readable title from a Markdown conversion result."""
+    metadata = conversion.json_document or {}
+    for key in ("title", "name"):
+        title = _clean_title_candidate(metadata.get(key))
+        if title:
+            return title
+
+    for line in conversion.markdown.splitlines():
+        if line.lstrip().startswith("#"):
+            title = _clean_title_candidate(line.lstrip("# ").strip())
+            if title:
+                return title
+
+    for line in conversion.markdown.splitlines():
+        title = _clean_title_candidate(line)
+        if title:
+            return title
+    return fallback
+
+
+def _title_from_pipeline_result(
+    result: DocumentPipelineResult,
+    fallback: str,
+) -> str:
+    """Return a readable title from final JSON, conversion metadata, or Markdown."""
+    title = _clean_title_candidate(result.final_json.get("title"))
+    if title:
+        return title
+    title = _title_from_conversion(result.conversion, "")
+    if title:
+        return title
+    for line in result.final_markdown.splitlines():
+        if line.lstrip().startswith("#"):
+            title = _clean_title_candidate(line.lstrip("# ").strip())
+            if title:
+                return title
+    return fallback
+
+
+def _clean_title_candidate(value: Any) -> str:
+    """Normalize and reject non-business titles such as temp filenames."""
+    if not isinstance(value, str):
+        return ""
+    title = value.strip()
+    if not title:
+        return ""
+    lowered = title.lower()
+    if re.fullmatch(r"tmp[_-]?[a-z0-9]+", lowered):
+        return ""
+    if re.fullmatch(r"\d{1,12}", title):
+        return ""
+    return title
+
 
 # ---------------------------------------------------------------------------
 # Search result models
@@ -111,6 +187,245 @@ class SearchQueryRecord(BaseModel):
     result_count: int = 0
 
     model_config = {"frozen": True}
+
+
+class SearchResultQualityPolicy:
+    """Filter and rank WebSearch results before original-content acquisition."""
+
+    OFFICIAL_DOMAINS = (
+        "cninfo.com.cn",
+        "szse.cn",
+        "sse.com.cn",
+        "bse.cn",
+        "csrc.gov.cn",
+        "gov.cn",
+    )
+    TRUSTED_NEWS_DOMAINS = (
+        "stcn.com",
+        "cls.cn",
+        "21jingji.com",
+        "nbd.com.cn",
+        "jiemian.com",
+        "caixin.com",
+        "yicai.com",
+        "xinhuanet.com",
+        "cnfin.com",
+        "zqrb.cn",
+        "cs.com.cn",
+        "sfccn.com",
+        "ifnews.com",
+        "csteelnews.com",
+        "wallstreetcn.com",
+    )
+    SECONDARY_DISCLOSURE_DOMAINS = (
+        "data.eastmoney.com",
+        "emweb.eastmoney.com",
+        "gg.cfi.cn",
+        "vip.stock.finance.sina.com.cn",
+        "money.finance.sina.com.cn",
+    )
+    LOW_QUALITY_DOMAINS = (
+        "xueqiu.com",
+        "futunn.com",
+        "moomoo.com",
+        "finance.yahoo.com",
+        "yahoo.com",
+        "investing.com",
+        "tradingview.com",
+        "fupanwang.com",
+        "q.stock.sohu.com",
+        "stockpage.10jqka.com.cn",
+        "basic.10jqka.com.cn",
+        "quote.cfi.cn",
+        "stock.finance.sina.com.cn",
+        "stock.quote.stockstar.com",
+    )
+    LOW_QUALITY_TEXT_TERMS = (
+        "股票股价",
+        "股价",
+        "走势",
+        "行情",
+        "行情走势",
+        "实时行情",
+        "走势图",
+        "报价",
+        "股吧",
+        "讨论",
+        "操盘必读",
+        "F10",
+        "公司资料",
+        "股票最新价格",
+        "历史市盈率",
+        "目标价",
+        "评级",
+        "研究报告",
+        "研报",
+        "价值分析",
+        "技术分析",
+        "买入",
+        "卖出",
+        "行情首页",
+    )
+    EVENT_TERMS = (
+        "公告",
+        "业绩",
+        "年报",
+        "年度报告",
+        "季报",
+        "季度报告",
+        "半年报",
+        "一季报",
+        "三季报",
+        "预告",
+        "快报",
+        "监管",
+        "诉讼",
+        "处罚",
+        "合同",
+        "中标",
+        "回购",
+        "减持",
+        "增持",
+        "持股",
+        "投资者关系",
+        "调研",
+        "权益分派",
+        "分红",
+        "重组",
+        "停牌",
+        "复牌",
+        "项目",
+        "收购",
+        "出售",
+        "质押",
+        "产能",
+        "进展",
+        "风险",
+    )
+    COMMON_QUERY_TERMS = EVENT_TERMS + (
+        "site",
+        "最新",
+        "重大事项",
+        "重大",
+        "新闻",
+        "公司",
+    )
+    TICKER_RE = re.compile(r"(?<!\d)(\d{6})(?:\.(?:SZ|SH|BJ))?(?!\d)", re.I)
+
+    def filter_and_rank(
+        self,
+        results: tuple[SearchResult, ...],
+        *,
+        query: str,
+        max_results: int,
+    ) -> tuple[SearchResult, ...]:
+        """Return acquisition-worthy results sorted by quality."""
+        target_terms = self._target_terms(query)
+        scored: list[tuple[int, int, SearchResult]] = []
+        for index, result in enumerate(results):
+            score = self._score(result, target_terms=target_terms)
+            if score is None:
+                continue
+            scored.append((score, index, result))
+
+        scored.sort(key=lambda item: (-item[0], item[1]))
+        return tuple(result for _, _, result in scored[:max_results])
+
+    def _score(
+        self,
+        result: SearchResult,
+        *,
+        target_terms: tuple[str, ...],
+    ) -> int | None:
+        domain = _domain(result.url)
+        text = f"{result.title} {result.snippet} {result.url}"
+        lowered_text = text.lower()
+
+        if _looks_garbled(result.title) or _looks_garbled(result.snippet):
+            return None
+        official = _matches_domain(domain, self.OFFICIAL_DOMAINS)
+        trusted = _matches_domain(domain, self.TRUSTED_NEWS_DOMAINS)
+        secondary = _matches_domain(domain, self.SECONDARY_DISCLOSURE_DOMAINS)
+        low_quality_domain = _matches_domain(domain, self.LOW_QUALITY_DOMAINS)
+        event_like = any(term in text for term in self.EVENT_TERMS)
+        has_target_context = bool(target_terms)
+        target_matched = not target_terms or any(
+            term and term.lower() in lowered_text for term in target_terms
+        )
+        low_quality_text = any(
+            term.lower() in lowered_text for term in self.LOW_QUALITY_TEXT_TERMS
+        )
+
+        if not target_matched:
+            return None
+        if low_quality_domain:
+            return None
+        if low_quality_text and not (official or trusted or secondary):
+            return None
+        if has_target_context and not event_like and not (official or trusted):
+            return None
+
+        score = 0
+        if official:
+            score += 60
+        elif trusted:
+            score += 40
+        elif secondary:
+            score += 25
+        if event_like:
+            score += 20
+        if target_matched:
+            score += 10
+        if result.url.lower().endswith(".pdf") and official:
+            score += 10
+        if low_quality_text:
+            score -= 20
+        return score
+
+    def _target_terms(self, query: str) -> tuple[str, ...]:
+        ticker_match = self.TICKER_RE.search(query)
+        terms: list[str] = []
+        if ticker_match:
+            terms.append(ticker_match.group(1))
+        cleaned = re.sub(r"site:\S+", " ", query)
+        cleaned = cleaned.replace("（", " ").replace("）", " ")
+        cleaned = cleaned.replace("(", " ").replace(")", " ")
+        for raw_token in re.split(r"\s+", cleaned):
+            token = raw_token.strip("：:，,。;；")
+            if not token or self.TICKER_RE.fullmatch(token):
+                continue
+            if not any("\u4e00" <= char <= "\u9fff" for char in token):
+                continue
+            if any(common in token for common in self.COMMON_QUERY_TERMS):
+                continue
+            terms.append(token)
+            break
+        return tuple(dict.fromkeys(terms))
+
+
+def _looks_garbled(text: str) -> bool:
+    """Return whether text looks like mojibake or private-use glyph garbage."""
+    if not text:
+        return False
+    meaningful = [char for char in text if not char.isspace()]
+    if not meaningful:
+        return False
+    if "�" in text:
+        return True
+    private_or_control = 0
+    readable = 0
+    for char in meaningful:
+        category = unicodedata.category(char)
+        if category == "Co" or (category.startswith("C") and char not in "\t\n\r"):
+            private_or_control += 1
+            continue
+        if (
+            "\u4e00" <= char <= "\u9fff"
+            or char.isascii()
+            or category.startswith(("P", "S", "N"))
+        ):
+            readable += 1
+    return private_or_control > 0 or readable / max(len(meaningful), 1) < 0.55
 
 
 class VerifiedContent(BaseModel):
@@ -379,6 +694,8 @@ class OriginalContentVerifier:
         self,
         registry: SourceRegistry,
         snapshot_store: SnapshotStore,
+        markdown_converter: Any | None = None,
+        normalization_pipeline: Any | None = None,
     ) -> None:
         """Initialize the verifier with a downloader backed by the registry and
         snapshot store.
@@ -386,11 +703,17 @@ class OriginalContentVerifier:
         Args:
             registry: Source registry used by the downloader.
             snapshot_store: Snapshot store used to read downloaded snapshots.
+            markdown_converter: Converter that normalizes all supported input formats
+                into Markdown before downstream LLM extraction.
+            normalization_pipeline: Optional full review/repair/verify/slim pipeline.
         """
         self._downloader = Downloader(registry, snapshot_store)
         self._snapshot_store = snapshot_store
         self._parser = DocumentParser()
         self._compliance = ComplianceChecker
+        self._normalization_pipeline = normalization_pipeline or DocumentNormalizationPipeline(
+            converter=markdown_converter or DoclingMarkdownConverter()
+        )
 
     def verify_and_snapshot(
         self,
@@ -418,10 +741,27 @@ class OriginalContentVerifier:
                 self._snapshot_store.delete(snapshot)
                 return None
 
-            parsed = self._parser.parse(snapshot, content)
-            original_content = str(parsed.get("content") or "").strip()
-            if parsed.get("parse_note") or not original_content:
+            normalized = self._normalization_pipeline.normalize(
+                DocumentPipelineRequest(
+                    content=content,
+                    document_id=snapshot.snapshot_id,
+                    source_url=result.url,
+                    content_type=snapshot.content_type,
+                )
+            )
+            original_content = str(normalized.final_markdown or "").strip()
+            if not original_content:
                 return None
+
+            title = _title_from_pipeline_result(
+                normalized,
+                result.title,
+            )
+            if not title:
+                title = _title_from_conversion(
+                    normalized.conversion,
+                    result.title,
+                )
 
             verified_result = result.model_copy(
                 update={
@@ -433,10 +773,10 @@ class OriginalContentVerifier:
             return VerifiedContent(
                 result=verified_result,
                 snapshot=snapshot,
-                title=str(parsed.get("title") or result.title),
+                title=title,
                 content=original_content,
             )
-        except (ComplianceError, DownloadError, ParseError):
+        except (ComplianceError, DownloadError, ParseError, RuntimeError, ValueError):
             return None
 
     def verify_batch(
@@ -480,6 +820,9 @@ class WebSearchService:
         registry: SourceRegistry,
         snapshot_store: SnapshotStore,
         repository: NewsRepository | None = None,
+        quality_policy: SearchResultQualityPolicy | None = None,
+        markdown_converter: Any | None = None,
+        normalization_pipeline: Any | None = None,
     ) -> None:
         """Initialize the service.
 
@@ -488,10 +831,19 @@ class WebSearchService:
             registry: Source registry for content acquisition.
             snapshot_store: Snapshot store for persisting downloaded content.
             repository: Optional repository for persisting search records and audited results.
+            quality_policy: Optional policy for pre-download result filtering.
+            markdown_converter: Optional shared document-to-Markdown converter.
+            normalization_pipeline: Optional shared document normalization pipeline.
         """
         self._provider = provider
-        self._verifier = OriginalContentVerifier(registry, snapshot_store)
+        self._verifier = OriginalContentVerifier(
+            registry,
+            snapshot_store,
+            markdown_converter=markdown_converter,
+            normalization_pipeline=normalization_pipeline,
+        )
         self._repository = repository
+        self._quality_policy = quality_policy or SearchResultQualityPolicy()
 
     def search(
         self,
@@ -533,6 +885,17 @@ class WebSearchService:
         """
         record = self._provider.search(
             query, max_results=max_results, source_level=source_level
+        )
+        filtered_results = self._quality_policy.filter_and_rank(
+            record.results,
+            query=query,
+            max_results=max_results,
+        )
+        record = record.model_copy(
+            update={
+                "results": filtered_results,
+                "result_count": len(filtered_results),
+            }
         )
         if searched_at is not None:
             record = record.model_copy(update={"searched_at": searched_at})

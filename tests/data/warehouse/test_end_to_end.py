@@ -41,7 +41,7 @@ class FakeDailyBarProvider:
         end: datetime,
         frequency: str = "1d",
     ) -> list[dict]:
-        """get bars."""
+        """Return one daily bar for the requested symbol and date range."""
         assert symbols == ["000001.SZ"]
         assert start == DECISION
         assert end == DECISION
@@ -85,7 +85,7 @@ def data_stack(database_url: str, tmp_path):
 
 
 def test_provider_payload_reaches_canonical_value(data_stack: DataWarehouseIngestionStack) -> None:
-    """provider payload reaches canonical value."""
+    """Test that a provider payload flows through to a persisted canonical value."""
     result = data_stack.sync_daily_bars(
         FakeDailyBarProvider(),
         symbols=("000001.SZ",),

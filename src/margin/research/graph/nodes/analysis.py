@@ -68,13 +68,19 @@ class AnalysisNode:
         tool_factory: ScopedToolFactory,
         handler: AnalysisHandler,
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the analysis node with its handler and tool factory.
+
+        Args:
+            node_name: Name of the analysis node.
+            tool_factory: Scoped tool factory for node sessions.
+            handler: Analysis handler to execute.
+        """
         self.node_name = node_name
         self._tool_factory = tool_factory
         self._handler = handler
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Call the instance."""
+        """Execute the scoped analysis handler and return graph state updates."""
         session = self._tool_factory.create_session(
             graph_run_id=state.graph_run_id,
             node_name=self.node_name,
@@ -133,7 +139,7 @@ class AnalysisJoinNode:
     )
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Call the instance."""
+        """Validate that all parallel analysis branches completed."""
         completed = tuple(
             node_name
             for node_name in self.required_nodes
@@ -160,7 +166,7 @@ class EvidenceGapRouter:
     """Record the deterministic supplemental-retrieval routing decision."""
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Call the instance."""
+        """Record the deterministic supplemental-retrieval routing decision."""
         return {
             "node_outputs": {
                 "evidence_gap_router": {
@@ -181,7 +187,12 @@ class TargetedReanalysisNode(AnalysisNode):
         tool_factory: ScopedToolFactory,
         handlers: Mapping[str, AnalysisHandler],
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the targeted reanalysis node.
+
+        Args:
+            tool_factory: Scoped tool factory for node sessions.
+            handlers: Mapping from node name to analysis handler.
+        """
         super().__init__(
             node_name="targeted_reanalysis",
             tool_factory=tool_factory,

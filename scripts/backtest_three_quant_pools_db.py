@@ -89,6 +89,18 @@ THEME_MEMBERS: dict[str, float] = {
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the DB-only monthly backtest for CSI300, All-A and CSI500 pools.
+
+    Args:
+        argv: Optional argument list. When ``None``, arguments are read from
+            ``sys.argv``.
+
+    Returns:
+        int: 0 on success.
+
+    Raises:
+        SystemExit: When no rebalance dates are available from DB market data.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--start-date", default="2024-06-24")
     parser.add_argument("--end-date", default="2026-06-23")
@@ -208,6 +220,17 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def inspect_coverage(engine, *, start: date, end: date) -> dict[str, Any]:
+    """Inspect DB data coverage for the requested backtest window.
+
+    Args:
+        engine: SQLAlchemy engine connected to the warehouse.
+        start: Backtest start date.
+        end: Backtest end date.
+
+    Returns:
+        dict[str, Any]: Coverage report with per-endpoint and per-index stats
+            plus data warnings.
+    """
     with engine.connect() as conn:
         endpoint_rows = conn.execute(coverage_by_endpoint()).mappings().all()
         index_rows = conn.execute(coverage_by_index_code()).mappings().all()
@@ -248,6 +271,20 @@ def inspect_coverage(engine, *, start: date, end: date) -> dict[str, Any]:
 
 
 def load_market_panels(engine, *, start: date, end: date) -> dict[str, Any]:
+    """Load market panel facts and derive price, return and feature panels.
+
+    Args:
+        engine: SQLAlchemy engine connected to the warehouse.
+        start: Panel start date (lookback-extended before backtest start).
+        end: Panel end date.
+
+    Returns:
+        dict[str, Any]: Dict with long frame, close, amount, adj_close,
+            returns and computed feature panels.
+
+    Raises:
+        SystemExit: When the DB market facts frame is empty.
+    """
     frame = pd.read_sql_query(
         market_panel_facts(),
         engine,
@@ -307,6 +344,16 @@ def load_market_panels(engine, *, start: date, end: date) -> dict[str, Any]:
 
 
 def pivot_indicator(frame: pd.DataFrame, indicator: str) -> pd.DataFrame:
+    """Pivot a long indicator frame into a date-by-security wide table.
+
+    Args:
+        frame: Long-format DataFrame with indicator_id column.
+        indicator: Indicator name to filter on.
+
+    Returns:
+        pd.DataFrame: Pivoted table indexed by trade_date, columns by
+            security_id.
+    """
     part = frame.loc[frame["indicator_id"] == indicator]
     return part.pivot_table(
         index="trade_date",
@@ -317,6 +364,17 @@ def pivot_indicator(frame: pd.DataFrame, indicator: str) -> pd.DataFrame:
 
 
 def load_daily_basic(engine, *, start: date, end: date) -> pd.DataFrame:
+    """Load daily basic valuation facts and pivot into a wide frame.
+
+    Args:
+        engine: SQLAlchemy engine connected to the warehouse.
+        start: Query start date.
+        end: Query end date.
+
+    Returns:
+        pd.DataFrame: Pivoted daily basic frame indexed by trade_date and
+            security_id, or an empty frame when no rows exist.
+    """
     frame = pd.read_sql_query(
         daily_basic_facts(),
         engine,
@@ -339,6 +397,17 @@ def load_index_members(
     start: date,
     end: date,
 ) -> dict[str, dict[pd.Timestamp, set[str]]]:
+    """Load index weight members grouped by index code and trade date.
+
+    Args:
+        engine: SQLAlchemy engine connected to the warehouse.
+        start: Query start date.
+        end: Query end date.
+
+    Returns:
+        dict[str, dict[pd.Timestamp, set[str]]]: Mapping from index code to
+            trade-date to set of member security IDs.
+    """
     frame = pd.read_sql_query(
         index_weight_members(),
         engine,
@@ -358,6 +427,15 @@ def load_index_members(
 
 
 def load_company_pool_snapshots(engine) -> dict[str, Any]:
+    """Load company pool snapshots and their member security ID sets.
+
+    Args:
+        engine: SQLAlchemy engine connected to the warehouse.
+
+    Returns:
+        dict[str, Any]: Dict with snapshots DataFrame and members mapping
+            from snapshot_id to security ID set.
+    """
     snapshots = pd.read_sql_query(
         company_pool_snapshots_sql(),
         engine,
@@ -376,6 +454,14 @@ def load_company_pool_snapshots(engine) -> dict[str, Any]:
 
 
 def load_security_names(engine) -> dict[str, str]:
+    """Load active security ID to name mapping.
+
+    Args:
+        engine: SQLAlchemy engine connected to the warehouse.
+
+    Returns:
+        dict[str, str]: Mapping from security ID to display name.
+    """
     frame = pd.read_sql_query(
         security_names_active(),
         engine,
@@ -384,6 +470,16 @@ def load_security_names(engine) -> dict[str, str]:
 
 
 def month_end_dates(index: pd.DatetimeIndex, *, start: date, end: date) -> list[pd.Timestamp]:
+    """Extract month-end rebalance dates within the requested window.
+
+    Args:
+        index: DatetimeIndex of available trading dates.
+        start: Window start date.
+        end: Window end date.
+
+    Returns:
+        list[pd.Timestamp]: Sorted list of last trading day per month.
+    """
     dates = pd.DatetimeIndex(index).sort_values().unique()
     dates = dates[(dates.date >= start) & (dates.date <= end)]
     if dates.empty:
@@ -405,6 +501,24 @@ def run_pool_backtest(
     theme_signals: dict[pd.Timestamp, dict[str, Any]],
     theme_enabled: bool = True,
 ) -> dict[str, Any]:
+    """Run a single pool backtest at a given cost level.
+
+    Args:
+        pool_code: Pool identifier (CSI300, ALL_A, CSI500).
+        cost_bps: Round-trip transaction cost in basis points.
+        rebalance_dates: Monthly rebalance timestamps.
+        prices: Market panel dict from load_market_panels.
+        daily_basic: Daily valuation frame from load_daily_basic.
+        company_pools: Company pool snapshots from load_company_pool_snapshots.
+        index_members: Index members from load_index_members.
+        security_names: Security ID to name mapping.
+        theme_signals: Theme hotness signals keyed by date.
+        theme_enabled: Whether the theme factor is active.
+
+    Returns:
+        dict[str, Any]: Dict with summary, nav, trades and latest_candidates
+            DataFrames.
+    """
     preset = DEFAULT_QUANT_POOL_PRESETS[pool_code]
     config = ManualAllAConfig(
         score_threshold=preset.buy_threshold,
@@ -580,6 +694,19 @@ def universe_for_date(
     company_pools: dict[str, Any],
     index_members: dict[str, dict[pd.Timestamp, set[str]]],
 ) -> set[str]:
+    """Resolve the investable universe for a pool at a rebalance date.
+
+    Args:
+        pool_code: Pool identifier (CSI300, ALL_A, CSI500).
+        rebalance_date: PIT rebalance timestamp.
+        prices: Market panel dict from load_market_panels.
+        company_pools: Company pool snapshots from load_company_pool_snapshots.
+        index_members: Index members from load_index_members.
+
+    Returns:
+        set[str]: Set of security IDs in the universe, or an empty set when
+            no index members are available before the date.
+    """
     if pool_code == "ALL_A":
         snapshots = company_pools["snapshots"]
         if not snapshots.empty:
@@ -605,6 +732,20 @@ def feature_frame_for_date(
     security_names: dict[str, str],
     theme_signals: dict[pd.Timestamp, dict[str, Any]],
 ) -> pd.DataFrame:
+    """Build the scoring feature frame for one rebalance date.
+
+    Args:
+        rebalance_date: PIT rebalance timestamp.
+        universe: Set of security IDs in the universe.
+        prices: Market panel dict from load_market_panels.
+        daily_basic: Daily valuation frame from load_daily_basic.
+        security_names: Security ID to name mapping.
+        theme_signals: Theme hotness signals keyed by date.
+
+    Returns:
+        pd.DataFrame: Feature frame with market features, latest valuation
+            fundamentals, names and theme columns.
+    """
     securities = sorted(universe & set(prices["adj_close"].columns.astype(str)))
     if not securities:
         return pd.DataFrame()
@@ -635,7 +776,16 @@ def build_theme_signals(
     prices: dict[str, Any],
     rebalance_dates: list[pd.Timestamp],
 ) -> dict[pd.Timestamp, dict[str, Any]]:
-    """Build PIT theme hotness signals from seed members and market panels."""
+    """Build PIT theme hotness signals from seed members and market panels.
+
+    Args:
+        prices: Market panel dict with adj_close, amount and returns.
+        rebalance_dates: Rebalance timestamps for which to compute signals.
+
+    Returns:
+        dict[pd.Timestamp, dict[str, Any]]: Per-rebalance theme signal
+            metrics including hot score, relative strength and confirmation.
+    """
     adj_close = prices["adj_close"]
     amount = prices["amount"].reindex_like(adj_close)
     members = sorted(set(THEME_MEMBERS) & set(adj_close.columns.astype(str)))
@@ -715,7 +865,17 @@ def attach_theme_features(
     rebalance_date: pd.Timestamp,
     theme_signals: dict[pd.Timestamp, dict[str, Any]],
 ) -> pd.DataFrame:
-    """Attach current theme signal and per-security membership confidence."""
+    """Attach current theme signal and per-security membership confidence.
+
+    Args:
+        records: Candidate feature frame for one rebalance date.
+        rebalance_date: The rebalance timestamp to look up.
+        theme_signals: Pre-computed theme signals keyed by date.
+
+    Returns:
+        pd.DataFrame: Enriched records with theme columns, or the original
+            frame when no signal exists for the date.
+    """
     signal = theme_signals.get(rebalance_date)
     if signal is None:
         return records
@@ -745,7 +905,15 @@ def theme_adjusted_weights(
     *,
     theme_enabled: bool,
 ) -> dict[str, float]:
-    """Return factor weights with theme-hotness isolated behind a switch."""
+    """Return factor weights with theme-hotness isolated behind a switch.
+
+    Args:
+        weights: Original factor weight map.
+        theme_enabled: When False, theme_hotness weight is zeroed out.
+
+    Returns:
+        dict[str, float]: Adjusted weight map.
+    """
     adjusted = dict(weights)
     if not theme_enabled:
         adjusted["theme_hotness"] = 0.0
@@ -756,6 +924,7 @@ def _latest_panel_date(
     index: pd.DatetimeIndex,
     target: pd.Timestamp,
 ) -> pd.Timestamp | None:
+    """Return the latest panel date at or before the target timestamp."""
     eligible = pd.DatetimeIndex(index).sort_values()
     eligible = eligible[eligible <= target]
     return None if eligible.empty else eligible[-1]
@@ -766,6 +935,7 @@ def _theme_drawdown_60d(
     members: list[str],
     date_key: pd.Timestamp,
 ) -> float:
+    """Compute the max drawdown of the theme member NAV over the trailing 60 days."""
     window = adj_close.reindex(columns=members).loc[:date_key].tail(60).ffill()
     window = window.dropna(axis=1, thresh=max(20, len(window) // 2))
     if len(window) < 20 or window.empty:
@@ -783,6 +953,7 @@ def _theme_signal_value(
     rebalance_date: pd.Timestamp,
     key: str,
 ) -> Any:
+    """Safely look up a single theme signal field for a rebalance date."""
     signal = theme_signals.get(rebalance_date)
     return None if signal is None else signal.get(key)
 
@@ -793,6 +964,19 @@ def target_weight_map(
     weighting: str,
     sell_threshold: float,
 ) -> dict[str, float]:
+    """Compute normalized target weights for selected securities.
+
+    Args:
+        scored: Scored candidate frame with manual_all_a_score and
+            volatility_120d columns.
+        target_ids: Security IDs to include in the target portfolio.
+        weighting: Weighting scheme ("inv_vol_score", "score_excess" or
+            equal weight).
+        sell_threshold: Score threshold below which excess is clipped.
+
+    Returns:
+        dict[str, float]: Mapping from security ID to normalized weight.
+    """
     if not target_ids:
         return {}
     target = scored.loc[scored["security_id"].astype(str).isin(target_ids)].copy()
@@ -835,6 +1019,23 @@ def summarize_backtest(
     data_notes: list[str],
     theme_enabled: bool = True,
 ) -> dict[str, Any]:
+    """Compute summary statistics for one pool backtest run.
+
+    Args:
+        pool_code: Pool identifier (CSI300, ALL_A, CSI500).
+        preset: Quant pool preset with thresholds and weighting.
+        cost_bps: Transaction cost in basis points.
+        nav_frame: Daily NAV rows for the backtest.
+        trades: Per-rebalance trade rows.
+        total_turnover: Cumulative turnover across all rebalances.
+        skipped_rebalances: Count of rebalances skipped due to empty data.
+        data_notes: Human-readable data quality notes.
+        theme_enabled: Whether the theme factor was active.
+
+    Returns:
+        dict[str, Any]: Summary dict with return, risk, turnover and holdings
+            statistics, or an insufficient_data status when NAV is empty.
+    """
     if nav_frame.empty:
         return {
             "pool": pool_code,

@@ -1,4 +1,12 @@
-"""v0.2 LangGraph execution tests for retrieval discipline and fan-in."""
+"""v0.2 LangGraph execution tests for retrieval discipline and fan-in.
+
+This module verifies that the AI delta review graph enforces retrieval
+discipline (analysis nodes cannot call retrieval tools), correctly fans in
+parallel analysis outputs with gap deduplication, limits supplemental
+retrieval to a single round, structures branch failures without losing
+parallel outputs, and routes carry-forward, deferred, and citation-repair
+outcomes deterministically.
+"""
 
 from __future__ import annotations
 
@@ -30,7 +38,16 @@ DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 
 
 class RetrievalInput(BaseModel):
-    """RetrievalInput."""
+    """Input model for the evidence retrieval tool.
+
+    Attributes:
+        security_id: The security identifier to retrieve evidence for.
+        decision_at: The point-in-time decision timestamp.
+        questions: Tuple of research questions to answer.
+        evidence_gaps: Tuple of known evidence gaps to fill.
+        supplemental: Whether this is a supplemental retrieval request.
+    """
+
     security_id: str
     decision_at: datetime
     questions: tuple[str, ...]
@@ -39,7 +56,15 @@ class RetrievalInput(BaseModel):
 
 
 class ValuationInput(BaseModel):
-    """ValuationInput."""
+    """Input model for the deterministic valuation tool.
+
+    Attributes:
+        security_id: The security identifier to value.
+        decision_at: The point-in-time decision timestamp.
+        earnings: The earnings figure used in the valuation.
+        multiple: The valuation multiple to apply.
+    """
+
     security_id: str
     decision_at: datetime
     earnings: float
@@ -47,7 +72,13 @@ class ValuationInput(BaseModel):
 
 
 def test_analysis_nodes_do_not_receive_or_call_retrieval_tools() -> None:
-    """analysis nodes do not receive or call retrieval tools."""
+    """Verify analysis nodes never receive or call retrieval tools.
+
+    Runs a full review graph and asserts that only the ``retrieve_evidence``
+    node calls the evidence retrieval tool, that no analysis node's tool
+    manifest includes ``evidence_retrieve``, and that the retrieval count
+    is exactly one.
+    """
     fixture = GraphFixture()
     graph = build_ai_delta_review_graph(fixture.dependencies())
 
@@ -69,7 +100,13 @@ def test_analysis_nodes_do_not_receive_or_call_retrieval_tools() -> None:
 
 
 def test_analysis_fan_in_preserves_all_outputs_and_deduplicates_gaps() -> None:
-    """analysis fan in preserves all outputs and deduplicates gaps."""
+    """Verify analysis fan-in preserves all outputs and deduplicates gaps.
+
+    Runs a full review graph where two analysis branches report the same
+    evidence gap and asserts that all four branch outputs are present, the
+    gap is deduplicated to a single entry, and the join reports four
+    completed branches.
+    """
     fixture = GraphFixture(shared_gap=True, enable_supplemental=False)
     graph = build_ai_delta_review_graph(fixture.dependencies())
 
@@ -86,7 +123,13 @@ def test_analysis_fan_in_preserves_all_outputs_and_deduplicates_gaps() -> None:
 
 
 def test_evidence_gap_allows_only_one_supplemental_retrieval() -> None:
-    """evidence gap allows only one supplemental retrieval."""
+    """Verify an evidence gap triggers at most one supplemental retrieval.
+
+    Runs a full review graph with a shared gap and supplemental retrieval
+    enabled, then asserts that exactly two retrieval calls occur (initial
+    plus supplemental), two evidence packages are produced, the targeted
+    reanalysis completes, and no repair is needed.
+    """
     fixture = GraphFixture(shared_gap=True, enable_supplemental=True)
     graph = build_ai_delta_review_graph(fixture.dependencies())
 
@@ -109,7 +152,13 @@ def test_evidence_gap_allows_only_one_supplemental_retrieval() -> None:
 
 
 def test_analysis_failure_is_structured_without_losing_parallel_outputs() -> None:
-    """analysis failure is structured without losing parallel outputs."""
+    """Verify a failing analysis branch is structured without losing parallel outputs.
+
+    Runs a full review graph where ``risk_review`` raises a runtime error and
+    asserts that the error is captured in the errors channel, the failing
+    branch's output marks success as ``False``, the other three branches
+    complete successfully, and the join still counts four branches.
+    """
     fixture = GraphFixture(failing_node="risk_review")
     graph = build_ai_delta_review_graph(fixture.dependencies())
 
@@ -124,7 +173,13 @@ def test_analysis_failure_is_structured_without_losing_parallel_outputs() -> Non
 
 
 def test_carry_forward_verified_keeps_effective_assessment_and_zero_llm() -> None:
-    """carry forward verified keeps effective assessment and zero llm."""
+    """Verify carry-forward fast path keeps the prior assessment with zero LLM calls.
+
+    Runs the graph in carry-forward mode with a previous effective assessment
+    and asserts that the outcome is ``CARRY_FORWARD_VERIFIED``, the effective
+    assessment ID is preserved, freshness is ``verified_current``, and no LLM
+    calls were made.
+    """
     fixture = GraphFixture()
     graph = build_ai_delta_review_graph(fixture.dependencies())
     state = fixture.full_review_state().with_updates(
@@ -141,7 +196,12 @@ def test_carry_forward_verified_keeps_effective_assessment_and_zero_llm() -> Non
 
 
 def test_deferred_keeps_previous_effective_assessment() -> None:
-    """deferred keeps previous effective assessment."""
+    """Verify review-deferred mode keeps the previous effective assessment.
+
+    Runs the graph in deferred mode with a stale reason and asserts that the
+    outcome is ``REVIEW_DEFERRED``, the previous effective assessment ID is
+    preserved, and the stale reason is propagated.
+    """
     fixture = GraphFixture()
     graph = build_ai_delta_review_graph(fixture.dependencies())
     state = fixture.full_review_state().with_updates(
@@ -158,7 +218,13 @@ def test_deferred_keeps_previous_effective_assessment() -> None:
 
 
 def test_unrepairable_citation_failure_abstains_without_overwriting_effective() -> None:
-    """unrepairable citation failure abstains without overwriting effective."""
+    """Verify an unrepairable citation failure abstains without overwriting effective.
+
+    Runs the graph with an unrepairable citation validation failure and
+    asserts that the outcome is ``ABSTAIN``, the previous effective assessment
+    is preserved, one repair attempt was made, and the stale reason indicates
+    citation validation failure.
+    """
     fixture = GraphFixture(
         decision_evidence_ids=("ev-invalid",),
         citation_mode="unrepairable",
@@ -177,7 +243,13 @@ def test_unrepairable_citation_failure_abstains_without_overwriting_effective() 
 
 
 def test_repairable_citation_removes_invalid_existing_reference_once() -> None:
-    """repairable citation removes invalid existing reference once."""
+    """Verify a repairable citation removes an invalid reference exactly once.
+
+    Runs the graph with a repairable citation failure and asserts that the
+    outcome is ``UPDATE_ASSESSMENT``, a new effective assessment is created,
+    one repair attempt was made, the invalid evidence ID is removed from the
+    draft, and the citation validator was called twice.
+    """
     fixture = GraphFixture(
         decision_evidence_ids=("ev-good", "ev-invalid"),
         citation_mode="repairable",
@@ -194,7 +266,12 @@ def test_repairable_citation_removes_invalid_existing_reference_once() -> None:
 
 
 def test_llm_decision_cannot_claim_verified_carry_forward() -> None:
-    """llm decision cannot claim verified carry forward."""
+    """Verify an LLM decision cannot claim the verified carry-forward outcome.
+
+    Runs the graph with a decision handler that attempts to return
+    ``CARRY_FORWARD_VERIFIED`` and asserts that the graph abstains and
+    records a ``forbidden_outcome`` error for the decision node.
+    """
     fixture = GraphFixture(
         decision_outcome=ReviewOutcome.CARRY_FORWARD_VERIFIED,
     )
@@ -207,7 +284,27 @@ def test_llm_decision_cannot_claim_verified_carry_forward() -> None:
 
 
 class GraphFixture:
-    """GraphFixture."""
+    """Reusable test fixture for building AI delta review graph dependencies.
+
+    This fixture provides configurable analysis handlers, a decision handler,
+    a citation validator, and a scoped tool factory with evidence retrieval
+    and deterministic valuation tools.
+
+    Attributes:
+        shared_gap: Whether analysis branches share a common evidence gap.
+        enable_supplemental: Whether supplemental retrieval is allowed.
+        failing_node: Name of a node that should raise an error, or ``None``.
+        decision_evidence_ids: Evidence IDs returned by the decision handler.
+        citation_mode: Citation validation mode (``valid``, ``repairable``,
+            ``unrepairable``).
+        decision_outcome: The review outcome returned by the decision handler.
+        citation_calls: Number of times the citation validator was called.
+        audit: In-memory tool call audit repository.
+        analysis_tool_names: Mapping of node name to tool names seen by that
+            node's analysis handler.
+        retrieval_calls: Number of times the retrieval tool was called.
+    """
+
     def __init__(
         self,
         *,
@@ -218,7 +315,16 @@ class GraphFixture:
         citation_mode: str = "valid",
         decision_outcome: ReviewOutcome = ReviewOutcome.UPDATE_ASSESSMENT,
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the fixture with the given configuration options.
+
+        Args:
+            shared_gap: Whether analysis branches share a common evidence gap.
+            enable_supplemental: Whether supplemental retrieval is allowed.
+            failing_node: Name of a node that should raise an error, or ``None``.
+            decision_evidence_ids: Evidence IDs returned by the decision handler.
+            citation_mode: Citation validation mode.
+            decision_outcome: The review outcome returned by the decision handler.
+        """
         self.shared_gap = shared_gap
         self.enable_supplemental = enable_supplemental
         self.failing_node = failing_node
@@ -231,7 +337,12 @@ class GraphFixture:
         self.retrieval_calls = 0
 
     def dependencies(self) -> GraphDependencies:
-        """dependencies."""
+        """Build graph dependencies with scoped tools and fixture handlers.
+
+        Returns:
+            A ``GraphDependencies`` instance wired with the fixture's tools,
+            analysis handlers, decision handler, and citation validator.
+        """
         registry = ToolDefinitionRegistry()
         registry.register(
             ToolDefinition(
@@ -278,7 +389,12 @@ class GraphFixture:
         )
 
     def full_review_state(self):
-        """full review state."""
+        """Build an initial graph state configured for a full review.
+
+        Returns:
+            An initial graph state with ``FULL_REVIEW`` mode and an
+            ``initial_research`` change set entry.
+        """
         return create_initial_state(
             graph_run_id="graph-1",
             context_snapshot_id="ctx-1",
@@ -293,7 +409,7 @@ class GraphFixture:
         )
 
     def _retrieve(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """retrieve."""
+        """Handle an evidence retrieval request, returning a mock package."""
         self.retrieval_calls += 1
         supplemental = bool(payload["supplemental"])
         return {
@@ -308,12 +424,12 @@ class GraphFixture:
         }
 
     def _analysis_handler(self, node_name: str):
-        """analysis handler."""
+        """Create an analysis handler for the given node name."""
         def handler(
             request: AnalysisRequest,
             session: ScopedToolSession,
         ) -> dict[str, Any]:
-            """handler."""
+            """Inner handler closure for a single analysis branch."""
             if node_name == self.failing_node:
                 raise RuntimeError("injected branch failure")
             self.analysis_tool_names[node_name] = tuple(
@@ -346,7 +462,7 @@ class GraphFixture:
         return handler
 
     def _decision(self, state) -> dict[str, Any]:
-        """decision."""
+        """Return a deterministic decision result based on fixture configuration."""
         del state
         return {
             "outcome": self.decision_outcome.value,
@@ -357,7 +473,7 @@ class GraphFixture:
         }
 
     def _validate_citations(self, draft, state) -> dict[str, Any]:
-        """validate citations."""
+        """Validate citations against the fixture's citation mode configuration."""
         del state
         self.citation_calls += 1
         evidence_ids = tuple(draft["evidence_ids"])

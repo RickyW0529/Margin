@@ -47,7 +47,7 @@ class ValuationDiscoveryService:
     """Thin application boundary around the valuation discovery orchestrator."""
 
     def __init__(self, orchestrator: ValuationDiscoveryOrchestrator) -> None:
-        """init  ."""
+        """Initialize the service with a valuation discovery orchestrator."""
         self._orchestrator = orchestrator
 
     def start_refresh(
@@ -125,5 +125,5 @@ def _step_to_dict(step: StepAttempt) -> dict:
 
 
 def _response_from_run(run: OrchestrationRun) -> RefreshStartResponse:
-    """response from run."""
+    """Convert an orchestration run into a refresh start response DTO."""
     return RefreshStartResponse(run_id=run.run_id)

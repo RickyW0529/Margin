@@ -51,7 +51,7 @@ class FactorScorer:
     }
 
     def __init__(self, normalizer: FactorNormalizer | None = None) -> None:
-        """init  ."""
+        """Initialize the scorer with an optional custom normalizer."""
         self._normalizer = normalizer or FactorNormalizer()
 
     def score_value(self, frame: pd.DataFrame) -> pd.DataFrame:

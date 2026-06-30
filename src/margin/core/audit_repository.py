@@ -21,7 +21,12 @@ AuditRedactor = Callable[[object, str, dict[str, Any]], dict[str, Any]]
 
 
 class AuditRepository(Protocol):
-    """Persistence contract for immutable audit records."""
+    """Persistence contract for immutable audit records.
+
+    Defines the append-only contract used by services to persist audit
+    records and by dashboards to query them. Implementations must reject
+    duplicate ``record_id`` values to preserve immutability.
+    """
 
     def record(self, record: AuditLogRecord) -> None:
         """Append an audit record.

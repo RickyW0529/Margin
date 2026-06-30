@@ -1,4 +1,9 @@
-"""Hard filter tests for valuation discovery quant."""
+"""Hard filter tests for valuation discovery quant.
+
+This module validates that the hard filter engine rejects ST stocks with
+structured reasons, retains low-liquidity companies with warnings, and
+marks missing critical financials as data-insufficient.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +19,11 @@ from margin.valuation_discovery.quant.filters import HardFilterEngine
 
 @pytest.fixture
 def quant_frame() -> pd.DataFrame:
-    """quant frame."""
+    """Return a deterministic single-row quant cross-section DataFrame.
+
+    Returns:
+        A pandas DataFrame indexed by security_id with one valid company row.
+    """
     frame = pd.DataFrame(
         [
             {
@@ -39,7 +48,14 @@ def quant_frame() -> pd.DataFrame:
 
 
 def test_st_stock_is_rejected_with_structured_reason(quant_frame: pd.DataFrame) -> None:
-    """st stock is rejected with structured reason."""
+    """Verify an ST stock is rejected with a structured blocker reason.
+
+    Args:
+        quant_frame: Deterministic quant cross-section DataFrame fixture.
+
+    Returns:
+        None.
+    """
     quant_frame.loc["000001.SZ", "is_st"] = True
     result = HardFilterEngine(QuantConfig()).apply(quant_frame)
 
@@ -50,7 +66,14 @@ def test_st_stock_is_rejected_with_structured_reason(quant_frame: pd.DataFrame) 
 
 
 def test_low_turnover_keeps_company_in_result_with_reason(quant_frame: pd.DataFrame) -> None:
-    """low turnover keeps company in result with reason."""
+    """Verify low turnover keeps the company in results with a structured reason.
+
+    Args:
+        quant_frame: Deterministic quant cross-section DataFrame fixture.
+
+    Returns:
+        None.
+    """
     quant_frame.loc["000001.SZ", "avg_amount_20d"] = 10_000_000
     result = HardFilterEngine(QuantConfig(min_avg_amount_20d=50_000_000)).apply(quant_frame)
 
@@ -61,7 +84,14 @@ def test_low_turnover_keeps_company_in_result_with_reason(quant_frame: pd.DataFr
 
 
 def test_required_financial_missing_marks_data_insufficient(quant_frame: pd.DataFrame) -> None:
-    """required financial missing marks data insufficient."""
+    """Verify a missing required financial field marks data as insufficient.
+
+    Args:
+        quant_frame: Deterministic quant cross-section DataFrame fixture.
+
+    Returns:
+        None.
+    """
     quant_frame.loc["000001.SZ", "net_profit_ttm"] = None
     result = HardFilterEngine(QuantConfig()).apply(quant_frame)
 

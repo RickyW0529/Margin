@@ -1,4 +1,9 @@
-"""v0.2 strategy config activation and scope freezing tests."""
+"""v0.2 strategy config activation and scope freezing tests.
+
+This module validates scope resolution, activation guardrails, provider health
+checks, SSRF protection, concurrent activation safety, and system boundary
+enforcement for strategy configuration.
+"""
 
 from __future__ import annotations
 
@@ -47,7 +52,12 @@ from margin.strategy.validator import ActivationError
 
 @pytest.fixture
 def strategy_repository() -> MemoryStrategyRepository:
-    """strategy repository."""
+    """Return a memory repository pre-seeded with active v0.2 config entities.
+
+    Returns:
+        A MemoryStrategyRepository with universe, indicator view, feature set,
+        quant strategy, prompt, tool policy, and provider config versions.
+    """
     repository = MemoryStrategyRepository()
     repository.save_universe_definition(
         UniverseDefinitionVersion(
@@ -111,13 +121,27 @@ def strategy_repository() -> MemoryStrategyRepository:
 
 @pytest.fixture
 def strategy_service(strategy_repository: MemoryStrategyRepository) -> StrategyService:
-    """strategy service."""
+    """Return a StrategyService backed by the pre-seeded repository.
+
+    Args:
+        strategy_repository: Pre-seeded memory strategy repository fixture.
+
+    Returns:
+        A StrategyService instance for activation tests.
+    """
     return StrategyService(repository=strategy_repository)
 
 
 @pytest.fixture
 def secret_store(database_url: str) -> SecretStore:
-    """secret store."""
+    """Return an isolated encrypted SecretStore for activation tests.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        A SecretStore backed by a fresh schema with a random master key.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -129,7 +153,14 @@ def secret_store(database_url: str) -> SecretStore:
 
 @pytest.fixture
 def provider_repository(secret_store: SecretStore) -> MemoryStrategyRepository:
-    """provider repository."""
+    """Return a memory repository with an active Tushare provider config and secret.
+
+    Args:
+        secret_store: Isolated encrypted SecretStore fixture.
+
+    Returns:
+        A MemoryStrategyRepository with a persisted provider secret and config.
+    """
     repository = MemoryStrategyRepository()
     metadata = secret_store.create_or_replace(
         WriteSecretCommand(
@@ -155,7 +186,14 @@ def provider_repository(secret_store: SecretStore) -> MemoryStrategyRepository:
 def test_scope_resolver_freezes_version_ids(
     strategy_repository: MemoryStrategyRepository,
 ) -> None:
-    """scope resolver freezes version ids."""
+    """Verify the scope resolver freezes all active version IDs into a scope.
+
+    Args:
+        strategy_repository: Pre-seeded memory strategy repository fixture.
+
+    Returns:
+        None.
+    """
     resolver = ScopeResolver(strategy_repository)
 
     scope = resolver.resolve_active_scope(owner_id="local-admin")
@@ -174,7 +212,15 @@ def test_cannot_activate_quant_strategy_without_calibration(
     strategy_service: StrategyService,
     strategy_repository: MemoryStrategyRepository,
 ) -> None:
-    """cannot activate quant strategy without calibration."""
+    """Verify a quant strategy without a calibration report cannot be activated.
+
+    Args:
+        strategy_service: StrategyService fixture for activation operations.
+        strategy_repository: Pre-seeded memory strategy repository fixture.
+
+    Returns:
+        None.
+    """
     version = QuantStrategyVersion(
         version_id="qstrat-no-calibration",
         factor_weights={"quality": 1.0},
@@ -191,7 +237,15 @@ def test_cannot_activate_scope_with_deprecated_reference(
     strategy_service: StrategyService,
     strategy_repository: MemoryStrategyRepository,
 ) -> None:
-    """cannot activate scope with deprecated reference."""
+    """Verify a scope referencing a deprecated provider cannot be activated.
+
+    Args:
+        strategy_service: StrategyService fixture for activation operations.
+        strategy_repository: Pre-seeded memory strategy repository fixture.
+
+    Returns:
+        None.
+    """
     strategy_repository.save_provider_config(
         ProviderConfigVersion(
             version_id="provider-deprecated",
@@ -224,7 +278,15 @@ def test_provider_health_uses_frozen_config_and_secret(
     provider_repository: MemoryStrategyRepository,
     secret_store: SecretStore,
 ) -> None:
-    """provider health uses frozen config and secret."""
+    """Verify provider health checks use the frozen config and secret version.
+
+    Args:
+        provider_repository: Memory repository with an active provider config.
+        secret_store: Isolated encrypted SecretStore fixture.
+
+    Returns:
+        None.
+    """
     service = ProviderConfigHealthService(provider_repository, secret_store)
 
     result = service.test_connection(provider_config_version_id="provider-tushare-1")
@@ -241,7 +303,15 @@ def test_provider_base_url_rejects_loopback(
     provider_repository: MemoryStrategyRepository,
     secret_store: SecretStore,
 ) -> None:
-    """provider base url rejects loopback."""
+    """Verify a loopback base URL is rejected by SSRF protection.
+
+    Args:
+        provider_repository: Memory repository with an active provider config.
+        secret_store: Isolated encrypted SecretStore fixture.
+
+    Returns:
+        None.
+    """
     service = ProviderConfigHealthService(provider_repository, secret_store)
 
     with pytest.raises(ProviderSSRFError):
@@ -251,7 +321,14 @@ def test_provider_base_url_rejects_loopback(
 def test_secretless_provider_health_calls_real_adapter(
     secret_store: SecretStore,
 ) -> None:
-    """secretless provider health calls real adapter."""
+    """Verify a secretless provider health check invokes the real adapter.
+
+    Args:
+        secret_store: Isolated encrypted SecretStore fixture.
+
+    Returns:
+        None.
+    """
     repository = MemoryStrategyRepository()
     repository.save_provider_config(
         ProviderConfigVersion(
@@ -284,7 +361,14 @@ def test_secretless_provider_health_calls_real_adapter(
 def test_provider_activation_requires_successful_health_check(
     secret_store: SecretStore,
 ) -> None:
-    """provider activation requires successful health check."""
+    """Verify provider activation requires a successful health check.
+
+    Args:
+        secret_store: Isolated encrypted SecretStore fixture.
+
+    Returns:
+        None.
+    """
     repository = MemoryStrategyRepository()
     metadata = secret_store.create_or_replace(
         WriteSecretCommand(
@@ -325,7 +409,15 @@ def test_provider_activation_rejects_undecryptable_secret(
     secret_store: SecretStore,
     database_url: str,
 ) -> None:
-    """provider activation rejects undecryptable secret."""
+    """Verify provider activation rejects a secret that cannot be decrypted.
+
+    Args:
+        secret_store: Isolated encrypted SecretStore fixture.
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        None.
+    """
     metadata = secret_store.create_or_replace(
         WriteSecretCommand(
             provider_name="tavily",
@@ -366,7 +458,14 @@ def test_provider_activation_rejects_undecryptable_secret(
 def test_provider_host_allowlist_requires_explicit_custom_opt_in(
     secret_store: SecretStore,
 ) -> None:
-    """provider host allowlist requires explicit custom opt in."""
+    """Verify host allowlist requires explicit custom base URL opt-in.
+
+    Args:
+        secret_store: Isolated encrypted SecretStore fixture.
+
+    Returns:
+        None.
+    """
     service = ProviderConfigHealthService(
         MemoryStrategyRepository(),
         secret_store,
@@ -394,7 +493,11 @@ def test_provider_host_allowlist_requires_explicit_custom_opt_in(
 
 
 def test_all_config_families_activate_and_deprecate_prior_version() -> None:
-    """all config families activate and deprecate prior version."""
+    """Verify all config families activate a new version and deprecate the prior one.
+
+    Returns:
+        None.
+    """
     repository = MemoryStrategyRepository()
     service = StrategyService(repository=repository)
 
@@ -487,7 +590,11 @@ def test_all_config_families_activate_and_deprecate_prior_version() -> None:
 
 
 def test_prompt_and_tool_policy_cannot_override_system_boundaries() -> None:
-    """prompt and tool policy cannot override system boundaries."""
+    """Verify prompt and tool policy cannot override system guardrail boundaries.
+
+    Returns:
+        None.
+    """
     repository = MemoryStrategyRepository()
     service = StrategyService(repository=repository)
     repository.save_tool_policy(
@@ -516,7 +623,14 @@ def test_prompt_and_tool_policy_cannot_override_system_boundaries() -> None:
 def test_concurrent_postgres_activation_keeps_one_active_version(
     database_url: str,
 ) -> None:
-    """concurrent postgres activation keeps one active version."""
+    """Verify concurrent PostgreSQL activation keeps exactly one active version.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        None.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -534,7 +648,7 @@ def test_concurrent_postgres_activation_keeps_one_active_version(
         )
 
     def activate(version_id: str) -> None:
-        """activate."""
+        """Activate one universe version, tolerating concurrent unique-index losers."""
         try:
             repository.activate_universe_definition(version_id)
         except IntegrityError:

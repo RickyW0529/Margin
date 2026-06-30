@@ -40,7 +40,11 @@ class SQLAlchemyRetentionService:
     """Delete only expired and unreferenced warehouse storage objects."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
-        """Initialize the instance."""
+        """Initialize the service.
+
+        Args:
+            session_factory: Callable returning a SQLAlchemy ``Session``.
+        """
         self._session_factory = session_factory
 
     def delete_expired(
@@ -49,7 +53,16 @@ class SQLAlchemyRetentionService:
         *,
         now: datetime | None = None,
     ) -> RetentionDeletionResult:
-        """Evaluate retention candidates and append audit rows for every decision."""
+        """Evaluate retention candidates and append audit rows for every decision.
+
+        Args:
+            candidates: Storage objects to evaluate for deletion.
+            now: Optional override for the decision timestamp.
+
+        Returns:
+            A ``RetentionDeletionResult`` with deleted, protected, and skipped
+            counts.
+        """
         decision_at = ensure_utc(now or utc_now())
         deleted: list[str] = []
         protected_count = 0
@@ -118,7 +131,7 @@ class SQLAlchemyRetentionService:
 
 
 def _raw_snapshot_reference_count(session: Session, snapshot_id: str) -> int:
-    """raw snapshot reference count."""
+    """Return the total reference count for a raw snapshot."""
     fact_count = session.scalar(fact_reference_count(snapshot_id))
     corporate_action_count = session.scalar(
         corporate_action_reference_count(snapshot_id)
@@ -135,7 +148,7 @@ def _audit(
     reference_count: int,
     created_at: datetime,
 ) -> None:
-    """audit."""
+    """Append an immutable retention decision audit row."""
     session.add(
         RetentionDeletionAuditRow(
             audit_id=f"rda_{uuid.uuid4().hex[:12]}",

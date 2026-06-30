@@ -26,7 +26,11 @@ class DataSyncStatus(StrEnum):
 
     @property
     def is_terminal(self) -> bool:
-        """Return whether no automatic processing remains."""
+        """Return whether no automatic processing remains.
+
+        Returns:
+            ``True`` for succeeded, partial, final-failure, and cancelled states.
+        """
         return self in {
             DataSyncStatus.SUCCEEDED,
             DataSyncStatus.PARTIAL,
@@ -64,7 +68,11 @@ class DataSyncRequest(BaseModel):
 
     @property
     def input_hash(self) -> str:
-        """Return deterministic request hash for idempotency and audit."""
+        """Return deterministic request hash for idempotency and audit.
+
+        Returns:
+            A ``sha256:``-prefixed hex digest of the JSON-serialized request.
+        """
         payload = self.model_dump(mode="json")
         encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
         return "sha256:" + hashlib.sha256(encoded).hexdigest()

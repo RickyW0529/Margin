@@ -41,7 +41,7 @@ class MigrationVerificationResult:
 
 @contextmanager
 def _temporary_database_url(database_url: str | URL) -> Iterator[str]:
-    """temporary database url."""
+    """Temporarily override MARGIN_DATABASE_URL for a scoped block."""
     previous = os.environ.get("MARGIN_DATABASE_URL")
     rendered = (
         database_url.render_as_string(hide_password=False)
@@ -61,14 +61,14 @@ def _temporary_database_url(database_url: str | URL) -> Iterator[str]:
 
 
 def _script_head() -> str:
-    """script head."""
+    """Return the current Alembic migration head revision."""
     config = Config("alembic.ini")
     script = ScriptDirectory.from_config(config)
     return script.get_current_head()
 
 
 def _terminate_database(admin_url: URL, database_name: str) -> None:
-    """terminate database."""
+    """Terminate all connections to a database."""
     engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
     try:
         with engine.connect() as connection:
@@ -81,7 +81,7 @@ def _terminate_database(admin_url: URL, database_name: str) -> None:
 
 
 def _drop_database(admin_url: URL, database_name: str) -> None:
-    """drop database."""
+    """Drop a database after terminating its connections."""
     _terminate_database(admin_url, database_name)
     engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
     try:
@@ -92,7 +92,7 @@ def _drop_database(admin_url: URL, database_name: str) -> None:
 
 
 def _create_database(admin_url: URL, database_name: str) -> None:
-    """create database."""
+    """Create a fresh database."""
     engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
     try:
         with engine.connect() as connection:
@@ -102,7 +102,7 @@ def _create_database(admin_url: URL, database_name: str) -> None:
 
 
 def _install_pgvector(target_url: URL) -> bool:
-    """install pgvector."""
+    """Install the pgvector extension and verify availability."""
     engine = create_engine(target_url)
     try:
         with engine.begin() as connection:
@@ -118,7 +118,7 @@ def _install_pgvector(target_url: URL) -> bool:
 
 
 def _inspect_database(target_url: URL) -> tuple[str | None, tuple[str, ...], bool]:
-    """inspect database."""
+    """Inspect migration head, tables and pgvector availability."""
     engine = create_engine(target_url)
     try:
         with engine.connect() as connection:
@@ -190,7 +190,15 @@ def verify_clean_database(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """main."""
+    """Verify Alembic migrations against a clean database and print results.
+
+    Args:
+        argv: Optional argument list. When ``None``, arguments are read from
+            ``sys.argv``.
+
+    Returns:
+        int: 0 when the migration head matches, 1 on failure or mismatch.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--database-url",

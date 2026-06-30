@@ -51,7 +51,16 @@ class QuantDataRequirementCatalog:
         requirements: Iterable[QuantDataRequirement],
         endpoints: Iterable[ProviderEndpointRequirement],
     ) -> None:
-        """Initialize and validate requirement links."""
+        """Initialize and validate requirement links.
+
+        Args:
+            requirements: Quant data requirements keyed by code.
+            endpoints: Provider endpoint candidates with admission decisions.
+
+        Raises:
+            ValueError: If an endpoint references an unknown requirement or an
+                enabled endpoint has no quant requirement.
+        """
         self._requirements = {item.code: item for item in requirements}
         self._endpoints = {
             (item.provider.lower(), item.api_name.lower()): item
@@ -78,7 +87,14 @@ class QuantDataRequirementCatalog:
         self,
         provider: str,
     ) -> tuple[ProviderEndpointRequirement, ...]:
-        """Return endpoints admitted by at least one active requirement."""
+        """Return endpoints admitted by at least one active requirement.
+
+        Args:
+            provider: The provider name to filter by.
+
+        Returns:
+            Enabled endpoints for the provider, sorted by provider and API name.
+        """
         normalized = provider.strip().lower()
         return tuple(
             endpoint
@@ -95,7 +111,11 @@ class QuantDataRequirementCatalog:
         )
 
     def requirements(self) -> tuple[QuantDataRequirement, ...]:
-        """Return all cataloged quant requirements in stable order."""
+        """Return all cataloged quant requirements in stable order.
+
+        Returns:
+            All requirements sorted by code.
+        """
         return tuple(
             self._requirements[code]
             for code in sorted(self._requirements)
@@ -105,7 +125,14 @@ class QuantDataRequirementCatalog:
         self,
         provider: str | None = None,
     ) -> tuple[ProviderEndpointRequirement, ...]:
-        """Return all endpoint decisions, optionally scoped to one provider."""
+        """Return all endpoint decisions, optionally scoped to one provider.
+
+        Args:
+            provider: Optional provider name filter.
+
+        Returns:
+            Endpoint decisions sorted by provider and API name.
+        """
         normalized = provider.strip().lower() if provider else None
         return tuple(
             endpoint
@@ -121,7 +148,15 @@ class QuantDataRequirementCatalog:
         provider: str,
         api_name: str,
     ) -> ProviderEndpointRequirement:
-        """Return one endpoint catalog entry."""
+        """Return one endpoint catalog entry.
+
+        Args:
+            provider: The provider name.
+            api_name: The API name.
+
+        Returns:
+            The matching endpoint requirement.
+        """
         return self._endpoints[(provider.strip().lower(), api_name.strip().lower())]
 
     def requirements_for_endpoint(
@@ -130,7 +165,15 @@ class QuantDataRequirementCatalog:
         provider: str,
         api_name: str,
     ) -> tuple[QuantDataRequirement, ...]:
-        """Return quant requirements that admit one endpoint."""
+        """Return quant requirements that admit one endpoint.
+
+        Args:
+            provider: The provider name.
+            api_name: The API name.
+
+        Returns:
+            Quant requirements linked to the endpoint.
+        """
         endpoint = self.endpoint(provider, api_name)
         return tuple(
             self._requirements[code]
@@ -139,7 +182,12 @@ class QuantDataRequirementCatalog:
 
     @classmethod
     def default(cls) -> QuantDataRequirementCatalog:
-        """Build the v0.3 default quant requirement closure."""
+        """Build the v0.3 default quant requirement closure.
+
+        Returns:
+            A catalog with 15 quant requirements and 16 enabled Tushare
+            endpoints plus 7 out-of-scope cataloged endpoints.
+        """
         requirements = (
             _requirement(
                 "security_master",

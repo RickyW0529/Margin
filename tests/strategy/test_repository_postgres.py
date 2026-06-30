@@ -1,4 +1,8 @@
-"""PostgreSQL strategy repository integration tests."""
+"""PostgreSQL strategy repository integration tests.
+
+This module validates that the SQLAlchemy strategy repository persists
+prompt layers and lifecycle state across fresh repository instances.
+"""
 
 from __future__ import annotations
 
@@ -21,7 +25,14 @@ from margin.strategy.repository import SQLAlchemyStrategyRepository
 
 
 def test_postgres_strategy_repository_round_trips_prompt_layers(database_url):
-    """Strategy versions must keep prompt layers across fresh repository instances."""
+    """Verify strategy versions keep prompt layers across fresh repository instances.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        None.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -74,7 +85,14 @@ def test_postgres_strategy_repository_round_trips_prompt_layers(database_url):
 def test_postgres_strategy_repository_updates_existing_version_lifecycle_state(
     database_url,
 ):
-    """Lifecycle state and sandbox results must persist for existing versions."""
+    """Verify lifecycle state and sandbox results persist for existing versions.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        None.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)

@@ -12,7 +12,7 @@ from margin.api.main import create_app
 
 
 def test_health_returns_ok():
-    """health returns ok."""
+    """Test that the health endpoint returns ok."""
     app = create_app()
     client = TestClient(app)
     response = client.get("/health")
@@ -21,7 +21,7 @@ def test_health_returns_ok():
 
 
 def test_ready_endpoint_checks_database():
-    """ready endpoint checks database."""
+    """Test that the ready endpoint checks the database."""
     app = create_app()
     client = TestClient(app)
     response = client.get("/health/ready")
@@ -29,7 +29,7 @@ def test_ready_endpoint_checks_database():
 
 
 def test_degraded_endpoint_returns_status():
-    """degraded endpoint returns status."""
+    """Test that the degraded endpoint returns status."""
     app = create_app()
     client = TestClient(app)
     response = client.get("/health/degraded")
@@ -38,9 +38,9 @@ def test_degraded_endpoint_returns_status():
 
 
 def test_ready_endpoint_returns_valid_sanitized_json_on_database_failure(monkeypatch):
-    """ready endpoint returns valid sanitized json on database failure."""
+    """Test that the ready endpoint returns sanitized JSON on database failure."""
     def fail_engine(*args, **kwargs):
-        """fail engine."""
+        """Raise a runtime error simulating database unavailability."""
         del args, kwargs
         raise RuntimeError('database "secret" unavailable')
 

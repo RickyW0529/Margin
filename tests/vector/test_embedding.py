@@ -1,4 +1,9 @@
-"""Tests for embeddings, vector store, BM25 keyword index, and the indexing pipeline."""
+"""Tests for embeddings, vector store, BM25 keyword index, and the indexing pipeline.
+
+Covers ``EmbeddingProvider`` hashing/normalization, ``VectorStore`` upsert/search,
+``BM25Index`` keyword ranking, ``EmbeddingPipeline`` combined indexing with graceful
+degradation, and an end-to-end chunking-to-indexing flow from a document event.
+"""
 
 from __future__ import annotations
 

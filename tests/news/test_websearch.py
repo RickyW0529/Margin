@@ -7,6 +7,15 @@ import pytest
 from margin.core.provider import ProviderType
 from margin.core.registry import ProviderRegistry
 from margin.core.secret import SecretManager
+from margin.documents.markdown import DocumentFormat, MarkdownConversionResult
+from margin.documents.pipeline import (
+    DocumentPipelineAudit,
+    DocumentPipelineResult,
+    TextVerificationResult,
+    VerificationLevel,
+    VisualVerificationResult,
+    VisualVerificationStatus,
+)
 from margin.news.acquirer import (
     BaseConnector,
     ComplianceError,
@@ -22,7 +31,23 @@ from margin.news.websearch import (
     SearchResult,
     WebSearchProvider,
     WebSearchService,
+    _title_from_conversion,
 )
+
+
+def test_title_from_conversion_ignores_docling_temp_name() -> None:
+    """Docling temporary filenames must not replace the business document title."""
+    conversion = MarkdownConversionResult(
+        document_id="doc_1",
+        markdown="000001\n\n140002\n\n## 平安银行股份有限公司 2024 年年度报告摘要\n\n正文",
+        document_format=DocumentFormat.PDF,
+        json_document={"name": "tmp_vn1gd2j"},
+        parser_name="docling",
+    )
+
+    assert _title_from_conversion(conversion, "平安银行2024年年度报告摘要") == (
+        "平安银行股份有限公司 2024 年年度报告摘要"
+    )
 
 
 class TestWebSearchProvider:
@@ -51,7 +76,7 @@ class TestWebSearchProvider:
         """Search must return a record containing the query and parsed results."""
 
         def mock_search(query, max_results=10):
-            """mock search."""
+            """Return a fixed list of mock search results."""
             return [
                 {"url": "https://a.com", "title": "A", "snippet": "snippet A"},
                 {"url": "https://b.com", "title": "B", "snippet": "snippet B"},
@@ -70,7 +95,7 @@ class TestWebSearchProvider:
         """Search must cap returned results to the requested max_results."""
 
         def mock_search(query, max_results=10):
-            """mock search."""
+            """Return a fixed list of mock search results."""
             return [
                 {"url": f"https://{i}.com", "title": str(i), "snippet": ""}
                 for i in range(20)
@@ -90,7 +115,7 @@ class TestWebSearchProvider:
         """Search records must be immutable after creation."""
 
         def mock_search(query, max_results=10):
-            """mock search."""
+            """Return a fixed list of mock search results."""
             return [{"url": "https://a.com", "title": "A", "snippet": ""}]
 
         provider = WebSearchProvider(search_func=mock_search)
@@ -193,7 +218,7 @@ class TestOriginalContentVerifier:
 
             @property
             def source_name(self):
-                """source name."""
+                """Return the fixed source name for this connector."""
                 return "websearch"
 
             def fetch(self, url, **kwargs):
@@ -235,7 +260,7 @@ class TestOriginalContentVerifier:
 
             @property
             def source_name(self):
-                """source name."""
+                """Return the fixed source name for this connector."""
                 return "websearch"
 
             def fetch(self, url, **kwargs):
@@ -270,7 +295,7 @@ class TestOriginalContentVerifier:
 
             @property
             def source_name(self):
-                """source name."""
+                """Return the fixed source name for this connector."""
                 return "websearch"
 
             def fetch(self, url, **kwargs):
@@ -304,7 +329,7 @@ class TestOriginalContentVerifier:
 
             @property
             def source_name(self):
-                """source name."""
+                """Return the fixed source name for this connector."""
                 return "websearch"
 
             def fetch(self, url, **kwargs):
@@ -334,6 +359,170 @@ class TestOriginalContentVerifier:
 class TestWebSearchService:
     """Tests for the high-level web search service."""
 
+    def test_search_and_acquire_uses_normalized_document_pipeline(self, tmp_path):
+        """Verified originals should enter events after review/repair/verify/slimming."""
+
+        class GoodConnector(BaseConnector):
+            """Mock connector returning public HTML."""
+
+            @property
+            def source_name(self):
+                """Return the fixed source name for this connector."""
+                return "websearch"
+
+            def fetch(self, url, **kwargs):
+                """Return public HTML with HTTP 200."""
+                del url, kwargs
+                return b"<html><body>raw</body></html>", "text/html", 200
+
+        class FakePipeline:
+            """Fake normalization pipeline used to assert WebSearch integration."""
+
+            def __init__(self) -> None:
+                """Initialize the fake pipeline with no calls."""
+                self.calls: list[object] = []
+
+            def normalize(self, request):
+                """Return post-review final Markdown."""
+                self.calls.append(request)
+                conversion = MarkdownConversionResult(
+                    document_id=request.document_id,
+                    source_url=request.source_url,
+                    content_type=request.content_type,
+                    document_format=DocumentFormat.HTML,
+                    markdown="# 原始标题\n\nraw",
+                    parser_name="fake_docling",
+                )
+                return DocumentPipelineResult(
+                    document_id=request.document_id,
+                    conversion=conversion,
+                    final_markdown="# 修复后标题\n\nclean",
+                    final_json={"title": "修复后标题"},
+                    rag_chunks=(),
+                    audit=DocumentPipelineAudit(
+                        issues=(),
+                        patches=(),
+                        text_verification=TextVerificationResult(passed=True),
+                        visual_verification=VisualVerificationResult(
+                            status=VisualVerificationStatus.SKIPPED_NO_MULTIMODAL_MODEL
+                        ),
+                    ),
+                    verification_level=VerificationLevel.TEXT_VERIFIED,
+                )
+
+        def mock_search(query, max_results=10):
+            """Return a fixed report-like result."""
+            del query, max_results
+            return [
+                {
+                    "url": "https://www.stcn.com/article/detail/clean.html",
+                    "title": "平安银行年度报告",
+                    "snippet": "年度报告 业绩",
+                }
+            ]
+
+        registry = SourceRegistry()
+        registry.register(
+            SourceDescriptor(
+                name="websearch",
+                source_type="websearch",
+                default_level=SourceLevel.L4,
+            ),
+            connector=GoodConnector(),
+        )
+        store = SnapshotStore(base_dir=tmp_path)
+        pipeline = FakePipeline()
+
+        provider = WebSearchProvider(search_func=mock_search)
+        service = WebSearchService(provider, registry, store, normalization_pipeline=pipeline)
+
+        _, events = service.search_and_acquire(
+            "平安银行 000001 年报 年度报告 业绩",
+            max_results=5,
+        )
+
+        assert len(events) == 1
+        assert events[0].content == "# 修复后标题\n\nclean"
+        assert events[0].title == "修复后标题"
+        assert pipeline.calls[0].source_url == "https://www.stcn.com/article/detail/clean.html"
+
+    def test_search_and_acquire_uses_markdown_converter(self, tmp_path):
+        """Verified original content must be normalized to Markdown before events."""
+
+        class GoodConnector(BaseConnector):
+            """Mock connector returning public HTML."""
+
+            @property
+            def source_name(self):
+                """Return the fixed source name for this connector."""
+                return "websearch"
+
+            def fetch(self, url, **kwargs):
+                """Return public HTML with HTTP 200."""
+                del url, kwargs
+                return (
+                    "<html><body><h1>年度报告</h1><p>原始正文</p></body></html>".encode(),
+                    "text/html",
+                    200,
+                )
+
+        class FakeMarkdownConverter:
+            """Fake Markdown converter used to assert integration."""
+
+            def __init__(self) -> None:
+                """Initialize the fake converter with an empty call list."""
+                self.calls: list[dict[str, object]] = []
+
+            def convert(self, **kwargs):
+                """Return deterministic Markdown for the downloaded document."""
+                self.calls.append(kwargs)
+                return MarkdownConversionResult(
+                    document_id=str(kwargs["document_id"]),
+                    source_url=str(kwargs["source_url"]),
+                    content_type=str(kwargs["content_type"]),
+                    document_format=DocumentFormat.HTML,
+                    markdown="# 年度报告\n\n原始正文",
+                    json_document={"blocks": 2},
+                    parser_name="fake_docling",
+                )
+
+        def mock_search(query, max_results=10):
+            """Return a fixed list of mock search results."""
+            del query, max_results
+            return [
+                {
+                    "url": "https://www.stcn.com/article/detail/123.html",
+                    "title": "平安银行发布年度报告",
+                    "snippet": "年度报告 业绩",
+                }
+            ]
+
+        registry = SourceRegistry()
+        registry.register(
+            SourceDescriptor(
+                name="websearch",
+                source_type="websearch",
+                default_level=SourceLevel.L4,
+            ),
+            connector=GoodConnector(),
+        )
+        store = SnapshotStore(base_dir=tmp_path)
+        converter = FakeMarkdownConverter()
+
+        provider = WebSearchProvider(search_func=mock_search)
+        service = WebSearchService(provider, registry, store, markdown_converter=converter)
+
+        record, events = service.search_and_acquire(
+            "平安银行 000001 年报 年度报告 业绩",
+            max_results=5,
+        )
+
+        assert len(record.results) == 1
+        assert len(events) == 1
+        assert events[0].content == "# 年度报告\n\n原始正文"
+        assert converter.calls[0]["source_url"] == "https://www.stcn.com/article/detail/123.html"
+        assert converter.calls[0]["content_type"] == "html"
+
     def test_search_and_acquire(self, tmp_path):
         """Search results must be converted to document events with L4 level."""
 
@@ -346,7 +535,7 @@ class TestWebSearchService:
 
             @property
             def source_name(self):
-                """source name."""
+                """Return the fixed source name for this connector."""
                 return "websearch"
 
             def fetch(self, url, **kwargs):
@@ -362,7 +551,7 @@ class TestWebSearchService:
                 return "<html><body>公开新闻内容</body></html>".encode(), "text/html", 200
 
         def mock_search(query, max_results=10):
-            """mock search."""
+            """Return a fixed list of mock search results."""
             return [
                 {"url": "https://a.com/news", "title": "News A", "snippet": "A"},
                 {"url": "https://b.com/news", "title": "News B", "snippet": "B"},
@@ -406,7 +595,7 @@ class TestWebSearchService:
 
             @property
             def source_name(self):
-                """source name."""
+                """Return the fixed source name for this connector."""
                 return "websearch"
 
             def fetch(self, url, **kwargs):
@@ -422,7 +611,7 @@ class TestWebSearchService:
                 return b"subscribe to read full article", "text/html", 200
 
         def mock_search(query, max_results=10):
-            """mock search."""
+            """Return a fixed list of mock search results."""
             return [
                 {"url": "https://pay.com", "title": "Paywalled", "snippet": "s"},
             ]
@@ -444,3 +633,142 @@ class TestWebSearchService:
         record, events = service.search_and_acquire("test", max_results=5)
 
         assert len(events) == 0
+
+    def test_search_and_acquire_filters_market_pages_before_download(self, tmp_path):
+        """Market/forum/quote pages must not enter the acquisition path."""
+
+        class GoodConnector(BaseConnector):
+            """Mock connector recording which URLs were downloaded."""
+
+            def __init__(self) -> None:
+                self.urls: list[str] = []
+
+            @property
+            def source_name(self):
+                """Return the fixed source name for this connector."""
+                return "websearch"
+
+            def fetch(self, url, **kwargs):
+                """Return public HTML and remember downloaded URLs."""
+                del kwargs
+                self.urls.append(url)
+                return f"<html><body>{url} 公开新闻内容</body></html>".encode(), "text/html", 200
+
+        def mock_search(query, max_results=10):
+            """Return mixed search results from low and higher quality sources."""
+            del query, max_results
+            return [
+                {
+                    "url": "https://xueqiu.com/S/SZ000001",
+                    "title": "平安银行(SZ000001)股票股价_股价行情_讨论",
+                    "snippet": "行情 走势图 股吧",
+                },
+                {
+                    "url": "https://static.cninfo.com.cn/finalpage/2026-01-01/000001.PDF",
+                    "title": "平安银行：2025年度业绩预告公告",
+                    "snippet": "公司发布年度业绩预告公告",
+                },
+                {
+                    "url": "https://hk.finance.yahoo.com/quote/000001.SZ",
+                    "title": "平安银行 股价、新闻、报价和记录",
+                    "snippet": "报价 走势图",
+                },
+                {
+                    "url": "https://www.stcn.com/article/detail/123456.html",
+                    "title": "平安银行发布2025年度业绩预告",
+                    "snippet": "证券时报报道公司公告",
+                },
+            ]
+
+        registry = SourceRegistry()
+        connector = GoodConnector()
+        registry.register(
+            SourceDescriptor(
+                name="websearch",
+                source_type="websearch",
+                default_level=SourceLevel.L4,
+            ),
+            connector=connector,
+        )
+        store = SnapshotStore(base_dir=tmp_path)
+
+        provider = WebSearchProvider(search_func=mock_search)
+        service = WebSearchService(provider, registry, store)
+
+        record, events = service.search_and_acquire(
+            "平安银行 000001.SZ 最新公告 业绩 重大事项",
+            max_results=5,
+        )
+
+        assert [result.url for result in record.results] == [
+            "https://static.cninfo.com.cn/finalpage/2026-01-01/000001.PDF",
+            "https://www.stcn.com/article/detail/123456.html",
+        ]
+        assert connector.urls == [result.url for result in record.results]
+        assert len(events) == 2
+
+    def test_search_and_acquire_filters_garbled_titles_before_download(self, tmp_path):
+        """Garbled mojibake titles must not enter the acquisition path."""
+
+        class GoodConnector(BaseConnector):
+            """Mock connector recording downloaded URLs."""
+
+            def __init__(self) -> None:
+                self.urls: list[str] = []
+
+            @property
+            def source_name(self):
+                """Return the fixed source name for this connector."""
+                return "websearch"
+
+            def fetch(self, url, **kwargs):
+                """Return public HTML and remember downloaded URLs."""
+                del kwargs
+                self.urls.append(url)
+                return (
+                    "<html><body>润贝航科发布年度报告，业绩保持增长。</body></html>".encode(),
+                    "text/html",
+                    200,
+                )
+
+        def mock_search(query, max_results=10):
+            """Return one mojibake title and one authoritative report result."""
+            del query, max_results
+            return [
+                {
+                    "url": "https://www.stcn.com/article/detail/001316.html",
+                    "title": "󱴺(001316) - ˾ - Ʊ - Ѻ֤ȯ",
+                    "snippet": "001316 年度报告 业绩",
+                },
+                {
+                    "url": "https://static.cninfo.com.cn/finalpage/2026-04-20/001316.PDF",
+                    "title": "润贝航科：2025年年度报告",
+                    "snippet": "公司披露年度报告及业绩情况",
+                },
+            ]
+
+        registry = SourceRegistry()
+        connector = GoodConnector()
+        registry.register(
+            SourceDescriptor(
+                name="websearch",
+                source_type="websearch",
+                default_level=SourceLevel.L4,
+            ),
+            connector=connector,
+        )
+        store = SnapshotStore(base_dir=tmp_path)
+
+        provider = WebSearchProvider(search_func=mock_search)
+        service = WebSearchService(provider, registry, store)
+
+        record, events = service.search_and_acquire(
+            "润贝航科 001316 年报 年度报告 业绩",
+            max_results=5,
+        )
+
+        assert [result.url for result in record.results] == [
+            "https://static.cninfo.com.cn/finalpage/2026-04-20/001316.PDF",
+        ]
+        assert connector.urls == ["https://static.cninfo.com.cn/finalpage/2026-04-20/001316.PDF"]
+        assert len(events) == 1

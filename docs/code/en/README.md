@@ -23,11 +23,11 @@ docs/code/en/
 
 | ID | Module (slug) | Chinese name | Documentation | Source paths |
 |----|---------------|--------------|---------------|--------------|
-| 00 | shared | Shared / core cross-cutting | [00-shared.md](./00-shared.md) | `src/margin/settings.py`, `src/margin/worker.py`, `src/margin/storage/`, `src/margin/api/`, `src/margin/core/provider.py`, `src/margin/core/registry.py`, `src/margin/core/resilience.py`, `src/margin/core/secret.py` |
+| 00 | shared | Shared / core cross-cutting | [00-shared.md](./00-shared.md) | `src/margin/settings.py`, `src/margin/worker.py`, `src/margin/storage/`, `src/margin/api/`, `src/margin/core/provider.py`, `src/margin/core/registry.py`, `src/margin/core/resilience.py`, `src/margin/core/secret.py`, `src/margin/documents/` |
 | 01 | data_provider | Data Provider | [01-data_provider.md](./01-data_provider.md) | `src/margin/data/`, `src/margin/core/provider.py`, `src/margin/core/registry.py` |
 | 03 | filing_websearch | Filing & WebSearch | [03-filing_websearch.md](./03-filing_websearch.md) | `src/margin/news/` |
 | 04 | text_indexing | Text Indexing | [04-text_indexing.md](./04-text_indexing.md) | `src/margin/vector/` |
-| 05 | rag_evidence | RAG Evidence | [05-rag_evidence.md](./05-rag_evidence.md) | `src/margin/evidence/` |
+| 05 | rag_evidence | RAG Evidence | [05-rag_evidence.md](./05-rag_evidence.md) | `src/margin/evidence/`, `src/margin/research/evidence_tools.py` |
 | 06 | multi_agent_research | Multi-Agent Research | [06-multi_agent_research.md](./06-multi_agent_research.md) | `src/margin/research/` |
 | 07 | strategy_config | Strategy Configuration | [07-strategy_config.md](./07-strategy_config.md) | `src/margin/strategy/`, `src/margin/core/secret_store.py`, `src/margin/api/routes/strategy.py`, `src/margin/api/routes/strategy_config.py`, `web/components/provider-settings-panel.tsx` |
 | 08 | research_candidate_dashboard | Research Candidate Dashboard | [08-research_candidate_dashboard.md](./08-research_candidate_dashboard.md) | `src/margin/dashboard/`, `src/margin/api/routes/dashboard.py`, `src/margin/api/routes/valuation_discovery.py`, `web/app/layout.tsx`, `web/app/page.tsx`, `web/app/research/`, `web/app/settings/`, `web/components/research-*.tsx`, `web/components/current-vs-effective-panel.tsx`, `web/components/evidence-locator-list.tsx`, `web/components/read-only-copilot-panel.tsx`, `web/components/provider-settings-panel.tsx` |
@@ -51,7 +51,7 @@ docs/code/en/
 
 - `01-data_provider` now includes the independent Tushare source system, quant endpoint admission catalog, rolling acquisition policy, source-quality screen, warehouse publisher, and real two-year market/financial/benchmark backfill path.
 - `11-valuation_discovery` now consumes data-layer company-pool snapshots and publishes the fourth-layer Quant Feature Mart + Analysis Mart. Third-layer ETL transactionally publishes `quant_feature_snapshots/rows` for quant-only reads, and quant output is then transactionally published as `analysis_snapshots`, metrics, findings, and lineage. The latest real quant run `qr_df48cd92fdf1424d` used 5304 non-ST/non-delisting/non-future-listed companies and produced 3 pass and 54 near-threshold names.
-- `06-multi_agent_research` registers `analysis_snapshot_get`, `analysis_metrics_list`, `analysis_findings_list`, `quant_feature_snapshot_get`, and `quant_feature_rows_list` scoped read tools. The `valuation_analysis` node can read fourth-layer features and analysis results by security/scope/PIT.
+- `06-multi_agent_research` registers `analysis_snapshot_get`, `analysis_metrics_list`, `analysis_findings_list`, `quant_feature_snapshot_get`, and `quant_feature_rows_list` scoped read tools. It also exposes `rag_evidence_retrieve`/`evidence_retrieve` for agent-facing RAG evidence retrieval, returning locatable `evidence_blocks` and optionally freezing them into EvidencePackage records.
 - `/settings/data` and `/api/v1/data-policies` expose the rolling data acquisition policy to frontend users.
 
 ## Update Policy

@@ -53,7 +53,7 @@ class MemoryQuantRepository:
     """In-memory quant repository for unit and local integration tests."""
 
     def __init__(self) -> None:
-        """init  ."""
+        """Initialize an empty in-memory quant repository."""
         self._cross_sections: dict[str, pd.DataFrame] = {}
         self._runs: dict[str, QuantRun] = {}
         self._results: dict[str, tuple[QuantResult, ...]] = {}
@@ -96,7 +96,12 @@ class SQLAlchemyQuantRepository:
         *,
         cross_section_loader: Callable[[QuantInputSnapshot], pd.DataFrame] | None = None,
     ) -> None:
-        """init  ."""
+        """Initialize the repository with a session factory and optional loader.
+
+        Args:
+            session_factory: Callable that returns a SQLAlchemy ``Session``.
+            cross_section_loader: Optional PIT-safe cross-section loader.
+        """
         self._session_factory = session_factory
         self._cross_section_loader = cross_section_loader
 
@@ -142,7 +147,7 @@ def _validate_result_run_ids(
     quant_run_id: str,
     results: tuple[QuantResult, ...],
 ) -> None:
-    """validate result run ids."""
+    """Validate that all results belong to the supplied quant run ID."""
     mismatches = [
         result.result_id for result in results if result.quant_run_id != quant_run_id
     ]
@@ -151,7 +156,7 @@ def _validate_result_run_ids(
 
 
 def _quant_run_to_row(quant_run: QuantRun) -> QuantScreenRunRow:
-    """quant run to row."""
+    """Convert a ``QuantRun`` to its database row."""
     return QuantScreenRunRow(
         quant_run_id=quant_run.quant_run_id,
         input_snapshot_id=quant_run.input_snapshot_id,
@@ -179,7 +184,7 @@ def _quant_run_from_row(row: QuantScreenRunRow) -> QuantRun:
 
 
 def _quant_result_to_row(result: QuantResult) -> QuantScreenResultRow:
-    """quant result to row."""
+    """Convert a ``QuantResult`` to its database row."""
     return QuantScreenResultRow(
         result_id=result.result_id,
         quant_run_id=result.quant_run_id,
@@ -205,7 +210,7 @@ def _quant_result_to_row(result: QuantResult) -> QuantScreenResultRow:
 
 
 def _quant_result_from_row(row: QuantScreenResultRow) -> QuantResult:
-    """quant result from row."""
+    """Convert a result row to the immutable ``QuantResult`` model."""
     return QuantResult(
         result_id=row.result_id,
         quant_run_id=row.quant_run_id,
@@ -231,7 +236,7 @@ def _quant_result_from_row(row: QuantScreenResultRow) -> QuantResult:
 
 
 def _factor_rows_from_result(result: QuantResult) -> tuple[QuantFactorValueRow, ...]:
-    """factor rows from result."""
+    """Build factor value rows from group scores in a quant result."""
     scores = {
         "final": result.final_score,
         "quality": result.quality_score,
@@ -263,6 +268,6 @@ def _factor_rows_from_result(result: QuantResult) -> tuple[QuantFactorValueRow, 
 
 
 def _factor_value_id(result_id: str, factor_name: str) -> str:
-    """factor value id."""
+    """Build a stable factor value ID from result ID and factor name."""
     material = f"{result_id}:{factor_name}"
     return "qfv_" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]

@@ -1,4 +1,9 @@
-"""Bitemporal universe domain tests for valuation discovery."""
+"""Bitemporal universe domain tests for valuation discovery.
+
+This module validates that universe memberships carry valid and system time,
+the resolver returns members known at system time, and the ALL_A pool accepts
+new listings only when they are known.
+"""
 
 from __future__ import annotations
 
@@ -21,12 +26,20 @@ from margin.valuation_discovery.universe import SecurityListing, UniverseResolve
 
 @pytest.fixture
 def valuation_repository() -> MemoryValuationDiscoveryRepository:
-    """valuation repository."""
+    """Return a fresh in-memory valuation discovery repository.
+
+    Returns:
+        An empty MemoryValuationDiscoveryRepository instance.
+    """
     return MemoryValuationDiscoveryRepository()
 
 
 def test_universe_membership_has_valid_and_system_time() -> None:
-    """universe membership has valid and system time."""
+    """Verify a universe membership is visible at valid and system time boundaries.
+
+    Returns:
+        None.
+    """
     membership = UniverseMembership(
         universe_code=UniverseCode.CSI300,
         universe_version_id="univ-v1",
@@ -54,7 +67,14 @@ def test_universe_membership_has_valid_and_system_time() -> None:
 def test_resolver_returns_members_known_at_system_time(
     valuation_repository: MemoryValuationDiscoveryRepository,
 ) -> None:
-    """resolver returns members known at system time."""
+    """Verify the resolver returns only members known at the system time cutoff.
+
+    Args:
+        valuation_repository: In-memory valuation discovery repository fixture.
+
+    Returns:
+        None.
+    """
     valuation_repository.add_universe_membership(
         UniverseMembership(
             universe_code=UniverseCode.CSI300,
@@ -94,7 +114,11 @@ def test_resolver_returns_members_known_at_system_time(
 
 @dataclass(frozen=True)
 class FakeSecuritySource:
-    """FakeSecuritySource."""
+    """Fake security listing source for ALL_A pool resolution tests.
+
+    Attributes:
+        listings: Tuple of security listings to filter by visibility.
+    """
     listings: tuple[SecurityListing, ...]
 
     def list_listed_securities(
@@ -103,7 +127,7 @@ class FakeSecuritySource:
         business_at: datetime,
         known_at: datetime,
     ) -> Iterable[SecurityListing]:
-        """list listed securities."""
+        """Return listings visible at the given business and system time."""
         return tuple(
             listing
             for listing in self.listings
@@ -114,7 +138,14 @@ class FakeSecuritySource:
 def test_all_a_pool_accepts_new_listing_when_known(
     valuation_repository: MemoryValuationDiscoveryRepository,
 ) -> None:
-    """all a pool accepts new listing when known."""
+    """Verify the ALL_A pool accepts a new listing only when it is known.
+
+    Args:
+        valuation_repository: In-memory valuation discovery repository fixture.
+
+    Returns:
+        None.
+    """
     source = FakeSecuritySource(
         listings=(
             SecurityListing(

@@ -530,15 +530,7 @@ def _candidate_from_item(
     item: ResearchItem,
     run: ResearchRun,
 ) -> ResearchCandidateListItemV2:
-    """_candidate_from_item.
-
-    Args:
-        item (ResearchItem): Description.
-        run (ResearchRun): Description.
-
-    Returns:
-        ResearchCandidateListItemV2: Description.
-    """
+    """Build a v0.2 candidate list item from a research item and its run."""
     screening_status = "pass" if item.status == ItemStatus.PUBLISHED else item.status.value
     data_status = "complete" if item.status == ItemStatus.PUBLISHED else "partial"
     return ResearchCandidateListItemV2(
@@ -580,14 +572,7 @@ def _candidate_page(
     cursor: str | None,
     limit: int,
 ) -> ResearchCandidateListResponse:
-    """_candidate_page.
-
-    Args:
-        candidates (list[ResearchCandidateListItemV2]): Description.
-
-    Returns:
-        ResearchCandidateListResponse: Description.
-    """
+    """Filter, sort, and paginate candidates into a cursor-paged response."""
     page_size = max(1, min(limit, 200))
     filtered = _apply_filters(candidates, filters)
     ordered = _sort_candidates(filtered, sort)
@@ -613,15 +598,7 @@ def _apply_filters(
     candidates: list[ResearchCandidateListItemV2],
     filters: DashboardFilters,
 ) -> list[ResearchCandidateListItemV2]:
-    """_apply_filters.
-
-    Args:
-        candidates (list[ResearchCandidateListItemV2]): Description.
-        filters (DashboardFilters): Description.
-
-    Returns:
-        list[ResearchCandidateListItemV2]: Description.
-    """
+    """Filter candidates by screening status, data status, freshness, and query text."""
     result = candidates
     if filters.screening_status:
         result = [
@@ -655,23 +632,11 @@ def _sort_candidates(
     candidates: list[ResearchCandidateListItemV2],
     sort: DashboardSort,
 ) -> list[ResearchCandidateListItemV2]:
-    """_sort_candidates.
-
-    Args:
-        candidates (list[ResearchCandidateListItemV2]): Description.
-        sort (DashboardSort): Description.
-
-    Returns:
-        list[ResearchCandidateListItemV2]: Description.
-    """
+    """Sort candidates by the requested field and direction with a stable tiebreaker."""
     reverse = sort.direction == "desc"
 
     def key(item: ResearchCandidateListItemV2):
-        """key.
-
-        Args:
-        item (ResearchCandidateListItemV2): Description.
-        """
+        """Return a sort key treating missing values as extremes."""
         value = getattr(item, sort.field)
         if value is None:
             value = -1 if reverse else float("inf")
@@ -684,15 +649,7 @@ def _cursor_offset(
     ordered: list[ResearchCandidateListItemV2],
     cursor: str | None,
 ) -> int:
-    """_cursor_offset.
-
-    Args:
-        ordered (list[ResearchCandidateListItemV2]): Description.
-        cursor (str | None): Description.
-
-    Returns:
-        int: Description.
-    """
+    """Return the start index for the next page based on a decoded cursor."""
     if not cursor:
         return 0
     decoded = _decode_cursor(cursor)
@@ -704,15 +661,7 @@ def _cursor_offset(
 
 
 def _encode_cursor(item: ResearchCandidateListItemV2, sort: DashboardSort) -> str:
-    """_encode_cursor.
-
-    Args:
-        item (ResearchCandidateListItemV2): Description.
-        sort (DashboardSort): Description.
-
-    Returns:
-        str: Description.
-    """
+    """Base64-encode a cursor payload identifying the last item of a page."""
     payload = {
         "item_id": item.item_id,
         "sort_field": sort.field,
@@ -724,14 +673,7 @@ def _encode_cursor(item: ResearchCandidateListItemV2, sort: DashboardSort) -> st
 
 
 def _decode_cursor(cursor: str) -> dict[str, object]:
-    """_decode_cursor.
-
-    Args:
-        cursor (str): Description.
-
-    Returns:
-        dict[str, object]: Description.
-    """
+    """Decode a base64 cursor payload, returning an empty dict on failure."""
     padded = cursor + "=" * (-len(cursor) % 4)
     try:
         decoded = base64.urlsafe_b64decode(padded.encode("ascii"))
@@ -744,14 +686,7 @@ def _decode_cursor(cursor: str) -> dict[str, object]:
 def _facets(
     candidates: list[ResearchCandidateListItemV2],
 ) -> dict[str, dict[str, int]]:
-    """_facets.
-
-    Args:
-        candidates (list[ResearchCandidateListItemV2]): Description.
-
-    Returns:
-        dict[str, dict[str, int]]: Description.
-    """
+    """Aggregate facet counts for screening status, data status, and freshness."""
     facets: dict[str, dict[str, int]] = {
         "screening_status": {},
         "data_status": {},
@@ -766,10 +701,5 @@ def _facets(
 
 
 def _increment(values: dict[str, int], key: str) -> None:
-    """_increment.
-
-    Args:
-        values (dict[str, int]): Description.
-        key (str): Description.
-    """
+    """Increment the count for a facet key, initializing to 1 when absent."""
     values[key] = values.get(key, 0) + 1

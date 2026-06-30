@@ -1,4 +1,10 @@
-"""Deterministic v0.2 ReviewMode routing tests."""
+"""Deterministic v0.2 ReviewMode routing tests.
+
+This module verifies that the context precheck and carry-forward rule nodes
+deterministically route the graph into the correct review mode based on
+context snapshot fields such as previous assessment existence, news target
+completeness, PIT validity, material changes, and input identity.
+"""
 
 from __future__ import annotations
 
@@ -16,7 +22,11 @@ DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 
 
 def test_no_previous_assessment_routes_full_review() -> None:
-    """no previous assessment routes full review."""
+    """Verify the absence of a previous assessment routes to a full review.
+
+    Runs the context precheck and change set builder nodes with no previous
+    effective assessment and asserts that the review mode is ``FULL_REVIEW``.
+    """
     state = _state(previous=None)
     context = _context()
 
@@ -27,7 +37,12 @@ def test_no_previous_assessment_routes_full_review() -> None:
 
 
 def test_news_incomplete_routes_review_deferred() -> None:
-    """news incomplete routes review deferred."""
+    """Verify incomplete news targets route to review deferred.
+
+    Runs the context precheck node with an incomplete news target and asserts
+    that the review mode is ``REVIEW_DEFERRED``, the previous effective
+    assessment is preserved, and the stale reason is ``news_target_incomplete``.
+    """
     state = _state(previous="assess-old")
     context = _context(news_target_complete=False)
 
@@ -39,7 +54,12 @@ def test_news_incomplete_routes_review_deferred() -> None:
 
 
 def test_invalid_pit_routes_abstain() -> None:
-    """invalid pit routes abstain."""
+    """Verify an invalid PIT check routes to abstain.
+
+    Runs the context precheck node with an invalid PIT flag and asserts that
+    the review mode is ``ABSTAIN``, the previous effective assessment is
+    preserved, and the stale reason is ``context_pit_invalid``.
+    """
     state = ContextPrecheckNode(_context(pit_valid=False)).run(
         _state(previous="assess-old")
     )
@@ -50,7 +70,12 @@ def test_invalid_pit_routes_abstain() -> None:
 
 
 def test_material_change_routes_delta_review() -> None:
-    """material change routes delta review."""
+    """Verify a material news change routes to delta review.
+
+    Runs the context precheck and change set builder nodes with a material
+    news change flag and asserts that the review mode is ``DELTA_REVIEW`` and
+    the change set records the material news change.
+    """
     state = _state(previous="assess-old")
     context = _context(material_news_change=True)
 
@@ -62,7 +87,12 @@ def test_material_change_routes_delta_review() -> None:
 
 
 def test_identical_inputs_and_complete_news_routes_carry_forward() -> None:
-    """identical inputs and complete news routes carry forward."""
+    """Verify identical inputs with complete news route to carry-forward fast path.
+
+    Runs the carry-forward rule node with a complete context and asserts that
+    the review mode is ``CARRY_FORWARD_FAST_PATH``, no LLM calls are made, and
+    the previous effective assessment is preserved.
+    """
     state = CarryForwardRuleNode(_context()).run(_state(previous="assess-old"))
 
     assert state.review_mode == ReviewMode.CARRY_FORWARD_FAST_PATH
@@ -71,7 +101,7 @@ def test_identical_inputs_and_complete_news_routes_carry_forward() -> None:
 
 
 def _state(*, previous: str | None):
-    """state."""
+    """Build an initial graph state with an optional previous assessment ID."""
     return create_initial_state(
         graph_run_id="graph-1",
         context_snapshot_id="ctx-1",
@@ -84,7 +114,15 @@ def _state(*, previous: str | None):
 
 
 def _context(**updates) -> GraphContextSnapshot:
-    """context."""
+    """Build a ``GraphContextSnapshot`` with defaults overridden by updates.
+
+    Args:
+        **updates: Field overrides to apply on top of the default context
+            snapshot values.
+
+    Returns:
+        A ``GraphContextSnapshot`` with the updated fields.
+    """
     values = {
         "context_snapshot_id": "ctx-1",
         "input_hash": "sha256:ctx",

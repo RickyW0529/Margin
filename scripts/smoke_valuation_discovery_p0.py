@@ -27,7 +27,11 @@ from margin.valuation_discovery.repository import SQLAlchemyValuationDiscoveryRe
 
 
 def main() -> int:
-    """main."""
+    """Run the P0 valuation-discovery quant smoke against real data.
+
+    Returns:
+        int: 0 on success, 2 when required inputs are missing or invalid.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scope-version-id", required=True)
     parser.add_argument("--decision-at", required=True)
@@ -111,7 +115,7 @@ def main() -> int:
 
 
 def _parse_datetime(value: str) -> datetime:
-    """parse datetime."""
+    """Parse a timezone-aware ISO 8601 datetime string."""
     normalized = value.replace("Z", "+00:00")
     parsed = datetime.fromisoformat(normalized)
     if parsed.utcoffset() is None:
@@ -120,7 +124,7 @@ def _parse_datetime(value: str) -> datetime:
 
 
 def _emit_failure(code: str, details: dict[str, Any]) -> int:
-    """emit failure."""
+    """Print a JSON failure payload and return exit code 2."""
     print(
         json.dumps(
             {

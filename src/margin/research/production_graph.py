@@ -75,7 +75,11 @@ class EvidenceBoundOutputValidator:
     """Validate schema and prevent LLM-created evidence identifiers."""
 
     def __init__(self, allowed_evidence_ids: set[str]) -> None:
-        """Initialize the validator with the frozen evidence boundary."""
+        """Initialize the validator with the frozen evidence boundary.
+
+        Args:
+            allowed_evidence_ids: Set of evidence IDs that may be referenced.
+        """
         self._allowed_evidence_ids = allowed_evidence_ids
 
     def validate(
@@ -85,7 +89,16 @@ class EvidenceBoundOutputValidator:
         output: dict[str, Any],
         output_schema: dict[str, Any],
     ) -> DeterministicValidation:
-        """Validate JSON shape, evidence references, and confidence bounds."""
+        """Validate JSON shape, evidence references, and confidence bounds.
+
+        Args:
+            node_name: Name of the calling node (unused).
+            output: Structured output to validate.
+            output_schema: JSON schema to validate against.
+
+        Returns:
+            A ``DeterministicValidation`` with validity and any issues found.
+        """
         del node_name
         valid_schema, schema_error = StructuredOutputGuardrail(
             output_schema
@@ -119,7 +132,16 @@ def build_production_analysis_handlers(
     llm_service: LLMService,
     prompt_factory: PromptFactory | None = None,
 ) -> dict[str, AnalysisHandler]:
-    """Build real LLM-backed handlers for every parallel analysis node."""
+    """Build real LLM-backed handlers for every parallel analysis node.
+
+    Args:
+        context: Frozen research context snapshot.
+        llm_service: Structured LLM service for graph node execution.
+        prompt_factory: Optional prompt factory override.
+
+    Returns:
+        Mapping from analysis node name to its ``AnalysisHandler``.
+    """
     factory = prompt_factory or PromptFactory()
     return {
         node_name: _analysis_handler(
@@ -144,6 +166,16 @@ def build_production_decision_handler(
     llm_service: LLMService,
     prompt_factory: PromptFactory | None = None,
 ):
+    """Build a real LLM-backed handler for the delta decision composer node.
+
+    Args:
+        context: Frozen research context snapshot.
+        llm_service: Structured LLM service for graph node execution.
+        prompt_factory: Optional prompt factory override.
+
+    Returns:
+        A ``DecisionHandler`` callable for the delta decision node.
+    """
     factory = prompt_factory or PromptFactory()
 
     def handler(state: AIDeltaGraphState) -> dict[str, Any]:
@@ -204,6 +236,14 @@ def build_production_decision_handler(
 def build_production_citation_validator(
     context: ResearchContextSnapshot,
 ):
+    """Build a real citation validator that checks evidence ID membership.
+
+    Args:
+        context: Frozen research context snapshot with allowed evidence IDs.
+
+    Returns:
+        A ``CitationValidationHandler`` callable for the citation validation node.
+    """
     allowed = _allowed_evidence_ids(context)
 
     def validator(
@@ -240,15 +280,7 @@ def _analysis_handler(
         request: AnalysisRequest,
         session: ScopedToolSession,
     ) -> dict[str, Any]:
-        """handler.
-
-        Args:
-        request (AnalysisRequest): Description.
-        session (ScopedToolSession): Description.
-
-        Returns:
-        dict[str, Any]: Description.
-        """
+        """Execute one analysis node via the bounded LLM execution runner."""
         allowed_evidence_ids = _allowed_evidence_ids(context)
         prompt = prompt_factory.build(
             node_name=node_name,
@@ -299,28 +331,14 @@ def _analysis_handler(
 
 
 def _allowed_evidence_ids(context: ResearchContextSnapshot) -> set[str]:
-    """_allowed_evidence_ids.
-
-    Args:
-        context (ResearchContextSnapshot): Description.
-
-    Returns:
-        set[str]: Description.
-    """
+    """Extract the frozen set of allowed evidence IDs from context."""
     return {
         str(value) for value in context.payload.get("evidence_ids", ())
     }
 
 
 def _strategy_params(context: ResearchContextSnapshot) -> dict[str, Any]:
-    """_strategy_params.
-
-    Args:
-        context (ResearchContextSnapshot): Description.
-
-    Returns:
-        dict[str, Any]: Description.
-    """
+    """Build strategy parameters for prompt rendering."""
     return {
         "scope_version_id": context.scope_version_id,
         "screening_status": context.payload.get("screening_status"),
@@ -330,14 +348,7 @@ def _strategy_params(context: ResearchContextSnapshot) -> dict[str, Any]:
 
 
 def _context_summary(context: ResearchContextSnapshot) -> str:
-    """_context_summary.
-
-    Args:
-        context (ResearchContextSnapshot): Description.
-
-    Returns:
-        str: Description.
-    """
+    """Render a deterministic JSON context summary for prompts."""
     return json.dumps(
         {
             "security_id": context.security_id,
@@ -361,14 +372,7 @@ def _context_summary(context: ResearchContextSnapshot) -> str:
 
 
 def _untrusted_blocks(context: ResearchContextSnapshot) -> list[str]:
-    """_untrusted_blocks.
-
-    Args:
-        context (ResearchContextSnapshot): Description.
-
-    Returns:
-        list[str]: Description.
-    """
+    """Extract untrusted evidence text blocks from context."""
     return [
         str(block.get("content", ""))
         for block in context.payload.get("evidence_blocks", ())
@@ -380,15 +384,7 @@ def _empty_manifest(
     state: AIDeltaGraphState,
     node_name: str,
 ) -> ToolManifest:
-    """_empty_manifest.
-
-    Args:
-        state (AIDeltaGraphState): Description.
-        node_name (str): Description.
-
-    Returns:
-        ToolManifest: Description.
-    """
+    """Build a tool manifest with no tools for decision-only nodes."""
     return ToolManifest(
         graph_run_id=state.graph_run_id,
         node_name=node_name,
@@ -402,14 +398,7 @@ def _empty_manifest(
 
 
 def _graph_run_id_from_manifest(manifest: ToolManifest) -> str:
-    """_graph_run_id_from_manifest.
-
-    Args:
-        manifest (ToolManifest): Description.
-
-    Returns:
-        str: Description.
-    """
+    """Extract the graph run ID from a tool manifest."""
     return manifest.graph_run_id
 
 

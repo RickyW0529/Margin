@@ -91,7 +91,20 @@ def build_company_pool_snapshot(
     known_at: datetime,
     created_at: datetime | None = None,
 ) -> CompanyPoolSnapshot:
-    """Build a stable immutable snapshot from serving-view rows."""
+    """Build a stable immutable snapshot from serving-view rows.
+
+    Args:
+        rows: Serving-view rows keyed by ``security_id`` with optional
+            ``name``, ``exchange``, ``industry_code`` and ``industry_name``.
+        source_run_id: The source run that produced the serving view.
+        business_at: The business date the snapshot represents.
+        known_at: The system time at which the snapshot became known.
+        created_at: Optional override for the creation timestamp.
+
+    Returns:
+        An immutable ``CompanyPoolSnapshot`` with deterministic IDs and a
+        content-addressed ``input_hash``.
+    """
     normalized_rows = sorted(rows, key=lambda row: str(row["security_id"]))
     payload = [
         {
@@ -154,7 +167,16 @@ def filter_company_pool_rows_as_of(
     *,
     business_at: datetime,
 ) -> list[dict[str, Any]]:
-    """Filter serving-view rows to securities listed by the business date."""
+    """Filter serving-view rows to securities listed by the business date.
+
+    Args:
+        rows: Raw serving-view rows to filter.
+        business_at: The business date used for listing-date and ST/delisting
+            exclusion checks.
+
+    Returns:
+        Rows excluding ST, delisting-transition, and not-yet-listed securities.
+    """
     business_date = ensure_utc(business_at).date()
     return [
         row
@@ -170,7 +192,11 @@ class SQLAlchemyCompanyPoolRepository:
     """Materialize and load company-pool snapshots from PostgreSQL."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
-        """Initialize the repository."""
+        """Initialize the repository.
+
+        Args:
+            session_factory: Callable returning a SQLAlchemy ``Session``.
+        """
         self._session_factory = session_factory
 
     def materialize(
@@ -180,7 +206,17 @@ class SQLAlchemyCompanyPoolRepository:
         business_at: datetime,
         known_at: datetime,
     ) -> CompanyPoolSnapshot:
-        """Freeze the current serving view for one completed source run."""
+        """Freeze the current serving view for one completed source run.
+
+        Args:
+            source_run_id: The source run that produced the serving view.
+            business_at: The business date the snapshot represents.
+            known_at: The system time at which the snapshot became known.
+
+        Returns:
+            The materialized immutable ``CompanyPoolSnapshot``. If a snapshot
+            for this source run already exists, the existing one is returned.
+        """
         with self._session_factory.begin() as session:
             existing = session.scalar(
                 pool_snapshot_by_run("ALL_A_NON_ST", source_run_id)
@@ -237,7 +273,14 @@ class SQLAlchemyCompanyPoolRepository:
             return snapshot
 
     def latest(self, pool_code: str = "ALL_A_NON_ST") -> CompanyPoolSnapshot | None:
-        """Return the newest immutable snapshot for upper services."""
+        """Return the newest immutable snapshot for upper services.
+
+        Args:
+            pool_code: The pool code to look up. Defaults to ``ALL_A_NON_ST``.
+
+        Returns:
+            The latest ``CompanyPoolSnapshot``, or ``None`` if none exists.
+        """
         with self._session_factory() as session:
             row = session.scalar(latest_pool_snapshot(pool_code))
             return self._load(session, row) if row is not None else None
@@ -247,6 +290,7 @@ class SQLAlchemyCompanyPoolRepository:
         session: Session,
         row: CompanyPoolSnapshotRow,
     ) -> CompanyPoolSnapshot:
+        """Reconstruct a snapshot model from persisted rows."""
         members = session.scalars(
             pool_members_by_snapshot(row.snapshot_id)
         ).all()

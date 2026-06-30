@@ -14,7 +14,7 @@ NewsContextBundle 关联，将它们规范化为不可变、PIT-safe、可重新
 | 文件 | 已实现能力 |
 | --- | --- |
 | `models.py` | `Evidence`、`Claim`、`EvidencePackage`、Claim/Evidence 角色、Claim 状态、冲突模型与来源等级限制。 |
-| `package_builder.py` | 从检索结果构建冻结 EvidencePackage；执行 security link 和 `available_at <= decision_at` 校验；生成稳定 Evidence/Package ID。 |
+| `package_builder.py` | 从检索结果构建冻结 EvidencePackage；执行 security link 和 `available_at <= decision_at` 校验；通过 `make_stable_evidence_id` 生成稳定 Evidence ID，并生成稳定 Package ID。 |
 | `locator.py` | PDF/HTML/表格统一 locator、PIT 检查、WebSearch 原文快照检查、snapshot hash 与 quote replay。 |
 | `validator.py` | Claim 引用存在性、来源等级、PIT、locator、原文快照、冲突与最低证据数校验；输出 PASS/FAIL/ABSTAINED。 |
 | `conflicts.py` | 根据结构化 SUPPORTS/REFUTES link 生成确定性高严重度冲突。 |
@@ -75,7 +75,29 @@ parent_package_id / added_evidence_ids[]
 `version + 1`，保留旧版本，记录 `parent_package_id` 和本轮
 `added_evidence_ids`。PostgreSQL 使用根版本行锁串行化并发补证。
 
-### 3.3 Claim
+### 3.3 Agent 检索输出
+
+`06-multi_agent_research` 的 `src/margin/research/evidence_tools.py` 负责把
+`04-text_indexing` 的 PIT-safe 检索结果转换为上层 Agent 可消费的结构，并在配置
+`EvidencePackageBuilder` 时写入本模块的不可变 EvidencePackage。
+
+工具输出的每个 `evidence_blocks[]` 包含：
+
+```text
+rank / evidence_id / chunk_id / document_id
+source_url / source_name / source_level / doc_type
+content / content_hash
+score / vector_score / keyword_score
+published_at / available_at
+snapshot_id / snapshot_hash
+locator
+```
+
+当 package builder 可用时，只有通过本模块 PIT/security 校验并成功冻结进
+EvidencePackage 的 Evidence 会返回给 Agent；未配置 builder 时，工具仍返回基于
+`make_stable_evidence_id` 的稳定 evidence ID，供后续补证和审计链路复用。
+
+### 3.4 Claim
 
 Claim 状态：
 

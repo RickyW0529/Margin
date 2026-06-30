@@ -34,7 +34,12 @@ class SecretRedactingProcessor:
     )
 
     def __init__(self, secret_values: tuple[str, ...] = ()) -> None:
-        """init  ."""
+        """Initialize the redactor with known secret values to scrub.
+
+        Args:
+            secret_values: Tuple of plaintext secret values to redact from
+                strings. Values are sorted longest-first for greedy matching.
+        """
         self._secret_values = tuple(
             sorted(
                 {value for value in secret_values if value},
@@ -49,7 +54,16 @@ class SecretRedactingProcessor:
         method_name: str,
         event_dict: dict[str, Any],
     ) -> dict[str, Any]:
-        """call  ."""
+        """Redact sensitive fields and known secret values from an event dict.
+
+        Args:
+            logger: Logger instance (unused, required by structlog protocol).
+            method_name: Method name (unused, required by structlog protocol).
+            event_dict: Event dictionary to redact in place.
+
+        Returns:
+            A new dictionary with sensitive fields and secret values redacted.
+        """
         del logger, method_name
         return self._redact_mapping(event_dict)
 

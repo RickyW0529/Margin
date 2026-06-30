@@ -15,7 +15,7 @@ from margin.valuation_discovery.scope import ScopeBinding
 
 
 def _normalize_datetime(value: datetime) -> datetime:
-    """normalize datetime."""
+    """Normalize a datetime to timezone-aware UTC."""
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
@@ -75,7 +75,12 @@ class QuantInputSnapshotBuilder:
         repository: QuantInputSnapshotRepository,
         warehouse_repository: QuantWarehouseRepository,
     ) -> None:
-        """init  ."""
+        """Initialize the builder with persistence and warehouse boundaries.
+
+        Args:
+            repository: Persistence boundary for frozen quant input snapshots.
+            warehouse_repository: Warehouse boundary for PIT-safe fact loading.
+        """
         self._repository = repository
         self._warehouse_repository = warehouse_repository
 
@@ -91,6 +96,15 @@ class QuantInputSnapshotBuilder:
 
         Invalid snapshots are still persisted for auditability. Downstream quant
         services decide whether a snapshot can be used for publishable results.
+
+        Args:
+            scope: The frozen scope binding with universe and feature set.
+            decision_at: Timezone-aware decision timestamp.
+            market_window_days: Number of calendar days for the market window.
+            persist: Whether to persist the snapshot immediately.
+
+        Returns:
+            A frozen ``QuantInputSnapshot`` with PIT-validated fact references.
         """
         decision = _normalize_datetime(decision_at)
         market_window_start = decision - timedelta(days=market_window_days)

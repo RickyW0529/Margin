@@ -157,7 +157,7 @@ def main() -> int:
 
 
 def _parse_args() -> argparse.Namespace:
-    """parse args."""
+    """Parse command-line arguments for the RAG evidence smoke."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--database-url", default="")
     parser.add_argument("--security-id", required=True)
@@ -169,7 +169,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _parse_decision_at(value: str) -> datetime:
-    """parse decision at."""
+    """Parse a timezone-aware ISO 8601 datetime string."""
     return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
 
 
@@ -181,7 +181,7 @@ def _resolve_chunk(
     security_id: str,
     decision_at: datetime,
 ) -> Chunk | None:
-    """resolve chunk."""
+    """Load or create a sample chunk for the smoke."""
     if not create_sample:
         return repository.get_chunk(chunk_id)
 
@@ -201,7 +201,7 @@ def _resolve_chunk(
 
 
 def _build_sample_chunk(security_id: str, available_at: datetime) -> Chunk:
-    """build sample chunk."""
+    """Build a synthetic filing chunk for the RAG evidence smoke."""
     content = "正式公告样例：本期经营现金流保持改善。"
     content_hash = compute_chunk_hash(content)
     document_id = f"smoke_rag_evidence_{security_id}"
@@ -235,19 +235,19 @@ def _build_sample_chunk(security_id: str, available_at: datetime) -> Chunk:
 
 
 def _scope_hash(security_id: str) -> str:
-    """scope hash."""
+    """Compute a deterministic scope hash from security ID and question."""
     payload = f"{security_id}|{QUESTION}"
     return "scope_" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
 
 
 def _claim_id(package_id: str, evidence_id: str) -> str:
-    """claim id."""
+    """Compute a deterministic claim ID from package, evidence and statement."""
     payload = f"{package_id}|{evidence_id}|{STATEMENT}"
     return "clm_" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
 
 
 def _claim_status(validation_status: ValidationStatus) -> ClaimStatus:
-    """claim status."""
+    """Map a validation status to a claim status."""
     if validation_status == ValidationStatus.PASS:
         return ClaimStatus.SUPPORTED
     if validation_status == ValidationStatus.ABSTAINED:
@@ -263,7 +263,7 @@ def _print_result(
     claim_status: ClaimStatus,
     validation_status: ValidationStatus,
 ) -> None:
-    """print result."""
+    """Print the smoke result as a single key=value line."""
     print(
         f"status={status} "
         f"package_id={package_id} "

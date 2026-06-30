@@ -594,6 +594,7 @@ PostgreSQL/pgvector persistence boundary for chunks, embeddings, indexing audits
 ## 10. Cross-Module Usage Notes
 
 - **Module 03 (news/document ingestion)**: v0.2 uses `IndexingRunner` to consume document outbox messages, parse raw snapshots, and write `chunks`, `chunk_security_links`, `chunk_embeddings`, and `indexed_documents`.
+- **Shared document normalization handoff**: RAG chunks emitted by `margin.documents` stay within `max_chunk_chars` before embedding. Single oversized paragraph/table blocks are split by line and then by character count when needed, preventing provider-side 400 responses for overlong inputs.
 - **Module 06 (multi-agent research)**: `RetrievalTool` / `HybridRetriever` expose PIT-safe evidence retrieval with `source_url`, `snapshot_id`, `SourceLocator`, `source_level`, and `trust_level`.
 - **PIT retrieval**: callers must pass `decision_at`; repository queries enforce `ChunkRow.available_at <= decision_at`.
 - **Provider registry**: `EmbeddingProvider` and `OpenAIEmbeddingProvider` implement provider descriptors compatible with `margin.core.provider`. `configure_secrets` allows credential injection from a central registry.

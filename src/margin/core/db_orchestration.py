@@ -23,7 +23,21 @@ from margin.storage.base import Base
 
 
 class OrchestrationRunRow(Base):
-    """Current derived state for a durable business run."""
+    """Current derived state for a durable business run.
+
+    Attributes:
+        run_id: Primary key for the run.
+        run_type: Type of the run (e.g. ``valuation_discovery``).
+        state: Current derived state of the run.
+        scope_version_id: Optional frozen scope version identifier.
+        scope_hash: Optional hash of the scope configuration.
+        idempotency_key_hash: Optional hash of the idempotency key.
+        trace_id: Request trace identifier.
+        degradation_reasons: List of degradation reason strings.
+        created_at: UTC timestamp when the run was created.
+        started_at: UTC timestamp when the run started, if started.
+        finished_at: UTC timestamp when the run finished, if finished.
+    """
 
     __tablename__ = "orchestration_runs"
     __table_args__ = (
@@ -56,7 +70,28 @@ class OrchestrationRunRow(Base):
 
 
 class OrchestrationStepAttemptRow(Base):
-    """Append-only state event for one execution attempt."""
+    """Append-only state event for one execution attempt.
+
+    Attributes:
+        event_id: Primary key for the step event.
+        run_id: Foreign key to the parent orchestration run.
+        step_id: Identifier of the orchestration step.
+        attempt_no: Execution attempt number (1-based).
+        state_seq: Sequence number for state events within the same attempt.
+        state: Current state of the step attempt.
+        input_hash: SHA-256 hash of the step input payload.
+        input_ref: Optional reference to the input snapshot.
+        output_ref: Optional reference to the output snapshot.
+        error_code: Optional error code when the step failed.
+        retry_after: Optional timestamp when the step may be retried.
+        trace_id: Request trace identifier.
+        started_at: UTC timestamp when the attempt started.
+        finished_at: UTC timestamp when the attempt finished, if finished.
+        lease_owner: Optional identifier of the worker holding the lease.
+        lease_expires_at: Optional when the current lease expires.
+        previous_event_id: Optional id of the preceding step event.
+        created_at: UTC timestamp when the event was created.
+    """
 
     __tablename__ = "orchestration_step_attempts"
     __table_args__ = (
@@ -108,7 +143,21 @@ class OrchestrationStepAttemptRow(Base):
 
 
 class CapacityLimitVersionRow(Base):
-    """Versioned capacity or budget limit."""
+    """Versioned capacity or budget limit.
+
+    Attributes:
+        version_id: Primary key for the limit version.
+        limit_key: Key identifying the limit.
+        version: Version label for the limit.
+        limit_type: Dimension label (``rate``, ``tokens``, ``budget``, ``composite``).
+        window_seconds: Duration of the rolling window in seconds.
+        max_count: Optional maximum request count per window.
+        max_tokens: Optional maximum token count per window.
+        max_cost: Optional maximum cumulative cost per window.
+        config: Provider-specific configuration dictionary.
+        lifecycle: Lifecycle status (``active`` or ``deprecated``).
+        created_at: UTC timestamp when the limit was created.
+    """
 
     __tablename__ = "capacity_limit_versions"
     __table_args__ = (
@@ -136,7 +185,19 @@ class CapacityLimitVersionRow(Base):
 
 
 class ProviderCapacityCounterRow(Base):
-    """Persisted usage counter for one limit window."""
+    """Persisted usage counter for one limit window.
+
+    Attributes:
+        counter_id: Primary key for the counter.
+        limit_key: Key identifying the limit.
+        limit_version_id: Foreign key to the capacity limit version.
+        window_started_at: UTC timestamp when the window started.
+        window_ends_at: UTC timestamp when the window ends.
+        request_count: Total request count in the window.
+        token_count: Total token count in the window.
+        cost_amount: Total cumulative cost in the window.
+        updated_at: UTC timestamp of the last counter update.
+    """
 
     __tablename__ = "provider_capacity_counters"
     __table_args__ = (
@@ -172,7 +233,22 @@ class ProviderCapacityCounterRow(Base):
 
 
 class TransactionalOutboxRow(Base):
-    """Durable event publication record with idempotency and lease state."""
+    """Durable event publication record with idempotency and lease state.
+
+    Attributes:
+        outbox_id: Primary key for the outbox message.
+        topic: Message topic used for routing.
+        idempotency_key: Key for deduplicating repeated enqueue requests.
+        payload: JSONB message payload.
+        state: Current delivery state of the message.
+        available_at: Timestamp when the message becomes claimable.
+        lease_owner: Optional identifier of the worker holding the lease.
+        lease_expires_at: Optional when the current lease expires.
+        attempt_count: Number of delivery attempts made so far.
+        last_error_code: Error code from the last failed attempt.
+        created_at: UTC timestamp when the message was created.
+        delivered_at: UTC timestamp when the message was delivered, if done.
+    """
 
     __tablename__ = "transactional_outbox"
     __table_args__ = (

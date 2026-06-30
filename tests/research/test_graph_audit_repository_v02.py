@@ -1,4 +1,10 @@
-"""DB-backed graph LLM/tool audit repository tests."""
+"""DB-backed graph LLM/tool audit repository tests.
+
+This module verifies that the SQLAlchemy-backed LLM and tool call audit
+repositories persist only hash-based metadata (never prompt or response
+text), are idempotent on replay, and correctly associate records with
+their graph run.
+"""
 
 from __future__ import annotations
 
@@ -29,7 +35,15 @@ DECISION_AT = datetime(2026, 6, 23, tzinfo=UTC)
 
 
 def test_llm_audit_repository_is_hash_only_and_idempotent(database_url: str) -> None:
-    """LLM audit persists metadata, not prompt/response text."""
+    """Verify the LLM audit repository persists metadata only and is idempotent.
+
+    Seeds a graph run, adds the same LLM call audit record twice, and asserts
+    that only one row is stored. Also verifies that the row contains hash
+    fields but no ``prompt`` or ``response`` text columns.
+
+    Args:
+        database_url: Fixture providing the PostgreSQL integration-test URL.
+    """
     session_factory = _session_factory(database_url)
     graph_run_id = "graph-audit-llm"
     _cleanup(session_factory, graph_run_id)
@@ -74,7 +88,14 @@ def test_llm_audit_repository_is_hash_only_and_idempotent(database_url: str) -> 
 
 
 def test_tool_audit_repository_is_idempotent(database_url: str) -> None:
-    """Scoped tool audit rows are immutable and replay-safe."""
+    """Verify the tool audit repository is immutable and replay-safe.
+
+    Seeds a graph run, adds the same tool call audit record twice, and asserts
+    that only one row is stored with the expected request hash.
+
+    Args:
+        database_url: Fixture providing the PostgreSQL integration-test URL.
+    """
     session_factory = _session_factory(database_url)
     graph_run_id = "graph-audit-tool"
     _cleanup(session_factory, graph_run_id)
@@ -114,12 +135,14 @@ def test_tool_audit_repository_is_idempotent(database_url: str) -> None:
 
 
 def _session_factory(database_url: str):
+    """Create a session factory with all tables initialized on the test database."""
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     return create_session_factory(engine)
 
 
 def _seed_graph_run(session_factory, graph_run_id: str) -> None:
+    """Insert an initial ``AIGraphRunRow`` row for the given graph run ID."""
     with session_factory.begin() as session:
         session.add(
             AIGraphRunRow(
@@ -146,6 +169,7 @@ def _seed_graph_run(session_factory, graph_run_id: str) -> None:
 
 
 def _cleanup(session_factory, graph_run_id: str) -> None:
+    """Delete all LLM, tool, and graph run rows for the given graph run ID."""
     with session_factory.begin() as session:
         session.execute(
             delete(LLMCallRecordRow).where(

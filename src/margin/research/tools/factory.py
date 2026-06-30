@@ -28,7 +28,13 @@ class ScopedToolFactory:
         policy: ToolPolicyEngine,
         audit_repository: ToolCallAuditRepository | None = None,
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the factory.
+
+        Args:
+            tool_registry: Registry of immutable tool definitions.
+            policy: Fail-closed tool policy engine.
+            audit_repository: Optional audit repository for tool call records.
+        """
         self._registry = tool_registry
         self._policy = policy
         self._audit = audit_repository
@@ -45,7 +51,21 @@ class ScopedToolFactory:
         max_result_bytes: int = 65_536,
         deadline: datetime | None = None,
     ) -> ScopedToolSession:
-        """Create one scoped session with immutable limits."""
+        """Create one scoped session with immutable limits.
+
+        Args:
+            graph_run_id: Identifier of the parent graph run.
+            node_name: Name of the node requesting the session.
+            security_id: Security under review.
+            decision_at: Point-in-time decision timestamp.
+            grants: Capabilities granted to this node.
+            max_calls: Maximum allowed tool calls.
+            max_result_bytes: Maximum allowed serialized result size.
+            deadline: Optional deadline for tool calls.
+
+        Returns:
+            A ``ScopedToolSession`` bound to the specified limits.
+        """
         return ScopedToolSession(
             graph_run_id=graph_run_id,
             node_name=node_name,
@@ -79,7 +99,21 @@ class ScopedToolSession:
         policy: ToolPolicyEngine,
         executor: ToolExecutor,
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the scoped session with immutable limits.
+
+        Args:
+            graph_run_id: Identifier of the parent graph run.
+            node_name: Name of the node owning this session.
+            security_id: Security under review.
+            decision_at: Point-in-time decision timestamp.
+            grants: Frozen set of capabilities granted to this node.
+            max_calls: Maximum allowed tool calls.
+            max_result_bytes: Maximum allowed serialized result size.
+            deadline: Optional deadline for tool calls.
+            registry: Tool definition registry.
+            policy: Tool policy engine.
+            executor: Tool executor for authorized calls.
+        """
         self._graph_run_id = graph_run_id
         self._node_name = node_name
         self._security_id = security_id
@@ -95,7 +129,11 @@ class ScopedToolSession:
         self._call_ids: list[str] = []
 
     def manifest(self) -> ToolManifest:
-        """Return only allowed and node-granted tool definitions."""
+        """Return only allowed and node-granted tool definitions.
+
+        Returns:
+            A ``ToolManifest`` containing exposable tools for this session.
+        """
         entries = tuple(
             ToolManifestEntry(
                 name=definition.name,
@@ -119,7 +157,15 @@ class ScopedToolSession:
         )
 
     def call(self, tool_name: str, args: dict[str, Any]) -> ScopedToolResult:
-        """Authorize and execute one tool call."""
+        """Authorize and execute one tool call.
+
+        Args:
+            tool_name: Name of the tool to call.
+            args: Arguments to pass to the tool.
+
+        Returns:
+            A ``ScopedToolResult`` with the tool output or an error code.
+        """
         definition = self._registry.get(tool_name)
         if definition is None:
             result = self._executor.unknown(
@@ -174,5 +220,5 @@ class ScopedToolSession:
 
 
 def _optional_string(value: Any) -> str | None:
-    """optional string."""
+    """Coerce a value to a string, returning None for missing values."""
     return str(value) if value is not None else None

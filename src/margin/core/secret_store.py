@@ -26,7 +26,13 @@ from margin.strategy.db_models import ProviderSecretVersionRow
 
 @dataclass(frozen=True)
 class SecretVersionRef:
-    """Reference to a stored encrypted secret version."""
+    """Reference to a stored encrypted secret version.
+
+    Attributes:
+        version_id: Unique identifier of the secret version.
+        provider_name: Name of the provider the secret belongs to.
+        secret_name: Name of the secret within the provider.
+    """
 
     version_id: str
     provider_name: str
@@ -35,7 +41,16 @@ class SecretVersionRef:
 
 @dataclass(frozen=True)
 class SecretMetadata:
-    """Write-only secret metadata safe for API responses and logs."""
+    """Write-only secret metadata safe for API responses and logs.
+
+    Attributes:
+        ref: Reference to the stored secret version.
+        configured: Whether the secret is currently active.
+        last_four: Last four characters of the plaintext for display.
+        version_id: Unique identifier of the secret version.
+        status: Lifecycle status (e.g. ``active``, ``deactivated``).
+        updated_at: UTC timestamp of the last status change.
+    """
 
     ref: SecretVersionRef
     configured: bool
@@ -46,7 +61,12 @@ class SecretMetadata:
 
 
 class SecretValue:
-    """Resolved secret value with masked representation."""
+    """Resolved secret value with masked representation.
+
+    Wraps a ``SecretStr`` so that the plaintext is only accessible via
+    ``get_secret_value()`` to trusted callers, while ``repr()`` and
+    accidental logging show a masked value.
+    """
 
     def __init__(self, value: str) -> None:
         """Initialize with the plaintext value.
@@ -57,16 +77,32 @@ class SecretValue:
         self._secret = SecretStr(value)
 
     def get_secret_value(self) -> str:
-        """Return the plaintext value to trusted provider adapters only."""
+        """Return the plaintext value to trusted provider adapters only.
+
+        Returns:
+            The plaintext secret string.
+        """
         return self._secret.get_secret_value()
 
     def __repr__(self) -> str:
-        """Return a masked representation safe for logs."""
+        """Return a masked representation safe for logs.
+
+        Returns:
+            A masked string that does not expose the secret value.
+        """
         return "SecretValue('**********')"
 
 
 class WriteSecretCommand(BaseModel):
-    """Command to create or replace a provider secret."""
+    """Command to create or replace a provider secret.
+
+    Attributes:
+        provider_name: Name of the provider the secret belongs to.
+        secret_name: Name of the secret within the provider.
+        secret_value: Plaintext value to encrypt and store.
+        actor_id: Identifier of the user or service writing the secret.
+        idempotency_key: Key for deduplicating repeated write requests.
+    """
 
     provider_name: str
     secret_name: str
@@ -77,7 +113,17 @@ class WriteSecretCommand(BaseModel):
     @field_validator("provider_name", "secret_name", "actor_id", "idempotency_key")
     @classmethod
     def non_empty(cls, value: str) -> str:
-        """Normalize and validate non-empty command fields."""
+        """Normalize and validate non-empty command fields.
+
+        Args:
+            value: Raw field value supplied during validation.
+
+        Returns:
+            The stripped and normalized field value.
+
+        Raises:
+            ValueError: When the value is empty or whitespace-only.
+        """
         normalized = value.strip()
         if not normalized:
             raise ValueError("secret command fields must be non-empty")
@@ -86,19 +132,41 @@ class WriteSecretCommand(BaseModel):
     @field_validator("secret_value")
     @classmethod
     def secret_non_empty(cls, value: str) -> str:
-        """Validate non-empty plaintext before encryption."""
+        """Validate non-empty plaintext before encryption.
+
+        Args:
+            value: Raw secret value supplied during validation.
+
+        Returns:
+            The original value if non-empty.
+
+        Raises:
+            ValueError: When the value is empty.
+        """
         if not value:
             raise ValueError("secret_value must be non-empty")
         return value
 
 
 class SecretRedactor(BaseModel):
-    """Redact known secret values from errors before serialization/logging."""
+    """Redact known secret values from errors before serialization/logging.
+
+    Attributes:
+        values: Tuple of known secret plaintext values to redact.
+    """
 
     values: tuple[str, ...] = Field(default_factory=tuple)
 
     def redact(self, message: str) -> str:
-        """Replace every known secret value with ``[REDACTED]``."""
+        """Replace every known secret value with ``[REDACTED]``.
+
+        Args:
+            message: String that may contain secret values.
+
+        Returns:
+            The message with all known secret values replaced by
+            ``[REDACTED]``.
+        """
         redacted = message
         for value in self.values:
             if value:
@@ -107,7 +175,12 @@ class SecretRedactor(BaseModel):
 
 
 class SQLAlchemySecretRepository:
-    """Repository for encrypted provider secret versions."""
+    """Repository for encrypted provider secret versions.
+
+    Persists AES-GCM encrypted secret rows in PostgreSQL via SQLAlchemy,
+    supporting idempotent writes, activation, deactivation, and listing
+    without decryption.
+    """
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
         """Initialize the repository.
@@ -118,7 +191,14 @@ class SQLAlchemySecretRepository:
         self._session_factory = session_factory
 
     def get(self, version_id: str) -> ProviderSecretVersionRow | None:
-        """Fetch one secret row by version id."""
+        """Fetch one secret row by version id.
+
+        Args:
+            version_id: Unique identifier of the secret version.
+
+        Returns:
+            The matching ORM row, or None if not found.
+        """
         with self._session_factory() as session:
             return session.get(ProviderSecretVersionRow, version_id)
 
@@ -129,7 +209,16 @@ class SQLAlchemySecretRepository:
         secret_name: str,
         idempotency_key: str,
     ) -> ProviderSecretVersionRow | None:
-        """Return a prior write with the same idempotency key if it exists."""
+        """Return a prior write with the same idempotency key if it exists.
+
+        Args:
+            provider_name: Name of the provider the secret belongs to.
+            secret_name: Name of the secret within the provider.
+            idempotency_key: Idempotency key to search for.
+
+        Returns:
+            The prior ORM row, or None if no match is found.
+        """
         with self._session_factory() as session:
             return session.scalar(
                 secret_by_idempotency(provider_name, secret_name, idempotency_key)
@@ -143,7 +232,14 @@ class SQLAlchemySecretRepository:
         secret_name: str,
         deactivated_at: datetime,
     ) -> None:
-        """Deactivate existing active rows and persist a new active version."""
+        """Deactivate existing active rows and persist a new active version.
+
+        Args:
+            row: The new secret version row to persist.
+            provider_name: Name of the provider the secret belongs to.
+            secret_name: Name of the secret within the provider.
+            deactivated_at: Timestamp to set on deactivated prior versions.
+        """
         with self._session_factory.begin() as session:
             active_rows = session.scalars(
                 active_secrets_by_provider_and_name(provider_name, secret_name)
@@ -159,7 +255,15 @@ class SQLAlchemySecretRepository:
         provider_name: str | None = None,
         secret_name: str | None = None,
     ) -> list[ProviderSecretVersionRow]:
-        """List secret rows in creation order without decrypting them."""
+        """List secret rows in creation order without decrypting them.
+
+        Args:
+            provider_name: Optional provider name filter.
+            secret_name: Optional secret name filter.
+
+        Returns:
+            List of matching secret version rows in creation order.
+        """
         with self._session_factory() as session:
             return list(
                 session.scalars(
@@ -173,7 +277,18 @@ class SQLAlchemySecretRepository:
         *,
         deactivated_at: datetime,
     ) -> ProviderSecretVersionRow:
-        """Deactivate a secret version while preserving decryptable history."""
+        """Deactivate a secret version while preserving decryptable history.
+
+        Args:
+            version_id: Unique identifier of the secret version to deactivate.
+            deactivated_at: Timestamp to set as the deactivation time.
+
+        Returns:
+            The deactivated ORM row.
+
+        Raises:
+            KeyError: When no secret version with the given id exists.
+        """
         with self._session_factory.begin() as session:
             row = session.get(ProviderSecretVersionRow, version_id)
             if row is None:
@@ -185,7 +300,13 @@ class SQLAlchemySecretRepository:
 
 
 class SecretStore:
-    """AEAD-encrypted, versioned provider secret store."""
+    """AEAD-encrypted, versioned provider secret store.
+
+    Encrypts plaintext secrets with AES-GCM-256 using a master key and
+    persists ciphertext via a SQLAlchemy repository. Supports idempotent
+    writes, decryption, metadata retrieval, and deactivation without
+    deleting encrypted history.
+    """
 
     def __init__(
         self,
@@ -206,7 +327,18 @@ class SecretStore:
         self._key_version = key_version
 
     def create_or_replace(self, command: WriteSecretCommand) -> SecretMetadata:
-        """Encrypt and store a new active secret version."""
+        """Encrypt and store a new active secret version.
+
+        If a prior write with the same idempotency key exists, its metadata
+        is returned without re-encrypting.
+
+        Args:
+            command: Write command containing provider, secret name, value,
+                actor, and idempotency key.
+
+        Returns:
+            Safe metadata for the stored or prior secret version.
+        """
         provider_name = command.provider_name.strip().lower()
         secret_name = command.secret_name.strip().lower()
         prior = self._repository.find_by_idempotency(
@@ -254,7 +386,18 @@ class SecretStore:
         return _metadata_from_row(row)
 
     def resolve(self, ref: SecretVersionRef) -> SecretValue:
-        """Decrypt a secret version and return a masked value wrapper."""
+        """Decrypt a secret version and return a masked value wrapper.
+
+        Args:
+            ref: Reference identifying the secret version to decrypt.
+
+        Returns:
+            A SecretValue wrapping the decrypted plaintext.
+
+        Raises:
+            KeyError: When no secret version with the given id exists.
+            ValueError: When AEAD decryption fails (invalid tag or key).
+        """
         row = self._repository.get(ref.version_id)
         if row is None:
             raise KeyError(f"secret version not found: {ref.version_id}")
@@ -275,7 +418,17 @@ class SecretStore:
         return SecretValue(plaintext.decode("utf-8"))
 
     def metadata(self, version_id: str) -> SecretMetadata:
-        """Return safe metadata for a secret version without decrypting it."""
+        """Return safe metadata for a secret version without decrypting it.
+
+        Args:
+            version_id: Unique identifier of the secret version.
+
+        Returns:
+            Safe metadata for the secret version.
+
+        Raises:
+            KeyError: When no secret version with the given id exists.
+        """
         row = self._repository.get(version_id)
         if row is None:
             raise KeyError(f"secret version not found: {version_id}")
@@ -287,7 +440,15 @@ class SecretStore:
         provider_name: str | None = None,
         secret_name: str | None = None,
     ) -> list[SecretMetadata]:
-        """List safe secret metadata without returning encrypted or plain values."""
+        """List safe secret metadata without returning encrypted or plain values.
+
+        Args:
+            provider_name: Optional provider name filter (case-insensitive).
+            secret_name: Optional secret name filter (case-insensitive).
+
+        Returns:
+            List of safe metadata objects for matching secret versions.
+        """
         normalized_provider = provider_name.strip().lower() if provider_name else None
         normalized_secret = secret_name.strip().lower() if secret_name else None
         return [
@@ -305,7 +466,19 @@ class SecretStore:
         actor_id: str,
         idempotency_key: str,
     ) -> SecretMetadata:
-        """Deactivate a secret version without deleting encrypted history."""
+        """Deactivate a secret version without deleting encrypted history.
+
+        Args:
+            ref: Reference identifying the secret version to deactivate.
+            actor_id: Identifier of the user or service requesting deactivation.
+            idempotency_key: Idempotency key for the deactivation request.
+
+        Returns:
+            Safe metadata for the deactivated secret version.
+
+        Raises:
+            ValueError: When actor_id or idempotency_key is empty.
+        """
         if not actor_id.strip() or not idempotency_key.strip():
             raise ValueError("actor_id and idempotency_key are required")
         row = self._repository.deactivate(

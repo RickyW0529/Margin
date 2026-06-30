@@ -70,7 +70,11 @@ class LLMCallAuditRepository(Protocol):
     """Persistence boundary for LLM call metadata."""
 
     def add(self, record: LLMCallAuditRecord) -> None:
-        """Persist one immutable call audit."""
+        """Persist one immutable call audit.
+
+        Args:
+            record: Hash-only audit record to persist.
+        """
 
 
 class MemoryLLMCallAuditRepository:
@@ -81,7 +85,14 @@ class MemoryLLMCallAuditRepository:
         self._records: dict[str, LLMCallAuditRecord] = {}
 
     def add(self, record: LLMCallAuditRecord) -> None:
-        """add."""
+        """Persist one immutable LLM call audit record.
+
+        Args:
+            record: Hash-only audit record to persist.
+
+        Raises:
+            ValueError: If a conflicting record with the same call ID exists.
+        """
         current = self._records.get(record.call_id)
         if current is not None and current != record:
             raise ValueError(f"LLM call audit '{record.call_id}' is immutable")
@@ -102,7 +113,12 @@ class LLMService:
         *,
         audit_repository: LLMCallAuditRepository | None = None,
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the LLM service.
+
+        Args:
+            provider: LLM provider or model router for completions.
+            audit_repository: Optional audit repository for call metadata.
+        """
         self._provider = provider
         self._audit = audit_repository or MemoryLLMCallAuditRepository()
 
@@ -116,7 +132,19 @@ class LLMService:
         graph_run_id: str,
         deadline: datetime | None = None,
     ) -> StructuredLLMResponse:
-        """Complete and validate one structured graph-node request."""
+        """Complete and validate one structured graph-node request.
+
+        Args:
+            prompt: Rendered prompt to send to the LLM.
+            output_schema: JSON schema used to validate the response.
+            task_type: Node task type for routing and audit.
+            node_name: Name of the calling graph node.
+            graph_run_id: Identifier of the parent graph run.
+            deadline: Optional deadline; returns a failure if already exceeded.
+
+        Returns:
+            A ``StructuredLLMResponse`` with validated output or error details.
+        """
         prompt_hash = prompt.prompt_hash
         schema_hash = _hash_json(output_schema)
         request_hash = _hash_json(
@@ -215,7 +243,7 @@ class LLMService:
         request_hash: str,
         prompt_version: str,
     ) -> None:
-        """record."""
+        """Record one LLM call audit entry with hash-only metadata."""
         billing_key = request_hash
         provider_name, model_name, model_version = _provider_identity(
             self._provider,
@@ -259,7 +287,7 @@ class LLMService:
 
 
 def _task_type(value: str) -> TaskType:
-    """task type."""
+    """Map a node task type string to a ModelRouter TaskType."""
     mapping = {
         "draft": TaskType.EVIDENCE,
         "reflection": TaskType.REFLECT,
@@ -282,7 +310,7 @@ def _provider_identity(
 
 
 def _hash_json(value: Any) -> str:
-    """hash json."""
+    """Return a deterministic SHA-256 hash for a JSON-serializable value."""
     encoded = json.dumps(
         value,
         sort_keys=True,

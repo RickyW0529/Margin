@@ -12,7 +12,7 @@ from margin.data.endpoints import (
 
 
 def test_registry_rejects_duplicate_provider_endpoint() -> None:
-    """registry rejects duplicate provider endpoint."""
+    """Test that registering the same provider endpoint twice raises an error."""
     registry = ProviderEndpointRegistry()
     endpoint = ProviderEndpoint(code="bars", provider="akshare", domain="market")
 
@@ -23,7 +23,7 @@ def test_registry_rejects_duplicate_provider_endpoint() -> None:
 
 
 def test_backfill_policy_is_not_user_scoped() -> None:
-    """backfill policy is not user scoped."""
+    """Test that endpoint backfill policy is global and not scoped to a user version."""
     endpoint = ProviderEndpoint(code="bars", provider="akshare", domain="market")
 
     assert endpoint.endpoint_id == "akshare:bars"
@@ -31,7 +31,7 @@ def test_backfill_policy_is_not_user_scoped() -> None:
 
 
 def test_default_registry_contains_akshare_and_tushare_market_endpoints() -> None:
-    """default registry contains akshare and tushare market endpoints."""
+    """Test that the default registry includes market endpoints for both providers."""
     registry = ProviderEndpointRegistry.default()
 
     assert registry.get("akshare", "daily_bar").domain == "market"

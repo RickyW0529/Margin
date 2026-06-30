@@ -205,11 +205,25 @@ class SQLAlchemyWarehouseRepository:
     """PIT-safe warehouse repository backed by SQLAlchemy."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
-        """Initialize the instance."""
+        """Initialize the repository.
+
+        Args:
+            session_factory: Callable returning a SQLAlchemy ``Session``.
+        """
         self._session_factory = session_factory
 
     def canonical_values(self, query: CanonicalQuery) -> list[CanonicalValue]:
-        """Return latest canonical values known at ``query.decision_at``."""
+        """Return latest canonical values known at ``query.decision_at``.
+
+        Args:
+            query: The canonical value query with security IDs and decision time.
+
+        Returns:
+            A list of ``CanonicalValue`` objects, one per security/indicator.
+
+        Raises:
+            PITQueryError: If ``query.decision_at`` is ``None``.
+        """
         decision_at = _require_decision_at(query.decision_at)
         if not query.security_ids:
             return []
@@ -227,7 +241,17 @@ class SQLAlchemyWarehouseRepository:
         return list(latest.values())
 
     def market_window(self, query: MarketWindowQuery) -> list[AdjustedPriceValue]:
-        """Return adjusted prices for the requested PIT market window."""
+        """Return adjusted prices for the requested PIT market window.
+
+        Args:
+            query: The market window query with security IDs and date range.
+
+        Returns:
+            A list of ``AdjustedPriceValue`` objects.
+
+        Raises:
+            PITQueryError: If ``query.decision_at`` is ``None``.
+        """
         return self.adjusted_prices(
             AdjustedPriceQuery(
                 security_ids=query.security_ids,
@@ -238,7 +262,17 @@ class SQLAlchemyWarehouseRepository:
         )
 
     def industry_memberships(self, query: IndustryQuery) -> list[IndustryMembershipValue]:
-        """Return industry memberships valid at business and system time."""
+        """Return industry memberships valid at business and system time.
+
+        Args:
+            query: The bitemporal industry membership query.
+
+        Returns:
+            A list of ``IndustryMembershipValue`` objects, one per security.
+
+        Raises:
+            PITQueryError: If ``query.system_as_of`` is ``None``.
+        """
         system_as_of = _require_system_as_of(query.system_as_of)
         if not query.security_ids:
             return []
@@ -257,7 +291,17 @@ class SQLAlchemyWarehouseRepository:
         return list(latest.values())
 
     def adjusted_prices(self, query: AdjustedPriceQuery) -> list[AdjustedPriceValue]:
-        """Return latest adjusted prices known at ``query.decision_at``."""
+        """Return latest adjusted prices known at ``query.decision_at``.
+
+        Args:
+            query: The adjusted price query with security IDs and date range.
+
+        Returns:
+            A list of ``AdjustedPriceValue`` objects, one per security/date.
+
+        Raises:
+            PITQueryError: If ``query.decision_at`` is ``None``.
+        """
         decision_at = _require_decision_at(query.decision_at)
         if not query.security_ids:
             return []
@@ -281,6 +325,12 @@ class SQLAlchemyWarehouseRepository:
         Results contain only the latest as-of row for each provider endpoint.
         Domain filtering joins the endpoint registry instead of guessing from
         endpoint names.
+
+        Args:
+            domains: Optional set of data domains to filter by.
+
+        Returns:
+            A list of ``FreshnessRecord`` objects, one per provider endpoint.
         """
         normalized_domains = {DataDomain(domain).value for domain in domains or set()}
         statement = freshness_records(normalized_domains or None)
@@ -295,7 +345,14 @@ class SQLAlchemyWarehouseRepository:
         return list(latest.values())
 
     def quality_events(self, query: QualityEventQuery) -> list[QualityEvent]:
-        """Return append-only quality events."""
+        """Return append-only quality events.
+
+        Args:
+            query: The quality event query with optional security and time filters.
+
+        Returns:
+            A list of ``QualityEvent`` objects matching the query.
+        """
         statement = quality_events_recent(
             security_ids=query.security_ids,
             since=ensure_utc(query.since) if query.since is not None else None,
@@ -310,7 +367,18 @@ class SQLAlchemyWarehouseRepository:
         *,
         system_as_of: datetime,
     ) -> list[SecurityProfileValue]:
-        """Return active security-master records known at ``system_as_of``."""
+        """Return active security-master records known at ``system_as_of``.
+
+        Args:
+            security_ids: The security IDs to look up.
+            system_as_of: The system time for bitemporal visibility.
+
+        Returns:
+            A list of ``SecurityProfileValue`` objects, one per security.
+
+        Raises:
+            PITQueryError: If ``system_as_of`` is ``None``.
+        """
         known_at = _require_system_as_of(system_as_of)
         if not security_ids:
             return []
@@ -341,7 +409,17 @@ class SQLAlchemyWarehouseRepository:
         self,
         query: IndicatorHistoryQuery,
     ) -> list[IndicatorHistoryValue]:
-        """Return one deterministic provider fact per security/indicator/event."""
+        """Return one deterministic provider fact per security/indicator/event.
+
+        Args:
+            query: The indicator history query with PIT enforcement.
+
+        Returns:
+            A list of ``IndicatorHistoryValue`` objects.
+
+        Raises:
+            PITQueryError: If ``query.decision_at`` is ``None``.
+        """
         decision_at = _require_decision_at(query.decision_at)
         if not query.security_ids or not query.indicator_ids:
             return []
@@ -372,21 +450,21 @@ class SQLAlchemyWarehouseRepository:
 
 
 def _require_decision_at(value: datetime | None) -> datetime:
-    """require decision at."""
+    """Return a UTC decision timestamp or raise a PIT query error."""
     if value is None:
         raise PITQueryError("decision_at is required for PIT warehouse queries")
     return ensure_utc(value)
 
 
 def _require_system_as_of(value: datetime | None) -> datetime:
-    """require system as of."""
+    """Return a UTC system-as-of timestamp or raise a PIT query error."""
     if value is None:
         raise PITQueryError("system_as_of is required for bitemporal warehouse queries")
     return ensure_utc(value)
 
 
 def _canonical_value_from_row(row: CanonicalIndicatorValueRow) -> CanonicalValue:
-    """canonical value from row."""
+    """Map a canonical indicator ORM row to the public value dataclass."""
     return CanonicalValue(
         canonical_id=row.canonical_id,
         security_id=row.security_id,
@@ -405,7 +483,7 @@ def _canonical_value_from_row(row: CanonicalIndicatorValueRow) -> CanonicalValue
 
 
 def _industry_from_row(row: SecurityIndustryMembershipRow) -> IndustryMembershipValue:
-    """industry from row."""
+    """Map an industry membership ORM row to the public value dataclass."""
     return IndustryMembershipValue(
         membership_id=row.membership_id,
         security_id=row.security_id,
@@ -422,7 +500,7 @@ def _industry_from_row(row: SecurityIndustryMembershipRow) -> IndustryMembership
 
 
 def _adjusted_price_from_row(row: AdjustedPriceSeriesRow) -> AdjustedPriceValue:
-    """adjusted price from row."""
+    """Map an adjusted price ORM row to the public value dataclass."""
     return AdjustedPriceValue(
         security_id=row.security_id,
         trade_date=row.trade_date,
@@ -436,7 +514,7 @@ def _adjusted_price_from_row(row: AdjustedPriceSeriesRow) -> AdjustedPriceValue:
 
 
 def _freshness_from_row(row: DataFreshnessStateRow) -> FreshnessRecord:
-    """freshness from row."""
+    """Map a freshness state ORM row to the public record dataclass."""
     return FreshnessRecord(
         provider=row.provider,
         endpoint_code=row.endpoint_code,
@@ -449,7 +527,7 @@ def _freshness_from_row(row: DataFreshnessStateRow) -> FreshnessRecord:
 
 
 def _quality_event_from_row(row: DataQualityEventRow) -> QualityEvent:
-    """quality event from row."""
+    """Map a quality event ORM row to the public event dataclass."""
     return QualityEvent(
         event_id=row.event_id,
         security_id=row.security_id,

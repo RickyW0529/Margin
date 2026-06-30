@@ -1,4 +1,8 @@
-"""v0.2 text indexing model tests."""
+"""v0.2 text indexing model tests.
+
+Verifies stable chunk ID derivation, point-in-time indexing request requirements,
+model-versioned embedding keys, and chunk-security link identity separation.
+"""
 
 from __future__ import annotations
 
@@ -15,7 +19,11 @@ from margin.vector.models import (
 
 
 def test_stable_chunk_id_uses_document_content_parser_and_index() -> None:
-    """stable chunk id uses document content parser and index."""
+    """Stable chunk ID must be derived from document, content, parser, and index.
+
+    Verifies that ``make_stable_chunk_id`` produces a deterministic hash from the
+    document ID, content hash, parser version, and chunk index.
+    """
     chunk_id = make_stable_chunk_id(
         document_id="doc-1",
         content_hash="sha256:abc",
@@ -27,7 +35,11 @@ def test_stable_chunk_id_uses_document_content_parser_and_index() -> None:
 
 
 def test_indexing_request_requires_available_at_for_pit() -> None:
-    """indexing request requires available at for pit."""
+    """Indexing request must carry ``available_at`` for point-in-time retrieval.
+
+    Verifies that an ``IndexingRequest`` with ``published_at=None`` still stores
+    the ``available_at`` timestamp for PIT filtering.
+    """
     request = IndexingRequest(
         event_id="event-1",
         snapshot_id="snapshot-1",
@@ -42,7 +54,11 @@ def test_indexing_request_requires_available_at_for_pit() -> None:
 
 
 def test_embedding_key_is_model_versioned() -> None:
-    """embedding key is model versioned."""
+    """Embedding key must be versioned by provider, model, and model version.
+
+    Verifies that ``EmbeddingKey`` produces a deterministic hash incorporating the
+    chunk ID, provider name, model name, and model version.
+    """
     key = EmbeddingKey(
         chunk_id="chk-1",
         provider_name="openai-compatible",
@@ -54,7 +70,12 @@ def test_embedding_key_is_model_versioned() -> None:
 
 
 def test_chunk_link_is_separate_from_chunk_identity() -> None:
-    """chunk link is separate from chunk identity."""
+    """Chunk-security links must be separate from chunk identity and locator anchors.
+
+    Verifies that ``ChunkSecurityLink`` stores the security ID and confidence
+    independently of the chunk, and that ``SourceLocator`` and ``TrustLevel``
+    expose precise-anchor and value semantics correctly.
+    """
     link = ChunkSecurityLink(
         chunk_id="chk-1",
         security_id="000001.SZ",

@@ -1,4 +1,10 @@
-"""Analysis Mart persistence and publishing tests."""
+"""Analysis Mart persistence and publishing tests.
+
+This module validates that the Analysis Mart repositories persist feature
+snapshots and analysis bundles idempotently, reject conflicting replays,
+roll back partial child conflicts atomically, and that the publisher
+materializes quant results into AI-ready analysis rows.
+"""
 
 from __future__ import annotations
 
@@ -43,7 +49,11 @@ DECISION_AT = datetime(2026, 6, 24, 8, 0, tzinfo=UTC)
 
 
 def test_memory_feature_mart_persists_snapshot_idempotently() -> None:
-    """Fourth-layer quant feature snapshots can be replayed safely."""
+    """Verify fourth-layer quant feature snapshots can be replayed safely.
+
+    Returns:
+        None.
+    """
     repository = MemoryAnalysisMartRepository()
     snapshot, rows = _feature_snapshot()
 
@@ -59,7 +69,11 @@ def test_memory_feature_mart_persists_snapshot_idempotently() -> None:
 
 
 def test_memory_feature_mart_rejects_conflicting_snapshot_replay() -> None:
-    """Feature mart rows are append-only and cannot be overwritten."""
+    """Verify feature mart rows are append-only and cannot be overwritten.
+
+    Returns:
+        None.
+    """
     repository = MemoryAnalysisMartRepository()
     snapshot, rows = _feature_snapshot()
     repository.upsert_feature_snapshot(snapshot, rows)
@@ -75,7 +89,14 @@ def test_memory_feature_mart_rejects_conflicting_snapshot_replay() -> None:
 
 
 def test_postgres_feature_mart_persists_snapshot(database_url: str) -> None:
-    """PostgreSQL repository stores feature snapshots and rows."""
+    """Verify the PostgreSQL repository stores feature snapshots and rows.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        None.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -100,7 +121,14 @@ def test_postgres_feature_mart_persists_snapshot(database_url: str) -> None:
 def test_postgres_feature_mart_rolls_back_partial_child_conflict(
     database_url: str,
 ) -> None:
-    """Feature ETL never leaves a snapshot header without its rows."""
+    """Verify feature ETL never leaves a snapshot header without its rows.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        None.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -138,7 +166,11 @@ def test_postgres_feature_mart_rolls_back_partial_child_conflict(
 
 
 def test_memory_analysis_mart_persists_bundle_idempotently() -> None:
-    """A complete fourth-layer bundle can be replayed without duplication."""
+    """Verify a complete fourth-layer bundle can be replayed without duplication.
+
+    Returns:
+        None.
+    """
     repository = MemoryAnalysisMartRepository()
     bundle = _bundle()
 
@@ -157,7 +189,11 @@ def test_memory_analysis_mart_persists_bundle_idempotently() -> None:
 
 
 def test_memory_analysis_mart_rejects_conflicting_replay() -> None:
-    """Append-only Analysis Mart rows cannot be overwritten with new content."""
+    """Verify append-only Analysis Mart rows cannot be overwritten with new content.
+
+    Returns:
+        None.
+    """
     repository = MemoryAnalysisMartRepository()
     bundle = _bundle()
     repository.upsert_bundle(bundle)
@@ -173,7 +209,11 @@ def test_memory_analysis_mart_rejects_conflicting_replay() -> None:
 
 
 def test_memory_analysis_mart_latest_snapshot_uses_decision_time() -> None:
-    """The latest effective analysis snapshot is selected by decision time."""
+    """Verify the latest effective analysis snapshot is selected by decision time.
+
+    Returns:
+        None.
+    """
     repository = MemoryAnalysisMartRepository()
     older = _bundle(snapshot_id="asnap-old", decision_at=datetime(2026, 6, 23, tzinfo=UTC))
     newer = _bundle(snapshot_id="asnap-new", decision_at=DECISION_AT)
@@ -193,7 +233,14 @@ def test_memory_analysis_mart_latest_snapshot_uses_decision_time() -> None:
 
 
 def test_postgres_analysis_mart_persists_bundle(database_url: str) -> None:
-    """PostgreSQL repository stores snapshots, metrics, findings, and links."""
+    """Verify the PostgreSQL repository stores snapshots, metrics, findings, and links.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        None.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -220,7 +267,14 @@ def test_postgres_analysis_mart_persists_bundle(database_url: str) -> None:
 def test_postgres_analysis_mart_rolls_back_partial_child_conflict(
     database_url: str,
 ) -> None:
-    """Analysis-result ETL commits snapshot and child rows atomically."""
+    """Verify analysis-result ETL commits snapshot and child rows atomically.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        None.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -260,7 +314,11 @@ def test_postgres_analysis_mart_rolls_back_partial_child_conflict(
 
 
 def test_analysis_mart_publisher_materializes_quant_result() -> None:
-    """Quant output is transformed into AI-ready fourth-layer analysis rows."""
+    """Verify quant output is transformed into AI-ready fourth-layer analysis rows.
+
+    Returns:
+        None.
+    """
     repository = MemoryAnalysisMartRepository()
     publisher = AnalysisMartPublisher(repository)
     result = QuantResult(
@@ -343,6 +401,7 @@ def _bundle(
     snapshot_id: str = "asnap-1",
     decision_at: datetime = DECISION_AT,
 ) -> AnalysisMartBundle:
+    """Build a deterministic Analysis Mart bundle with snapshot, metrics, and findings."""
     snapshot = AnalysisSnapshot(
         analysis_snapshot_id=snapshot_id,
         security_id="000001.SZ",
@@ -433,6 +492,7 @@ def _feature_snapshot(
     snapshot_id: str = "qfsnap-1",
     decision_at: datetime = DECISION_AT,
 ) -> tuple[QuantFeatureSnapshot, tuple[QuantFeatureRow, ...]]:
+    """Build a deterministic quant feature snapshot with two rows."""
     snapshot = QuantFeatureSnapshot(
         feature_snapshot_id=snapshot_id,
         scope_version_id="scope-v1",
@@ -504,6 +564,7 @@ def _feature_snapshot(
 
 
 def _delete_bundle_rows(session, snapshot_id: str) -> None:
+    """Delete all Analysis Mart child rows for a given snapshot ID."""
     session.query(AnalysisEvidenceLinkRow).filter_by(
         analysis_snapshot_id=snapshot_id
     ).delete()
@@ -519,6 +580,7 @@ def _delete_bundle_rows(session, snapshot_id: str) -> None:
 
 
 def _delete_feature_rows(session, snapshot_id: str) -> None:
+    """Delete all quant feature rows and snapshot header for a given snapshot ID."""
     session.query(QuantFeatureRowRow).filter_by(
         feature_snapshot_id=snapshot_id
     ).delete()

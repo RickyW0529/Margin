@@ -17,23 +17,23 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 def _utc_now() -> datetime:
-    """utc now."""
+    """Return the current UTC datetime."""
     return datetime.now(UTC)
 
 
 def _new_id(prefix: str) -> str:
-    """new id."""
+    """Generate a prefixed unique ID from a truncated UUID4 hex."""
     return f"{prefix}_{uuid4().hex[:16]}"
 
 
 def _hash_payload(payload: Any) -> str:
-    """hash payload."""
+    """Hash a payload to a deterministic SHA-256 digest string."""
     rendered = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
     return "sha256:" + hashlib.sha256(rendered.encode("utf-8")).hexdigest()
 
 
 def _normalize_datetime(value: datetime | None) -> datetime | None:
-    """normalize datetime."""
+    """Normalize a datetime to timezone-aware UTC, or return None."""
     if value is None:
         return None
     if value.tzinfo is None:
@@ -194,7 +194,7 @@ class UniverseSnapshot(FrozenModel):
     _normalize_created_at = field_validator("created_at")(_normalize_datetime)
 
     def model_post_init(self, __context: Any) -> None:
-        """model post init."""
+        """Compute the deterministic input hash after model initialization."""
         if self.input_hash:
             return
         payload = {
@@ -243,7 +243,7 @@ class QuantInputSnapshot(FrozenModel):
     _normalize_created_at = field_validator("created_at")(_normalize_datetime)
 
     def model_post_init(self, __context: Any) -> None:
-        """model post init."""
+        """Derive data status and input hash after model initialization."""
         if self.missing_required and self.data_status == DataStatus.OK:
             object.__setattr__(self, "data_status", DataStatus.INSUFFICIENT)
         if not self.input_hash:

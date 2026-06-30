@@ -373,7 +373,7 @@ class LocatorValidator:
         )
 
     def _resolve_snapshot(self, snapshot_id: str) -> object | None:
-        """resolve snapshot."""
+        """Resolve a snapshot ID via the configured resolver callable or object."""
         resolver = self._snapshot_resolver
         if callable(resolver):
             return resolver(snapshot_id)
@@ -387,7 +387,7 @@ class LocatorValidator:
 
 
 def _snapshot_content(snapshot: object) -> str | bytes | None:
-    """snapshot content."""
+    """Extract textual or binary content from a snapshot object."""
     for attr in ("content", "text", "raw_content", "body"):
         value = getattr(snapshot, attr, None)
         if value is None and isinstance(snapshot, dict):
@@ -402,7 +402,7 @@ def _locate_text(
     content_type: str,
     locator: CitationLocator,
 ) -> str | LocatorReplayResult:
-    """locate text."""
+    """Locate text within snapshot content using the locator's structural fields."""
     normalized_content_type = content_type.lower()
     if locator.page is not None and (
         "pdf" in normalized_content_type
@@ -442,7 +442,7 @@ def _locate_pdf_page(
     content: str | bytes,
     page_number: int,
 ) -> str | LocatorReplayResult:
-    """locate pdf page."""
+    """Extract text from a specific PDF page using PyMuPDF."""
     if not isinstance(content, bytes):
         return LocatorReplayResult(valid=False, reason_code="pdf_page_not_found")
     try:
@@ -470,7 +470,7 @@ def _locate_table_cell(
     content_type: str,
     locator: CitationLocator,
 ) -> str | None:
-    """locate table cell."""
+    """Locate a table cell value from CSV content using table and row locators."""
     if locator.table_id != "table-1":
         return None
     row_match = re.fullmatch(r"row-(\d+)", locator.row_id or "")
@@ -498,7 +498,7 @@ def _locate_table_cell(
 
 
 def _locate_dom_path(content: str, dom_path: str) -> str | None:
-    """locate dom path."""
+    """Locate text within HTML content using a DOM path expression."""
     match = re.search(r"/([A-Za-z0-9]+)\[(\d+)\]$", dom_path)
     if match is None:
         return None
@@ -519,7 +519,7 @@ def _apply_quote_span(
     content: str,
     locator: CitationLocator,
 ) -> str | LocatorReplayResult:
-    """apply quote span."""
+    """Extract a substring of content using the locator's quote span."""
     if locator.quote_span is None:
         return content
     start, end = locator.quote_span

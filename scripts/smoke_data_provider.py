@@ -100,7 +100,7 @@ def main() -> int:
 
 
 def _parse_args() -> argparse.Namespace:
-    """parse args."""
+    """Parse command-line arguments for the data-provider smoke."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--providers",
@@ -123,7 +123,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _build_stack(settings: MarginSettings) -> DataWarehouseIngestionStack:
-    """build stack."""
+    """Build a DataWarehouseIngestionStack from application settings."""
     engine = create_database_engine(
         DatabaseSettings(
             url=str(settings.database_url),
@@ -138,7 +138,7 @@ def _build_stack(settings: MarginSettings) -> DataWarehouseIngestionStack:
 
 
 def _build_provider(provider_name: str, tushare_token: str | None, tushare_http_url: str | None):
-    """build provider."""
+    """Instantiate a data provider by name."""
     if provider_name == "akshare":
         return AKShareProvider()
     if provider_name == "tushare":
@@ -147,7 +147,7 @@ def _build_provider(provider_name: str, tushare_token: str | None, tushare_http_
 
 
 def _resolve_tushare_token(settings: MarginSettings) -> str | None:
-    """resolve tushare token."""
+    """Resolve the Tushare API token from settings or secret manager."""
     if settings.tushare_token is not None:
         token = settings.tushare_token.get_secret_value().strip()
         if token:
@@ -160,7 +160,7 @@ def _resolve_tushare_token(settings: MarginSettings) -> str | None:
 
 
 def _provider_dry_run_status(provider_name: str, tushare_token: str | None) -> dict[str, str]:
-    """provider dry run status."""
+    """Return dry-run status for a provider without network calls."""
     provider_name = provider_name.lower()
     if provider_name == "tushare":
         return {
@@ -171,19 +171,19 @@ def _provider_dry_run_status(provider_name: str, tushare_token: str | None) -> d
 
 
 def _parse_csv(value: str) -> list[str]:
-    """parse csv."""
+    """Split a comma-separated string into a stripped token list."""
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def _decision_at(end_date: str) -> datetime:
-    """decision at."""
+    """Parse an end-date string or return current UTC time."""
     if not end_date:
         return datetime.now(UTC)
     return datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=UTC)
 
 
 def _redact(message: str, secret_values: list[str]) -> str:
-    """redact."""
+    """Replace known secret values in a message with [REDACTED]."""
     redacted = message
     for secret in secret_values:
         if secret:

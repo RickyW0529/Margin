@@ -1,4 +1,8 @@
-"""Bootstrap command configuration tests."""
+"""Bootstrap command configuration tests.
+
+This module verifies that the bootstrap configuration builder assembles
+provider specs without leaking plaintext secrets into rendered config JSON.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +11,14 @@ from scripts.bootstrap_config import build_provider_specs
 
 
 def test_bootstrap_provider_specs_contain_no_plaintext_secrets() -> None:
-    """Non-sensitive bootstrap definitions never copy API keys into config JSON."""
+    """Verify non-sensitive bootstrap definitions never copy API keys into config JSON.
+
+    The rendered provider specs must include all expected providers while
+    ensuring that secret values do not appear in any string representation.
+
+    Returns:
+        None.
+    """
     settings = MarginSettings(
         _env_file=None,
         llm_api_key="llm-secret",

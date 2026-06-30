@@ -84,7 +84,15 @@ class SecretManager:
         )
 
     def resolve_versioned(self, ref, store) -> str:
-        """Resolve a versioned Secret Store reference through a trusted store."""
+        """Resolve a versioned Secret Store reference through a trusted store.
+
+        Args:
+            ref: Secret version reference to resolve.
+            store: Trusted SecretStore instance used for decryption.
+
+        Returns:
+            The decrypted secret value as a string.
+        """
         return store.resolve(ref).get_secret_value()
 
     def has(self, ref: str) -> bool:

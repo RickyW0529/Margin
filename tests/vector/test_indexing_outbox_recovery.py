@@ -1,4 +1,9 @@
-"""v0.2 indexing outbox lease and retry recovery tests."""
+"""v0.2 indexing outbox lease and retry recovery tests.
+
+Verifies that expired processing leases can be reclaimed by the indexing runner
+and that embedding failures after successful parsing keep the outbox entry in a
+retryable state rather than marking it permanently failed.
+"""
 
 from __future__ import annotations
 
@@ -17,7 +22,14 @@ from margin.vector.indexing_runner import IndexingRunner
 
 @pytest.fixture
 def news_repository(database_url: str) -> Iterator[NewsRepository]:
-    """news repository."""
+    """Yield a ``NewsRepository`` seeded with a single document event.
+
+    Args:
+        database_url: pytest fixture providing the connection URL for the test database.
+
+    Yields:
+        NewsRepository: repository with one pre-published document event.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -39,16 +51,24 @@ def news_repository(database_url: str) -> Iterator[NewsRepository]:
 
 
 class FailingPipeline:
-    """FailingPipeline."""
+    """Stub pipeline that always raises to simulate embedding provider failure."""
+
     def index_event(self, event) -> None:  # noqa: ANN001
-        """index event."""
+        """Raise a runtime error simulating embedding provider unavailability."""
         raise RuntimeError("embedding provider unavailable")
 
 
 def test_expired_processing_lease_can_be_reclaimed(
     news_repository: NewsRepository,
 ) -> None:
-    """expired processing lease can be reclaimed."""
+    """Expired processing leases must be reclaimable by the indexing runner.
+
+    An outbox entry stuck in ``processing`` past the lease duration should be
+    picked up by ``claim_next`` on the next runner cycle.
+
+    Args:
+        news_repository: pytest fixture providing a seeded repository.
+    """
     outbox_id = news_repository.add_document_outbox(
         event_id="event-1",
         topic="vector_index",
@@ -70,7 +90,14 @@ def test_expired_processing_lease_can_be_reclaimed(
 def test_parser_success_embedding_failure_keeps_retryable_outbox(
     news_repository: NewsRepository,
 ) -> None:
-    """parser success embedding failure keeps retryable outbox."""
+    """Embedding failure after successful parsing must keep the outbox retryable.
+
+    When the pipeline raises during indexing, the outbox entry should transition
+    to ``failed_retryable`` rather than being permanently marked as failed.
+
+    Args:
+        news_repository: pytest fixture providing a seeded repository.
+    """
     news_repository.add_document_outbox(
         event_id="event-1",
         topic="vector_index",

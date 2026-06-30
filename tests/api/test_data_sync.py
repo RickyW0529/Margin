@@ -28,7 +28,7 @@ def test_default_data_sync_request_creates_executable_work_items(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    """A default API request must never create a zero-work pending run."""
+    """Test that a default API request never creates a zero-work pending run."""
     monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin-test-token")
     monkeypatch.setenv("MARGIN_CSRF_TOKEN", "valid")
     get_settings.cache_clear()
@@ -87,7 +87,7 @@ def test_default_data_sync_request_creates_executable_work_items(
 
 
 def test_data_sync_rejects_unauthenticated_frontend_write() -> None:
-    """Manual sync is a protected mutation, not a public long-running trigger."""
+    """Test that manual sync is a protected mutation, not a public trigger."""
     response = TestClient(create_app()).post(
         "/api/v1/data-sync",
         json={"requested_by": "anonymous"},

@@ -14,7 +14,12 @@ class EvidencePackageBuilder:
     """Normalize retrieval output into immutable EvidencePackage versions."""
 
     def __init__(self, vector_repository: Any, evidence_repository: Any) -> None:
-        """Initialize the builder with vector and evidence repositories."""
+        """Initialize the builder with vector and evidence repositories.
+
+        Args:
+            vector_repository: Repository exposing chunk-security link checks.
+            evidence_repository: Repository used to persist evidence and packages.
+        """
         self._vector_repository = vector_repository
         self._evidence_repository = evidence_repository
 
@@ -36,6 +41,20 @@ class EvidencePackageBuilder:
         The builder is deliberately conservative: future evidence and chunks
         without a link to the requested security are excluded before package
         quality is computed.
+
+        Args:
+            security_id: Ticker/security symbol the package is scoped to.
+            decision_at: Decision timestamp; future evidence is excluded.
+            questions: Research questions the package must cover.
+            retrieval_results: Retrieval results to normalize into evidence.
+            news_bundle_id: Optional news context bundle to link evidence to.
+            scope_hash: Hash of the retrieval scope used for deduplication.
+            retrieval_audit_id: Optional retrieval audit record identifier.
+            parent_package_id: Optional parent package ID for revisions.
+            version: Package version number. Defaults to 1.
+
+        Returns:
+            The persisted ``EvidencePackage`` instance.
         """
         normalized_decision_at = ensure_utc(decision_at)
         valid_evidence: list[Evidence] = []
@@ -48,7 +67,7 @@ class EvidencePackageBuilder:
                 continue
             evidence = Evidence.from_chunk(chunk).model_copy(
                 update={
-                    "evidence_id": _stable_evidence_id(security_id, chunk),
+                    "evidence_id": make_stable_evidence_id(security_id, chunk),
                     "symbol": security_id,
                     # Chunk has no persisted retrieval timestamp. Reuse its
                     # immutable availability time so rebuilding the same
@@ -101,15 +120,15 @@ class EvidencePackageBuilder:
         return package
 
     def _chunk_matches_security(self, chunk: Any, security_id: str) -> bool:
-        """chunk matches security."""
+        """Check whether a chunk is linked to the requested security."""
         has_link = getattr(self._vector_repository, "chunk_has_security_link", None)
         if callable(has_link):
             return bool(has_link(chunk.chunk_id, security_id))
         return getattr(chunk, "symbol", None) == security_id
 
 
-def _stable_evidence_id(security_id: str, chunk: Any) -> str:
-    """stable evidence id."""
+def make_stable_evidence_id(security_id: str, chunk: Any) -> str:
+    """Compute a deterministic evidence ID from security and chunk identity."""
     payload = "|".join(
         [
             security_id,
@@ -131,7 +150,7 @@ def _stable_package_id(
     parent_package_id: str | None,
     version: int,
 ) -> str:
-    """stable package id."""
+    """Compute a deterministic package ID from scope and evidence identity."""
     payload = "|".join(
         [
             security_id,
@@ -150,7 +169,7 @@ def _quality_status(
     valid_evidence_count: int,
     requested_result_count: int,
 ) -> EvidencePackageQualityStatus:
-    """quality status."""
+    """Determine the package quality status from valid vs requested evidence counts."""
     if valid_evidence_count == 0:
         return EvidencePackageQualityStatus.ABSTAIN_REQUIRED
     if valid_evidence_count < requested_result_count:

@@ -74,6 +74,7 @@ class ResearchContextSnapshot(BaseModel):
 
 
 class AIDeltaReviewResult(BaseModel):
+    """Public DTO for one completed AI delta-review graph run."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -98,23 +99,39 @@ class AIDeltaReviewResult(BaseModel):
 
 
 class ResearchContextRepository(Protocol):
+    """Persistence contract for frozen research context snapshots."""
 
     def get_context_snapshot(
         self,
         context_snapshot_id: str,
     ) -> ResearchContextSnapshot | None:
-        """Load one frozen context snapshot."""
+        """Load one frozen context snapshot.
+
+        Args:
+            context_snapshot_id: Unique context snapshot identifier.
+
+        Returns:
+            The matching ``ResearchContextSnapshot`` or ``None``.
+        """
         ...
 
 
 class MemoryResearchContextRepository:
+    """In-memory research context snapshot repository used by tests."""
 
     def __init__(self) -> None:
         """Initialize an empty repository."""
         self._snapshots: dict[str, ResearchContextSnapshot] = {}
 
     def add(self, snapshot: ResearchContextSnapshot) -> None:
-        """Persist a snapshot by immutable ID."""
+        """Persist a snapshot by immutable ID.
+
+        Args:
+            snapshot: Frozen context snapshot to persist.
+
+        Raises:
+            ValueError: If a conflicting snapshot with the same ID exists.
+        """
         existing = self._snapshots.get(snapshot.context_snapshot_id)
         if existing is not None and existing != snapshot:
             raise ValueError("conflicting research context snapshot")
@@ -124,21 +141,40 @@ class MemoryResearchContextRepository:
         self,
         context_snapshot_id: str,
     ) -> ResearchContextSnapshot | None:
-        """Load one frozen context snapshot."""
+        """Load one frozen context snapshot from memory.
+
+        Args:
+            context_snapshot_id: Unique context snapshot identifier.
+
+        Returns:
+            The matching ``ResearchContextSnapshot`` or ``None``.
+        """
         return self._snapshots.get(context_snapshot_id)
 
 
 class SQLAlchemyResearchContextRepository:
+    """PostgreSQL-backed research context snapshot repository."""
 
     def __init__(self, session_factory: SessionFactory) -> None:
-        """Initialize the repository."""
+        """Initialize the repository.
+
+        Args:
+            session_factory: Callable that returns a new SQLAlchemy ``Session``.
+        """
         self._session_factory = session_factory
 
     def get_context_snapshot(
         self,
         context_snapshot_id: str,
     ) -> ResearchContextSnapshot | None:
-        """Load one frozen context snapshot."""
+        """Load one frozen context snapshot from PostgreSQL.
+
+        Args:
+            context_snapshot_id: Unique context snapshot identifier.
+
+        Returns:
+            The matching ``ResearchContextSnapshot`` or ``None``.
+        """
         with self._session_factory() as session:
             row = session.get(ResearchContextSnapshotRow, context_snapshot_id)
             if row is None:
@@ -155,6 +191,7 @@ class SQLAlchemyResearchContextRepository:
 
 
 class EvidenceRetrieveInput(BaseModel):
+    """Input model for the evidence retrieval tool."""
 
     security_id: str
     decision_at: datetime
@@ -166,6 +203,7 @@ class EvidenceRetrieveInput(BaseModel):
 
 
 class ResearchService:
+    """High-level service that runs the v0.2 AI delta-review graph."""
 
     def __init__(
         self,
@@ -181,11 +219,28 @@ class ResearchService:
         v02_llm_audit_repository: LLMCallAuditRepository | None = None,
         v02_tool_audit_repository: ToolCallAuditRepository | None = None,
         analysis_mart_repository: AnalysisMartRepository | None = None,
+        rag_retrieval_tool: Any | None = None,
+        rag_evidence_package_builder: Any | None = None,
+        rag_scope_hash_factory: Callable[[dict[str, Any]], str] | None = None,
     ) -> None:
         """Initialize the research service.
 
         Args:
             llm_provider: Optional LLM provider used for v0.2 graph nodes.
+            context_repository: Optional context snapshot repository override.
+            delta_repository: Optional delta review repository override.
+            session_factory: Optional SQLAlchemy session factory.
+            v02_tool_factory: Optional scoped tool factory for graph nodes.
+            v02_analysis_handlers: Optional analysis handler overrides.
+            v02_decision_handler: Optional decision handler override.
+            v02_citation_validator: Optional citation validator override.
+            v02_checkpointer: Optional LangGraph checkpointer.
+            v02_llm_audit_repository: Optional LLM call audit repository.
+            v02_tool_audit_repository: Optional tool call audit repository.
+            analysis_mart_repository: Optional Analysis Mart repository.
+            rag_retrieval_tool: Optional vector-backed retrieval tool for RAG evidence.
+            rag_evidence_package_builder: Optional package builder for retrieved evidence.
+            rag_scope_hash_factory: Optional deterministic scope hash factory.
         """
         self._llm = llm_provider
         self._context_repository: ResearchContextRepository = (
@@ -212,6 +267,9 @@ class ResearchService:
         self._v02_checkpointer = v02_checkpointer
         self._v02_llm_audit_repository = v02_llm_audit_repository
         self._v02_tool_audit_repository = v02_tool_audit_repository
+        self._rag_retrieval_tool = rag_retrieval_tool
+        self._rag_evidence_package_builder = rag_evidence_package_builder
+        self._rag_scope_hash_factory = rag_scope_hash_factory
         if analysis_mart_repository is not None:
             self._analysis_mart_repository = analysis_mart_repository
         elif session_factory is not None:
@@ -226,7 +284,17 @@ class ResearchService:
             self._analysis_mart_repository = None
 
     def run_delta_review(self, context_snapshot_id: str) -> AIDeltaReviewResult:
-        """Run the v0.2 AI delta-review graph for one frozen context snapshot."""
+        """Run the v0.2 AI delta-review graph for one frozen context snapshot.
+
+        Args:
+            context_snapshot_id: Unique identifier of the frozen context snapshot.
+
+        Returns:
+            An ``AIDeltaReviewResult`` with the terminal review outcome.
+
+        Raises:
+            KeyError: If the context snapshot is not found.
+        """
         context = self._context_repository.get_context_snapshot(context_snapshot_id)
         if context is None:
             raise KeyError(f"research context snapshot not found: {context_snapshot_id}")
@@ -283,6 +351,9 @@ class ResearchService:
                     context,
                     audit_repository=self._v02_tool_audit_repository,
                     analysis_mart_repository=self._analysis_mart_repository,
+                    rag_retrieval_tool=self._rag_retrieval_tool,
+                    rag_evidence_package_builder=self._rag_evidence_package_builder,
+                    rag_scope_hash_factory=self._rag_scope_hash_factory,
                 ),
                 analysis_handlers=analysis_handlers
                 or _default_analysis_handlers(context),
@@ -318,14 +389,7 @@ class ResearchService:
         self,
         context: ResearchContextSnapshot,
     ) -> AIDeltaGraphState:
-        """_routed_initial_state.
-
-        Args:
-        context (ResearchContextSnapshot): Description.
-
-        Returns:
-        AIDeltaGraphState: Description.
-        """
+        """Build the initial graph state and route it via the carry-forward rule."""
         payload = context.payload
         initial_state = create_initial_state(
             graph_run_id=_graph_run_id(context),
@@ -366,14 +430,7 @@ class ResearchService:
         return CarryForwardRuleNode(context_view).run(initial_state)
 
     def _ensure_graph_run_row(self, state: AIDeltaGraphState) -> None:
-        """_ensure_graph_run_row.
-
-        Args:
-        state (AIDeltaGraphState): Description.
-
-        Raises:
-        ValueError: Description.
-        """
+        """Insert the graph run row if it does not already exist."""
         from margin.research.db_models import AIGraphRunRow
 
         now = datetime.now(UTC)
@@ -415,26 +472,40 @@ def _default_tool_factory(
     *,
     audit_repository: ToolCallAuditRepository | None = None,
     analysis_mart_repository: AnalysisMartRepository | None = None,
+    rag_retrieval_tool: Any | None = None,
+    rag_evidence_package_builder: Any | None = None,
+    rag_scope_hash_factory: Callable[[dict[str, Any]], str] | None = None,
 ) -> ScopedToolFactory:
-    """_default_tool_factory.
-
-    Args:
-        context (ResearchContextSnapshot): Description.
-
-    Returns:
-        ScopedToolFactory: Description.
-    """
+    """Build the default scoped tool factory for graph execution."""
     registry = ToolDefinitionRegistry()
-    registry.register(
-        ToolDefinition(
-            name="evidence_retrieve",
-            capability=ToolCapability.EVIDENCE_RETRIEVE,
-            version="evidence-retrieve-v0.2.0",
-            description="Retrieve frozen evidence package references from context.",
-            input_model=EvidenceRetrieveInput,
-            handler=lambda payload: _retrieve_evidence_from_context(context, payload),
+    if rag_retrieval_tool is None:
+        registry.register(
+            ToolDefinition(
+                name="evidence_retrieve",
+                capability=ToolCapability.EVIDENCE_RETRIEVE,
+                version="evidence-retrieve-v0.2.0",
+                description="Retrieve frozen evidence package references from context.",
+                input_model=EvidenceRetrieveInput,
+                handler=lambda payload: _retrieve_evidence_from_context(context, payload),
+            )
         )
-    )
+    else:
+        from margin.research.evidence_tools import register_rag_evidence_tools
+
+        register_rag_evidence_tools(
+            registry,
+            retrieval_tool=rag_retrieval_tool,
+            package_builder=rag_evidence_package_builder,
+            scope_hash_factory=rag_scope_hash_factory,
+            name="evidence_retrieve",
+            version="evidence-retrieve-rag-v0.3.0",
+        )
+        register_rag_evidence_tools(
+            registry,
+            retrieval_tool=rag_retrieval_tool,
+            package_builder=rag_evidence_package_builder,
+            scope_hash_factory=rag_scope_hash_factory,
+        )
     if analysis_mart_repository is not None:
         from margin.research.analysis_tools import register_analysis_mart_tools
 
@@ -453,18 +524,7 @@ def _retrieve_evidence_from_context(
     context: ResearchContextSnapshot,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    """_retrieve_evidence_from_context.
-
-    Args:
-        context (ResearchContextSnapshot): Description.
-        payload (dict[str, Any]): Description.
-
-    Returns:
-        dict[str, Any]: Description.
-
-    Raises:
-        RuntimeError: Description.
-    """
+    """Retrieve the frozen evidence package from context payload."""
     evidence_ids = tuple(
         str(value) for value in context.payload.get("evidence_ids", ())
     )
@@ -492,14 +552,7 @@ def _retrieve_evidence_from_context(
 def _default_analysis_handlers(
     context: ResearchContextSnapshot,
 ) -> dict[str, Callable[[AnalysisRequest, ScopedToolSession], dict[str, Any]]]:
-    """_default_analysis_handlers.
-
-    Args:
-        context (ResearchContextSnapshot): Description.
-
-    Returns:
-        dict[str, Callable[[AnalysisRequest, ScopedToolSession], dict[str, Any]]]: Description.
-    """
+    """Build default analysis handlers for all parallel analysis nodes."""
     return {
         node_name: _analysis_handler(context, node_name)
         for node_name in (
@@ -516,28 +569,12 @@ def _analysis_handler(
     context: ResearchContextSnapshot,
     node_name: str,
 ) -> Callable[[AnalysisRequest, ScopedToolSession], dict[str, Any]]:
-    """_analysis_handler.
-
-    Args:
-        context (ResearchContextSnapshot): Description.
-        node_name (str): Description.
-
-    Returns:
-        Callable[[AnalysisRequest, ScopedToolSession], dict[str, Any]]: Description.
-    """
+    """Create one default analysis handler for a specific node name."""
     def handler(
         request: AnalysisRequest,
         session: ScopedToolSession,
     ) -> dict[str, Any]:
-        """handler.
-
-        Args:
-        request (AnalysisRequest): Description.
-        session (ScopedToolSession): Description.
-
-        Returns:
-        dict[str, Any]: Description.
-        """
+        """Return a deterministic analysis output without an LLM call."""
         del session
         forced_gaps = tuple(
             str(value)
@@ -559,14 +596,7 @@ def _analysis_handler(
 
 
 def _default_decision_handler(state: AIDeltaGraphState) -> dict[str, Any]:
-    """_default_decision_handler.
-
-    Args:
-        state (AIDeltaGraphState): Description.
-
-    Returns:
-        dict[str, Any]: Description.
-    """
+    """Build a deterministic default decision from joined analysis outputs."""
     evidence_ids: list[str] = []
     for package in state.node_outputs.get("evidence_packages", {}).values():
         summary = package.get("summary", {}) if isinstance(package, dict) else {}
@@ -586,15 +616,7 @@ def _default_citation_validator(
     draft: dict[str, Any],
     state: AIDeltaGraphState,
 ) -> dict[str, Any]:
-    """_default_citation_validator.
-
-    Args:
-        draft (dict[str, Any]): Description.
-        state (AIDeltaGraphState): Description.
-
-    Returns:
-        dict[str, Any]: Description.
-    """
+    """Validate that the default decision references at least one evidence ID."""
     del state
     return {
         "valid": bool(draft.get("evidence_ids")),
@@ -608,15 +630,7 @@ def _dto_from_graph_result(
     context: ResearchContextSnapshot,
     graph_result: Mapping[str, Any],
 ) -> AIDeltaReviewResult:
-    """_dto_from_graph_result.
-
-    Args:
-        context (ResearchContextSnapshot): Description.
-        graph_result (Mapping[str, Any]): Description.
-
-    Returns:
-        AIDeltaReviewResult: Description.
-    """
+    """Convert raw graph output into the public delta-review DTO."""
     outcome = _review_outcome(graph_result.get("current_review_outcome"))
     final_result = graph_result.get("final_result", {})
     evidence_package_ids = tuple(
@@ -691,14 +705,7 @@ def _review_from_result(
     graph_result: Mapping[str, Any],
     context: ResearchContextSnapshot,
 ) -> ResearchDeltaReview:
-    """_review_from_result.
-
-    Args:
-        result (AIDeltaReviewResult): Description.
-
-    Returns:
-        ResearchDeltaReview: Description.
-    """
+    """Build a persistent delta review from a graph result DTO."""
     return ResearchDeltaReview(
         review_id=result.review_id,
         graph_run_id=result.graph_run_id,
@@ -730,14 +737,7 @@ def _review_from_result(
 
 
 def _graph_run_id(context: ResearchContextSnapshot) -> str:
-    """_graph_run_id.
-
-    Args:
-        context (ResearchContextSnapshot): Description.
-
-    Returns:
-        str: Description.
-    """
+    """Derive a deterministic graph run ID from the context snapshot."""
     return "graph_" + _hash_json(
         {
             "context_snapshot_id": context.context_snapshot_id,
@@ -747,28 +747,13 @@ def _graph_run_id(context: ResearchContextSnapshot) -> str:
 
 
 def _optional_str(payload: Mapping[str, Any], key: str) -> str | None:
-    """_optional_str.
-
-    Args:
-        payload (Mapping[str, Any]): Description.
-        key (str): Description.
-
-    Returns:
-        str | None: Description.
-    """
+    """Return a string value from a payload, or None if empty/missing."""
     value = payload.get(key)
     return str(value) if value not in {None, ""} else None
 
 
 def _review_outcome(value: Any) -> ReviewOutcome:
-    """_review_outcome.
-
-    Args:
-        value (Any): Description.
-
-    Returns:
-        ReviewOutcome: Description.
-    """
+    """Coerce a raw outcome value into a ReviewOutcome enum member."""
     if isinstance(value, ReviewOutcome):
         return value
     if value is None:
@@ -777,14 +762,7 @@ def _review_outcome(value: Any) -> ReviewOutcome:
 
 
 def _hash_json(value: Any) -> str:
-    """_hash_json.
-
-    Args:
-        value (Any): Description.
-
-    Returns:
-        str: Description.
-    """
+    """Return a deterministic SHA-256 hash for a JSON-serializable value."""
     encoded = json.dumps(
         value,
         sort_keys=True,

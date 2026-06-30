@@ -8,29 +8,58 @@ from margin.news.connectors import SSEAnnouncementConnector, SZSEAnnouncementCon
 
 
 class FakeResponse:
-    """FakeResponse."""
+    """Fake HTTP response that returns a preconfigured JSON payload.
+
+    Attributes:
+        _payload: The JSON payload returned by ``json()``.
+    """
     def __init__(self, payload: dict):
-        """Initialize the instance."""
+        """Initialize the fake response with a JSON payload.
+
+        Args:
+            payload: The JSON payload to return from ``json()``.
+        """
         self._payload = payload
 
     def raise_for_status(self):
-        """raise for status."""
+        """No-op stub that never raises an HTTP error."""
         return None
 
     def json(self):
-        """json."""
+        """Return the preconfigured JSON payload.
+
+        Returns:
+            The payload dictionary passed at construction.
+        """
         return self._payload
 
 
 class FakeClient:
-    """FakeClient."""
+    """Fake HTTP client that records GET requests and returns a fixed response.
+
+    Attributes:
+        payload: The JSON payload returned for every GET request.
+        requests: List of recorded request arguments.
+    """
     def __init__(self, payload: dict):
-        """Initialize the instance."""
+        """Initialize the fake client with a fixed JSON payload.
+
+        Args:
+            payload: The JSON payload to return for all GET requests.
+        """
         self.payload = payload
         self.requests: list[dict] = []
 
     def get(self, url: str, **kwargs):
-        """get."""
+        """Record a GET request and return a fake response.
+
+        Args:
+            url: The request URL.
+            **kwargs: Additional request keyword arguments.
+
+        Returns:
+            A ``FakeResponse`` containing the configured payload.
+        """
         self.requests.append({"url": url, **kwargs})
         return FakeResponse(self.payload)
 

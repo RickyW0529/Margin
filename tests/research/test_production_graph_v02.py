@@ -1,4 +1,10 @@
-"""Production LLM handler boundary tests."""
+"""Production LLM handler boundary tests.
+
+This module verifies that the production analysis handler isolates untrusted
+evidence as data only (not instructions), that the production decision
+handler abstains when the LLM invents evidence IDs, and that the rendered
+prompt carries the expected safety markers and analysis context.
+"""
 
 from __future__ import annotations
 
@@ -21,7 +27,14 @@ DECISION_AT = datetime(2026, 6, 23, tzinfo=UTC)
 
 
 def test_analysis_handler_isolates_untrusted_evidence_and_uses_allowed_ids() -> None:
-    """The production prompt carries evidence as untrusted data only."""
+    """Verify the production prompt carries evidence as untrusted data only.
+
+    Builds a production analysis handler, invokes it with a fundamental
+    analysis request, and asserts that the output uses only allowed evidence
+    IDs and that the rendered prompt contains the untrusted data block
+    marker, the injected adversarial text, the analysis summary, and the
+    trading-order prohibition.
+    """
     llm = SequenceStructuredLLM(
         [
             {
@@ -61,7 +74,12 @@ def test_analysis_handler_isolates_untrusted_evidence_and_uses_allowed_ids() -> 
 
 
 def test_decision_handler_abstains_when_llm_invents_evidence_id() -> None:
-    """Unknown evidence IDs cannot survive deterministic validation."""
+    """Verify unknown evidence IDs cannot survive deterministic validation.
+
+    Builds a production decision handler where the LLM invents an evidence ID
+    and the critic accepts it, then asserts that the handler abstains, returns
+    no evidence IDs, and records two LLM calls.
+    """
     llm = SequenceStructuredLLM(
         [
             {
@@ -101,14 +119,36 @@ def test_decision_handler_abstains_when_llm_invents_evidence_id() -> None:
 
 
 class SequenceStructuredLLM:
-    """Return schema-specific outputs while recording rendered prompts."""
+    """Fake LLM service that returns schema-specific outputs in sequence.
+
+    This service records rendered prompts for inspection and returns
+    pre-configured output dictionaries one at a time.
+
+    Attributes:
+        outputs: List of output dictionaries to return in sequence.
+        prompts: List of rendered prompt strings recorded from each call.
+        call_count: Number of times ``complete_structured`` was called.
+    """
 
     def __init__(self, outputs: list[dict]) -> None:
+        """Initialize the sequence LLM with a queue of outputs.
+
+        Args:
+            outputs: List of output dictionaries to return in sequence.
+        """
         self.outputs = list(outputs)
         self.prompts: list[str] = []
         self.call_count = 0
 
     def complete_structured(self, **kwargs) -> StructuredLLMResponse:
+        """Return the next pre-configured output and record the rendered prompt.
+
+        Args:
+            **kwargs: Keyword arguments including ``prompt`` and ``task_type``.
+
+        Returns:
+            A ``StructuredLLMResponse`` with the next queued output.
+        """
         self.call_count += 1
         self.prompts.append(kwargs["prompt"].render())
         return StructuredLLMResponse(
@@ -122,6 +162,7 @@ class SequenceStructuredLLM:
 
 
 def _context() -> ResearchContextSnapshot:
+    """Build a research context snapshot with adversarial evidence for tests."""
     return ResearchContextSnapshot(
         context_snapshot_id="context-production",
         security_id="000001.SZ",
@@ -148,6 +189,14 @@ def _context() -> ResearchContextSnapshot:
 
 
 def _session(node_name: str):
+    """Build a scoped tool session with no tools for the given node name.
+
+    Args:
+        node_name: The name of the node the session is scoped to.
+
+    Returns:
+        A ``ScopedToolSession`` with an empty tool registry and zero budget.
+    """
     factory = ScopedToolFactory(
         tool_registry=ToolDefinitionRegistry(),
         policy=ToolPolicyEngine(),

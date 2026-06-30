@@ -38,12 +38,21 @@ _CheckpointKey = tuple[str, str, str]
 
 
 class PostgresGraphCheckpointer(BaseCheckpointSaver[int]):
+    """LangGraph checkpoint saver backed by Margin-owned audit tables."""
+
     def __init__(
         self,
         session_factory: Callable[[], Session],
         serde: SerializerProtocol | None = None,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
+        """Initialize the checkpointer.
+
+        Args:
+            session_factory: Callable that returns a new SQLAlchemy ``Session``.
+            serde: Optional serializer; defaults to ``JsonPlusSerializer``.
+            clock: Optional clock callable for timestamps.
+        """
         if serde is None:
             serde = JsonPlusSerializer()
         super().__init__(serde=serde)
@@ -52,7 +61,17 @@ class PostgresGraphCheckpointer(BaseCheckpointSaver[int]):
         self._pending_writes: dict[_CheckpointKey, list[dict[str, Any]]] = {}
 
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
-        """Load one checkpoint tuple, validating the requested graph identity."""
+        """Load one checkpoint tuple, validating the requested graph identity.
+
+        Args:
+            config: Runnable config containing thread ID and optional checkpoint ID.
+
+        Returns:
+            The matching ``CheckpointTuple`` or ``None`` if no checkpoint exists.
+
+        Raises:
+            ValueError: If the requested identity hash does not match the stored row.
+        """
         thread_id, checkpoint_ns = _thread_and_namespace(config)
         checkpoint_id = get_checkpoint_id(config)
         requested_identity_hash = config["configurable"].get("identity_hash")
@@ -80,7 +99,17 @@ class PostgresGraphCheckpointer(BaseCheckpointSaver[int]):
         before: RunnableConfig | None = None,
         limit: int | None = None,
     ) -> Iterator[CheckpointTuple]:
-        """List checkpoints ordered newest-first."""
+        """List checkpoints ordered newest-first.
+
+        Args:
+            config: Optional runnable config to scope the listing.
+            filter: Optional metadata key-value pairs to filter by.
+            before: Optional config whose checkpoint ID bounds the listing.
+            limit: Optional maximum number of tuples to yield.
+
+        Yields:
+            ``CheckpointTuple`` instances in newest-first order.
+        """
         before_checkpoint_id = get_checkpoint_id(before) if before else None
         with self._session_factory() as session:
             thread_id = None
@@ -116,7 +145,20 @@ class PostgresGraphCheckpointer(BaseCheckpointSaver[int]):
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
-        """Persist a checkpoint and return its updated runnable config."""
+        """Persist a checkpoint and return its updated runnable config.
+
+        Args:
+            config: Runnable config with thread ID and optional parent checkpoint.
+            checkpoint: LangGraph checkpoint payload to persist.
+            metadata: Checkpoint metadata to store alongside the state.
+            new_versions: Channel version deltas (unused, accepted for compatibility).
+
+        Returns:
+            Updated runnable config pointing at the persisted checkpoint.
+
+        Raises:
+            ValueError: If the graph run does not exist or a conflicting replay is detected.
+        """
         del new_versions
         thread_id, checkpoint_ns = _thread_and_namespace(config)
         checkpoint_id = str(checkpoint["id"])
@@ -183,7 +225,14 @@ class PostgresGraphCheckpointer(BaseCheckpointSaver[int]):
         task_id: str,
         task_path: str = "",
     ) -> None:
-        """Persist pending writes for a checkpoint, deduplicated by task/index."""
+        """Persist pending writes for a checkpoint, deduplicated by task/index.
+
+        Args:
+            config: Runnable config identifying the target checkpoint.
+            writes: Sequence of ``(channel, value)`` pairs to persist.
+            task_id: Identifier of the task that produced the writes.
+            task_path: Optional task path for nested execution.
+        """
         thread_id, checkpoint_ns = _thread_and_namespace(config)
         checkpoint_id = str(config["configurable"]["checkpoint_id"])
         with self._session_factory.begin() as session:
@@ -238,8 +287,7 @@ class PostgresGraphCheckpointer(BaseCheckpointSaver[int]):
         task_id: str,
         task_path: str,
     ) -> None:
-        """_buffer_pending_writes.
-        """
+        """Buffer pending writes in memory before a checkpoint row exists."""
         key = (thread_id, checkpoint_ns, checkpoint_id)
         pending_writes = self._pending_writes.setdefault(key, [])
         existing_keys = {
@@ -278,6 +326,7 @@ class PostgresGraphCheckpointer(BaseCheckpointSaver[int]):
         before: RunnableConfig | None = None,
         limit: int | None = None,
     ):
+        """Async wrapper around :meth:`list`."""
         for item in self.list(config, filter=filter, before=before, limit=limit):
             yield item
 
@@ -304,14 +353,7 @@ class PostgresGraphCheckpointer(BaseCheckpointSaver[int]):
         checkpoint_id: str | None,
         for_update: bool = False,
     ) -> AIGraphCheckpointRow | None:
-        """_load_checkpoint_row.
-
-        Args:
-        session (Session): Description.
-
-        Returns:
-        AIGraphCheckpointRow | None: Description.
-        """
+        """Load one checkpoint row, optionally acquiring a row lock."""
         statement = checkpoint_row(thread_id, checkpoint_ns, checkpoint_id)
         if for_update:
             statement = statement.with_for_update()
@@ -321,14 +363,7 @@ class PostgresGraphCheckpointer(BaseCheckpointSaver[int]):
         self,
         row: AIGraphCheckpointRow,
     ) -> CheckpointTuple:
-        """_row_to_checkpoint_tuple.
-
-        Args:
-        row (AIGraphCheckpointRow): Description.
-
-        Returns:
-        CheckpointTuple: Description.
-        """
+        """Convert a persisted checkpoint row into a LangGraph tuple."""
         checkpoint = _load_typed(self.serde, row.state_payload["checkpoint"])
         metadata_payload = row.checkpoint_metadata.get("metadata")
         metadata = (
@@ -370,30 +405,13 @@ class PostgresGraphCheckpointer(BaseCheckpointSaver[int]):
 
 
 def _thread_and_namespace(config: RunnableConfig) -> tuple[str, str]:
-    """_thread_and_namespace.
-
-    Args:
-        config (RunnableConfig): Description.
-
-    Returns:
-        tuple[str, str]: Description.
-    """
+    """Extract thread ID and checkpoint namespace from a runnable config."""
     configurable = config["configurable"]
     return str(configurable["thread_id"]), str(configurable.get("checkpoint_ns", ""))
 
 
 def _identity_hash_from_config(config: RunnableConfig) -> str:
-    """_identity_hash_from_config.
-
-    Args:
-        config (RunnableConfig): Description.
-
-    Returns:
-        str: Description.
-
-    Raises:
-        ValueError: Description.
-    """
+    """Return the required identity hash from a runnable config."""
     identity_hash = config["configurable"].get("identity_hash")
     if not identity_hash:
         raise ValueError("identity_hash is required for graph checkpoint persistence")
@@ -404,15 +422,7 @@ def _dump_typed(
     serde: SerializerProtocol,
     value: Any,
 ) -> dict[str, str]:
-    """_dump_typed.
-
-    Args:
-        serde (SerializerProtocol): Description.
-        value (Any): Description.
-
-    Returns:
-        dict[str, str]: Description.
-    """
+    """Serialize a value to a base64-encoded typed dict."""
     type_tag, data = serde.dumps_typed(value)
     if isinstance(data, str):
         data = data.encode("utf-8")
@@ -426,15 +436,7 @@ def _load_typed(
     serde: SerializerProtocol,
     payload: dict[str, str],
 ) -> Any:
-    """_load_typed.
-
-    Args:
-        serde (SerializerProtocol): Description.
-        payload (dict[str, str]): Description.
-
-    Returns:
-        Any: Description.
-    """
+    """Deserialize a base64-encoded typed dict back into a Python value."""
     return serde.loads_typed(
         (
             payload["type"],
@@ -447,15 +449,7 @@ def _load_pending_writes(
     serde: SerializerProtocol,
     rows: list[dict[str, Any]],
 ) -> list[PendingWrite]:
-    """_load_pending_writes.
-
-    Args:
-        serde (SerializerProtocol): Description.
-        rows (list[dict[str, Any]]): Description.
-
-    Returns:
-        list[PendingWrite]: Description.
-    """
+    """Deserialize buffered pending writes into LangGraph PendingWrite tuples."""
     return [
         (
             str(item["task_id"]),
@@ -467,14 +461,7 @@ def _load_pending_writes(
 
 
 def _hash_json(payload: dict[str, Any]) -> str:
-    """_hash_json.
-
-    Args:
-        payload (dict[str, Any]): Description.
-
-    Returns:
-        str: Description.
-    """
+    """Return a deterministic SHA-256 hash for a JSON-serializable payload."""
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
         "utf-8"
     )

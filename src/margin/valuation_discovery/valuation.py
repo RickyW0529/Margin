@@ -63,7 +63,7 @@ class IndustryValuationRegistry:
     """Registry mapping industry families to appropriate valuation models."""
 
     def __init__(self, models: dict[str, IndustryValuationModel]) -> None:
-        """init  ."""
+        """Initialize the registry with industry-family to model mappings."""
         self._models = models
 
     @classmethod
@@ -153,7 +153,7 @@ def _bank_pb_roe(
     industry_family: str,
     inputs: dict[str, Any],
 ) -> ValuationModelResult:
-    """bank pb roe."""
+    """Evaluate a bank PB-ROE valuation model."""
     book_value = _float(inputs["book_value_per_share"])
     roe = _float(inputs["roe_ttm"])
     pb_floor = _float(inputs["pb_floor"])
@@ -181,7 +181,7 @@ def _insurance_ev_yield(
     industry_family: str,
     inputs: dict[str, Any],
 ) -> ValuationModelResult:
-    """insurance ev yield."""
+    """Evaluate an insurance embedded-value yield valuation model."""
     embedded_value = _float(inputs["embedded_value_per_share"])
     investment_yield = _float(inputs["investment_yield"])
     multiple_floor = _float(inputs.get("ev_multiple_floor", 0.75))
@@ -205,7 +205,7 @@ def _mid_cycle_earnings(
     industry_family: str,
     inputs: dict[str, Any],
 ) -> ValuationModelResult:
-    """mid cycle earnings."""
+    """Evaluate a mid-cycle earnings valuation model for cyclicals."""
     eps = _float(inputs["mid_cycle_eps"])
     pe_floor = _float(inputs["pe_floor"])
     pe_ceiling = _float(inputs["pe_ceiling"])
@@ -226,7 +226,7 @@ def _normalized_earnings(
     industry_family: str,
     inputs: dict[str, Any],
 ) -> ValuationModelResult:
-    """normalized earnings."""
+    """Evaluate a normalized earnings valuation model."""
     eps = _float(inputs["normalized_eps"])
     pe_floor = _float(inputs["pe_floor"])
     pe_ceiling = _float(inputs["pe_ceiling"])
@@ -247,7 +247,7 @@ def _growth_fcf_path(
     industry_family: str,
     inputs: dict[str, Any],
 ) -> ValuationModelResult:
-    """growth fcf path."""
+    """Evaluate a growth FCF path valuation model."""
     fcf = _float(inputs["fcf_per_share_forward"])
     multiple_floor = _float(inputs["fcf_multiple_floor"])
     multiple_ceiling = _float(inputs["fcf_multiple_ceiling"])
@@ -273,7 +273,7 @@ def _dividend_regulated_return(
     industry_family: str,
     inputs: dict[str, Any],
 ) -> ValuationModelResult:
-    """dividend regulated return."""
+    """Evaluate a dividend-regulated return valuation model."""
     dividend = _float(inputs["dividend_per_share"])
     yield_floor = _float(inputs["dividend_yield_floor"])
     yield_ceiling = _float(inputs["dividend_yield_ceiling"])
@@ -304,7 +304,7 @@ def _available_result(
     sensitivity: dict[str, float],
     data_requirements: tuple[str, ...],
 ) -> ValuationModelResult:
-    """available result."""
+    """Build an available ``ValuationModelResult`` with sorted value range."""
     low, high = sorted(value_range)
     return ValuationModelResult(
         security_id=security_id,
@@ -320,5 +320,5 @@ def _available_result(
 
 
 def _float(value: Any) -> float:
-    """float."""
+    """Convert a value to float."""
     return float(value)

@@ -245,7 +245,7 @@ class TestMockConnector(BaseConnector):
 
     @property
     def source_name(self) -> str:
-        """source name."""
+        """Return the fixed source name for this connector."""
         return "mock"
 
     def fetch(self, url: str, **kwargs):
@@ -296,7 +296,7 @@ class TestDownloader:
 
             @property
             def source_name(self):
-                """source name."""
+                """Return the fixed source name for this connector."""
                 return "forbidden"
 
             def fetch(self, url, **kwargs):
@@ -336,7 +336,7 @@ class TestDownloader:
 
             @property
             def source_name(self):
-                """source name."""
+                """Return the fixed source name for this connector."""
                 return "fail"
 
             def fetch(self, url, **kwargs):
@@ -397,13 +397,27 @@ class TestDownloader:
         captured = {}
 
         class Response:
-            """Response."""
+            """Minimal fake HTTP response with fixed content and headers.
+
+            Attributes:
+                content: Fixed response body bytes.
+                status_code: Fixed HTTP status code.
+                headers: Fixed response headers.
+            """
             content = b"ok"
             status_code = 200
             headers = {"Content-Type": "text/plain"}
 
         def fake_get(url, **kwargs):
-            """fake get."""
+            """Record request kwargs and return a fake response.
+
+            Args:
+                url: The request URL (ignored).
+                **kwargs: Request keyword arguments captured for assertion.
+
+            Returns:
+                A ``Response`` instance with fixed content.
+            """
             captured.update(kwargs)
             return Response()
 
@@ -536,7 +550,7 @@ class TestFilingAcquirer:
 
             @property
             def source_name(self):
-                """source name."""
+                """Return the fixed source name for this connector."""
                 return "fail"
 
             def fetch(self, url, **kwargs):
@@ -568,9 +582,20 @@ class TestFilingAcquirer:
         """A preserved raw snapshot must not make an unparsed filing actionable."""
 
         class FailingParser:
-            """FailingParser."""
+            """Fake parser that always raises ``ParseError``.
+
+            Attributes:
+                source_name: Fixed source identifier.
+            """
             def parse(self, snapshot):
-                """parse."""
+                """Reject every snapshot with a parse error.
+
+                Args:
+                    snapshot: The snapshot to parse (ignored).
+
+                Raises:
+                    ParseError: Always, to simulate a parsing failure.
+                """
                 raise ParseError("cannot parse")
 
         registry = SourceRegistry()

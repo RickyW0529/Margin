@@ -1,4 +1,9 @@
-"""Quant adapter wiring tests for fourth-layer feature mart reads."""
+"""Quant adapter wiring tests for fourth-layer feature mart reads.
+
+This module validates that the quant adapter persists feature-bound input
+snapshots and that the SQLAlchemy feature mart ETL pipeline writes bound
+input and feature rows atomically in one transaction.
+"""
 
 from __future__ import annotations
 
@@ -49,7 +54,11 @@ DECISION_AT = datetime(2026, 6, 24, 8, 0, tzinfo=UTC)
 
 
 def test_quant_adapter_persists_feature_bound_input_snapshot() -> None:
-    """Production adapter path binds quant input to fourth-layer features."""
+    """Verify the production adapter path binds quant input to fourth-layer features.
+
+    Returns:
+        None.
+    """
     valuation_repository = MemoryValuationDiscoveryRepository()
     analysis_repository = MemoryAnalysisMartRepository()
     snapshot_builder = QuantInputSnapshotBuilder(
@@ -83,7 +92,14 @@ def test_quant_adapter_persists_feature_bound_input_snapshot() -> None:
 def test_sqlalchemy_quant_feature_mart_etl_persists_atomically(
     database_url: str,
 ) -> None:
-    """SQL ETL writes bound input and feature rows in one transaction."""
+    """Verify SQL ETL writes bound input and feature rows in one transaction.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        None.
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     with engine.begin() as connection:
@@ -146,14 +162,19 @@ def test_sqlalchemy_quant_feature_mart_etl_persists_atomically(
 
 @dataclass(frozen=True)
 class _ScopeProvider:
+    """Fake scope binding provider returning a single frozen scope."""
+
     scope: ScopeBinding
 
     def get_scope_binding(self, scope_version_id: str) -> ScopeBinding:
+        """Return the frozen scope, asserting the expected version ID."""
         assert scope_version_id == self.scope.scope_version_id
         return self.scope
 
 
 class _FactWarehouse:
+    """Fake fact warehouse returning deterministic canonical fact references."""
+
     def get_latest_facts(
         self,
         *,
@@ -161,6 +182,7 @@ class _FactWarehouse:
         indicator_ids: tuple[str, ...],
         known_at: datetime,
     ) -> tuple[CanonicalFactRef, ...]:
+        """Return deterministic canonical fact refs for all security-indicator pairs."""
         return tuple(
             CanonicalFactRef(
                 fact_id=f"fact-{security_id}-{indicator_id}",
@@ -175,6 +197,7 @@ class _FactWarehouse:
 
 
 def _scope() -> ScopeBinding:
+    """Build a deterministic scope binding with an ALL_A universe and feature set."""
     universe = UniverseSnapshot(
         universe_code=UniverseCode.ALL_A,
         universe_version_id="univ-v1",
@@ -200,6 +223,7 @@ def _scope() -> ScopeBinding:
 
 
 def _feature_frame(_snapshot) -> pd.DataFrame:
+    """Build a deterministic two-row feature DataFrame for ETL tests."""
     return pd.DataFrame.from_records(
         [
             {
@@ -225,6 +249,7 @@ def _feature_frame(_snapshot) -> pd.DataFrame:
 
 
 def _fact_ref_keys(fact_refs: tuple[dict, ...]) -> tuple[tuple[str, str, str], ...]:
+    """Extract and sort fact reference keys for equality comparison."""
     return tuple(
         sorted(
             (

@@ -35,4 +35,12 @@ class DocumentParser(Protocol):
         *,
         source_url: str | None = None,
     ) -> list[ParsedBlock]:
-        """Parse bytes into locator-rich blocks."""
+        """Parse bytes into locator-rich blocks.
+
+        Args:
+            content: Raw document bytes to parse.
+            source_url: Optional URL of the original source.
+
+        Returns:
+            A list of ``ParsedBlock`` instances with locator metadata.
+        """

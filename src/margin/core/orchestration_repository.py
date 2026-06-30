@@ -25,7 +25,12 @@ from margin.sql.core_queries import (
 
 
 class OrchestrationRepository(Protocol):
-    """Persistence contract used by run creators and DB-backed workers."""
+    """Persistence contract used by run creators and DB-backed workers.
+
+    Defines the atomic claim, append-only event, and run summary contract
+    for durable orchestration. Implementations must preserve immutable
+    step-event history and serialize concurrent step claims.
+    """
 
     def create_run(self, run: OrchestrationRun) -> None:
         """Persist a new orchestration run.
@@ -77,7 +82,16 @@ class OrchestrationRepository(Protocol):
         state: RunState,
         finished_at: datetime | None = None,
     ) -> OrchestrationRun:
-        """Update the derived run summary while preserving step-event history."""
+        """Update the derived run summary while preserving step-event history.
+
+        Args:
+            run_id: The run identifier.
+            state: New run state to set.
+            finished_at: Optional finished timestamp.
+
+        Returns:
+            The updated OrchestrationRun.
+        """
         ...
 
     def append_step_event(self, event: StepAttempt) -> None:
@@ -138,7 +152,12 @@ class OrchestrationRepository(Protocol):
 
 
 class MemoryOrchestrationRepository:
-    """Deterministic process-local repository for domain tests."""
+    """Deterministic process-local repository for domain tests.
+
+    Uses an ``RLock`` to serialize concurrent operations. Step events are
+    stored in a dictionary keyed by event id, with a separate set for
+    sequence uniqueness enforcement.
+    """
 
     def __init__(self) -> None:
         """Initialize an empty in-memory repository."""
@@ -180,7 +199,17 @@ class MemoryOrchestrationRepository:
         state: str | RunState | None = None,
         limit: int = 50,
     ) -> list[OrchestrationRun]:
-        """Return persisted runs, newest first, filtered by optional facets."""
+        """Return persisted runs, newest first, filtered by optional facets.
+
+        Args:
+            run_type: Optional run-type filter.
+            scope_version_id: Optional scope version filter.
+            state: Optional run-state filter.
+            limit: Maximum number of runs to return.
+
+        Returns:
+            Ordered list of runs, newest ``created_at`` first.
+        """
         if limit <= 0:
             return []
         state_value = state.value if isinstance(state, RunState) else state
@@ -200,7 +229,19 @@ class MemoryOrchestrationRepository:
         state: RunState,
         finished_at: datetime | None = None,
     ) -> OrchestrationRun:
-        """Update the in-memory run summary."""
+        """Update the in-memory run summary.
+
+        Args:
+            run_id: The run identifier.
+            state: New run state to set.
+            finished_at: Optional finished timestamp.
+
+        Returns:
+            The updated OrchestrationRun.
+
+        Raises:
+            KeyError: If the run does not exist.
+        """
         with self._lock:
             run = self._runs.get(run_id)
             if run is None:
@@ -332,7 +373,11 @@ class MemoryOrchestrationRepository:
 
 
 class SQLAlchemyOrchestrationRepository:
-    """PostgreSQL repository preserving immutable step-event history."""
+    """PostgreSQL repository preserving immutable step-event history.
+
+    Uses ``SELECT ... FOR UPDATE SKIP LOCKED`` for concurrent step claiming
+    and unique constraints to enforce append-only event sequences.
+    """
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
         """Initialize the repository.
@@ -378,7 +423,17 @@ class SQLAlchemyOrchestrationRepository:
         state: str | RunState | None = None,
         limit: int = 50,
     ) -> list[OrchestrationRun]:
-        """Return persisted runs, newest first, filtered by optional facets."""
+        """Return persisted runs, newest first, filtered by optional facets.
+
+        Args:
+            run_type: Optional run-type filter.
+            scope_version_id: Optional scope version filter.
+            state: Optional run-state filter.
+            limit: Maximum number of runs to return.
+
+        Returns:
+            Ordered list of runs, newest ``created_at`` first.
+        """
         if limit <= 0:
             return []
         state_value = state.value if isinstance(state, RunState) else state
@@ -398,7 +453,19 @@ class SQLAlchemyOrchestrationRepository:
         state: RunState,
         finished_at: datetime | None = None,
     ) -> OrchestrationRun:
-        """Update the materialized run state derived from append-only steps."""
+        """Update the materialized run state derived from append-only steps.
+
+        Args:
+            run_id: The run identifier.
+            state: New run state to set.
+            finished_at: Optional finished timestamp.
+
+        Returns:
+            The updated OrchestrationRun.
+
+        Raises:
+            KeyError: If the run does not exist.
+        """
         with self._session_factory.begin() as session:
             row = session.get(OrchestrationRunRow, run_id)
             if row is None:

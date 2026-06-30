@@ -17,7 +17,7 @@ from margin.settings import get_settings
 def test_news_refresh_status_returns_reconciliation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """news refresh status returns reconciliation."""
+    """Test that news refresh status returns reconciliation details."""
     monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin-test-token")
     monkeypatch.setenv("MARGIN_CSRF_TOKEN", "valid")
     get_settings.cache_clear()
@@ -34,7 +34,7 @@ def test_news_refresh_status_returns_reconciliation(
 def test_news_refresh_submit_returns_accepted_run_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """news refresh submit returns accepted run id."""
+    """Test that news refresh submit returns an accepted run id."""
     monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin-test-token")
     monkeypatch.setenv("MARGIN_CSRF_TOKEN", "valid")
     get_settings.cache_clear()
@@ -71,11 +71,12 @@ def test_news_refresh_submit_returns_accepted_run_id(
 
 @dataclass
 class _FakeNewsService:
-    """FakeNewsService."""
+    """Fake news service stub used by the API tests."""
+
     received_target_count: int = 0
 
     def start_refresh(self, **kwargs: object) -> NewsRefreshRun:
-        """start refresh."""
+        """Capture the refresh request and return a completed run."""
         targets = kwargs["targets"]
         self.received_target_count = len(targets)  # type: ignore[arg-type]
         return NewsRefreshRun(
@@ -89,7 +90,7 @@ class _FakeNewsService:
         )
 
     def get_run_status(self, run_id: str) -> NewsRunStatus:
-        """get run status."""
+        """Return a fake completed run status for the given run id."""
         return NewsRunStatus(
             run_id=run_id,
             status="completed",

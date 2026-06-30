@@ -12,7 +12,11 @@ import sys
 
 
 def main() -> int:
-    """main."""
+    """Run Alembic migrations to head and return the subprocess exit code.
+
+    Returns:
+        int: Exit code from the ``alembic upgrade head`` subprocess.
+    """
     return subprocess.call(["alembic", "upgrade", "head"])
 
 

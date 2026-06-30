@@ -247,7 +247,15 @@ class EvidenceRepository:
             return [_research_evidence_from_row(row) for row in rows]
 
     def add_evidence_package(self, package: EvidencePackage) -> None:
-        """Persist a frozen evidence package version append-only."""
+        """Persist a frozen evidence package version append-only.
+
+        Args:
+            package: The evidence package to persist.
+
+        Raises:
+            ValueError: If a different package with the same composite key
+                already exists.
+        """
         key = (package.package_id, package.version)
         with self._session_factory.begin() as session:
             row = session.get(EvidencePackageRow, key)
@@ -267,7 +275,15 @@ class EvidenceRepository:
         package_id: str,
         version: int,
     ) -> EvidencePackage | None:
-        """Fetch a frozen evidence package version by composite key."""
+        """Fetch a frozen evidence package version by composite key.
+
+        Args:
+            package_id: Unique identifier of the evidence package.
+            version: Version number of the evidence package.
+
+        Returns:
+            The evidence package if found, otherwise None.
+        """
         with self._session_factory() as session:
             row = session.get(EvidencePackageRow, (package_id, version))
             return _package_from_row(row) if row is not None else None
@@ -286,6 +302,20 @@ class EvidenceRepository:
         Revisions retain the package identity and increment ``version``. The
         first version row is locked before reading the latest version so
         concurrent supplementation attempts serialize on PostgreSQL.
+
+        Args:
+            parent_package_id: Identifier of the package to revise.
+            added_evidence_ids: Evidence IDs to add to the revision.
+            retrieval_audit_id: Optional retrieval audit record identifier.
+            coverage: Optional override for the coverage score.
+            quality_status: Optional override for the quality status.
+
+        Returns:
+            The newly created revision ``EvidencePackage``.
+
+        Raises:
+            ValueError: If ``added_evidence_ids`` is empty or contains no new IDs.
+            KeyError: If the parent package or referenced evidence is not found.
         """
         requested_ids = tuple(dict.fromkeys(added_evidence_ids))
         if not requested_ids:
@@ -366,7 +396,12 @@ class EvidenceRepository:
             return revision
 
     def link_news_context_evidence(self, bundle_id: str, evidence_id: str) -> None:
-        """Persist an immutable news-context to evidence link idempotently."""
+        """Persist an immutable news-context to evidence link idempotently.
+
+        Args:
+            bundle_id: Identifier of the news context bundle.
+            evidence_id: Identifier of the evidence record to link.
+        """
         with self._session_factory.begin() as session:
             row = session.get(NewsContextEvidenceRow, (bundle_id, evidence_id))
             if row is None:
@@ -382,7 +417,14 @@ class EvidenceRepository:
         self,
         bundle_id: str,
     ) -> list[NewsContextEvidenceLink]:
-        """List evidence links for a news context bundle."""
+        """List evidence links for a news context bundle.
+
+        Args:
+            bundle_id: Identifier of the news context bundle.
+
+        Returns:
+            List of ``NewsContextEvidenceLink`` records for the bundle.
+        """
         with self._session_factory() as session:
             rows = session.scalars(
                 news_context_evidence_by_bundle(bundle_id)
@@ -397,7 +439,18 @@ class EvidenceRepository:
         role: ClaimEvidenceRole,
         rank: int = 0,
     ) -> None:
-        """Persist an immutable claim-evidence role link idempotently."""
+        """Persist an immutable claim-evidence role link idempotently.
+
+        Args:
+            claim_id: Identifier of the claim.
+            evidence_id: Identifier of the evidence record.
+            role: Role of the evidence relative to the claim.
+            rank: Display order of the link.
+
+        Raises:
+            ValueError: If an existing link with the same composite key has a
+                different rank.
+        """
         role_value = role.value if isinstance(role, ClaimEvidenceRole) else str(role)
         key = (claim_id, evidence_id, role_value)
         with self._session_factory.begin() as session:
@@ -420,7 +473,14 @@ class EvidenceRepository:
                 )
 
     def list_claim_evidence(self, claim_id: str) -> list[ClaimEvidenceLink]:
-        """List claim-evidence role links ordered by rank."""
+        """List claim-evidence role links ordered by rank.
+
+        Args:
+            claim_id: Identifier of the claim.
+
+        Returns:
+            List of ``ClaimEvidenceLink`` records ordered by rank.
+        """
         with self._session_factory() as session:
             rows = session.scalars(
                 claim_evidence_by_claim(claim_id)
@@ -428,7 +488,14 @@ class EvidenceRepository:
             return [_claim_evidence_link_from_row(row) for row in rows]
 
     def add_evidence_conflict(self, conflict: EvidenceConflict) -> None:
-        """Persist an immutable evidence conflict."""
+        """Persist an immutable evidence conflict.
+
+        Args:
+            conflict: The evidence conflict to persist.
+
+        Raises:
+            ValueError: If a different conflict with the same ID already exists.
+        """
         with self._session_factory.begin() as session:
             row = session.get(EvidenceConflictRow, conflict.conflict_id)
             if row is None:
@@ -442,7 +509,15 @@ class EvidenceRepository:
         package_id: str,
         version: int,
     ) -> list[EvidenceConflict]:
-        """List conflicts recorded for an evidence package version."""
+        """List conflicts recorded for an evidence package version.
+
+        Args:
+            package_id: Identifier of the evidence package.
+            version: Version number of the evidence package.
+
+        Returns:
+            List of ``EvidenceConflict`` records for the package version.
+        """
         with self._session_factory() as session:
             rows = session.scalars(
                 evidence_conflicts_by_package(package_id, version)

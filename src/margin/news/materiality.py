@@ -47,7 +47,12 @@ class DocumentMaterialityService:
     )
 
     def __init__(self, scoring_version: str = "materiality-v0.2.0") -> None:
-        """Initialize the instance."""
+        """Initialize the materiality service.
+
+        Args:
+            scoring_version: Version label for the scoring rules, used for audit and
+                deduplication of persisted scores.
+        """
         self.scoring_version = scoring_version
 
     def score(
@@ -60,7 +65,20 @@ class DocumentMaterialityService:
         source_level: int,
         event_id: str | None = None,
     ) -> DocumentMaterialityScore:
-        """Return a deterministic score for one document/security relation."""
+        """Return a deterministic score for one document/security relation.
+
+        Args:
+            title: Document title.
+            content: Document body text, if available.
+            symbols: Tuple of security symbols mentioned in the document.
+            target_symbol: Security symbol to score relevance against.
+            source_level: Numeric source level of the document (1-5).
+            event_id: Optional event identifier to attach to the score.
+
+        Returns:
+            A ``DocumentMaterialityScore`` with deterministic relevance, materiality,
+            novelty, and trust flags.
+        """
         text = f"{title} {content or ''}"
         trigger_type = "general_news"
         risk_polarity = "neutral"

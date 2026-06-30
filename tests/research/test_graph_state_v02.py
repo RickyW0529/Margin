@@ -1,4 +1,11 @@
-"""v0.2 AI delta review graph state contract tests."""
+"""v0.2 AI delta review graph state contract tests.
+
+This module verifies that the graph state correctly freezes identity fields
+on creation, rejects mutations to identity fields after graph start, allows
+immutable updates to non-identity fields, exposes the expected review mode
+and outcome enumerations, and that the persistence tables expose the
+required audit and idempotency columns.
+"""
 
 from __future__ import annotations
 
@@ -25,7 +32,12 @@ DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 
 
 def test_initial_state_freezes_identity_fields() -> None:
-    """initial state freezes identity fields."""
+    """Verify the initial state freezes identity fields and sets defaults.
+
+    Creates an initial state with all identity fields populated and asserts
+    that the review mode is ``None``, the LLM call count is zero, the max
+    LLM calls default is 16, and the identity hash is a SHA-256 digest.
+    """
     state = create_initial_state(
         graph_run_id="graph-1",
         context_snapshot_id="ctx-1",
@@ -46,7 +58,12 @@ def test_initial_state_freezes_identity_fields() -> None:
 
 
 def test_identity_fields_cannot_change_after_graph_start() -> None:
-    """identity fields cannot change after graph start."""
+    """Verify identity fields cannot be changed after graph start.
+
+    Creates an initial state and asserts that attempting to update the
+    ``security_id`` via ``with_updates`` raises a ``ValueError`` mentioning
+    immutable identity.
+    """
     state = create_initial_state(
         graph_run_id="graph-1",
         context_snapshot_id="ctx-1",
@@ -61,7 +78,12 @@ def test_identity_fields_cannot_change_after_graph_start() -> None:
 
 
 def test_non_identity_fields_can_be_updated_immutably() -> None:
-    """non identity fields can be updated immutably."""
+    """Verify non-identity fields can be updated immutably without side effects.
+
+    Creates an initial state, updates the review mode and step count via
+    ``with_updates``, and asserts that the original state is unchanged, the
+    updated state reflects the new values, and the identity hash is preserved.
+    """
     state = create_initial_state(
         graph_run_id="graph-1",
         context_snapshot_id="ctx-1",
@@ -83,13 +105,22 @@ def test_non_identity_fields_can_be_updated_immutably() -> None:
 
 
 def test_review_outcomes_include_deferred_and_carry_forward() -> None:
-    """review outcomes include deferred and carry forward."""
+    """Verify review modes and outcomes include deferred and carry-forward values.
+
+    Asserts that ``CARRY_FORWARD_FAST_PATH`` and ``REVIEW_DEFERRED`` have the
+    expected string values.
+    """
     assert ReviewMode.CARRY_FORWARD_FAST_PATH.value == "carry_forward_fast_path"
     assert ReviewOutcome.REVIEW_DEFERRED.value == "review_deferred"
 
 
 def test_graph_persistence_tables_expose_audit_and_idempotency_fields() -> None:
-    """graph persistence tables expose audit and idempotency fields."""
+    """Verify graph persistence tables expose audit and idempotency fields.
+
+    Asserts that the seven persistence tables have the expected table names
+    and that the run, LLM call, and tool call tables expose the required
+    hash, billing, and policy columns.
+    """
     assert {
         AIGraphRunRow.__tablename__,
         AIGraphNodeRunRow.__tablename__,

@@ -21,7 +21,16 @@ from margin.news.models import utc_now
 
 
 class TavilyErrorCode(StrEnum):
-    """Stable token-safe Tavily error codes."""
+    """Stable token-safe Tavily error codes.
+
+    Attributes:
+        RATE_LIMITED: Provider returned HTTP 429 (rate limit exceeded).
+        BUDGET_EXCEEDED: Provider returned HTTP 432 (key or plan usage limit exceeded).
+        PAYGO_LIMIT_EXCEEDED: Provider returned HTTP 433 (pay-as-you-go limit exceeded).
+        AUTH_FAILED: Provider returned HTTP 401/403 (authentication failed).
+        SERVER_ERROR: Provider returned HTTP 5xx (server error).
+        BAD_RESPONSE: Provider returned a malformed or unexpected response.
+    """
 
     RATE_LIMITED = "provider_429"
     BUDGET_EXCEEDED = "provider_budget_exceeded"
@@ -42,7 +51,14 @@ class TavilyProviderError(RuntimeError):
         message: str,
         retry_after_seconds: int | None = None,
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the error.
+
+        Args:
+            code: Stable error code.
+            retryable: Whether the error is retryable.
+            message: Human-readable error message.
+            retry_after_seconds: Optional seconds to wait before retrying.
+        """
         self.provider_name = "tavily_websearch"
         self.code = code
         self.retryable = retryable
@@ -103,7 +119,11 @@ class TavilySearchAdapter:
 
     @property
     def descriptor(self) -> ProviderDescriptor:
-        """Return the provider descriptor."""
+        """Return the provider descriptor.
+
+        Returns:
+            ``ProviderDescriptor`` with metadata, capabilities, and secret refs.
+        """
         return self._descriptor
 
     def search(self, query: str, max_results: int = 10) -> list[dict[str, str]]:
@@ -201,7 +221,12 @@ class TavilySearchAdapter:
         return results
 
     def healthcheck(self) -> HealthCheckResult:
-        """Run a real lightweight Tavily search health check."""
+        """Run a real lightweight Tavily search health check.
+
+        Returns:
+            ``HealthCheckResult`` with HEALTHY status if the search succeeds, or UNHEALTHY
+            with the error message otherwise.
+        """
         try:
             self.search("healthcheck", max_results=1)
         except Exception as exc:

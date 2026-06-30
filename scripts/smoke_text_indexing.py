@@ -136,7 +136,7 @@ def main() -> int:
 
 
 def _parse_args() -> argparse.Namespace:
-    """parse args."""
+    """Parse command-line arguments for the text-indexing smoke."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--database-url", default="")
     parser.add_argument("--security-id", default="000001.SZ")
@@ -145,7 +145,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _embedding_config() -> dict[str, str | None]:
-    """embedding config."""
+    """Resolve embedding provider config from env or settings."""
     raw_env = {
         "api_key": os.getenv("MARGIN_EMBEDDING_API_KEY"),
         "base_url": os.getenv("MARGIN_EMBEDDING_BASE_URL"),
@@ -167,7 +167,7 @@ def _embedding_config() -> dict[str, str | None]:
 
 
 def _secret_value(value: object | None) -> str | None:
-    """secret value."""
+    """Extract a plaintext value from a SecretStr-like object."""
     if value is None:
         return None
     get_secret_value = getattr(value, "get_secret_value", None)
@@ -177,25 +177,25 @@ def _secret_value(value: object | None) -> str | None:
 
 
 def _string_value(value: object | None) -> str | None:
-    """string value."""
+    """Convert a value to string or return None."""
     return str(value) if value is not None else None
 
 
 def _parse_decision_at(value: str) -> datetime:
-    """parse decision at."""
+    """Parse an ISO 8601 datetime or return current UTC time."""
     if not value:
         return datetime.now(UTC)
     return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
 
 
 def _build_repository(database_url: str, *, dimension: int) -> VectorRepository:
-    """build repository."""
+    """Build a VectorRepository from a database URL."""
     engine = create_database_engine(DatabaseSettings(url=database_url))
     return VectorRepository(create_session_factory(engine), dimension=dimension)
 
 
 def _build_smoke_chunk(security_id: str, available_at: datetime) -> Chunk:
-    """build smoke chunk."""
+    """Build a synthetic news chunk for the text-indexing smoke."""
     content = "文本索引 smoke 验证：PIT 检索、chunk-security link 和向量写入。"
     content_hash = compute_chunk_hash(content)
     document_id = "smoke_text_indexing_doc"

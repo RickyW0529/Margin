@@ -10,15 +10,20 @@ from margin.data.tushare_warehouse import TushareWarehousePublisher
 
 
 class _Stack:
+    """In-memory ingestion stack double tracking published records per endpoint."""
+
     def __init__(self) -> None:
+        """Initialize the call log."""
         self.calls: list[tuple[str, str, list[dict[str, Any]]]] = []
 
     def ingest_security_master(self, work_item: object, **kwargs: Any) -> EndpointSyncResult:
+        """Log a security-master ingestion call and return a success result."""
         records = kwargs["raw_records"]
         self.calls.append(("security", "security_master", records))
         return _result(work_item, fact_count=0)
 
     def ingest_records(self, work_item: object, **kwargs: Any) -> EndpointSyncResult:
+        """Log a record ingestion call and return a success result with fact count."""
         records = kwargs["raw_records"]
         self.calls.append(("records", kwargs["endpoint_code"], records))
         return _result(work_item, fact_count=6 * len(records))
@@ -28,12 +33,14 @@ class _Stack:
         work_item: object,
         **kwargs: Any,
     ) -> EndpointSyncResult:
+        """Log an indicator ingestion call and return a success result."""
         records = kwargs["raw_records"]
         self.calls.append(("indicators", kwargs["endpoint_code"], records))
         return _result(work_item, fact_count=len(records))
 
 
 def _result(work_item: object, *, fact_count: int) -> EndpointSyncResult:
+    """Build a succeeded ``EndpointSyncResult`` with the given fact count."""
     return EndpointSyncResult(
         work_item_id=getattr(work_item, "work_item_id"),
         status=DataSyncStatus.SUCCEEDED,

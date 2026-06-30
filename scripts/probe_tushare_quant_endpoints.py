@@ -13,6 +13,7 @@ from margin.data.tushare_query import TushareQueryCatalog
 
 
 def _safe_error(exc: Exception) -> str:
+    """Redact known secret values from an exception message."""
     message = str(exc)
     for secret_name in ("MARGIN_TUSHARE_TOKEN", "TUSHARE_TOKEN"):
         secret = os.getenv(secret_name, "")

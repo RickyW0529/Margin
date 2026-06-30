@@ -31,7 +31,7 @@ class QualityFactorCalculator:
     }
 
     def __init__(self, normalizer: FactorNormalizer | None = None) -> None:
-        """init  ."""
+        """Initialize the calculator with an optional custom normalizer."""
         self._normalizer = normalizer or FactorNormalizer()
 
     def calculate(self, frame: pd.DataFrame) -> pd.DataFrame:

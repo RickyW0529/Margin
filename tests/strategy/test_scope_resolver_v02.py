@@ -1,4 +1,9 @@
-"""v0.2 strategy scope and configuration model tests."""
+"""v0.2 strategy scope and configuration model tests.
+
+This module validates that strategy configuration tables exist after migration,
+indicator views preserve required quant features, and research scope hashes
+are deterministic.
+"""
 
 from __future__ import annotations
 
@@ -15,7 +20,14 @@ from scripts.verify_migrations import verify_clean_database
 
 
 def test_strategy_config_v02_tables_exist(database_url: str) -> None:
-    """strategy config v02 tables exist."""
+    """Verify all v0.2 strategy configuration tables exist after migration.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        None.
+    """
     url = make_url(database_url)
     result = verify_clean_database(
         database_url,
@@ -38,7 +50,11 @@ def test_strategy_config_v02_tables_exist(database_url: str) -> None:
 
 
 def test_indicator_view_does_not_remove_required_quant_features() -> None:
-    """indicator view does not remove required quant features."""
+    """Verify an indicator view excludes indicators without removing required features.
+
+    Returns:
+        None.
+    """
     view = IndicatorViewVersion(
         version_id="view-1",
         owner_id="local-admin",
@@ -61,7 +77,11 @@ def test_indicator_view_does_not_remove_required_quant_features() -> None:
 
 
 def test_research_scope_hash_is_deterministic() -> None:
-    """research scope hash is deterministic."""
+    """Verify the research scope hash is deterministic for identical scope content.
+
+    Returns:
+        None.
+    """
     scope = ResearchScopeVersion(
         version_id="scope-1",
         universe_version_id="univ-1",

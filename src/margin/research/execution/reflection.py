@@ -26,7 +26,14 @@ class NodeReflection(BaseModel):
     model_config = {"frozen": True}
 
     def preserves_evidence(self, existing_evidence_ids: set[str]) -> bool:
-        """Return whether critic references only existing evidence IDs."""
+        """Return whether critic references only existing evidence IDs.
+
+        Args:
+            existing_evidence_ids: Set of evidence IDs available to the node.
+
+        Returns:
+            True if all critic-referenced evidence IDs are in the existing set.
+        """
         return set(self.evidence_ids) <= existing_evidence_ids
 
 
