@@ -12,6 +12,7 @@ from margin.news.db_models import (
     DocumentMaterialityScoreRow,
     DocumentOutboxRow,
     DocumentSecurityLinkRow,
+    NewsAgentTaskRow,
     NewsArticleFindingRow,
     NewsRefreshTargetRow,
     NewsSearchPlanRow,
@@ -211,6 +212,20 @@ def news_search_plans_by_run(run_id: str) -> Select:
         select(NewsSearchPlanRow)
         .where(NewsSearchPlanRow.run_id == run_id)
         .order_by(NewsSearchPlanRow.security_id, NewsSearchPlanRow.plan_id)
+    )
+
+
+def news_agent_tasks_by_run(run_id: str) -> Select:
+    """Return agentic task audit rows for one run."""
+    return (
+        select(NewsAgentTaskRow)
+        .where(NewsAgentTaskRow.run_id == run_id)
+        .order_by(
+            NewsAgentTaskRow.security_id.nullsfirst(),
+            NewsAgentTaskRow.task_type,
+            NewsAgentTaskRow.attempt,
+            NewsAgentTaskRow.task_id,
+        )
     )
 
 

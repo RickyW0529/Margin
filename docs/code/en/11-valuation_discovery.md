@@ -92,6 +92,10 @@ Repository behavior:
 | Method | Path | Purpose |
 |--------|------|---------|
 | `POST` | `/api/v1/valuation-discovery/refreshes` | Starts a valuation discovery refresh. Requires local admin auth, CSRF, and `Idempotency-Key`; returns `202` and `run_id`. If the service is not configured, it fails closed with `503`. |
+| `GET` | `/api/v1/valuation-discovery/runs` | Paginated list of recent valuation discovery refresh runs. |
+| `GET` | `/api/v1/valuation-discovery/runs/{run_id}` | Status and per-step state of a single refresh run. |
+| `GET` | `/api/v1/valuation-discovery/companies/{security_id}/quant` | Latest quant screening profile for a security: five factor group scores, rankings, screening status, risk flags, review reasons, and reason summary. Returns `404` when no result exists. |
+| `GET` | `/api/v1/valuation-discovery/companies/{security_id}/analysis` | Fourth-layer Analysis Mart profile for a security: snapshot header, metrics (with market/industry percentile and rank), findings (with severity/confidence/evidence), and evidence link count. `scope_version_id` is optional; when omitted, the latest snapshot across all scopes is returned. |
 
 ## Smoke
 

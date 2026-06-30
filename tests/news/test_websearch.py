@@ -707,6 +707,65 @@ class TestWebSearchService:
         assert connector.urls == [result.url for result in record.results]
         assert len(events) == 2
 
+    def test_search_and_acquire_assigns_source_level_from_domain(self, tmp_path):
+        """Official disclosure URLs should not be persisted as low-trust WebSearch L4."""
+
+        class GoodConnector(BaseConnector):
+            """Mock connector returning public content."""
+
+            @property
+            def source_name(self):
+                """Return the fixed source name for this connector."""
+                return "websearch"
+
+            def fetch(self, url, **kwargs):
+                """Return content for official and trusted-news URLs."""
+                del kwargs
+                body = f"<html><body>{url} 年度报告 业绩公告</body></html>"
+                return body.encode(), "text/html", 200
+
+        def mock_search(query, max_results=10):
+            """Return one official disclosure and one trusted media result."""
+            del query, max_results
+            return [
+                {
+                    "url": "https://static.cninfo.com.cn/finalpage/2026-01-01/000001.PDF",
+                    "title": "平安银行：2025年年度报告",
+                    "snippet": "年度报告 业绩 公告",
+                },
+                {
+                    "url": "https://www.stcn.com/article/detail/123456.html",
+                    "title": "平安银行披露年度业绩",
+                    "snippet": "年度报告 业绩 公告",
+                },
+            ]
+
+        registry = SourceRegistry()
+        registry.register(
+            SourceDescriptor(
+                name="websearch",
+                source_type="websearch",
+                default_level=SourceLevel.L4,
+            ),
+            connector=GoodConnector(),
+        )
+        provider = WebSearchProvider(search_func=mock_search)
+        service = WebSearchService(provider, registry, SnapshotStore(base_dir=tmp_path))
+
+        record, events = service.search_and_acquire(
+            "平安银行 000001 年报 年度报告 业绩",
+            max_results=5,
+        )
+
+        assert [result.source_level for result in record.results] == [
+            SourceLevel.L1,
+            SourceLevel.L4,
+        ]
+        assert [event.source_level for event in events] == [
+            SourceLevel.L1,
+            SourceLevel.L4,
+        ]
+
     def test_search_and_acquire_filters_garbled_titles_before_download(self, tmp_path):
         """Garbled mojibake titles must not enter the acquisition path."""
 

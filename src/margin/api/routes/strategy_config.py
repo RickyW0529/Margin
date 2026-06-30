@@ -28,6 +28,7 @@ from margin.strategy.models import (
     UserStylePromptVersion,
 )
 from margin.strategy.provider_config import ProviderConfigHealthService, ProviderHealth
+from margin.strategy.provider_router import enrich_provider_config_metadata
 from margin.strategy.service import StrategyService
 from margin.valuation_discovery.quant.pool_defaults import quant_strategy_defaults_payload
 
@@ -99,7 +100,11 @@ class ProviderConfigResponse(BaseModel):
         enabled: Whether the provider config is enabled.
         lifecycle: Lifecycle status (e.g. ``draft``, ``active``, ``deprecated``).
         base_url: Optional base URL for the provider API.
-        model_name: Optional model name used by the provider.
+    model_name: Optional model name used by the provider.
+        provider_category: Normalized UI/runtime category.
+        detected_provider: Provider id detected from URL within the category.
+        detected_label: Short label safe to display next to the category title.
+        is_custom_provider: Whether URL detection fell back to Custom.
         secret_metadata: Optional safe metadata for the bound secret.
     """
 
@@ -110,6 +115,10 @@ class ProviderConfigResponse(BaseModel):
     lifecycle: str
     base_url: str | None
     model_name: str | None
+    provider_category: str
+    detected_provider: str
+    detected_label: str
+    is_custom_provider: bool
     secret_metadata: SecretMetadataResponse | None
 
     @classmethod
@@ -134,6 +143,7 @@ class ProviderConfigResponse(BaseModel):
             secret_metadata = SecretMetadataResponse.from_metadata(
                 secret_store.metadata(version.secret_version_id)
             )
+        router_metadata = enrich_provider_config_metadata(version)
         return cls(
             version_id=version.version_id,
             provider_name=version.provider_name,
@@ -142,6 +152,10 @@ class ProviderConfigResponse(BaseModel):
             lifecycle=version.lifecycle.value,
             base_url=version.base_url,
             model_name=version.model_name,
+            provider_category=str(router_metadata["provider_category"]),
+            detected_provider=str(router_metadata["detected_provider"]),
+            detected_label=str(router_metadata["detected_label"]),
+            is_custom_provider=bool(router_metadata["is_custom_provider"]),
             secret_metadata=secret_metadata,
         )
 

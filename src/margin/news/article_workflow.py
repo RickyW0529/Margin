@@ -147,7 +147,8 @@ class ArticleWorkflow:
             if not getattr(review_response, "success", False):
                 return None
             review_output = dict(getattr(review_response, "output", {}) or {})
-            if bool(review_output.get("approved")):
+            local_notes = _local_review_notes(event, draft)
+            if bool(review_output.get("approved")) and not local_notes:
                 return NewsArticleFinding(
                     finding_id=_finding_id(run_id, target.security_id, event.event_id),
                     run_id=run_id,
@@ -168,7 +169,10 @@ class ArticleWorkflow:
                     prompt_hash=writer_prompt_hash,
                     response_hash=writer_response_hash,
                 )
-            revision_notes = _string_tuple(review_output.get("revision_notes", ()))
+            revision_notes = (
+                *_string_tuple(review_output.get("revision_notes", ())),
+                *local_notes,
+            )
         return None
 
 
@@ -187,6 +191,40 @@ def _brief_id(run_id: str, security_id: str) -> str:
 def _key_points(output: dict[str, Any]) -> tuple[str, ...]:
     """Return cleaned key points from model output."""
     return _string_tuple(output.get("key_points", ()))
+
+
+def _local_review_notes(
+    event: DocumentEvent,
+    draft: dict[str, Any],
+) -> tuple[str, ...]:
+    """Return deterministic article-review issues independent of LLM judgment."""
+    notes: list[str] = []
+    cited_spans = tuple(
+        item for item in draft.get("cited_spans", ()) if isinstance(item, dict)
+    )
+    if not cited_spans:
+        notes.append("missing cited_spans")
+        return tuple(notes)
+    content = event.content or ""
+    for span in cited_spans:
+        issue = _citation_span_issue(content, span)
+        if issue:
+            notes.append(issue)
+    return tuple(notes)
+
+
+def _citation_span_issue(content: str, span: dict[str, Any]) -> str:
+    """Return a stable issue for an invalid citation span, or empty string."""
+    start = span.get("start")
+    end = span.get("end")
+    if not isinstance(start, int) or not isinstance(end, int):
+        return "citation span missing integer start/end"
+    if start < 0 or end <= start or end > len(content):
+        return "citation span outside source content"
+    quoted = span.get("text") or span.get("quote")
+    if quoted is not None and str(quoted) != content[start:end]:
+        return "citation span text mismatch"
+    return ""
 
 
 def _string_tuple(value: Any) -> tuple[str, ...]:

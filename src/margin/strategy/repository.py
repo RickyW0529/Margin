@@ -12,7 +12,6 @@ from margin.news.models import utc_now
 from margin.sql.strategy_queries import (
     active_indicator_views_by_owner,
     active_provider_configs_by_owner,
-    active_provider_configs_by_owner_and_provider,
     active_quant_feature_sets_by_owner,
     active_quant_strategies_by_owner_and_family,
     active_research_scopes_by_owner,
@@ -60,6 +59,7 @@ from margin.strategy.models import (
     UniverseDefinitionVersion,
     UserStylePromptVersion,
 )
+from margin.strategy.provider_router import provider_category_for_config
 
 T = TypeVar("T")
 
@@ -222,7 +222,7 @@ class MemoryStrategyRepository:
     def activate_provider_config(self, version_id: str) -> ProviderConfigVersion:
         """Activate a provider config and deprecate older active sibling versions."""
         version = self._must_get(self._provider_configs, version_id, "provider config")
-        self._deprecate_provider_configs(version.owner_id, version.provider_name)
+        self._deprecate_provider_configs(version)
         activated = version.model_copy(update={"lifecycle": ConfigLifecycle.ACTIVE})
         self._provider_configs[version_id] = activated
         return activated
@@ -577,12 +577,22 @@ class MemoryStrategyRepository:
         """Return a prior config mutation audit by replay key."""
         return self._config_audits.get((actor_id, action, idempotency_key))
 
-    def _deprecate_provider_configs(self, owner_id: str, provider_name: str) -> None:
+    def _deprecate_provider_configs(self, version: ProviderConfigVersion) -> None:
         """deprecate provider configs."""
+        category = provider_category_for_config(
+            version.provider_type,
+            version.provider_name,
+            version.non_sensitive_config,
+        )
         for candidate in list(self._provider_configs.values()):
             if (
-                candidate.owner_id == owner_id
-                and candidate.provider_name == provider_name
+                candidate.owner_id == version.owner_id
+                and provider_category_for_config(
+                    candidate.provider_type,
+                    candidate.provider_name,
+                    candidate.non_sensitive_config,
+                )
+                == category
                 and candidate.lifecycle is ConfigLifecycle.ACTIVE
             ):
                 self._provider_configs[candidate.version_id] = candidate.model_copy(
@@ -821,15 +831,21 @@ class SQLAlchemyStrategyRepository:
             row = session.get(ProviderConfigVersionRow, version_id)
             if row is None:
                 raise KeyError(f"provider config '{version_id}' not found")
+            category = provider_category_for_config(
+                row.provider_type,
+                row.provider_name,
+                row.non_sensitive_config,
+            )
             active_rows = session.scalars(
-                active_provider_configs_by_owner_and_provider(
-                    row.owner_id,
-                    row.provider_name,
-                    ConfigLifecycle.ACTIVE.value,
-                )
+                active_provider_configs_by_owner(row.owner_id, ConfigLifecycle.ACTIVE.value)
             ).all()
             for active in active_rows:
-                if active.version_id != version_id:
+                active_category = provider_category_for_config(
+                    active.provider_type,
+                    active.provider_name,
+                    active.non_sensitive_config,
+                )
+                if active.version_id != version_id and active_category == category:
                     active.lifecycle = ConfigLifecycle.DEPRECATED.value
             row.lifecycle = ConfigLifecycle.ACTIVE.value
             return _provider_config_from_row(row)

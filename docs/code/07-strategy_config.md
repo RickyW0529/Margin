@@ -41,7 +41,9 @@
 - `UserStylePromptVersion`、`ToolPolicyVersionRef`：冻结用户表达风格和工具权限版本。
 - `ResearchScopeVersion`：冻结上述版本 ID、Canonical rule 和 Provider config；`scope_hash` 使用 canonical JSON + SHA-256 确定性计算。
 
-配置生命周期为 `draft -> review -> active -> deprecated`。PostgreSQL partial unique index 和 repository 激活事务共同保证同一配置 family 只有一个 active 版本。量化策略没有 calibration report 时不能激活；Research Scope 引用缺失、非 active 或 deprecated 版本时不能激活。
+配置生命周期为 `draft -> review -> active -> deprecated`。PostgreSQL partial unique index 和 repository 激活事务共同保证同一配置 family 只有一个 active 版本；Provider config 的运行时 family 进一步按 `llm`、`web_search`、`data_source`、`embedding`、`rerank` 分类互斥，允许每类各有一个 active。量化策略没有 calibration report 时不能激活；Research Scope 引用缺失、非 active 或 deprecated 版本时不能激活。
+
+Provider URL 会通过 `provider_router` 在分类内自动识别供应商标签：LLM 支持 DeepSeek、OpenAI、OpenRouter、Qwen、Gemini、Anthropic、ModelScope、Zhipu、Ollama、VLLM 和本地 OpenAI-compatible；WebSearch 支持 Tavily、Exa、SerpAPI、Bing；数据源支持 Tushare、AKShare；Embedding 支持 OpenAI-compatible、DashScope、Jina；Rerank 支持 Jina、Cohere。未匹配 URL 反显为 `Custom` 并保留用户提供的 URL。Token 仍只做加密写入，不参与持久化明文检测。
 
 用户指标视图与量化特征集是正交配置：`IndicatorViewVersion` 可以隐藏 `pb`，但 `QuantFeatureSetVersion.required_indicators` 仍可要求 `pb`，因此前端展示偏好不会改变底层全量数据同步和量化输入。
 
@@ -74,10 +76,13 @@
 | `src/margin/strategy/service.py` | 业务入口 `StrategyService`，编排创建、更新、校验、生命周期与 Prompt。 |
 | `src/margin/strategy/scope.py` | `ScopeResolver`，解析 active 配置并生成冻结 Research Scope。 |
 | `src/margin/strategy/provider_config.py` | Provider health、SSRF guard、secret-safe 结果。 |
+| `src/margin/strategy/provider_router.py` | Provider 分类与 URL 正则识别；输出安全的 `detected_label` / `router_rule_id` / Custom metadata。 |
+| `src/margin/strategy/provider_runtime.py` | 按 active Provider category 解析运行时 adapter，并只在构造 adapter 时内存解密 token。 |
 | `src/margin/core/secret_store.py` | AES-GCM 版本化 Secret Store 与脱敏。 |
 | `src/margin/api/routes/strategy.py` | FastAPI 路由，前缀 `/strategies`。 |
 | `src/margin/api/routes/strategy_config.py` | v0.2 配置路由，前缀 `/api/v1`。 |
-| `web/components/provider-settings-panel.tsx` | Provider 密钥写入、last-four 展示和真实连接测试。 |
+| `web/components/provider-settings-panel.tsx` | Provider 设置页：LLM、网页搜索、数据源、向量化模型、Rerank 五个独立配置块；URL 自动反显供应商标签，token write-only 加密写入。 |
+| `web/lib/provider-settings.ts` | 前端 Provider 分类、URL 标签识别和默认 secret name 规则。 |
 
 ---
 
@@ -507,7 +512,7 @@ PostgreSQL 实现。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `GET/POST` | `/provider-configs` | 列出安全 Provider 摘要/创建 Provider config version |
+| `GET/POST` | `/provider-configs` | 列出安全 Provider 摘要/创建 Provider config version；响应包含 provider category、detected provider label 和 Custom 标记 |
 | `PUT` | `/provider-configs/{version_id}/secret` | 加密写入 secret，仅返回 last-four metadata |
 | `POST` | `/provider-configs/{version_id}/test` | 使用冻结 config/secret 做真实只读 healthcheck |
 | `POST` | `/provider-configs/{version_id}/activate` | 激活 Provider config |

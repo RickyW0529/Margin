@@ -197,7 +197,7 @@ def start_news_refresh(
 )
 def start_agentic_news_refresh(
     request: AgenticNewsRefreshRequest,
-    _idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
     _actor_id: Annotated[str, Depends(require_local_admin)],
     service: Annotated[
         AgenticNewsAcquisitionService,
@@ -221,6 +221,7 @@ def start_agentic_news_refresh(
         decision_at=request.decision_at,
         include_near_threshold=request.include_near_threshold,
         max_workers=request.max_workers,
+        idempotency_key=idempotency_key,
     )
     return AgenticNewsRefreshResponse(
         run_id=run.run_id,

@@ -153,6 +153,49 @@ def test_list_provider_configs_returns_safe_secret_metadata(
     assert "abcdef1234567890" not in str(body)
 
 
+def test_list_provider_configs_returns_category_and_detected_label(
+    strategy_config_client: TestClient,
+) -> None:
+    """Provider list responses should include safe router metadata for UI tags."""
+    response = strategy_config_client.get("/api/v1/provider-configs")
+
+    assert response.status_code == 200
+    body = response.json()[0]
+    assert body["provider_category"] == "data_source"
+    assert body["detected_provider"] == "tushare"
+    assert body["detected_label"] == "Tushare"
+    assert body["is_custom_provider"] is False
+
+
+def test_create_provider_config_enriches_router_metadata(
+    strategy_config_client: TestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """Creating from a category URL should persist backend-derived detection metadata."""
+    response = strategy_config_client.post(
+        "/api/v1/provider-configs",
+        json={
+            "version_id": "provider-llm-deepseek",
+            "provider_name": "llm",
+            "provider_type": "llm",
+            "base_url": "https://api.deepseek.com/v1",
+            "model_name": "deepseek-chat",
+            "non_sensitive_config": {},
+            "lifecycle": "draft",
+        },
+        headers={
+            **admin_headers,
+            "Idempotency-Key": "idem-provider-create-deepseek",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["non_sensitive_config"]["provider_category"] == "llm"
+    assert body["non_sensitive_config"]["detected_provider"] == "deepseek"
+    assert body["non_sensitive_config"]["router_rule_id"] == "llm.deepseek"
+
+
 def test_list_provider_configs_works_without_secret_master_key(
     database_url: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -195,6 +238,10 @@ def test_list_provider_configs_works_without_secret_master_key(
             "lifecycle": "draft",
             "base_url": "https://api.deepseek.com",
             "model_name": "deepseek-v4-pro",
+            "provider_category": "llm",
+            "detected_provider": "deepseek",
+            "detected_label": "DeepSeek",
+            "is_custom_provider": False,
             "secret_metadata": None,
         }
     ]

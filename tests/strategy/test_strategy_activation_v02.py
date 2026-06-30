@@ -233,6 +233,41 @@ def test_cannot_activate_quant_strategy_without_calibration(
         strategy_service.activate_quant_strategy(version.version_id)
 
 
+def test_provider_activation_deprecates_prior_active_in_same_category() -> None:
+    """Activating AKShare should deactivate the prior active Tushare data source."""
+    repository = MemoryStrategyRepository()
+    repository.save_provider_config(
+        ProviderConfigVersion(
+            version_id="provider-tushare-active",
+            provider_name="tushare",
+            provider_type="market_data",
+            non_sensitive_config={"provider_category": "data_source"},
+            secret_version_id="sec-tushare",
+            lifecycle=ConfigLifecycle.ACTIVE,
+        )
+    )
+    repository.save_provider_config(
+        ProviderConfigVersion(
+            version_id="provider-akshare-review",
+            provider_name="akshare",
+            provider_type="market_data",
+            non_sensitive_config={
+                "provider_category": "data_source",
+                "secret_required": False,
+            },
+            lifecycle=ConfigLifecycle.REVIEW,
+        )
+    )
+
+    activated = repository.activate_provider_config("provider-akshare-review")
+
+    assert activated.lifecycle is ConfigLifecycle.ACTIVE
+    assert (
+        repository.get_provider_config("provider-tushare-active").lifecycle
+        is ConfigLifecycle.DEPRECATED
+    )
+
+
 def test_cannot_activate_scope_with_deprecated_reference(
     strategy_service: StrategyService,
     strategy_repository: MemoryStrategyRepository,

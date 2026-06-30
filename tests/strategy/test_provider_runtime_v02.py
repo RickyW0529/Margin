@@ -182,3 +182,77 @@ def test_runtime_factory_builds_adapter_with_config_version_lineage(
     assert runtime.adapter.descriptor.config["base_url"] == "https://api.deepseek.com"
     assert runtime.adapter.descriptor.config["model"] == "deepseek-v4-pro"
     assert "runtime-secret" not in repr(runtime)
+
+
+def test_runtime_factory_builds_llm_from_active_provider_category(
+    secret_store: SecretStore,
+) -> None:
+    """LLM runtime should resolve active DeepSeek configs by category."""
+    metadata = secret_store.create_or_replace(
+        WriteSecretCommand(
+            provider_name="deepseek",
+            secret_name="api_key",
+            secret_value="deepseek-secret",
+            actor_id="local-admin",
+            idempotency_key=f"runtime-deepseek-{uuid4().hex}",
+        )
+    )
+    repository = MemoryStrategyRepository()
+    repository.save_provider_config(
+        ProviderConfigVersion(
+            version_id="provider-deepseek-active",
+            provider_name="deepseek",
+            provider_type="llm",
+            base_url="https://api.deepseek.com/v1",
+            model_name="deepseek-chat",
+            non_sensitive_config={"provider_category": "llm"},
+            secret_version_id=metadata.version_id,
+            lifecycle=ConfigLifecycle.ACTIVE,
+        )
+    )
+
+    runtime = ProviderRuntimeFactory(
+        ProviderRuntimeResolver(repository, secret_store)
+    ).build_llm()
+
+    assert runtime.config_version_id == "provider-deepseek-active"
+    assert runtime.adapter.descriptor.config["base_url"] == "https://api.deepseek.com/v1"
+    assert runtime.adapter.descriptor.config["model"] == "deepseek-chat"
+
+
+def test_runtime_factory_builds_embedding_from_active_provider_category(
+    secret_store: SecretStore,
+) -> None:
+    """Embedding runtime should resolve active provider configs by category."""
+    metadata = secret_store.create_or_replace(
+        WriteSecretCommand(
+            provider_name="jina",
+            secret_name="api_key",
+            secret_value="jina-secret",
+            actor_id="local-admin",
+            idempotency_key=f"runtime-jina-{uuid4().hex}",
+        )
+    )
+    repository = MemoryStrategyRepository()
+    repository.save_provider_config(
+        ProviderConfigVersion(
+            version_id="provider-jina-embedding-active",
+            provider_name="jina",
+            provider_type="embedding",
+            base_url="https://api.jina.ai/v1/embeddings",
+            model_name="jina-embeddings-v3",
+            non_sensitive_config={"provider_category": "embedding", "dimension": 1024},
+            secret_version_id=metadata.version_id,
+            lifecycle=ConfigLifecycle.ACTIVE,
+        )
+    )
+
+    runtime = ProviderRuntimeFactory(
+        ProviderRuntimeResolver(repository, secret_store)
+    ).build_embedding()
+
+    assert runtime.config_version_id == "provider-jina-embedding-active"
+    assert runtime.adapter.descriptor.config["base_url"] == (
+        "https://api.jina.ai/v1/embeddings"
+    )
+    assert runtime.adapter.descriptor.config["model"] == "jina-embeddings-v3"

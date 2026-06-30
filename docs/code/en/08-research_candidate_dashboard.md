@@ -145,7 +145,8 @@ Removed public endpoints:
 | `/` | `fetchResearchCandidates`, `fetchProviderStatus`, provider configs | Research workspace home with candidate summary, latest candidate snapshot, recommended workflow, and provider status. |
 | `/research` | `fetchResearchCandidates`, `startValuationDiscoveryRefresh` | Candidate workspace; users filter candidates first, then trigger valuation discovery refreshes and inspect Provider blockers in the right rail. |
 | `/research/runs/[runId]` | `fetchResearchRunDetailV2` → `/api/v1/valuation-discovery/runs/{run_id}` | Run progress page. |
-| `/research/items/[itemId]` | `fetchResearchItemDetailV2` | Company detail page. |
+| `/research/items/[itemId]` | `fetchResearchItemDetailV2` | Company detail page with current/effective split, factor snapshot, evidence locator, and feedback form; header links to the company quant page. |
+| `/research/companies/[symbol]` | `fetchCompanyQuantProfile`, `fetchCompanyAnalysisProfile` | Company quant and analysis profile page; fetches quant result (five-factor radar, rankings, status, rejection reasons) and fourth-layer Analysis Mart (metric percentiles, finding cards) in parallel; Tabs split into Factor Radar, Analysis Metrics, Key Findings, and Rejection Reasons. |
 | `/research/universe` | Static/config data | Universe explanation. |
 | `/settings/providers` | Provider config API | Tushare, Tavily, LLM, Embedding, and Rerank key config. |
 | `/settings/scope` | Scope config API | User-visible universe and indicator scope. |

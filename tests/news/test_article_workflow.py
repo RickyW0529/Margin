@@ -115,6 +115,44 @@ def test_article_workflow_drops_repeatedly_rejected_finding() -> None:
     assert findings == ()
 
 
+def test_article_workflow_repairs_invalid_local_citation_span() -> None:
+    """LLM-approved drafts must still pass deterministic citation-span checks."""
+    workflow = ArticleWorkflow(
+        llm_service=FakeLLMService(
+            {
+                "news_article_writer": [
+                    {
+                        "key_points": ["公告披露经营情况改善。"],
+                        "cited_spans": [{"start": 99, "end": 120}],
+                        "confidence": 0.7,
+                    },
+                    {
+                        "key_points": ["公告披露经营情况改善。"],
+                        "cited_spans": [{"start": 0, "end": 10, "text": "公告披露经营情况改善"}],
+                        "confidence": 0.82,
+                    },
+                ],
+                "news_writing_review": [
+                    {"approved": True, "revision_notes": []},
+                    {"approved": True, "revision_notes": []},
+                ],
+            }
+        ),
+        max_review_rounds=2,
+    )
+
+    findings = workflow.extract_findings(
+        run_id="nar_test",
+        target=_target(),
+        events=(_event(),),
+    )
+
+    assert len(findings) == 1
+    assert findings[0].cited_spans == (
+        {"start": 0, "end": 10, "text": "公告披露经营情况改善"},
+    )
+
+
 def test_article_workflow_builds_derived_brief_from_approved_findings() -> None:
     """Briefs are derived and retain finding/source references."""
     workflow = ArticleWorkflow(

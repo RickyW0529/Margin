@@ -92,6 +92,10 @@ Repository 行为：
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `POST` | `/api/v1/valuation-discovery/refreshes` | 启动估值发现刷新，要求本地 admin、CSRF 和 `Idempotency-Key`，返回 `202` 与 `run_id`。默认未配置 service 时 fail-closed 为 `503`。 |
+| `GET` | `/api/v1/valuation-discovery/runs` | 分页列出最近的 valuation discovery refresh run。 |
+| `GET` | `/api/v1/valuation-discovery/runs/{run_id}` | 查询单个 refresh run 的状态与各步骤。 |
+| `GET` | `/api/v1/valuation-discovery/companies/{security_id}/quant` | 返回某证券最新的量化筛选 profile，含 5 大因子组分数、排名、筛选状态、风险标记、复核原因和原因摘要。无结果时返回 `404`。 |
+| `GET` | `/api/v1/valuation-discovery/companies/{security_id}/analysis` | 返回某证券的第四层 Analysis Mart profile，含 snapshot 头、metrics（带市场和行业百分位/排名）、findings（带 severity/confidence/evidence）和 evidence link 数量。`scope_version_id` 可选，省略时跨所有 scope 取最新。 |
 
 ## Smoke
 

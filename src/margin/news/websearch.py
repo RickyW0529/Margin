@@ -329,7 +329,18 @@ class SearchResultQualityPolicy:
             scored.append((score, index, result))
 
         scored.sort(key=lambda item: (-item[0], item[1]))
-        return tuple(result for _, _, result in scored[:max_results])
+        return tuple(
+            self._with_policy_source_level(result)
+            for _, _, result in scored[:max_results]
+        )
+
+    def _with_policy_source_level(self, result: SearchResult) -> SearchResult:
+        """Return a result with source level derived from its domain."""
+        domain = _domain(result.url)
+        source_level = result.source_level
+        if _matches_domain(domain, self.OFFICIAL_DOMAINS):
+            source_level = SourceLevel.L1
+        return result.model_copy(update={"source_level": source_level})
 
     def _score(
         self,

@@ -46,7 +46,9 @@ The current code also implements an independent v0.2 versioned configuration bou
 - `UserStylePromptVersion` and `ToolPolicyVersionRef` freeze style and tool permissions.
 - `ResearchScopeVersion` freezes all referenced version IDs and computes a deterministic SHA-256 `scope_hash`.
 
-The lifecycle is `draft -> review -> active -> deprecated`. Repository transactions and PostgreSQL partial unique indexes enforce one active version per configuration family. Quant strategies require a calibration report before activation, and Research Scope activation rejects missing, inactive, or deprecated references.
+The lifecycle is `draft -> review -> active -> deprecated`. Repository transactions and PostgreSQL partial unique indexes enforce one active version per configuration family. Provider runtime families are additionally grouped by `llm`, `web_search`, `data_source`, `embedding`, and `rerank`, allowing one active provider per category. Quant strategies require a calibration report before activation, and Research Scope activation rejects missing, inactive, or deprecated references.
+
+Provider URLs are routed by `provider_router` within each category. LLM detection covers DeepSeek, OpenAI, OpenRouter, Qwen, Gemini, Anthropic, ModelScope, Zhipu, Ollama, VLLM, and local OpenAI-compatible endpoints. WebSearch detection covers Tavily, Exa, SerpAPI, and Bing; data sources cover Tushare and AKShare; embedding covers OpenAI-compatible, DashScope, and Jina; rerank covers Jina and Cohere. Unmatched URLs are reflected as `Custom` and retain the user-supplied URL. Tokens remain write-only encrypted secrets and are not persisted as plaintext detection inputs.
 
 `IndicatorViewVersion` and `QuantFeatureSetVersion` are intentionally orthogonal: hiding `pb` in the UI does not remove `pb` from required quant inputs or the full underlying data layer.
 
@@ -77,10 +79,13 @@ The lifecycle is `draft -> review -> active -> deprecated`. Repository transacti
 | `src/margin/strategy/service.py` | High-level service orchestrating creation, validation, and lifecycle. |
 | `src/margin/strategy/scope.py` | Resolves active config versions into a frozen Research Scope. |
 | `src/margin/strategy/provider_config.py` | Provider health checks, SSRF guard, and safe health results. |
+| `src/margin/strategy/provider_router.py` | Provider category routing and URL-regex detection for safe `detected_label`, `router_rule_id`, and Custom metadata. |
+| `src/margin/strategy/provider_runtime.py` | Resolves active providers by category and decrypts tokens only at adapter construction time. |
 | `src/margin/core/secret_store.py` | AES-GCM versioned Secret Store and redaction. |
 | `src/margin/api/routes/strategy.py` | FastAPI routes for strategy management. |
 | `src/margin/api/routes/strategy_config.py` | v0.2 configuration API under `/api/v1`. |
-| `web/components/provider-settings-panel.tsx` | Write-only provider secret settings and real connection tests. |
+| `web/components/provider-settings-panel.tsx` | Provider Settings UI split into LLM, WebSearch, Data Source, Embedding, and Rerank blocks with URL-detected labels and write-only token storage. |
+| `web/lib/provider-settings.ts` | Frontend provider category definitions, URL label detection, and default secret-name rules. |
 
 ## Domain Models
 
@@ -516,7 +521,7 @@ All routes are defined in `src/margin/api/routes/strategy.py` under the `/strate
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET/POST` | `/api/v1/provider-configs` | List safe provider summaries/create provider versions |
+| `GET/POST` | `/api/v1/provider-configs` | List safe provider summaries/create provider versions with category, detected provider label, and Custom metadata |
 | `PUT` | `/api/v1/provider-configs/{id}/secret` | Encrypt a secret and return last-four metadata only |
 | `POST` | `/api/v1/provider-configs/{id}/test` | Run a real read-only health check |
 | `POST` | `/api/v1/provider-configs/{id}/activate` | Activate a provider config |

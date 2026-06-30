@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from threading import Barrier, BrokenBarrierError
 from types import SimpleNamespace
 
 import pytest
@@ -125,6 +126,100 @@ def test_agentic_acquisition_waits_when_websearch_budget_is_exceeded(
     assert news_repository.list_news_search_plans(result.run_id)
 
 
+def test_agentic_acquisition_is_idempotent_for_same_key(
+    news_repository: NewsRepository,
+) -> None:
+    """Repeating the same idempotency key should return the existing run."""
+    target = _target()
+    websearch = FakeWebSearch(news_repository)
+    service = AgenticNewsAcquisitionService(
+        repository=news_repository,
+        target_repository=FakeTargetRepository((target,)),
+        keyword_workflow=FakeKeywordWorkflow(),
+        websearch_service=websearch,
+        article_workflow=FakeArticleWorkflow(),
+    )
+
+    first = service.run_for_quant_run(
+        scope_version_id="scope_v1",
+        quant_run_id="qr_test",
+        decision_at=target.decision_at,
+        idempotency_key="same-request",
+    )
+    second = service.run_for_quant_run(
+        scope_version_id="scope_v1",
+        quant_run_id="qr_test",
+        decision_at=target.decision_at,
+        idempotency_key="same-request",
+    )
+
+    assert second.run_id == first.run_id
+    assert websearch.calls == ["平安银行 000001.SZ 公告"]
+
+
+def test_agentic_acquisition_uses_max_workers_for_targets(
+    news_repository: NewsRepository,
+) -> None:
+    """Multiple targets should be processed concurrently when max_workers allows it."""
+    targets = (
+        _target(security_id="000001.SZ", name="平安银行"),
+        _target(security_id="000002.SZ", name="万科A"),
+    )
+    websearch = BarrierWebSearch(parties=2)
+    service = AgenticNewsAcquisitionService(
+        repository=news_repository,
+        target_repository=FakeTargetRepository(targets),
+        keyword_workflow=TargetKeywordWorkflow(),
+        websearch_service=websearch,
+        article_workflow=EmptyArticleWorkflow(),
+    )
+
+    result = service.run_for_quant_run(
+        scope_version_id="scope_v1",
+        quant_run_id="qr_parallel",
+        decision_at=targets[0].decision_at,
+        max_workers=2,
+    )
+
+    assert result.status == NewsAgentRunStatus.COMPLETED
+    assert sorted(websearch.calls) == [
+        "万科A 000002.SZ 公告",
+        "平安银行 000001.SZ 公告",
+    ]
+
+
+def test_agentic_acquisition_persists_failed_target_task(
+    news_repository: NewsRepository,
+) -> None:
+    """Target failures should include security-level task audit details."""
+    targets = (
+        _target(security_id="000001.SZ", name="平安银行"),
+        _target(security_id="000002.SZ", name="万科A"),
+    )
+    service = AgenticNewsAcquisitionService(
+        repository=news_repository,
+        target_repository=FakeTargetRepository(targets),
+        keyword_workflow=TargetKeywordWorkflow(),
+        websearch_service=FailingWebSearch(fail_query="万科A 000002.SZ 公告"),
+        article_workflow=EmptyArticleWorkflow(),
+    )
+
+    result = service.run_for_quant_run(
+        scope_version_id="scope_v1",
+        quant_run_id="qr_fail",
+        decision_at=targets[0].decision_at,
+    )
+
+    tasks = news_repository.list_news_agent_tasks(result.run_id)
+    failed = [task for task in tasks if task.status.value == "failed_final"]
+
+    assert result.status == NewsAgentRunStatus.PARTIAL
+    assert len(failed) == 1
+    assert failed[0].security_id == "000002.SZ"
+    assert failed[0].task_type == "target_pipeline"
+    assert failed[0].error_code == "RuntimeError"
+
+
 class FakeTargetRepository:
     """Fake quant target repository."""
 
@@ -153,6 +248,23 @@ class FakeKeywordWorkflow:
             symbol=target.symbol,
             name=target.name,
             queries=("平安银行 000001.SZ 公告",),
+            review_status="approved",
+            fallback_used=False,
+        )
+
+
+class TargetKeywordWorkflow:
+    """Keyword workflow that emits one target-specific query."""
+
+    def build_plan(self, *, run_id: str, target: NewsTarget) -> NewsSearchPlan:
+        """Return one query using the target name and symbol."""
+        return NewsSearchPlan(
+            plan_id=f"nsp_{target.security_id}",
+            run_id=run_id,
+            security_id=target.security_id,
+            symbol=target.symbol,
+            name=target.name,
+            queries=(f"{target.name} {target.symbol} 公告",),
             review_status="approved",
             fallback_used=False,
         )
@@ -193,6 +305,48 @@ class FakeWebSearch:
         )
         self._repository.add_document_event(event, publishable=True)
         return SimpleNamespace(query_id="sq_agentic"), [event]
+
+
+class BarrierWebSearch:
+    """Fake WebSearch that fails under serial execution and succeeds in parallel."""
+
+    def __init__(self, parties: int) -> None:
+        """Initialize the barrier fake."""
+        self._barrier = Barrier(parties, timeout=1.0)
+        self.calls: list[str] = []
+
+    def search_and_acquire(
+        self,
+        query: str,
+        max_results: int = 10,
+    ) -> tuple[SimpleNamespace, list[object]]:
+        """Wait for the peer target before returning no events."""
+        del max_results
+        self.calls.append(query)
+        try:
+            self._barrier.wait()
+        except BrokenBarrierError as exc:
+            raise RuntimeError("target was not processed concurrently") from exc
+        return SimpleNamespace(query_id=f"sq_{len(self.calls)}"), []
+
+
+class FailingWebSearch:
+    """Fake WebSearch that fails for one query."""
+
+    def __init__(self, *, fail_query: str) -> None:
+        """Initialize with the query that should fail."""
+        self._fail_query = fail_query
+
+    def search_and_acquire(
+        self,
+        query: str,
+        max_results: int = 10,
+    ) -> tuple[SimpleNamespace, list[object]]:
+        """Raise for one query and return no events for others."""
+        del max_results
+        if query == self._fail_query:
+            raise RuntimeError("download failed")
+        return SimpleNamespace(query_id="sq_ok"), []
 
 
 class BudgetExceededWebSearch:
@@ -260,14 +414,44 @@ class FakeArticleWorkflow:
         )
 
 
-def _target() -> NewsTarget:
+class EmptyArticleWorkflow:
+    """Article workflow that returns no findings."""
+
+    def extract_findings(
+        self,
+        *,
+        run_id: str,
+        target: NewsTarget,
+        events: tuple[object, ...],
+    ) -> tuple[NewsArticleFinding, ...]:
+        """Return no findings."""
+        del run_id, target, events
+        return ()
+
+    def build_brief(
+        self,
+        *,
+        run_id: str,
+        target: NewsTarget,
+        findings: tuple[NewsArticleFinding, ...],
+    ) -> None:
+        """Return no brief."""
+        del run_id, target, findings
+        return None
+
+
+def _target(
+    *,
+    security_id: str = "000001.SZ",
+    name: str = "平安银行",
+) -> NewsTarget:
     """Return one PASS target."""
     return NewsTarget(
         scope_version_id="scope_v1",
         quant_run_id="qr_test",
-        security_id="000001.SZ",
-        symbol="000001.SZ",
-        name="平安银行",
+        security_id=security_id,
+        symbol=security_id,
+        name=name,
         trigger_type=TargetTriggerType.QUANT_PASS,
         decision_at=datetime(2026, 6, 29, tzinfo=UTC),
         priority=100,

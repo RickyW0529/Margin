@@ -155,7 +155,8 @@
 | `/` | `fetchResearchCandidates`、`fetchProviderStatus`、provider configs | 研究工作台首页；展示候选摘要、最新候选快照、推荐操作顺序和 Provider 状态。 |
 | `/research` | `fetchResearchCandidates`、`startValuationDiscoveryRefresh` | 研究候选工作台；用户先筛选候选，再在右侧触发 valuation discovery refresh 并查看 Provider blocker。 |
 | `/research/runs/[runId]` | `fetchResearchRunDetailV2` → `/api/v1/valuation-discovery/runs/{run_id}` | 运行进度页，展示 target count、completed、pending、failed、wait state、trace。 |
-| `/research/items/[itemId]` | `fetchResearchItemDetailV2` | 公司详情页，展示 current/effective、factor snapshot、证据 locator、反馈表单。 |
+| `/research/items/[itemId]` | `fetchResearchItemDetailV2` | 公司详情页，展示 current/effective、factor snapshot、证据 locator、反馈表单；顶部含"查看量化指标"链接到公司量化页。 |
+| `/research/companies/[symbol]` | `fetchCompanyQuantProfile`、`fetchCompanyAnalysisProfile` | 公司量化与分析 profile 页；并行拉取量化结果（5 因子雷达图、排名、状态、淘汰原因）和第四层 Analysis Mart（metrics 百分位、findings 卡片）；Tabs 拆「因子雷达」「分析指标」「关键发现」「筛选原因」四栏。 |
 | `/research/universe` | 静态/配置说明 | 展示沪深300、中证500、全 A 等公司池配置逻辑。 |
 | `/settings/providers` | provider config API | 配置 Tushare、Tavily、LLM、Embedding、Rerank 等密钥。 |
 | `/settings/scope` | scope config API | 配置用户可见公司池与指标视图。 |

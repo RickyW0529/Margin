@@ -56,6 +56,7 @@ def test_agentic_news_refresh_starts_from_quant_run(
         "decision_at": datetime(2026, 6, 29, tzinfo=UTC),
         "include_near_threshold": False,
         "max_workers": 2,
+        "idempotency_key": "agentic-news-test",
     }
 
 
@@ -114,6 +115,7 @@ class FakeAgenticNewsService:
         decision_at: datetime,
         include_near_threshold: bool = False,
         max_workers: int = 4,
+        idempotency_key: str | None = None,
     ) -> NewsAgentRun:
         """Capture the request and return a completed run.
 
@@ -133,6 +135,7 @@ class FakeAgenticNewsService:
             "decision_at": decision_at,
             "include_near_threshold": include_near_threshold,
             "max_workers": max_workers,
+            "idempotency_key": idempotency_key,
         }
         return NewsAgentRun(
             run_id="nar_api",

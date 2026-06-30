@@ -29,7 +29,7 @@ It implements the acquisition, web search, deduplication, and source-leveling bo
 | Incremental discovery | Discover URLs/API records from exchange announcement connectors and resume safely using persisted cursors. |
 | v0.2 target queue | Persist the complete daily quant-selected research target set before external calls; batch size limits throughput only, not company coverage. |
 | v0.2 refresh runs | Track target completeness, priority, claim, retry/backoff, partial/final failures, and reconciliation in `news_refresh_runs` / `news_refresh_targets`. |
-| v0.3 agentic news acquisition | Load quant PASS targets, backfill company name/industry from the company pool, generate/review report-oriented search keywords, run controlled WebSearch, extract reviewed findings, and build derived briefs. Keywords prioritize annual reports, quarterly reports, earnings forecasts/flash reports, earnings briefings, official announcements, and authoritative text news; market-price, quote, rating, forum, and technical-analysis queries are rejected. |
+| v0.3 agentic news acquisition | Load quant PASS targets, backfill company name/industry from the company pool, generate/review report-oriented search keywords, run controlled WebSearch, extract reviewed findings, and build derived briefs. Keywords prioritize annual reports, quarterly reports, earnings forecasts/flash reports, earnings briefings, official announcements, and authoritative text news; market-price, quote, rating, forum, and technical-analysis queries are rejected. The service supports API idempotency keys, bounded target-level parallelism, and target-level `NewsAgentTask` audit rows. |
 | Download & snapshot | Download original content through connectors and persist immutable raw snapshots with content hashes. |
 | Format detection & parsing | Detect PDF, HTML, DOCX, XLSX, JSON, CSV, XML, and text. Verified WebSearch originals are normalized through the shared `margin.documents` pipeline: Docling conversion, Review, Repair, Verifier, and Slimming, producing final Markdown, JSON, and RAG chunks. RAG chunking hard-splits single oversized paragraphs/table blocks under `max_chunk_chars` before embedding. PDF conversion enables RapidOCR by default and pins the OCR backend to `onnxruntime`; non-multimodal verifiers automatically skip screenshot/page-image verification. |
 | Security mapping | Extract security symbols from titles and body text using exchange code patterns. |
@@ -67,8 +67,8 @@ It implements the acquisition, web search, deduplication, and source-leveling bo
 | `src/margin/news/quant_targets.py` | Scoped quant-result reader for news targets; defaults to PASS only, optionally includes NEAR_THRESHOLD, and backfills missing name/industry from latest included company-pool members. |
 | `src/margin/news/agentic_prompts.py` | Structured prompts and JSON schemas for keyword writing/review, article extraction/review, and brief generation; keyword prompts forbid market/trading queries. |
 | `src/margin/news/keyword_workflow.py` | Keyword writer/reviewer loop with a local guardrail for wrong-company, missing ticker/name, missing event terms, and trading/market terms; falls back to deterministic templates. |
-| `src/margin/news/article_workflow.py` | Article finding extraction/review and derived security brief generation. |
-| `src/margin/news/agentic_acquisition.py` | Agentic orchestration: target loading, query plan persistence, controlled WebSearch, finding/brief persistence, and provider-waiting status handling. |
+| `src/margin/news/article_workflow.py` | Article finding extraction/review and derived security brief generation; locally validates `cited_spans` even after LLM review approval. |
+| `src/margin/news/agentic_acquisition.py` | Agentic orchestration: target loading, query plan persistence, controlled WebSearch, finding/brief persistence, idempotent runs, bounded target parallelism, failure audit, and provider-waiting status handling. |
 | `src/margin/news/refresh_service.py` | v0.2 target-driven WebSearch orchestration: persist all targets first, then call providers; rate limits move runs to waiting state. |
 | `src/margin/news/official_sync.py` | v0.2 official filing sync: source-level cursors advance only after durable `DocumentEvent` persistence. |
 | `src/margin/news/materiality.py` | Deterministic materiality scoring for penalties, trading-status changes, major contracts, litigation, and control changes. |
@@ -83,7 +83,7 @@ It implements the acquisition, web search, deduplication, and source-leveling bo
 | `src/margin/news/parsed.py` | Block-oriented parsed document models and `StructuredDocumentParser` for HTML, CSV, JSON, PDF, and text. |
 | `src/margin/news/providers/__init__.py` | Provider package docstring; third-party adapters live under this package. |
 | `src/margin/news/providers/tavily.py` | `TavilySearchAdapter` plus token-safe `TavilyProviderError` and stable error codes. |
-| `src/margin/news/repository.py` | `NewsRepository` and domain record models for PostgreSQL-backed persistence. |
+| `src/margin/news/repository.py` | `NewsRepository` and domain record models for PostgreSQL-backed persistence, including v0.3 agentic run/task/plan/finding/brief records. |
 | `src/margin/news/robots.py` | `RobotsChecker` and `RobotsRules` for robots.txt longest-prefix Allow/Disallow compliance. |
 | `src/margin/news/scheduler.py` | `IncrementalAcquisitionRunner` and `AcquisitionRunResult` for restart-safe incremental acquisition. |
 | `src/margin/news/websearch.py` | Web search models, `WebSearchProvider`, `ComplianceChecker`, `OriginalContentVerifier`, and `WebSearchService`. |
@@ -364,7 +364,7 @@ A single web search result.
 | `url` | `str` | Result URL. |
 | `title` | `str` | Result title. |
 | `snippet` | `str` | Result snippet or abstract. |
-| `source_level` | `SourceLevel` | Assigned source level; defaults to `L4`. |
+| `source_level` | `SourceLevel` | Assigned source level; defaults to `L4`; official exchange, cninfo, and regulator domains are promoted to `L1` by the WebSearch quality policy. |
 | `has_accessible_original` | `bool` | Whether accessible original content is available. |
 | `content_hash` | `str \| None` | Hash of the original content snapshot. |
 | `snapshot_id` | `str \| None` | Identifier of the downloaded snapshot. |
@@ -441,7 +441,7 @@ Integration service combining provider, compliance checks, and original content 
 | --- | --- | --- |
 | `__init__` | `(provider: WebSearchProvider, registry: SourceRegistry, snapshot_store: SnapshotStore, repository: NewsRepository \| None = None, quality_policy: SearchResultQualityPolicy \| None = None, markdown_converter: Any \| None = None) -> None` | Initialize the service with optional result-quality and Markdown-conversion overrides. |
 | `search` | `(query: str, max_results: int = 10) -> SearchQueryRecord` | Execute a search and return the query record. |
-| `search_and_acquire` | `(query: str, max_results: int = 10, source_level: SourceLevel = SourceLevel.L4, searched_at: datetime \| None = None) -> tuple[SearchQueryRecord, list[DocumentEvent]]` | Search, filter/rank official report and authoritative text-news results, verify originals, convert them to Markdown, persist audit records, and return document events. |
+| `search_and_acquire` | `(query: str, max_results: int = 10, source_level: SourceLevel = SourceLevel.L4, searched_at: datetime \| None = None) -> tuple[SearchQueryRecord, list[DocumentEvent]]` | Search, filter/rank official report and authoritative text-news results, promote official domains to `L1`, verify originals, convert them to Markdown, persist audit records, and return document events. |
 
 ### `TavilySearchAdapter`
 
@@ -625,6 +625,11 @@ SQLAlchemy-backed persistence boundary.
 | `get_dedup_record` | `(duplicate_event_id: str) -> DedupRecord \| None` | Fetch a persisted duplicate decision. |
 | `add_repost_edge` | `(*, parent_event_id: str, child_event_id: str, reason: str) -> None` | Persist a repost edge idempotently. |
 | `list_repost_chain` | `(parent_event_id: str) -> list[RepostEdge]` | List direct repost edges for a canonical event. |
+| `add_news_agent_run` / `get_news_agent_run` | `(NewsAgentRun)` / `(run_id)` | Persist and read a v0.3 agentic acquisition run. |
+| `add_news_agent_task` / `list_news_agent_tasks` | `(NewsAgentTask)` / `(run_id)` | Persist and read agentic task audit rows, including target pipeline running/approved/failed_final states. |
+| `add_news_search_plan` / `list_news_search_plans` | `(NewsSearchPlan)` / `(run_id)` | Persist and read reviewed or fallback query plans. |
+| `add_news_article_finding` / `list_news_article_findings` | `(NewsArticleFinding)` / `(run_id, security_id=None)` | Persist and read article findings. |
+| `add_news_security_brief` / `list_news_security_briefs` | `(NewsSecurityBrief)` / `(run_id)` | Persist and read derived security briefs. |
 
 ### Row Mapping Helpers
 
@@ -825,15 +830,18 @@ SQLAlchemyQuantNewsTargetRepository.list_targets()
         +-- company_pool_members backfill for name / industry
         v
 AgenticNewsAcquisitionService.run_for_quant_run()
+        +-- idempotency key -> stable run_id / existing run reuse
+        +-- bounded target parallelism controlled by max_workers
         +-- KeywordWorkflow: writer -> review -> local guardrail -> fallback if needed
         +-- WebSearchService.search_and_acquire()
         |       +-- official/report-oriented result filtering
         |       +-- original-content access validation
         |       +-- Docling Markdown conversion
         +-- ArticleWorkflow.extract_findings()
+        |       +-- writer -> writing review -> local cited_span validation
         +-- ArticleWorkflow.build_brief()
         v
-news_search_plans / news_article_findings / news_security_briefs
+news_agent_tasks / news_search_plans / news_article_findings / news_security_briefs
 ```
 
 The agentic layer never writes vector tables directly. Raw documents still enter downstream indexing through `document_outbox(topic=vector_index)`. Production provider construction prefers active strategy providers; local smoke runs may fall back to direct `.env` LLM/WebSearch providers when the secret store is absent. Agentic news is not a LangGraph run, so its LLM service does not use the SQL audit repository with the `ai_graph_runs` foreign key; news-specific prompt/response hashes are persisted on news run/plan/finding records. Stable WebSearch budget, paygo, or auth errors move the run to `waiting_provider` with token-safe error metadata.

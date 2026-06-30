@@ -22,6 +22,7 @@ from margin.strategy.models import (
     UserStylePromptVersion,
 )
 from margin.strategy.prompt import PromptLayerBuilder
+from margin.strategy.provider_router import enrich_provider_config_metadata
 from margin.strategy.repository import MemoryStrategyRepository, StrategyRepository
 from margin.strategy.sandbox import StrategySandbox
 from margin.strategy.templates import BUILTIN_TEMPLATES, list_templates
@@ -661,20 +662,31 @@ class StrategyService:
         )
         if replay is not None:
             return replay
-        self._repository.save_provider_config(version)
+        enriched = version.model_copy(
+            update={
+                "non_sensitive_config": enrich_provider_config_metadata(version),
+            }
+        )
+        self._repository.save_provider_config(enriched)
         self._record_config_mutation(
             actor_id=actor_id,
             action="provider_config.create",
             idempotency_key=idempotency_key,
             resource_type="provider_config",
-            resource_version_id=version.version_id,
+            resource_version_id=enriched.version_id,
             details={
-                "provider_name": version.provider_name,
-                "provider_type": version.provider_type,
-                "lifecycle": version.lifecycle.value,
+                "provider_name": enriched.provider_name,
+                "provider_type": enriched.provider_type,
+                "provider_category": enriched.non_sensitive_config.get(
+                    "provider_category"
+                ),
+                "detected_provider": enriched.non_sensitive_config.get(
+                    "detected_provider"
+                ),
+                "lifecycle": enriched.lifecycle.value,
             },
         )
-        return version
+        return enriched
 
     def list_provider_configs(self, owner_id: str) -> list[ProviderConfigVersion]:
         """List provider configuration versions for an owner."""

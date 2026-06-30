@@ -27,7 +27,7 @@
 - **发现与增量采集**：通过交易所公告连接器发现 URL，使用 `IncrementalAcquisitionRunner` 进行断点续传式采集。
 - **v0.2 目标队列**：`NewsTargetQueue` 在外部调用前完整持久化每日量化研究目标；批次大小只限制吞吐，不裁剪公司覆盖范围。
 - **v0.2 Refresh Run**：`news_refresh_runs` / `news_refresh_targets` 记录 target 完整性、优先级、claim、retry/backoff、partial/final 失败和对账状态。
-- **v0.3 Agentic News Acquisition**：从量化 PASS 结果读取股票目标，并从公司池补齐公司名和行业上下文；使用 LLM 生成/审核搜索关键词、提炼/审核文章 finding、汇总 security brief；关键词聚焦年报、季报、业绩预告/快报、业绩说明会、公告和权威文字新闻，禁止行情、股价、走势、报价、目标价、评级、股吧和技术分析类查询；真实搜索、下载、合规、快照和 DocumentEvent 仍走受控 WebSearch 链路。
+- **v0.3 Agentic News Acquisition**：从量化 PASS 结果读取股票目标，并从公司池补齐公司名和行业上下文；使用 LLM 生成/审核搜索关键词、提炼/审核文章 finding、汇总 security brief；关键词聚焦年报、季报、业绩预告/快报、业绩说明会、公告和权威文字新闻，禁止行情、股价、走势、报价、目标价、评级、股吧和技术分析类查询；真实搜索、下载、合规、快照和 DocumentEvent 仍走受控 WebSearch 链路；支持 API 幂等键、按 target 的有界并发处理和 target 级 `NewsAgentTask` 审计。
 - **下载与快照**：使用 `Downloader` + `SnapshotStore` 下载原始内容并保存不可变快照。
 - **格式检测与解析**：支持 HTML、PDF、DOCX、XLSX、JSON、CSV、XML、纯文本；WebSearch 原文验证后通过共享 `margin.documents` 流水线统一转为 Markdown，再执行 Review / Repair / Verifier / Slimming，输出 final Markdown、JSON 和 RAG chunks；RAG chunking 会对单个超长段落/表格 block 做二次切分，保证不超过 `max_chunk_chars` 后再进入 embedding；PDF 默认启用 RapidOCR，OCR 后端固定为 `onnxruntime`；非多模态 verifier 自动跳过截图校验。
 - **证券映射**：从标题与正文中提取标准化证券代码。
@@ -51,8 +51,8 @@
 | `src/margin/news/quant_targets.py` | v0.3 量化结果到 news target 的 scoped 读取器；默认只返回 PASS，显式开关包含 NEAR_THRESHOLD；当量化 `factor_details` 缺 name/industry 时回查最新 included company-pool member。 |
 | `src/margin/news/agentic_prompts.py` | v0.3 关键词、文章提炼、写作 review 和 brief 的结构化 prompt 与 JSON schema；关键词 prompt 明确禁止股价走势、目标价、评级、研报等交易/行情查询。 |
 | `src/margin/news/keyword_workflow.py` | v0.3 关键词 writer/review 两轮循环；LLM review 后还有本地 guardrail，拦截错公司、缺 ticker、缺事件词和交易/行情词；失败后回退 `QueryTemplateFactory`。 |
-| `src/margin/news/article_workflow.py` | v0.3 文章 finding 提炼/review 和 derived security brief 生成。 |
-| `src/margin/news/agentic_acquisition.py` | v0.3 agentic 编排：target 读取、query plan、受控 WebSearch、finding/brief 持久化。 |
+| `src/margin/news/article_workflow.py` | v0.3 文章 finding 提炼/review 和 derived security brief 生成；LLM review 通过后仍执行本地 `cited_spans` 区间校验。 |
+| `src/margin/news/agentic_acquisition.py` | v0.3 agentic 编排：target 读取、query plan、受控 WebSearch、finding/brief 持久化、幂等 run、按 target 有界并发和失败审计。 |
 | `src/margin/news/refresh_service.py` | v0.2 target-driven WebSearch 编排：先持久化全部 target，再调用 provider，限流时 run 进入 waiting。 |
 | `src/margin/news/official_sync.py` | v0.2 官方公告同步：全局 cursor 增量，只有 DocumentEvent 落库后才推进 cursor。 |
 | `src/margin/news/materiality.py` | v0.2 确定性文档重要度评分：监管处罚、停复牌、重大合同、诉讼、控制权变化等规则。 |
@@ -67,7 +67,7 @@
 | `src/margin/news/providers/__init__.py` | 第三方 provider 包入口（当前为空）。 |
 | `src/margin/news/providers/tavily.py` | Tavily 搜索适配器：`TavilySearchAdapter`、token-safe `TavilyProviderError` 与稳定错误码。 |
 | `src/margin/news/dedup.py` | 去重与评分：`Deduplicator`、`NewsProcessor`、`PersistentNewsProcessor`、`QualityScorer`、SimHash 工具。 |
-| `src/margin/news/repository.py` | PostgreSQL 仓库：`NewsRepository`、`OutboxMessage`、`DedupRecord`、`RepostEdge` 及行映射函数。 |
+| `src/margin/news/repository.py` | PostgreSQL 仓库：`NewsRepository`、`OutboxMessage`、`DedupRecord`、`RepostEdge`、v0.3 agentic run/task/plan/finding/brief 及行映射函数。 |
 | `src/margin/news/db_models.py` | SQLAlchemy 行模型：快照、事件、Outbox、搜索记录、去重记录、转载边、游标、v0.2 refresh run/target、文档证券关系、materiality、context bundle。 |
 | `src/margin/news/outbox.py` | Outbox 发布者/消费者：`DocumentEventPublisher`、`OutboxConsumer`。 |
 | `src/margin/news/parsed.py` | 结构化解析：`ParsedBlock`、`ParsedDocument`、`StructuredDocumentParser`。 |
@@ -213,7 +213,7 @@
 | `url` | `str` | 结果 URL。 |
 | `title` | `str` | 结果标题。 |
 | `snippet` | `str` | 摘要。 |
-| `source_level` | `SourceLevel` | 默认 `L4`。 |
+| `source_level` | `SourceLevel` | 默认 `L4`；WebSearch 质量策略会把交易所、巨潮、监管等官方域名提升为 `L1`。 |
 | `has_accessible_original` | `bool` | 是否有可访问原内容。 |
 | `content_hash` | `str \| None` | 原内容快照哈希。 |
 | `snapshot_id` | `str \| None` | 快照 ID。 |
@@ -284,8 +284,8 @@
 
 | 模型 | 说明 |
 | --- | --- |
-| `NewsAgentRun` | 一次 agentic news acquisition run，记录 scope、quant run、decision_at、状态、target 数和配置 hash。 |
-| `NewsAgentTask` | 单个 LLM/deterministic 节点任务审计，保存 prompt/schema/request/response hash 和错误信息。 |
+| `NewsAgentRun` | 一次 agentic news acquisition run，记录 scope、quant run、decision_at、状态、target 数和配置 hash；API 幂等键会生成稳定 run_id 并复用已存在 run。 |
+| `NewsAgentTask` | 单个 LLM/deterministic/target pipeline 节点任务审计，保存 prompt/schema/request/response hash、target payload 和错误信息。 |
 | `NewsSearchPlan` | 每只股票审核后的搜索计划；`fallback_used=True` 表示 LLM review 未通过后使用 deterministic 模板。 |
 | `NewsArticleFinding` | 从已落库 DocumentEvent 提炼出的事件级 finding，必须反链 `event_id` 和 `source_url`。 |
 | `NewsSecurityBrief` | 每只股票的 derived news brief，反链 finding 与 source event；默认 `trust_level=derived_low_trust`。 |
@@ -505,7 +505,7 @@ WebSearch 合规边界检查。
 | --- | --- | --- |
 | `__init__` | `(provider: WebSearchProvider, registry: SourceRegistry, snapshot_store: SnapshotStore, repository: NewsRepository \| None = None, quality_policy: SearchResultQualityPolicy \| None = None, markdown_converter: Any \| None = None, normalization_pipeline: Any \| None = None)` | 注入各组件，可覆盖搜索结果质量策略、Markdown 转换器或完整文档标准化流水线。 |
 | `search` | `(query: str, max_results: int = 10) -> SearchQueryRecord` | 直接调用 provider 搜索。 |
-| `search_and_acquire` | `(query: str, max_results: int = 10, source_level: SourceLevel = SourceLevel.L4, searched_at: datetime \| None = None) -> tuple[SearchQueryRecord, list[DocumentEvent]]` | 搜索 -> 权威/官方/报告类结果过滤与重排 -> 持久化查询记录 -> 原内容验证与 Markdown 转换 -> 为可访问结果生成 `DocumentEvent` -> 用验证后结果更新查询记录再持久化。 |
+| `search_and_acquire` | `(query: str, max_results: int = 10, source_level: SourceLevel = SourceLevel.L4, searched_at: datetime \| None = None) -> tuple[SearchQueryRecord, list[DocumentEvent]]` | 搜索 -> 权威/官方/报告类结果过滤与重排 -> 官方域名来源等级提升为 `L1` -> 持久化查询记录 -> 原内容验证与 Markdown 转换 -> 为可访问结果生成 `DocumentEvent` -> 用验证后结果更新查询记录再持久化。 |
 
 ### 5.5 TavilySearchAdapter
 
@@ -630,6 +630,7 @@ SQLAlchemy 持久化边界，所有公共方法自行管理会话生命周期。
 | `add_repost_edge` | `(*, parent_event_id: str, child_event_id: str, reason: str) -> None` | 写入转载边。 |
 | `list_repost_chain` | `(parent_event_id: str) -> list[RepostEdge]` | 列出某父事件下的直接转载边。 |
 | `add_news_agent_run` / `get_news_agent_run` | `(NewsAgentRun)` / `(run_id)` | 持久化和读取 v0.3 agentic run。 |
+| `add_news_agent_task` / `list_news_agent_tasks` | `(NewsAgentTask)` / `(run_id)` | 持久化和读取 v0.3 agentic 任务审计，包括 target pipeline 的 running/approved/failed_final 状态。 |
 | `add_news_search_plan` / `list_news_search_plans` | `(NewsSearchPlan)` / `(run_id)` | 持久化和读取 reviewed/fallback query plan。 |
 | `add_news_article_finding` / `list_news_article_findings` | `(NewsArticleFinding)` / `(run_id, security_id=None)` | 持久化和读取文章 finding。 |
 | `add_news_security_brief` / `list_news_security_briefs` | `(NewsSecurityBrief)` / `(run_id)` | 持久化和读取 derived security brief。 |
@@ -813,17 +814,19 @@ SQLAlchemyQuantNewsTargetRepository.list_targets(PASS only by default)
         v
 AgenticNewsAcquisitionService.run_for_quant_run()
         |
+        +-- idempotency key -> stable run_id / existing run reuse
+        +-- bounded target parallelism controlled by max_workers
         +-- KeywordWorkflow: writer -> review -> local guardrail -> fallback if needed
         +-- WebSearchService.search_and_acquire()
         |       +-- query/result audit
         |       +-- robots/paywall/original-content checks
         |       +-- snapshot/Docling Markdown/DocumentEvent
         |       +-- document_outbox(topic=vector_index)
-        +-- ArticleWorkflow: article writer -> writing review
+        +-- ArticleWorkflow: article writer -> writing review -> local cited_span validation
         +-- ArticleWorkflow.build_brief()
         |
         v
-news_search_plans / news_article_findings / news_security_briefs
+news_agent_tasks / news_search_plans / news_article_findings / news_security_briefs
 ```
 
 Agentic 层不直接写 `chunks`、`chunk_embeddings` 或任何向量表；原文索引仍由 `04-text_indexing` 的 `IndexingRunner` 消费 `document_outbox(topic=vector_index)` 完成。LLM 不能执行自由 SQL，量化目标读取由服务端 repository 完成。

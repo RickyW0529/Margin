@@ -7,6 +7,7 @@ from typing import Generic, TypeVar
 
 from margin.core.secret_store import SecretStore, SecretValue
 from margin.strategy.models import ProviderConfigVersion
+from margin.strategy.provider_router import provider_category_for_config
 
 T = TypeVar("T")
 
@@ -60,25 +61,57 @@ class ProviderRuntimeResolver:
             raise RuntimeError(
                 f"multiple active provider configs found: {normalized_name}"
             )
-        config = matches[0]
+        return self._resolve_config(matches[0], normalized_name)
+
+    def resolve_category(self, provider_category: str) -> ResolvedProviderRuntime:
+        """Return the single active config for a provider category."""
+        normalized_category = provider_category.strip().lower()
+        matches = [
+            config
+            for config in self._repository.list_active_provider_configs(
+                self._owner_id
+            )
+            if provider_category_for_config(
+                config.provider_type,
+                config.provider_name,
+                config.non_sensitive_config,
+            )
+            == normalized_category
+        ]
+        if not matches:
+            raise LookupError(
+                f"active provider config not found: {normalized_category}"
+            )
+        if len(matches) != 1:
+            raise RuntimeError(
+                f"multiple active provider configs found: {normalized_category}"
+            )
+        return self._resolve_config(matches[0], normalized_category)
+
+    def _resolve_config(
+        self,
+        config: ProviderConfigVersion,
+        lookup_name: str,
+    ) -> ResolvedProviderRuntime:
+        """Resolve one config and its frozen secret."""
         secret_required = bool(
             config.non_sensitive_config.get("secret_required", True)
         )
         if config.secret_version_id is None:
             if secret_required:
                 raise RuntimeError(
-                    f"active provider secret not configured: {normalized_name}"
+                    f"active provider secret not configured: {lookup_name}"
                 )
             return ResolvedProviderRuntime(config=config, secret=None)
 
         metadata = self._secret_store.metadata(config.secret_version_id)
         if metadata.status != "active":
             raise RuntimeError(
-                f"active provider references inactive secret: {normalized_name}"
+                f"active provider references inactive secret: {lookup_name}"
             )
         if metadata.ref.provider_name != config.provider_name.strip().lower():
             raise RuntimeError(
-                f"provider secret reference mismatch: {normalized_name}"
+                f"provider secret reference mismatch: {lookup_name}"
             )
         return ResolvedProviderRuntime(
             config=config,
@@ -97,7 +130,7 @@ class ProviderRuntimeFactory:
         """Build an OpenAI-compatible LLM adapter."""
         from margin.research.llm import LLMProvider
 
-        runtime = self._resolver.resolve("llm")
+        runtime = self._resolver.resolve_category("llm")
         return RuntimeBoundProvider(
             adapter=LLMProvider(
                 name=runtime.config.provider_name,
@@ -112,7 +145,7 @@ class ProviderRuntimeFactory:
         """Build an OpenAI-compatible embedding adapter."""
         from margin.vector.providers.openai_embedding import OpenAIEmbeddingProvider
 
-        runtime = self._resolver.resolve("embedding")
+        runtime = self._resolver.resolve_category("embedding")
         dimension = int(
             runtime.config.non_sensitive_config.get("dimension", 1536)
         )
@@ -130,7 +163,7 @@ class ProviderRuntimeFactory:
         """Build the Tavily WebSearch adapter."""
         from margin.news.providers.tavily import TavilySearchAdapter
 
-        runtime = self._resolver.resolve("tavily")
+        runtime = self._resolver.resolve_category("web_search")
         return RuntimeBoundProvider(
             adapter=TavilySearchAdapter(
                 api_key=_required_secret(runtime),
@@ -169,7 +202,7 @@ class ProviderRuntimeFactory:
         """Build the configured HTTP rerank adapter."""
         from margin.vector.providers.rerank import HTTPRerankProvider
 
-        runtime = self._resolver.resolve("rerank")
+        runtime = self._resolver.resolve_category("rerank")
         return RuntimeBoundProvider(
             adapter=HTTPRerankProvider(
                 api_key=_required_secret(runtime),

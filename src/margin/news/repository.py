@@ -67,6 +67,7 @@ from margin.sql.news_queries import (
     delete_search_results_by_query,
     document_events_by_ids,
     materiality_score_by_event_security_version,
+    news_agent_tasks_by_run,
     news_article_findings_by_run,
     news_context_documents,
     news_search_plans_by_run,
@@ -1152,6 +1153,19 @@ class NewsRepository:
                 row.payload = task.payload
                 row.completed_at = task.completed_at
 
+    def list_news_agent_tasks(self, run_id: str) -> list[NewsAgentTask]:
+        """List agentic task audit rows for one run.
+
+        Args:
+            run_id: Identifier of the parent agentic run.
+
+        Returns:
+            Agentic task audit rows ordered by security/task/attempt.
+        """
+        with self._session_factory() as session:
+            rows = session.scalars(news_agent_tasks_by_run(run_id)).all()
+            return [_news_agent_task_from_row(row) for row in rows]
+
     def add_news_search_plan(self, plan: NewsSearchPlan) -> None:
         """Persist a reviewed security-level search plan.
 
@@ -1592,6 +1606,28 @@ def _news_agent_task_to_row(task: NewsAgentTask) -> NewsAgentTaskRow:
         payload=task.payload,
         created_at=task.created_at,
         completed_at=task.completed_at,
+    )
+
+
+def _news_agent_task_from_row(row: NewsAgentTaskRow) -> NewsAgentTask:
+    """Map an agentic task row to its domain object."""
+    return NewsAgentTask(
+        task_id=row.task_id,
+        run_id=row.run_id,
+        security_id=row.security_id,
+        task_type=row.task_type,
+        status=row.status,
+        attempt=row.attempt,
+        prompt_version=row.prompt_version,
+        prompt_hash=row.prompt_hash,
+        schema_hash=row.schema_hash,
+        request_hash=row.request_hash,
+        response_hash=row.response_hash,
+        error_code=row.error_code,
+        error_message=row.error_message,
+        payload=dict(row.payload or {}),
+        created_at=row.created_at,
+        completed_at=row.completed_at,
     )
 
 
