@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from margin.api.dependencies import (
+    get_company_profile_service,
     get_dashboard_services,
     get_news_service,
     get_optional_secret_store,
@@ -35,7 +36,10 @@ from margin.dashboard.service import DashboardServiceBundle
 from margin.news.service import NewsService
 from margin.settings import get_settings
 from margin.strategy.service import StrategyService
-from margin.valuation_discovery.service import ValuationDiscoveryService
+from margin.valuation_discovery.service import (
+    CompanyProfileService,
+    ValuationDiscoveryService,
+)
 
 
 def create_app(
@@ -45,6 +49,7 @@ def create_app(
     dashboard_services: DashboardServiceBundle | None = None,
     valuation_discovery_service: ValuationDiscoveryService | None = None,
     news_service: NewsService | None = None,
+    company_profile_service: CompanyProfileService | None = None,
 ) -> FastAPI:
     """Create and configure the Margin API application.
 
@@ -131,6 +136,10 @@ def create_app(
         )
     if news_service is not None:
         application.dependency_overrides[get_news_service] = lambda: news_service
+    if company_profile_service is not None:
+        application.dependency_overrides[get_company_profile_service] = (
+            lambda: company_profile_service
+        )
 
     return application
 

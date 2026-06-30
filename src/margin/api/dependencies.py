@@ -8,6 +8,7 @@ application instance reuses the same database engine and repository objects.
 from __future__ import annotations
 
 import hmac
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Annotated, Any
@@ -100,7 +101,7 @@ from margin.valuation_discovery.quant_adapter import (
 )
 from margin.valuation_discovery.quant_input import QuantInputSnapshotBuilder
 from margin.valuation_discovery.repository import SQLAlchemyValuationDiscoveryRepository
-from margin.valuation_discovery.service import ValuationDiscoveryService
+from margin.valuation_discovery.service import CompanyProfileService, ValuationDiscoveryService
 from margin.vector.indexing_runner import DocumentIndexingRunner
 from margin.vector.persistent_pipeline import PersistentEmbeddingPipeline
 from margin.vector.providers.openai_embedding import OpenAIEmbeddingProvider
@@ -806,6 +807,29 @@ def get_valuation_discovery_step_worker() -> ValuationDiscoveryStepWorker:
     )
 
 
+@lru_cache
+def get_company_profile_service() -> CompanyProfileService:
+    """Return a cached company profile service for quant/analysis visualization.
+
+    Builds standalone SQLAlchemy repositories sharing the same engine as the
+    valuation discovery service. Read-only: no orchestrator dependencies.
+    """
+    settings = get_settings()
+    engine = build_database_engine(settings)
+    session_factory = create_session_factory(engine)
+    quant_repository = SQLAlchemyQuantRepository(
+        session_factory,
+        cross_section_loader=build_feature_mart_cross_section_loader(
+            SQLAlchemyAnalysisMartRepository(session_factory)
+        ),
+    )
+    analysis_mart_repository = SQLAlchemyAnalysisMartRepository(session_factory)
+    return CompanyProfileService(
+        quant_repository=quant_repository,
+        analysis_mart_repository=analysis_mart_repository,
+    )
+
+
 def _build_news_refresh_adapter(
     settings: MarginSettings,
     session_factory: Any,
@@ -1087,7 +1111,42 @@ def get_dashboard_services() -> DashboardServiceBundle:
     session_factory = create_session_factory(engine)
     dashboard_repository = SQLAlchemyDashboardRepository(session_factory)
     settings = get_settings()
+    quant_profile_loader = _build_dashboard_quant_profile_loader()
     return DashboardServiceBundle.from_repositories(
         dashboard_repository=dashboard_repository,
         providers=build_provider_status_providers(settings),
+        quant_profile_loader=quant_profile_loader,
     )
+
+
+def _build_dashboard_quant_profile_loader() -> Callable[[str], dict[str, Any] | None]:
+    """Return a callable that loads a quant profile dict for a security id.
+
+    Used by the dashboard item detail to surface five-factor scores. Returns
+    None when no profile exists so the detail page degrades gracefully.
+    """
+    profile_service = get_company_profile_service()
+
+    def loader(security_id: str) -> dict[str, Any] | None:
+        profile = profile_service.get_quant_profile(security_id)
+        if profile is None:
+            return None
+        return {
+            "final_score": profile.final_score,
+            "factor_scores": [
+                {
+                    "factor_key": item.factor_key,
+                    "label": item.label,
+                    "score": item.score,
+                    "weight": item.weight,
+                }
+                for item in profile.factor_scores
+            ],
+            "rank_overall": profile.rank_overall,
+            "rank_in_industry": profile.rank_in_industry,
+            "screening_status": profile.screening_status,
+            "research_guardrail": profile.research_guardrail,
+            "reason_summary": profile.reason_summary,
+        }
+
+    return loader

@@ -48,6 +48,9 @@ class QuantRepository(Protocol):
     def list_results(self, quant_run_id: str) -> tuple[QuantResult, ...]:
         """Return persisted results for a quant run."""
 
+    def latest_result_for_security(self, security_id: str) -> QuantResult | None:
+        """Return the most recent quant result for a security, or None."""
+
 
 class MemoryQuantRepository:
     """In-memory quant repository for unit and local integration tests."""
@@ -85,6 +88,17 @@ class MemoryQuantRepository:
     def list_results(self, quant_run_id: str) -> tuple[QuantResult, ...]:
         """Return persisted results for one run."""
         return self._results.get(quant_run_id, ())
+
+    def latest_result_for_security(self, security_id: str) -> QuantResult | None:
+        """Return the most recent result for a security across all runs."""
+        latest: QuantResult | None = None
+        for results in self._results.values():
+            for result in results:
+                if result.security_id != security_id:
+                    continue
+                if latest is None or result.created_at > latest.created_at:
+                    latest = result
+        return latest
 
 
 class SQLAlchemyQuantRepository:
@@ -133,7 +147,7 @@ class SQLAlchemyQuantRepository:
         return _quant_run_from_row(row) if row is not None else None
 
     def list_results(self, quant_run_id: str) -> tuple[QuantResult, ...]:
-        """Return persisted results for one run ordered by creation time."""
+        """Return persisted results for a quant run ordered by creation time."""
         with self._session_factory() as session:
             rows = session.scalars(
                 select(QuantScreenResultRow)
@@ -141,6 +155,17 @@ class SQLAlchemyQuantRepository:
                 .order_by(QuantScreenResultRow.created_at, QuantScreenResultRow.result_id)
             ).all()
         return tuple(_quant_result_from_row(row) for row in rows)
+
+    def latest_result_for_security(self, security_id: str) -> QuantResult | None:
+        """Return the most recent persisted quant result for a security."""
+        with self._session_factory() as session:
+            row = session.scalars(
+                select(QuantScreenResultRow)
+                .where(QuantScreenResultRow.security_id == security_id)
+                .order_by(QuantScreenResultRow.created_at.desc())
+                .limit(1)
+            ).first()
+        return _quant_result_from_row(row) if row is not None else None
 
 
 def _validate_result_run_ids(

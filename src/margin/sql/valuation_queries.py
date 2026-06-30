@@ -227,17 +227,24 @@ def latest_delta_review_id_for_context(context_snapshot_id: str) -> Select:
 def latest_analysis_snapshot(
     *,
     security_id: str,
-    scope_version_id: str,
+    scope_version_id: str | None = None,
     as_of,
 ) -> Select:
-    """Return the latest Analysis Mart snapshot visible as of a time."""
+    """Return the latest Analysis Mart snapshot visible as of a time.
+
+    When ``scope_version_id`` is None, the latest snapshot across all scopes
+    is returned. This supports the company profile page where the caller may
+    not know the active scope version ahead of time.
+    """
+    conditions = [
+        AnalysisSnapshotRow.security_id == security_id,
+        AnalysisSnapshotRow.decision_at <= as_of,
+    ]
+    if scope_version_id is not None:
+        conditions.append(AnalysisSnapshotRow.scope_version_id == scope_version_id)
     return (
         select(AnalysisSnapshotRow)
-        .where(
-            AnalysisSnapshotRow.security_id == security_id,
-            AnalysisSnapshotRow.scope_version_id == scope_version_id,
-            AnalysisSnapshotRow.decision_at <= as_of,
-        )
+        .where(*conditions)
         .order_by(
             AnalysisSnapshotRow.decision_at.desc(),
             AnalysisSnapshotRow.created_at.desc(),

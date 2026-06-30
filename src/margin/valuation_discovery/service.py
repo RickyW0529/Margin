@@ -2,14 +2,23 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import Any
 
 from margin.core.run_states import OrchestrationRun, StepAttempt
+from margin.valuation_discovery.analysis_mart import (
+    AnalysisFinding,
+    AnalysisMartRepository,
+    AnalysisMetric,
+    AnalysisSnapshot,
+)
+from margin.valuation_discovery.models import QuantResult
 from margin.valuation_discovery.orchestrator import (
     ValuationDiscoveryOrchestrator,
     ValuationDiscoveryStepWorker,
 )
+from margin.valuation_discovery.quant.repository import QuantRepository
 
 
 @dataclass(frozen=True)
@@ -127,3 +136,163 @@ def _step_to_dict(step: StepAttempt) -> dict:
 def _response_from_run(run: OrchestrationRun) -> RefreshStartResponse:
     """Convert an orchestration run into a refresh start response DTO."""
     return RefreshStartResponse(run_id=run.run_id)
+
+
+# ---------------------------------------------------------------------------
+# Company quant / analysis profile DTOs and query helpers
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class FactorScoreItem:
+    """Single factor group score with label and weight."""
+
+    factor_key: str
+    label: str
+    score: float | None
+    weight: float
+
+
+@dataclass(frozen=True)
+class CompanyQuantProfile:
+    """Quant screening profile for one security, ready for visualization."""
+
+    security_id: str
+    quant_run_id: str
+    result_id: str
+    decision_at: datetime
+    final_score: float
+    factor_scores: tuple[FactorScoreItem, ...]
+    rank_overall: int | None
+    rank_in_industry: int | None
+    screening_status: str
+    data_status: str
+    risk_flags: tuple[str, ...]
+    review_required: bool
+    review_reasons: tuple[str, ...]
+    research_guardrail: str
+    reason_summary: str
+    factor_details: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class CompanyAnalysisProfile:
+    """Fourth-layer Analysis Mart profile for one security."""
+
+    security_id: str
+    analysis_snapshot: AnalysisSnapshot | None
+    metrics: tuple[AnalysisMetric, ...]
+    findings: tuple[AnalysisFinding, ...]
+    evidence_link_count: int
+
+
+_FACTOR_LABELS: dict[str, str] = {
+    "quality_score": "质量",
+    "value_score": "价值",
+    "growth_score": "成长",
+    "momentum_score": "动量",
+    "risk_score": "风险",
+}
+
+_FACTOR_KEYS: tuple[str, ...] = (
+    "quality_score",
+    "value_score",
+    "growth_score",
+    "momentum_score",
+    "risk_score",
+)
+
+_FACTOR_WEIGHTS: dict[str, float] = {
+    "quality_score": 0.35,
+    "value_score": 0.25,
+    "growth_score": 0.15,
+    "momentum_score": 0.15,
+    "risk_score": 0.10,
+}
+
+
+class CompanyProfileService:
+    """Read-only service that assembles quant and Analysis Mart profiles."""
+
+    def __init__(
+        self,
+        quant_repository: QuantRepository,
+        analysis_mart_repository: AnalysisMartRepository,
+    ) -> None:
+        """Initialize with quant and Analysis Mart repositories."""
+        self._quant_repository = quant_repository
+        self._analysis_mart_repository = analysis_mart_repository
+
+    def get_quant_profile(self, security_id: str) -> CompanyQuantProfile | None:
+        """Return the latest quant profile for a security, or None."""
+        result = self._quant_repository.latest_result_for_security(security_id)
+        if result is None:
+            return None
+        return _quant_profile_from_result(result)
+
+    def get_analysis_profile(
+        self,
+        security_id: str,
+        scope_version_id: str | None = None,
+    ) -> CompanyAnalysisProfile:
+        """Return the Analysis Mart profile for a security.
+
+        When ``scope_version_id`` is None, returns the latest snapshot across
+        all scopes for the given security.
+        """
+        snapshot = self._analysis_mart_repository.latest_snapshot(
+            security_id=security_id,
+            scope_version_id=scope_version_id,
+            as_of=datetime.now(UTC),
+        )
+        if snapshot is None:
+            return CompanyAnalysisProfile(
+                security_id=security_id,
+                analysis_snapshot=None,
+                metrics=(),
+                findings=(),
+                evidence_link_count=0,
+            )
+        metrics = tuple(self._analysis_mart_repository.list_metrics(snapshot.analysis_snapshot_id))
+        findings = tuple(
+            self._analysis_mart_repository.list_findings(snapshot.analysis_snapshot_id)
+        )
+        links = self._analysis_mart_repository.list_evidence_links(snapshot.analysis_snapshot_id)
+        return CompanyAnalysisProfile(
+            security_id=security_id,
+            analysis_snapshot=snapshot,
+            metrics=metrics,
+            findings=findings,
+            evidence_link_count=len(links),
+        )
+
+
+def _quant_profile_from_result(result: QuantResult) -> CompanyQuantProfile:
+    """Convert a QuantResult into a visualization-ready profile DTO."""
+    factor_scores = tuple(
+        FactorScoreItem(
+            factor_key=key,
+            label=_FACTOR_LABELS[key],
+            score=getattr(result, key),
+            weight=_FACTOR_WEIGHTS[key],
+        )
+        for key in _FACTOR_KEYS
+    )
+    return CompanyQuantProfile(
+        security_id=result.security_id,
+        quant_run_id=result.quant_run_id,
+        result_id=result.result_id,
+        decision_at=result.created_at,
+        final_score=result.final_score,
+        factor_scores=factor_scores,
+        rank_overall=result.rank_overall,
+        rank_in_industry=result.rank_in_industry,
+        screening_status=result.screening_status.value,
+        data_status=result.data_status.value,
+        risk_flags=result.risk_flags,
+        review_required=result.review_required,
+        review_reasons=result.review_reasons,
+        research_guardrail=result.research_guardrail.value,
+        reason_summary=result.reason_summary,
+        factor_details=dict(result.factor_details),
+    )

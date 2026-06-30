@@ -197,10 +197,14 @@ class AnalysisMartRepository(Protocol):
         self,
         *,
         security_id: str,
-        scope_version_id: str,
+        scope_version_id: str | None = None,
         as_of: datetime,
     ) -> AnalysisSnapshot | None:
-        """Return the latest snapshot visible at or before ``as_of``."""
+        """Return the latest snapshot visible at or before ``as_of``.
+
+        When ``scope_version_id`` is None, returns the latest snapshot across
+        all scopes for the given security.
+        """
 
     def list_metrics(self, analysis_snapshot_id: str) -> list[AnalysisMetric]:
         """Return metrics for a snapshot."""
@@ -321,16 +325,23 @@ class MemoryAnalysisMartRepository:
         self,
         *,
         security_id: str,
-        scope_version_id: str,
+        scope_version_id: str | None = None,
         as_of: datetime,
     ) -> AnalysisSnapshot | None:
-        """Return the latest visible snapshot."""
+        """Return the latest visible snapshot.
+
+        When ``scope_version_id`` is None, returns the latest snapshot across
+        all scopes for the given security.
+        """
         candidates = [
             snapshot
             for snapshot in self._snapshots.values()
             if snapshot.security_id == security_id
-            and snapshot.scope_version_id == scope_version_id
             and snapshot.decision_at <= as_of
+            and (
+                scope_version_id is None
+                or snapshot.scope_version_id == scope_version_id
+            )
         ]
         return max(
             candidates,
@@ -486,10 +497,14 @@ class SQLAlchemyAnalysisMartRepository:
         self,
         *,
         security_id: str,
-        scope_version_id: str,
+        scope_version_id: str | None = None,
         as_of: datetime,
     ) -> AnalysisSnapshot | None:
-        """Return the latest visible snapshot."""
+        """Return the latest visible snapshot.
+
+        When ``scope_version_id`` is None, returns the latest snapshot across
+        all scopes for the given security.
+        """
         with self._session_factory() as session:
             row = session.scalar(
                 latest_analysis_snapshot(

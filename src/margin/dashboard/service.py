@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -22,6 +23,8 @@ from margin.dashboard.models import (
 )
 from margin.dashboard.repository import DashboardRepository, MemoryDashboardRepository
 
+QuantProfileLoader = Callable[[str], dict[str, Any] | None]
+
 
 class DashboardQueryService:
     """Read-only dashboard query service for v0.2 candidate data."""
@@ -29,13 +32,17 @@ class DashboardQueryService:
     def __init__(
         self,
         repository: DashboardRepository,
+        quant_profile_loader: QuantProfileLoader | None = None,
     ) -> None:
         """Initialize the query service.
 
         Args:
             repository: Dashboard repository for runs, items, and feedback.
+            quant_profile_loader: Optional callable that returns a quant
+                profile dict (with five factor scores) for a security id.
         """
         self._repository = repository
+        self._quant_profile_loader = quant_profile_loader
 
     def get_run(self, run_id: str) -> ResearchRun:
         """Fetch a research run by identifier.
@@ -73,11 +80,16 @@ class DashboardQueryService:
             cursor=cursor,
             limit=limit,
         )
-
     def get_item_detail_v2(self, item_id: str) -> ResearchItemDetailV2:
         """Return the v0.2 company detail aggregate for a research item."""
         item = self.get_item(item_id)
         run = self.get_run(item.run_id)
+        quant_factors = self._load_quant_factors(item.symbol)
+        factors: dict[str, Any] = {
+            "risk_score": item.risk_score,
+            "confidence": item.confidence,
+        }
+        factors.update(quant_factors)
         return ResearchItemDetailV2(
             item=_candidate_item_from_research_item(item, run),
             current_review={
@@ -97,10 +109,7 @@ class DashboardQueryService:
                 ),
                 "stale_reason": item.abstain_reason,
             },
-            factors={
-                "risk_score": item.risk_score,
-                "confidence": item.confidence,
-            },
+            factors=factors,
             thesis={
                 "statement": item.statement,
                 "counter_arguments": tuple(item.counter_arguments),
@@ -141,6 +150,39 @@ class DashboardQueryService:
         if item is None:
             raise KeyError(f"research item '{item_id}' not found")
         return item
+
+    def _load_quant_factors(self, symbol: str) -> dict[str, Any]:
+        """Load five-factor scores for a symbol via the optional loader.
+
+        Returns an empty dict when no loader is configured or no quant result
+        exists, so the detail page degrades gracefully without erroring.
+        """
+        if self._quant_profile_loader is None:
+            return {}
+        try:
+            profile = self._quant_profile_loader(symbol)
+        except Exception:
+            return {}
+        if not profile:
+            return {}
+        factor_scores = profile.get("factor_scores") or []
+        result: dict[str, Any] = {}
+        for item in factor_scores:
+            key = item.get("factor_key")
+            if key:
+                result[key] = item.get("score")
+        for extra_key in (
+            "final_score",
+            "rank_overall",
+            "rank_in_industry",
+            "screening_status",
+            "research_guardrail",
+            "reason_summary",
+        ):
+            value = profile.get(extra_key)
+            if value is not None:
+                result[extra_key] = value
+        return result
 
 
 class FeedbackService:
@@ -304,18 +346,21 @@ class DashboardServiceBundle:
         *,
         dashboard_repository: DashboardRepository,
         providers: list[Any] | None = None,
+        quant_profile_loader: QuantProfileLoader | None = None,
     ) -> DashboardServiceBundle:
         """Create a service bundle from existing repositories.
 
         Args:
             dashboard_repository: Dashboard repository implementation.
             providers: Optional list of providers to health-check.
+            quant_profile_loader: Optional callable returning a quant profile
+                dict (with five factor scores) for a security id.
 
         Returns:
             A fully wired service bundle.
         """
         return cls(
-            query=DashboardQueryService(dashboard_repository),
+            query=DashboardQueryService(dashboard_repository, quant_profile_loader),
             feedback=FeedbackService(dashboard_repository),
             providers=ProviderStatusService(providers),
             jobs=JobService(),
