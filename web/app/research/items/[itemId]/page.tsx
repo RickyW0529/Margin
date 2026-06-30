@@ -15,6 +15,7 @@ import {
   type ResearchItemDetailV2,
 } from "@/lib/api";
 import { formatNumber, formatPercent } from "@/lib/utils";
+import Link from "next/link";
 
 import { createResearchFeedbackAction } from "./actions";
 
@@ -65,6 +66,14 @@ export default async function ResearchItemPage({
           </div>
         </div>
         {item ? <ResearchStatusBadge status={item.screening_status} /> : null}
+        {item?.security_id ? (
+          <Link
+            href={`/research/companies/${encodeURIComponent(item.security_id)}`}
+            className="text-xs text-muted-foreground no-underline hover:text-accent hover:underline"
+          >
+            查看量化指标 →
+          </Link>
+        ) : null}
       </header>
 
       {error ? (

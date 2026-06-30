@@ -155,6 +155,10 @@ export type ProviderConfigSummary = {
   version_id: string;
   provider_name: string;
   provider_type: string;
+  provider_category?: string;
+  detected_provider?: string;
+  detected_label?: string;
+  is_custom_provider?: boolean;
   enabled: boolean;
   lifecycle: string;
   base_url?: string | null;
@@ -946,4 +950,110 @@ export type JobRun = Record<string, unknown> & {
 /** Fetches a dashboard job run record. */
 export function fetchJobRun(jobRunId: string): Promise<JobRun> {
   return request<JobRun>(`/api/v1/jobs/${jobRunId}`);
+}
+
+// ---------------------------------------------------------------------------
+// Company quant / analysis profile (visualization-facing)
+// ---------------------------------------------------------------------------
+
+/** Single factor group score with label and weight. */
+export type FactorScoreItem = {
+  factor_key: string;
+  label: string;
+  score: number | null;
+  weight: number;
+};
+
+/** Quant screening profile for one security. */
+export type CompanyQuantProfile = {
+  security_id: string;
+  quant_run_id: string;
+  result_id: string;
+  decision_at: string;
+  final_score: number;
+  factor_scores: FactorScoreItem[];
+  rank_overall: number | null;
+  rank_in_industry: number | null;
+  screening_status: string;
+  data_status: string;
+  risk_flags: string[];
+  review_required: boolean;
+  review_reasons: string[];
+  research_guardrail: string;
+  reason_summary: string;
+  factor_details: Record<string, unknown>;
+};
+
+/** One Analysis Mart metric row. */
+export type AnalysisMetric = {
+  metric_id: string;
+  metric_code: string;
+  metric_name: string;
+  metric_group: string;
+  numeric_value: number | null;
+  unit: string | null;
+  direction: string;
+  percentile_market: number | null;
+  percentile_industry: number | null;
+  rank_market: number | null;
+  rank_industry: number | null;
+};
+
+/** One Analysis Mart finding row. */
+export type AnalysisFinding = {
+  finding_id: string;
+  finding_type: string;
+  severity: string;
+  title: string;
+  description: string;
+  confidence: number;
+  evidence_ids: string[];
+};
+
+/** Header metadata for an analysis snapshot. */
+export type AnalysisSnapshotHeader = {
+  analysis_snapshot_id: string;
+  decision_at: string;
+  trading_date: string;
+  analysis_version: string;
+  analysis_kind: string;
+  quant_run_id: string | null;
+  quant_result_id: string | null;
+  input_hash: string;
+  result_hash: string;
+};
+
+/** Fourth-layer Analysis Mart profile for one security. */
+export type CompanyAnalysisProfile = {
+  security_id: string;
+  snapshot: AnalysisSnapshotHeader | null;
+  metrics: AnalysisMetric[];
+  findings: AnalysisFinding[];
+  evidence_link_count: number;
+};
+
+/** Fetches the latest quant screening profile for a security. */
+export function fetchCompanyQuantProfile(
+  securityId: string,
+): Promise<CompanyQuantProfile> {
+  return request<CompanyQuantProfile>(
+    `/api/v1/valuation-discovery/companies/${securityId}/quant`,
+  );
+}
+
+/** Fetches the Analysis Mart profile for a security.
+ *
+ * When `scopeVersionId` is omitted, the latest snapshot across all scopes is
+ * returned.
+ */
+export function fetchCompanyAnalysisProfile(
+  securityId: string,
+  scopeVersionId?: string,
+): Promise<CompanyAnalysisProfile> {
+  const path = `/api/v1/valuation-discovery/companies/${securityId}/analysis`;
+  if (scopeVersionId) {
+    const params = new URLSearchParams({ scope_version_id: scopeVersionId });
+    return request<CompanyAnalysisProfile>(`${path}?${params}`);
+  }
+  return request<CompanyAnalysisProfile>(path);
 }

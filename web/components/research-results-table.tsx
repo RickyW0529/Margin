@@ -101,6 +101,12 @@ export function ResearchResultsTable({
                     <span className="text-xs text-muted-foreground">
                       {item.name}
                     </span>
+                    <Link
+                      href={`/research/companies/${encodeURIComponent(item.security_id)}`}
+                      className="text-xs text-muted-foreground no-underline hover:text-accent hover:underline"
+                    >
+                      量化指标 →
+                    </Link>
                   </div>
                 </td>
                 <td className="px-3 py-3">
