@@ -236,6 +236,15 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _python_executable(root: Path) -> str:
+    """Return the local virtualenv Python executable when available.
+
+    Args:
+        root: Repository root containing the ``.venv`` directory.
+
+    Returns:
+        str: Path to the virtualenv Python interpreter, falling back to the
+            interpreter running this script.
+    """
     venv_python = root / ".venv" / "bin" / "python"
     if venv_python.exists():
         return str(venv_python)
@@ -243,6 +252,11 @@ def _python_executable(root: Path) -> str:
 
 
 def _ensure_runtime_dirs(config: DevConfig) -> None:
+    """Ensure the PID and log directories exist for the dev process group.
+
+    Args:
+        config: Dev configuration describing the runtime directory layout.
+    """
     config.pid_dir.mkdir(parents=True, exist_ok=True)
     config.log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -254,6 +268,17 @@ def _start_process(
     cwd: Path,
     config: DevConfig,
 ) -> int:
+    """Spawn one background dev process and record its PID.
+
+    Args:
+        name: Logical process label used to name the log file and PID file.
+        command: Fully-qualified command line to launch the process.
+        cwd: Working directory for the spawned process.
+        config: Dev configuration that owns the PID and log directories.
+
+    Returns:
+        int: PID of the spawned subprocess.
+    """
     log_path = config.log_dir / f"{name}.log"
     log_file = log_path.open("ab")
     process = subprocess.Popen(
@@ -269,6 +294,7 @@ def _start_process(
 
 
 def _ensure_postgres() -> None:
+    """Start the docker-compose Postgres service if it is not already healthy."""
     result = subprocess.run(
         ["docker", "ps", "--filter", "name=margin-postgres-1", "--format", "{{.Status}}"],
         check=False,
@@ -281,10 +307,29 @@ def _ensure_postgres() -> None:
 
 
 def _pid_file(config: DevConfig, name: str) -> Path:
+    """Return the path of the PID file for one named dev process.
+
+    Args:
+        config: Dev configuration describing the PID directory.
+        name: Logical process label.
+
+    Returns:
+        Path: Absolute or relative path to the PID file.
+    """
     return config.pid_dir / f"{name}.pid"
 
 
 def _read_pid(config: DevConfig, name: str) -> int | None:
+    """Read a persisted PID from disk for one named dev process.
+
+    Args:
+        config: Dev configuration describing the PID directory.
+        name: Logical process label.
+
+    Returns:
+        int | None: The persisted PID, or ``None`` when the file is missing
+            or unreadable.
+    """
     path = _pid_file(config, name)
     try:
         return int(path.read_text(encoding="utf-8").strip())
@@ -293,6 +338,14 @@ def _read_pid(config: DevConfig, name: str) -> int | None:
 
 
 def _listening_pids(port: int) -> list[int]:
+    """Return PIDs currently listening on a TCP port.
+
+    Args:
+        port: TCP port number to inspect.
+
+    Returns:
+        list[int]: Sorted, de-duplicated list of PIDs listening on the port.
+    """
     result = subprocess.run(
         ["lsof", "-tiTCP:" + str(port), "-sTCP:LISTEN", "-n", "-P"],
         check=False,
@@ -309,6 +362,16 @@ def _listening_pids(port: int) -> list[int]:
 
 
 def _wait_for_listen(port: int, *, timeout_seconds: float) -> bool:
+    """Poll the OS for a listener on a port until one appears or the timeout expires.
+
+    Args:
+        port: TCP port number to monitor.
+        timeout_seconds: Maximum number of seconds to wait.
+
+    Returns:
+        bool: ``True`` if a listener appeared within the timeout, otherwise
+            ``False``.
+    """
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         if _listening_pids(port):
@@ -318,6 +381,12 @@ def _wait_for_listen(port: int, *, timeout_seconds: float) -> bool:
 
 
 def _process_rows() -> list[ProcessRow]:
+    """List currently running processes with their PID and command line.
+
+    Returns:
+        list[ProcessRow]: Parsed ``ps`` rows, skipping lines without a
+            numeric PID.
+    """
     result = subprocess.run(
         ["ps", "-axo", "pid=,command="],
         check=False,
@@ -338,6 +407,15 @@ def _process_rows() -> list[ProcessRow]:
 
 
 def _process_cwd(pid: int) -> Path | None:
+    """Return the resolved current working directory for a process.
+
+    Args:
+        pid: Process ID to inspect.
+
+    Returns:
+        Path | None: Resolved working directory when available, otherwise
+            ``None``.
+    """
     result = subprocess.run(
         ["lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
         check=False,
@@ -351,6 +429,11 @@ def _process_cwd(pid: int) -> Path | None:
 
 
 def _terminate_pids(pids: list[int]) -> None:
+    """Terminate a set of PIDs gracefully, escalating to SIGKILL after a grace period.
+
+    Args:
+        pids: PIDs to terminate. The current process PID is skipped.
+    """
     own_pid = os.getpid()
     for pid in pids:
         if pid == own_pid:
@@ -374,6 +457,15 @@ def _terminate_pids(pids: list[int]) -> None:
 
 
 def _pid_exists(pid: int) -> bool:
+    """Return ``True`` when a process with the given PID is currently alive.
+
+    Args:
+        pid: Process ID to probe.
+
+    Returns:
+        bool: ``True`` when the process exists (or we lack permission to
+            probe it), ``False`` when the OS reports no such process.
+    """
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -384,6 +476,14 @@ def _pid_exists(pid: int) -> bool:
 
 
 def _format_pids(pids: list[int]) -> str:
+    """Format a PID list for human-readable status output.
+
+    Args:
+        pids: PIDs to format.
+
+    Returns:
+        str: Comma-separated PID string or ``"not running"`` when empty.
+    """
     if not pids:
         return "not running"
     return ",".join(str(pid) for pid in pids)
