@@ -178,10 +178,18 @@ def _parse_tushare_date(value: Any) -> date | None:
         return None
 
 
-def _derive_income_metrics(
+def _latest_income_profit_by_period(
     rows: list[Any],
-) -> dict[tuple[str, str], dict[str, float | None]]:
-    """Derive PIT-safe TTM and prior annual profit from cumulative income rows."""
+) -> dict[tuple[str, str], float]:
+    """Return the latest-announced raw ``n_income_attr_p`` per period.
+
+    The raw per-period net profit attributable to parent is landed as a
+    canonical fact so the Feature Mart ETL can derive prior annual profits
+    (``net_profit_y1``/``net_profit_y2``) with PIT safety and without relying
+    on provider-time derivation. ``net_profit_ttm`` is intentionally not
+    derived here: it is not consumed by any factor and deriving it inline
+    was the source of unstable, unrecoverable gaps.
+    """
     latest_by_period: dict[tuple[str, date], tuple[date, float]] = {}
     for row in rows:
         ts_code = str(row.get("ts_code", ""))
@@ -198,55 +206,10 @@ def _derive_income_metrics(
         current = latest_by_period.get(key)
         if current is None or announced >= current[0]:
             latest_by_period[key] = (announced, profit)
-
-    periods_by_symbol: dict[str, dict[date, float]] = {}
-    for (ts_code, end_date), (_, profit) in latest_by_period.items():
-        periods_by_symbol.setdefault(ts_code, {})[end_date] = profit
-
-    derived: dict[tuple[str, str], dict[str, float | None]] = {}
-    for ts_code, periods in periods_by_symbol.items():
-        annuals = sorted(
-            (
-                (period_end, profit)
-                for period_end, profit in periods.items()
-                if (period_end.month, period_end.day) == (12, 31)
-            ),
-            reverse=True,
-        )
-        for period_end, current_profit in periods.items():
-            if (period_end.month, period_end.day) == (12, 31):
-                ttm_profit: float | None = current_profit
-            else:
-                prior_annual = periods.get(date(period_end.year - 1, 12, 31))
-                prior_same_period = periods.get(
-                    date(
-                        period_end.year - 1,
-                        period_end.month,
-                        period_end.day,
-                    )
-                )
-                ttm_profit = (
-                    prior_annual + current_profit - prior_same_period
-                    if prior_annual is not None and prior_same_period is not None
-                    else None
-                )
-            prior_annual_values = [
-                profit
-                for annual_end, profit in annuals
-                if annual_end <= period_end
-            ]
-            derived[(ts_code, period_end.strftime("%Y%m%d"))] = {
-                "net_profit_ttm": ttm_profit,
-                "net_profit_y1": (
-                    prior_annual_values[0] if prior_annual_values else None
-                ),
-                "net_profit_y2": (
-                    prior_annual_values[1]
-                    if len(prior_annual_values) > 1
-                    else None
-                ),
-            }
-    return derived
+    return {
+        (ts_code, end_date.strftime("%Y%m%d")): profit
+        for (ts_code, end_date), (_, profit) in latest_by_period.items()
+    }
 
 
 def _map_valuation_row(
@@ -685,7 +648,7 @@ class TushareProvider(BaseProvider):
                         row["ts_code"] = ts_code
                     income_rows.append(row)
 
-        income_metrics = _derive_income_metrics(income_rows)
+        income_profit_by_period = _latest_income_profit_by_period(income_rows)
         result: list[dict[str, Any]] = []
         for row in indicator_rows:
             ts_code = str(row.get("ts_code", ""))
@@ -695,16 +658,9 @@ class TushareProvider(BaseProvider):
                 fetched_at=fetched_at,
             )
             period_key = str(row.get("end_date") or "")
-            mapped.update(
-                {
-                    key: value
-                    for key, value in income_metrics.get(
-                        (ts_code, period_key),
-                        {},
-                    ).items()
-                    if value is not None
-                }
-            )
+            raw_profit = income_profit_by_period.get((ts_code, period_key))
+            if raw_profit is not None:
+                mapped["n_income_attr_p"] = raw_profit
             result.append(mapped)
         return result
 

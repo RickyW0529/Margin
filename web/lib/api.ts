@@ -49,10 +49,48 @@ export type ResearchItemDetailV2 = {
   item: ResearchCandidateListItemV2;
   current_review: Record<string, unknown>;
   effective_assessment: Record<string, unknown>;
-  factors: Record<string, unknown>;
-  thesis: Record<string, unknown>;
+  factors: ResearchDetailFactors;
+  thesis: ResearchDetailThesis;
   evidence: EvidenceLocatorListItem[];
   versions: Record<string, string>;
+};
+
+/** Research detail thesis text and AI status. */
+export type ResearchDetailThesis = Record<string, unknown> & {
+  statement?: string | null;
+  ai_status?: string | null;
+};
+
+/** One metric trend series rendered on the recommendation detail page. */
+export type MetricTrend = {
+  metric: string;
+  label: string;
+  unit?: string | null;
+  points: Array<{ date: string; value: number | null }>;
+};
+
+/** One compact raw metric tile on the recommendation detail page. */
+export type RawMetricCard = {
+  metric: string;
+  label: string;
+  value: number | null;
+  unit?: string | null;
+};
+
+/** Valuation state rendered on the recommendation detail page. */
+export type ValuationState = {
+  discount_rate?: number | null;
+  intrinsic_value?: number | null;
+  margin_of_safety?: number | null;
+  status?: string | null;
+  message?: string | null;
+};
+
+/** Factors plus visualization extras used by the recommendation detail page. */
+export type ResearchDetailFactors = Record<string, unknown> & {
+  valuation?: ValuationState;
+  trends?: MetricTrend[];
+  raw_metrics?: RawMetricCard[];
 };
 
 /** v0.2 research run progress detail. */
@@ -101,6 +139,9 @@ export type EvidenceLocatorListItem = {
   snapshot_id?: string | null;
   source_url?: string | null;
   pit_timestamp?: string | null;
+  source_name?: string | null;
+  snippet?: string | null;
+  linked_to_security?: boolean | null;
 };
 
 /** Query filters accepted by the v0.2 research candidate list BFF. */

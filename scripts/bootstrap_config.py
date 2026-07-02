@@ -1,4 +1,4 @@
-"""Bootstrap v0.2 versioned configuration from non-sensitive defaults."""
+"""Bootstrap v0.3 versioned configuration from non-sensitive defaults."""
 
 from __future__ import annotations
 

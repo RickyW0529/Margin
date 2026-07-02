@@ -52,7 +52,9 @@ The lifecycle is `draft -> review -> active -> deprecated`. Repository transacti
 
 Provider URLs are routed by `provider_router` within each category. LLM detection covers DeepSeek, OpenAI, OpenRouter, Qwen, Gemini, Anthropic, ModelScope, Zhipu, Ollama, VLLM, and local OpenAI-compatible endpoints. WebSearch detection covers Tavily, Exa, SerpAPI, and Bing; data sources cover Tushare and AKShare; embedding covers OpenAI-compatible, DashScope, and Jina; rerank covers Jina and Cohere. Unmatched URLs are reflected as `Custom` and retain the user-supplied URL. Tokens remain write-only encrypted secrets and are not persisted as plaintext detection inputs.
 
-`IndicatorViewVersion` and `QuantFeatureSetVersion` are intentionally orthogonal: hiding `pb` in the UI does not remove `pb` from required quant inputs or the full underlying data layer.
+`IndicatorViewVersion` and `QuantFeatureSetVersion` are intentionally orthogonal: hiding `pb` in the UI does not remove `pb` from required quant inputs or the full underlying data layer. The default quant feature set now requires `n_income_attr_p`, `roe_ttm`, and `pe_ttm`: raw `n_income_attr_p` feeds Feature Mart annual-profit derivation, while `roe_ttm` is the financial freshness canary.
+
+The current default bootstrap creates and activates the v0.3 versioned defaults: `quant-feature-default-v0.3.0`, `quant-strategy-default-v0.3.0`, and `scope-default-v0.3.0`. Historical v0.2 config rows are preserved. When a v0.2 row is already active, repository activation transactions flush/deprecate the old active row before activating the new one so PostgreSQL partial unique indexes continue to enforce one active version per config family.
 
 ### Secret Store and authorization boundary
 

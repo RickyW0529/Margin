@@ -17,8 +17,9 @@ describe("RecommendationDetailPage", () => {
   beforeEach(() => {
     vi.mocked(fetchResearchItemDetailV2).mockResolvedValue({
       current_review: {
-        outcome: "update_assessment",
-        reason: null,
+        outcome: "review_deferred",
+        reason: "证据包为空，AI 未形成可引用结论。",
+        conclusion: "证据不足，等待补证。",
       },
       effective_assessment: {
         assessment_id: "assess-1",
@@ -33,9 +34,30 @@ describe("RecommendationDetailPage", () => {
           source_level: "official",
           source_url: null,
           title: "年报",
+          snippet: "证券代码：000001 证券简称：平安银行",
+          linked_to_security: true,
         },
       ],
-      factors: { final_score: 86, quality: 82 },
+      factors: {
+        final_score: 86,
+        quality: 82,
+        valuation: {
+          discount_rate: null,
+          status: "missing_assessment",
+          message: "AI 估值未形成：没有可引用证据支持 valuation assessment。",
+        },
+        trends: [
+          {
+            metric: "adj_close",
+            label: "复权收盘价",
+            unit: "CNY",
+            points: [
+              { date: "2026-06-01", value: 10.2 },
+              { date: "2026-07-01", value: 12.4 },
+            ],
+          },
+        ],
+      },
       item: {
         assessment_freshness: "fresh",
         confidence: 0.82,
@@ -57,7 +79,8 @@ describe("RecommendationDetailPage", () => {
         symbol: "000001",
       },
       thesis: {
-        statement: "估值折价仍然存在",
+        statement: "证据不足，等待补证。",
+        ai_status: "review_deferred",
       },
       versions: {
         snapshot_id: "ctx-1",
@@ -78,9 +101,15 @@ describe("RecommendationDetailPage", () => {
       "/dashboard",
     );
     expect(screen.getByRole("heading", { name: "平安银行" })).toBeInTheDocument();
-    expect(screen.getByText("估值折价仍然存在")).toBeInTheDocument();
+    expect(screen.getByText("证据不足，等待补证。")).toBeInTheDocument();
+    expect(screen.getAllByText("证据包为空，AI 未形成可引用结论。").length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getByText("AI 估值未形成")).toBeInTheDocument();
+    expect(screen.getByText("复权收盘价")).toBeInTheDocument();
     expect(screen.getByText("量化可视化")).toBeInTheDocument();
     expect(screen.getByText("风险与复核")).toBeInTheDocument();
     expect(screen.getByText("年报 第 2 页")).toBeInTheDocument();
+    expect(screen.getByText("已关联本股票")).toBeInTheDocument();
   });
 });

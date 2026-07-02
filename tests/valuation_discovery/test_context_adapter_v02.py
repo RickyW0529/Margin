@@ -230,7 +230,7 @@ def _seed_quant_state(session_factory) -> None:
                 decision_at=DECISION_AT,
                 known_at=DECISION_AT,
                 security_ids=["000001.SZ"],
-                required_indicators=["net_profit_ttm", "pe_ttm"],
+                required_indicators=["n_income_attr_p", "roe_ttm", "pe_ttm"],
                 optional_indicators=[],
                 fact_count=2,
                 missing_required=[],

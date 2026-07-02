@@ -244,16 +244,14 @@ class QuantDataRequirementCatalog:
                 "income_fundamentals",
                 "quality + growth + profitability filters",
                 (
-                    "net_profit_ttm",
-                    "net_profit_y1",
-                    "net_profit_y2",
+                    "n_income_attr_p",
                     "revenue_yoy",
                     "profit_yoy",
                     "revenue_cagr_3y",
                     "profit_cagr_3y",
                     "margin_trend",
                 ),
-                "Supply profitability and growth features.",
+                "Supply raw parent-company profit plus growth features.",
                 history=1095,
             ),
             _requirement(

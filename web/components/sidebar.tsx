@@ -23,12 +23,70 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/settings", label: "设置", icon: Settings },
 ];
 
+/** Mobile header navigation for narrow screens. */
+export function MobileNavigation() {
+  const pathname = usePathname() ?? "/";
+
+  return (
+    <div className="grid min-w-0 flex-1 gap-3 md:hidden">
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <Link
+          href="/"
+          className="inline-flex min-w-0 items-center gap-2.5 no-underline"
+        >
+          <span className="grid size-8 place-items-center rounded-md bg-foreground text-background">
+            <ShieldCheck className="size-4" />
+          </span>
+          <span className="min-w-0 leading-tight">
+            <span className="block truncate text-base font-semibold text-foreground">
+              Margin
+            </span>
+            <span className="block truncate text-xs text-muted-foreground">
+              安全边际
+            </span>
+          </span>
+        </Link>
+        <span className="max-w-28 shrink-0 truncate rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+          个人研究模式
+        </span>
+      </div>
+      <nav
+        className="grid grid-cols-3 gap-1 rounded-md border border-border bg-muted/40 p-1"
+        aria-label="移动主导航"
+      >
+        {NAV_ITEMS.map((item) => {
+          const Icon = item.icon;
+          const active =
+            pathname === item.href ||
+            (item.href !== "/" && pathname.startsWith(`${item.href}/`));
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "flex min-h-9 min-w-0 items-center justify-center gap-1.5 rounded px-1.5 text-xs font-medium no-underline transition-colors",
+                active
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-background/70 hover:text-foreground",
+              )}
+            >
+              <Icon className="size-3.5 shrink-0" />
+              <span className="truncate">{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
+
 /** Minimal application sidebar for the user-facing workspace. */
 export function Sidebar() {
   const pathname = usePathname() ?? "/";
 
   return (
-    <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col gap-6 self-start overflow-y-auto border-r border-sidebar-border bg-sidebar p-4 text-sidebar-foreground">
+    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-6 self-start overflow-y-auto border-r border-sidebar-border bg-sidebar p-4 text-sidebar-foreground md:flex">
       <Link href="/" className="inline-flex items-center gap-2.5 no-underline">
         <span className="grid size-8 place-items-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
           <ShieldCheck className="size-4" />

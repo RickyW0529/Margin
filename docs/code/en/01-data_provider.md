@@ -106,7 +106,7 @@ Current verified production DB coverage at decision time `2026-06-22T16:00:00Z`:
 | Daily bars | `daily`: 2024-06-24 through 2026-06-22, 483 open trading days, 2,502,953 source rows; `close` and `amount` each publish 2,502,966 warehouse facts. |
 | Adjustment factors | `adj_factor`: same 483 open trading days, 2,501,465 source rows; `adj_factor` published to warehouse. |
 | Suspension | `suspend_d`: 4635 accepted suspension rows, publishing `is_suspended` and `suspend_type`. |
-| Financials | `income`, `balancesheet`, `cashflow`, `fina_indicator`, and `fina_audit` cover the TTM/comparison window from 2020-12-31 to 2026-03-31. |
+| Financials | `income`, `balancesheet`, `cashflow`, `fina_indicator`, and `fina_audit` cover the financial window from 2020-12-31 to 2026-03-31; `income` publishes raw `n_income_attr_p` only and does not derive `net_profit_ttm` or annual profit features in the provider layer. |
 | Valuation snapshot | `daily_basic` publishes 2026-06-22 close-time valuation fields including `pe_ttm`, `pb`, `ps_ttm`, `dv_ttm`, `total_mv`, and `turnover_rate`. |
 | Benchmarks | `index_daily` covers 000300/000905/000852 for 483 open days; `index_weight` publishes 41895 weight facts. |
 
@@ -323,7 +323,7 @@ A-share market data provider backed by the Tushare Pro API. The Tushare token is
 | `get_securities` | `(as_of: datetime) -> list[dict[str, Any]]` | Security records | Fetch listed A-share securities via `stock_basic`. |
 | `get_bars` | `(symbols, start, end, frequency="1d") -> list[dict[str, Any]]` | OHLCV records | Fetch daily bars via `daily`. Volume converted to shares; amount converted to yuan. |
 | `get_adjustment_factors` | `(symbols, start, end) -> list[dict[str, Any]]` | Adjustment records | Fetch adjustment factors via `adj_factor`. |
-| `get_financials` | `(symbols, start, end) -> list[dict[str, Any]]` | Financial records | Fetch financial indicators via `fina_indicator`. |
+| `get_financials` | `(symbols, start, end) -> list[dict[str, Any]]` | Financial records | Fetch financial indicators via `fina_indicator` and attach raw same-period `income.n_income_attr_p`. |
 | `get_index_members` | `(index_code, as_of) -> list[dict[str, Any]]` | Constituent records | Fetch index constituent weights via `index_weight`. |
 
 Volume and amount unit conversions in `get_bars`:

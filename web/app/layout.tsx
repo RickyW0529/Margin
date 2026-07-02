@@ -6,7 +6,7 @@
 
 import type { Metadata } from "next";
 
-import { Sidebar } from "@/components/sidebar";
+import { MobileNavigation, Sidebar } from "@/components/sidebar";
 
 import "./globals.css";
 
@@ -28,11 +28,12 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body>
-        <div className="grid min-h-screen grid-cols-[15rem_minmax(0,1fr)]">
+        <div className="grid min-h-screen grid-cols-1 md:grid-cols-[15rem_minmax(0,1fr)]">
           <Sidebar />
           <div className="grid min-h-screen grid-rows-[auto_minmax(0,1fr)]">
-            <header className="sticky top-0 z-20 flex min-h-14 items-center justify-end border-b border-border bg-background/80 px-6 py-2.5 backdrop-blur">
-              <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            <header className="sticky top-0 z-20 flex min-h-14 min-w-0 items-center justify-between gap-4 border-b border-border bg-background/80 px-4 py-3 backdrop-blur md:justify-end md:px-6 md:py-2.5">
+              <MobileNavigation />
+              <span className="hidden rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground md:inline-flex">
                 个人研究模式
               </span>
             </header>

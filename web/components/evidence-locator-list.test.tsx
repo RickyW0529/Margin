@@ -33,4 +33,35 @@ describe("EvidenceLocatorList", () => {
     expect(screen.getByText("snap-1")).toBeInTheDocument();
     expect(container.querySelector("img")).toBeNull();
   });
+
+  it("renders news snippets and security-link status", () => {
+    render(
+      <EvidenceLocatorList
+        evidence={[
+          {
+            evidence_id: "evt-1",
+            title: "投资者关系活动记录表",
+            source_level: "L1",
+            locator: "news_document",
+            snapshot_id: "snap-1",
+            snippet: "证券代码：002416 证券简称：爱施德",
+            linked_to_security: true,
+          },
+          {
+            evidence_id: "evt-2",
+            title: "海目星年度报告",
+            source_level: "L1",
+            locator: "news_document",
+            snapshot_id: "snap-2",
+            snippet: "公司代码：688559 公司简称：海目星",
+            linked_to_security: false,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("证券代码：002416 证券简称：爱施德")).toBeInTheDocument();
+    expect(screen.getByText("已关联本股票")).toBeInTheDocument();
+    expect(screen.getByText("需复核关联")).toBeInTheDocument();
+  });
 });

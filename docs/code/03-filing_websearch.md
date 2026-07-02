@@ -34,7 +34,7 @@
 - **Web 搜索**：通过可插拔 `WebSearchProvider` 调用第三方搜索 API，对结果进行合规边界检查与原内容验证。
 - **Materiality 与 Context Bundle**：`DocumentMaterialityService` 输出确定性相关度/重要度/新颖度评分；`NewsContextBundleBuilder` 把已完成文档和未完成 target 语义一起交给下游 RAG/AI。
 - **去重与质量评分**：URL、内容哈希、标题-日期、SimHash、向量相似度、转载链检测，并计算 L1-L5 来源等级与质量分。
-- **持久化与 Outbox**：使用 `NewsRepository` 将快照、事件、查询记录、重复决策、转载边写入 PostgreSQL，并通过事务性 Outbox 投递给下游索引队列。
+- **持久化与 Outbox**：使用 `NewsRepository` 将快照、事件、查询记录、重复决策、转载边写入 PostgreSQL，并通过事务性 Outbox 投递给下游索引队列；事件标题、正文、来源和错误文本入库前会清理 PostgreSQL 不接受的 NUL 字符，避免二进制/复杂文档抽取内容阻断 refresh。
 - **合规边界**：robots.txt 检查、禁止绕过登录墙/付费墙、401/403 拒绝、原内容可访问性验证。
 
 ---
@@ -67,7 +67,7 @@
 | `src/margin/news/providers/__init__.py` | 第三方 provider 包入口（当前为空）。 |
 | `src/margin/news/providers/tavily.py` | Tavily 搜索适配器：`TavilySearchAdapter`、token-safe `TavilyProviderError` 与稳定错误码。 |
 | `src/margin/news/dedup.py` | 去重与评分：`Deduplicator`、`NewsProcessor`、`PersistentNewsProcessor`、`QualityScorer`、SimHash 工具。 |
-| `src/margin/news/repository.py` | PostgreSQL 仓库：`NewsRepository`、`OutboxMessage`、`DedupRecord`、`RepostEdge`、v0.3 agentic run/task/plan/finding/brief 及行映射函数。 |
+| `src/margin/news/repository.py` | PostgreSQL 仓库：`NewsRepository`、`OutboxMessage`、`DedupRecord`、`RepostEdge`、v0.3 agentic run/task/plan/finding/brief 及行映射函数；`DocumentEvent` 文本字段入库前清理 NUL 字符。 |
 | `src/margin/news/db_models.py` | SQLAlchemy 行模型：快照、事件、Outbox、搜索记录、去重记录、转载边、游标、v0.2 refresh run/target、文档证券关系、materiality、context bundle。 |
 | `src/margin/news/outbox.py` | Outbox 发布者/消费者：`DocumentEventPublisher`、`OutboxConsumer`。 |
 | `src/margin/news/parsed.py` | 结构化解析：`ParsedBlock`、`ParsedDocument`、`StructuredDocumentParser`。 |

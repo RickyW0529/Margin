@@ -47,7 +47,9 @@
 
 Provider URL 会通过 `provider_router` 在分类内自动识别供应商标签：LLM 支持 DeepSeek、OpenAI、OpenRouter、Qwen、Gemini、Anthropic、ModelScope、Zhipu、Ollama、VLLM 和本地 OpenAI-compatible；WebSearch 支持 Tavily、Exa、SerpAPI、Bing；数据源支持 Tushare、AKShare；Embedding 支持 OpenAI-compatible、DashScope、Jina；Rerank 支持 Jina、Cohere。未匹配 URL 反显为 `Custom` 并保留用户提供的 URL。Token 仍只做加密写入，不参与持久化明文检测。
 
-用户指标视图与量化特征集是正交配置：`IndicatorViewVersion` 可以隐藏 `pb`，但 `QuantFeatureSetVersion.required_indicators` 仍可要求 `pb`，因此前端展示偏好不会改变底层全量数据同步和量化输入。
+用户指标视图与量化特征集是正交配置：`IndicatorViewVersion` 可以隐藏 `pb`，但 `QuantFeatureSetVersion.required_indicators` 仍可要求 `pb`，因此前端展示偏好不会改变底层全量数据同步和量化输入。默认量化特征集当前要求 `n_income_attr_p`、`roe_ttm`、`pe_ttm`：`n_income_attr_p` 用于第四层 ETL 派生最近两年净利，`roe_ttm` 作为财务 freshness canary。
+
+当前默认 bootstrap 会创建并激活 v0.3 版本化配置：`quant-feature-default-v0.3.0`、`quant-strategy-default-v0.3.0`、`scope-default-v0.3.0`。历史 v0.2 配置不会被覆盖；当库里已有 v0.2 active 版本时，repository 激活事务会先 flush/deprecate 旧 active 行，再激活新版本，以满足 PostgreSQL partial unique index 的“一类一个 active”约束。
 
 ### 1.2 Secret Store 与权限边界
 

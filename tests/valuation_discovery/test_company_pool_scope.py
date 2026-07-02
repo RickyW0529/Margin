@@ -32,8 +32,8 @@ class _Strategy:
         """Return a frozen quant feature set namespace."""
         return SimpleNamespace(
             version_id="features-v1",
-            required_indicators=("net_profit_ttm", "pe_ttm"),
-            optional_indicators=("roe_ttm",),
+            required_indicators=("n_income_attr_p", "roe_ttm", "pe_ttm"),
+            optional_indicators=(),
             history_days=500,
         )
 

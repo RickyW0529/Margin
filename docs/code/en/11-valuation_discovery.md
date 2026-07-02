@@ -8,7 +8,7 @@ In v0.3, `ALL_A` / `ALL_A_NON_ST` scopes prefer the latest data-layer `company_p
 
 The quant service now supports versioned manual-pool strategy metadata. When `QuantInputSnapshot.quant_feature_set.metadata.quant_strategy.thresholds.presets` provides factor weights, `QuantService` uses `manual_all_a_score` as the real `QuantResult.final_score` input for ranks and screening status. `theme_hotness` is a confirmed theme/industry-hotness bonus sourced from PIT-safe cross-section fields `theme_hot_score`, `theme_member_confidence`, and `theme_signal_confirmed`; unconfirmed signals and non-members receive no bonus. The compatibility path without versioned strategy metadata still uses the legacy five-group `FactorScorer.combine()` score.
 
-v0.3 adds fourth-layer marts. Third-layer canonical data is first materialized by the ETL pipeline into `quant_feature_snapshots` / `quant_feature_rows`, and quant reads only those fourth-layer feature snapshots. Quant results are then published through ETL into `analysis_snapshots`, `analysis_metrics`, `analysis_findings`, and `analysis_evidence_links`. This layer serves Quant, dashboards, and LangGraph scoped read tools with structured metrics, findings, quality flags, input/result hashes, and lineage so the AI flow does not recompute the same indicators from lower layers.
+v0.3 adds fourth-layer marts. Third-layer canonical data is first materialized by the ETL pipeline into `quant_feature_snapshots` / `quant_feature_rows`, and quant reads only those fourth-layer feature snapshots. Quant results are then published through ETL into `analysis_snapshots`, `analysis_metrics`, `analysis_findings`, and `analysis_evidence_links`. This layer serves Quant, dashboards, and LangGraph scoped read tools with structured metrics, findings, quality flags, input/result hashes, and lineage so the AI flow does not recompute the same indicators from lower layers. The Feature Mart cross-section loader also reads PIT-safe annual `n_income_attr_p` history and derives `net_profit_y1` / `net_profit_y2` during ETL for the consecutive-loss filter. Suspension hard filters prefer explicit `is_suspended` / `suspend_type` facts published from `suspend_d`; the missing-bar fallback only uses latest market dates with at least 80% coverage, preventing partial smoke/backfill bars from marking the whole market suspended. Refresh orchestration now runs `DASHBOARD_REFRESH` immediately after `RESEARCH_CONTEXT_BUILD`, publishing quant pass/near_threshold/watchlist candidates to today's recommendations before the slower AI review and valuation publish steps continue. `NewsRefreshAdapter` only releases downstream work after the news refresh is terminal or in an explicit provider-wait state; `pending` / `running` runs become a `news_refresh_incomplete` retryable step so target retries do not create partial research contexts and premature AI-deferred conclusions.
 
 ## Data Model and Migrations
 
@@ -35,8 +35,8 @@ Migrations: `20260622_0021` through `20260622_0024`, v0.3 source/company-pool/qu
 | `models.py` | `UniverseMembership`, `QuantInputSnapshot`, `QuantRun`, `QuantResult`, `NewsTarget`, `EffectiveAssessmentPointer` | Immutable domain records. |
 | `universe.py` | `UniverseResolver` | Resolves `CSI300`, `CSI500`, and `ALL_A` by business and system time. |
 | `scope.py` / `quant_input.py` | `ScopeBinding`, `QuantInputSnapshotBuilder` | Freezes user-visible and quant-required indicators into PIT input snapshots. |
-| `quant_adapter.py` | `SQLAlchemyScopeBindingProvider`, `WarehouseFactAdapter`, `build_cross_section_loader`, `QuantAdapter` | Connects strategy scopes, data-layer company pools, warehouse canonical/history reads, fourth-layer feature ETL, and quant service execution. Historical market reads cap at the latest 260 PIT points per security/indicator for stable full-universe runs. |
-| `quant/filters.py` | `HardFilterEngine` | Structured hard filters for ST, suspension, listing age, liquidity, missing financials, losses, debt, goodwill, cashflow, and audit opinion. |
+| `quant_adapter.py` | `SQLAlchemyScopeBindingProvider`, `WarehouseFactAdapter`, `build_cross_section_loader`, `QuantAdapter` | Connects strategy scopes, data-layer company pools, warehouse canonical/history reads, fourth-layer feature ETL, and quant service execution. Historical market reads cap at the latest 260 PIT points per security/indicator, annual `n_income_attr_p` history is read separately to derive `net_profit_y1` / `net_profit_y2`, and suspension status always reads explicit hard-filter indicators before applying a coverage-gated missing-bar fallback. |
+| `quant/filters.py` | `HardFilterEngine` | Structured hard filters for ST, suspension, listing age, liquidity, missing financials, losses, debt, goodwill, cashflow, and audit opinion. The default missing-financial canary is `roe_ttm`; consecutive-loss filtering consumes ETL-derived `net_profit_y1` / `net_profit_y2`. |
 | `quant/scoring.py` / `quant/service.py` | `FactorScorer`, `QuantService` | Industry normalization, weighted factor scoring, versioned manual-pool final score, status/guardrails, ranks, and persistence. |
 | `quant/manual_all_a.py` / `quant/theme_tilt.py` | `score_manual_all_a`, `score_theme_components`, `confirmation_states` | Manual three-pool quant scoring, confirmed theme/industry-hotness bonus, and theme entry/exit confirmation. |
 | `etl.py` | `SQLAlchemyQuantFeatureMartETLPipeline`, `QuantFeatureMartETLPipeline`, `AnalysisResultMartETLPipeline`, `build_feature_mart_cross_section_loader` | The v0.3 ETL management layer; it coordinates third-layer-to-feature-mart publishing, quant reads from fourth-layer features, and quant-result publishing back to Analysis Mart. |
@@ -45,6 +45,7 @@ Migrations: `20260622_0021` through `20260622_0024`, v0.3 source/company-pool/qu
 | `valuation.py` | `IndustryValuationRegistry` | Bank, insurance, cyclic resource, consumer/manufacturing, growth/tech, and utilities valuation families. |
 | `confidence.py` | `ConfidenceCalibrator` | Deterministic confidence calibration; LLM confidence is not accepted as an input. |
 | `assessments.py` | `EffectiveAssessmentService` | Deferred/abstained reviews keep the prior assessment; update/invalidate outcomes point to new assessments. |
+| `adapters.py` | `NewsRefreshAdapter`, `ResearchContextBuilderAdapter`, `AIReviewAdapter` | Connects news, context, and AI production services to the durable orchestrator; news refreshes that are still pending/running stay retryable and are not released to the context builder. |
 | `orchestrator.py` / `service.py` | `ValuationDiscoveryOrchestrator`, `ValuationDiscoveryService` | 12-step refresh orchestration, idempotent start, and explicit failed/waiting/skipped semantics. |
 
 ## Fourth-Layer Marts and ETL
@@ -124,25 +125,25 @@ Local end-to-end refresh verified on 2026-07-02:
 - Quant run: `qr_b0b6297bde0e43f8`
 - Result distribution: 300 results, 0 `pass`, 1 `near_threshold`, and 299 `reject`
 - Dashboard run: `dr_5e4501525fbe8434615c1994`, publishing one visible candidate, `000001.SZ`
-- The run completed DATA_FRESHNESS_CHECK, DATA_SYNC, SCOPE_RESOLVE, QUANT_INPUT_BUILD, QUANT_RUN, NEWS_TARGET_SELECTION, NEWS_REFRESH, NEWS_INDEXING, RESEARCH_CONTEXT_BUILD, AI_DELTA_REVIEW, VALUATION_PUBLISH, and DASHBOARD_REFRESH with real Tavily and embedding-provider HTTP calls recorded in the worker log.
+- The run completed DATA_FRESHNESS_CHECK, DATA_SYNC, SCOPE_RESOLVE, QUANT_INPUT_BUILD, QUANT_RUN, NEWS_TARGET_SELECTION, NEWS_REFRESH, NEWS_INDEXING, RESEARCH_CONTEXT_BUILD, DASHBOARD_REFRESH, AI_DELTA_REVIEW, and VALUATION_PUBLISH with real Tavily and embedding-provider HTTP calls recorded in the worker log.
 
 Latest verified Tushare-backed quant run:
 
 - Company-pool snapshot: `cps_29518c0fec90836c57609b6f1f24`
-- Quant run: `qr_df48cd92fdf1424d`
-- Decision time: `2026-06-22T16:00:00Z`
+- Quant run: `qr_ee2c66c6199f4a76`
+- Decision time: `2026-07-02T08:05:00Z`
 - Input companies: 5304
-- Quant input: `qis_432bf2fba3e741cb`, `fact_count=76462`, `missing_required=[]`, `data_status=ok`
-- Result distribution: 3 `pass`, 54 `near_threshold`, 447 `watchlist`, and 4800 `reject`; 4 rows have `data_status=insufficient`, and 3495 rows require review.
-- The theme/industry-hotness final-score path is covered by an in-memory service regression. The distribution below is from the pre-connection warehouse validation run and should be refreshed after rerunning real database quant.
+- Quant input: `qis_5740145402264f6c`, `missing_required=[]`, `data_status=ok`
+- Result distribution: 3 `pass`, 55 `near_threshold`, 350 `watchlist`, and 4896 `reject`; 4 rows have `data_status=insufficient`.
+- Suspension hard filters use explicit `suspend_d` state. This run has 577 suspension blockers and is no longer affected by the single-security partial market bar on 2026-06-23.
 
 Top pass:
 
 | rank | code | name | final | quality | value | growth | momentum | risk | status |
 |---:|---|---|---:|---:|---:|---:|---:|---:|---|
 | 1 | 002416.SZ | 爱施德 | 92.50 | 100.00 | 70.00 | 100.00 | 100.00 | 100.00 | pass |
-| 2 | 603223.SH | 恒通股份 | 90.50 | 100.00 | 70.00 | 100.00 | 100.00 | 80.00 | pass |
-| 3 | 000592.SZ | 平潭发展 | 80.25 | 100.00 | 25.00 | 100.00 | 100.00 | 90.00 | pass |
+| 2 | 600740.SH | 山西焦化 | 82.25 | 90.00 | 70.00 | 75.00 | 100.00 | 70.00 | pass |
+| 3 | 000036.SZ | 华联控股 | 81.63 | 95.00 | 54.38 | 100.00 | 95.63 | 54.38 | pass |
 
 ## Cross-Module Notes
 

@@ -1001,9 +1001,13 @@ class SQLAlchemyStrategyRepository:
                     row.owner_id, ConfigLifecycle.ACTIVE.value
                 )
             ).all()
+            deprecated_existing = False
             for active in active_rows:
                 if active.version_id != version_id:
                     active.lifecycle = ConfigLifecycle.DEPRECATED.value
+                    deprecated_existing = True
+            if deprecated_existing:
+                session.flush()
             row.lifecycle = ConfigLifecycle.ACTIVE.value
             return _quant_feature_set_from_row(row)
 
@@ -1058,9 +1062,13 @@ class SQLAlchemyStrategyRepository:
                     ConfigLifecycle.ACTIVE.value,
                 )
             ).all()
+            deprecated_existing = False
             for active in active_rows:
                 if active.version_id != version_id:
                     active.lifecycle = ConfigLifecycle.DEPRECATED.value
+                    deprecated_existing = True
+            if deprecated_existing:
+                session.flush()
             row.lifecycle = ConfigLifecycle.ACTIVE.value
             return _quant_strategy_from_row(row)
 
@@ -1204,9 +1212,13 @@ class SQLAlchemyStrategyRepository:
                     row.owner_id, ConfigLifecycle.ACTIVE.value
                 )
             ).all()
+            deprecated_existing = False
             for active in active_rows:
                 if active.version_id != version_id:
                     active.lifecycle = ConfigLifecycle.DEPRECATED.value
+                    deprecated_existing = True
+            if deprecated_existing:
+                session.flush()
             row.lifecycle = ConfigLifecycle.ACTIVE.value
             row.scope_hash = _research_scope_from_row(row).scope_hash
             return _research_scope_from_row(row)

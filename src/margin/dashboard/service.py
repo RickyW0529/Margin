@@ -24,6 +24,7 @@ from margin.dashboard.models import (
 from margin.dashboard.repository import DashboardRepository, MemoryDashboardRepository
 
 QuantProfileLoader = Callable[[str], dict[str, Any] | None]
+DetailContextLoader = Callable[[ResearchItem, ResearchRun], dict[str, Any] | None]
 
 
 class DashboardQueryService:
@@ -33,6 +34,7 @@ class DashboardQueryService:
         self,
         repository: DashboardRepository,
         quant_profile_loader: QuantProfileLoader | None = None,
+        detail_context_loader: DetailContextLoader | None = None,
     ) -> None:
         """Initialize the query service.
 
@@ -43,6 +45,7 @@ class DashboardQueryService:
         """
         self._repository = repository
         self._quant_profile_loader = quant_profile_loader
+        self._detail_context_loader = detail_context_loader
 
     def get_run(self, run_id: str) -> ResearchRun:
         """Fetch a research run by identifier.
@@ -72,7 +75,7 @@ class DashboardQueryService:
         limit: int,
     ) -> ResearchCandidateListResponse:
         """Return one v0.2 paged candidate list."""
-        return self._repository.list_research_candidates_v2(
+        page = self._repository.list_research_candidates_v2(
             scope_version_id=scope_version_id,
             universe_code=universe_code,
             filters=filters,
@@ -80,19 +83,23 @@ class DashboardQueryService:
             cursor=cursor,
             limit=limit,
         )
+        return self._enrich_candidate_page(page)
+
     def get_item_detail_v2(self, item_id: str) -> ResearchItemDetailV2:
         """Return the v0.2 company detail aggregate for a research item."""
         item = self.get_item(item_id)
         run = self.get_run(item.run_id)
-        quant_factors = self._load_quant_factors(item.symbol)
+        profile = self._load_quant_profile(item.symbol)
+        context = self._load_detail_context(item, run)
+        quant_factors = self._quant_factors_from_profile(profile)
         factors: dict[str, Any] = {
             "risk_score": item.risk_score,
             "confidence": item.confidence,
         }
         factors.update(quant_factors)
-        return ResearchItemDetailV2(
-            item=_candidate_item_from_research_item(item, run),
-            current_review={
+        factors = _merge_dicts(factors, _dict_value(context, "factors"))
+        current_review = _merge_dicts(
+            {
                 "outcome": (
                     "update_assessment"
                     if item.status == ItemStatus.PUBLISHED
@@ -102,20 +109,31 @@ class DashboardQueryService:
                 "run_id": item.run_id,
                 "workflow_run_id": item.workflow_run_id,
             },
-            effective_assessment={
+            _dict_value(context, "current_review"),
+        )
+        effective_assessment = _merge_dicts(
+            {
                 "assessment_id": item.snapshot_id,
                 "freshness": (
                     "current" if item.status == ItemStatus.PUBLISHED else "stale"
                 ),
                 "stale_reason": item.abstain_reason,
             },
-            factors=factors,
-            thesis={
+            _dict_value(context, "effective_assessment"),
+        )
+        thesis = _merge_dicts(
+            {
                 "statement": item.statement,
                 "counter_arguments": tuple(item.counter_arguments),
                 "rejection_reasons": tuple(item.rejection_reasons),
             },
-            evidence=tuple(
+            _dict_value(context, "thesis"),
+        )
+        context_evidence = context.get("evidence") if isinstance(context, dict) else None
+        evidence = (
+            tuple(context_evidence)
+            if isinstance(context_evidence, list | tuple)
+            else tuple(
                 {
                     "evidence_id": evidence_id,
                     "source_level": "unknown",
@@ -123,8 +141,10 @@ class DashboardQueryService:
                     "snapshot_id": item.snapshot_id,
                 }
                 for evidence_id in item.evidence_ids
-            ),
-            versions={
+            )
+        )
+        versions = _merge_dicts(
+            {
                 "run_id": run.run_id,
                 "strategy_id": run.strategy_id,
                 "strategy_version_id": run.version_id,
@@ -132,6 +152,18 @@ class DashboardQueryService:
                 "workflow_run_id": item.workflow_run_id,
                 "snapshot_id": item.snapshot_id or "",
             },
+            _dict_value(context, "versions"),
+        )
+        candidate = _candidate_item_from_research_item(item, run)
+        candidate = self._enrich_candidate(candidate, profile=profile, context=context)
+        return ResearchItemDetailV2(
+            item=candidate,
+            current_review=current_review,
+            effective_assessment=effective_assessment,
+            factors=factors,
+            thesis=thesis,
+            evidence=evidence,
+            versions=versions,
         )
 
     def get_item(self, item_id: str) -> ResearchItem:
@@ -157,6 +189,10 @@ class DashboardQueryService:
         Returns an empty dict when no loader is configured or no quant result
         exists, so the detail page degrades gracefully without erroring.
         """
+        return self._quant_factors_from_profile(self._load_quant_profile(symbol))
+
+    def _load_quant_profile(self, symbol: str) -> dict[str, Any]:
+        """Load the optional quant profile, swallowing provider gaps."""
         if self._quant_profile_loader is None:
             return {}
         try:
@@ -165,6 +201,10 @@ class DashboardQueryService:
             return {}
         if not profile:
             return {}
+        return dict(profile)
+
+    def _quant_factors_from_profile(self, profile: dict[str, Any]) -> dict[str, Any]:
+        """Extract numeric factor values from a quant profile dict."""
         factor_scores = profile.get("factor_scores") or []
         result: dict[str, Any] = {}
         for item in factor_scores:
@@ -183,6 +223,69 @@ class DashboardQueryService:
             if value is not None:
                 result[extra_key] = value
         return result
+
+    def _load_detail_context(
+        self,
+        item: ResearchItem,
+        run: ResearchRun,
+    ) -> dict[str, Any]:
+        """Load optional context data for one detail page."""
+        if self._detail_context_loader is None:
+            return {}
+        try:
+            context = self._detail_context_loader(item, run)
+        except Exception:
+            return {}
+        return dict(context or {})
+
+    def _enrich_candidate_page(
+        self,
+        page: ResearchCandidateListResponse,
+    ) -> ResearchCandidateListResponse:
+        """Apply profile-driven display fields to one candidate page."""
+        if self._quant_profile_loader is None:
+            return page
+        items = tuple(
+            self._enrich_candidate(
+                item,
+                profile=self._load_quant_profile(item.security_id),
+                context={},
+            )
+            for item in page.items
+        )
+        return ResearchCandidateListResponse(
+            items=items,
+            page_info=page.page_info,
+            facets=page.facets,
+            as_of=page.as_of,
+            scope_version_id=page.scope_version_id,
+        )
+
+    def _enrich_candidate(
+        self,
+        item: ResearchCandidateListItemV2,
+        *,
+        profile: dict[str, Any],
+        context: dict[str, Any],
+    ) -> ResearchCandidateListItemV2:
+        """Return a candidate with display name and valuation overrides."""
+        display_name = (
+            _string_value(context, "display_name")
+            or _string_value(profile, "display_name")
+            or _string_value(profile.get("factor_details"), "name")
+            or item.name
+        )
+        discount_rate = item.discount_rate
+        valuation = _dict_value(context, "factors").get("valuation")
+        if isinstance(valuation, dict):
+            discount_rate = _optional_float(valuation.get("discount_rate"), discount_rate)
+        discount_rate = _optional_float(profile.get("discount_rate"), discount_rate)
+        return item.model_copy(
+            update={
+                "name": display_name,
+                "discount_rate": discount_rate,
+            }
+        )
 
 
 class FeedbackService:
@@ -347,6 +450,7 @@ class DashboardServiceBundle:
         dashboard_repository: DashboardRepository,
         providers: list[Any] | None = None,
         quant_profile_loader: QuantProfileLoader | None = None,
+        detail_context_loader: DetailContextLoader | None = None,
     ) -> DashboardServiceBundle:
         """Create a service bundle from existing repositories.
 
@@ -355,12 +459,18 @@ class DashboardServiceBundle:
             providers: Optional list of providers to health-check.
             quant_profile_loader: Optional callable returning a quant profile
                 dict (with five factor scores) for a security id.
+            detail_context_loader: Optional callable returning AI/news/valuation
+                context for a detail item.
 
         Returns:
             A fully wired service bundle.
         """
         return cls(
-            query=DashboardQueryService(dashboard_repository, quant_profile_loader),
+            query=DashboardQueryService(
+                dashboard_repository,
+                quant_profile_loader,
+                detail_context_loader,
+            ),
             feedback=FeedbackService(dashboard_repository),
             providers=ProviderStatusService(providers),
             jobs=JobService(),
@@ -420,3 +530,36 @@ def _screening_status_from_item(item: ResearchItem) -> str:
     if item.signal_type.startswith(prefix):
         return item.signal_type.removeprefix(prefix)
     return "pass" if item.status == ItemStatus.PUBLISHED else item.status.value
+
+
+def _merge_dicts(base: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:
+    """Shallow merge two dicts while preserving base when update is empty."""
+    if not update:
+        return base
+    merged = dict(base)
+    merged.update(update)
+    return merged
+
+
+def _dict_value(value: Any, key: str | None = None) -> dict[str, Any]:
+    """Return a nested dict or an empty dict."""
+    candidate = value.get(key) if key is not None and isinstance(value, dict) else value
+    return dict(candidate) if isinstance(candidate, dict) else {}
+
+
+def _string_value(value: Any, key: str | None = None) -> str | None:
+    """Return a non-empty string from a dict or raw value."""
+    candidate = value.get(key) if key is not None and isinstance(value, dict) else value
+    if isinstance(candidate, str) and candidate.strip():
+        return candidate.strip()
+    return None
+
+
+def _optional_float(value: Any, fallback: float | None = None) -> float | None:
+    """Return a float when conversion is possible."""
+    if value is None:
+        return fallback
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback

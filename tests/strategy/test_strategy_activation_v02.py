@@ -26,6 +26,9 @@ from margin.storage.database import (
 )
 from margin.strategy.db_models import (
     ProviderSecretVersionRow,
+    QuantFeatureSetVersionRow,
+    QuantStrategyVersionRow,
+    ResearchScopeVersionRow,
     UniverseDefinitionVersionRow,
 )
 from margin.strategy.models import (
@@ -840,3 +843,131 @@ def test_concurrent_postgres_activation_keeps_one_active_version(
     engine.dispose()
 
     assert active_count == 1
+
+
+def test_postgres_research_scope_activation_deprecates_old_scope_before_new_active(
+    database_url: str,
+) -> None:
+    """Verify scope activation respects the one-active partial unique index.
+
+    Args:
+        database_url: PostgreSQL connection URL for the isolated test database.
+
+    Returns:
+        None.
+    """
+    engine = create_database_engine(DatabaseSettings(url=database_url))
+    Base.metadata.create_all(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory.begin() as session:
+        session.query(ResearchScopeVersionRow).delete()
+    repository = SQLAlchemyStrategyRepository(session_factory)
+    repository.save_research_scope(
+        ResearchScopeVersion(
+            version_id="scope-universe-b-old",
+            universe_version_id="univ-csi300",
+            indicator_view_version_id="view-active",
+            quant_feature_set_version_id="feature-active",
+            quant_strategy_version_id="strategy-active",
+            ai_prompt_version_id="prompt-active",
+            canonical_rule_version="canonical-v0.2.0",
+            tool_policy_version_id="tool-policy-active",
+            provider_config_version_ids=(),
+            lifecycle=ConfigLifecycle.ACTIVE,
+        )
+    )
+    repository.save_research_scope(
+        ResearchScopeVersion(
+            version_id="scope-universe-7-new",
+            universe_version_id="univ-all-a",
+            indicator_view_version_id="view-active",
+            quant_feature_set_version_id="feature-active",
+            quant_strategy_version_id="strategy-active",
+            ai_prompt_version_id="prompt-active",
+            canonical_rule_version="canonical-v0.2.0",
+            tool_policy_version_id="tool-policy-active",
+            provider_config_version_ids=(),
+            lifecycle=ConfigLifecycle.REVIEW,
+        )
+    )
+
+    activated = repository.activate_research_scope("scope-universe-7-new")
+
+    old_scope = repository.get_research_scope("scope-universe-b-old")
+    active_scope = repository.get_active_research_scope("local-admin")
+    with session_factory.begin() as session:
+        session.query(ResearchScopeVersionRow).delete()
+    engine.dispose()
+
+    assert activated.lifecycle is ConfigLifecycle.ACTIVE
+    assert old_scope is not None
+    assert old_scope.lifecycle is ConfigLifecycle.DEPRECATED
+    assert active_scope is not None
+    assert active_scope.version_id == "scope-universe-7-new"
+
+
+def test_postgres_quant_activation_deprecates_old_versions_before_new_active(
+    database_url: str,
+) -> None:
+    """Verify quant config activation respects active partial unique indexes."""
+    engine = create_database_engine(DatabaseSettings(url=database_url))
+    Base.metadata.create_all(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory.begin() as session:
+        session.query(QuantFeatureSetVersionRow).delete()
+        session.query(QuantStrategyVersionRow).delete()
+    repository = SQLAlchemyStrategyRepository(session_factory)
+    repository.save_quant_feature_set(
+        QuantFeatureSetVersion(
+            version_id="quant-feature-b-old",
+            required_indicators=("net_profit_ttm", "pe_ttm"),
+            lifecycle=ConfigLifecycle.ACTIVE,
+        )
+    )
+    repository.save_quant_feature_set(
+        QuantFeatureSetVersion(
+            version_id="quant-feature-7-new",
+            required_indicators=("n_income_attr_p", "roe_ttm", "pe_ttm"),
+            lifecycle=ConfigLifecycle.REVIEW,
+        )
+    )
+    repository.save_quant_strategy(
+        QuantStrategyVersion(
+            version_id="quant-strategy-b-old",
+            factor_weights={"quality": 0.35},
+            calibration_report_id="old",
+            lifecycle=ConfigLifecycle.ACTIVE,
+        )
+    )
+    repository.save_quant_strategy(
+        QuantStrategyVersion(
+            version_id="quant-strategy-7-new",
+            factor_weights={"value": 1.0},
+            thresholds={"presets": {"ALL_A": {"factor_weights": {"value": 1.0}}}},
+            calibration_report_id="new",
+            lifecycle=ConfigLifecycle.REVIEW,
+        )
+    )
+
+    feature = repository.activate_quant_feature_set("quant-feature-7-new")
+    strategy = repository.activate_quant_strategy("quant-strategy-7-new")
+
+    old_feature = repository.get_quant_feature_set("quant-feature-b-old")
+    old_strategy = repository.get_quant_strategy("quant-strategy-b-old")
+    active_feature = repository.get_active_quant_feature_set("local-admin")
+    active_strategy = repository.get_active_quant_strategy("local-admin")
+    with session_factory.begin() as session:
+        session.query(QuantFeatureSetVersionRow).delete()
+        session.query(QuantStrategyVersionRow).delete()
+    engine.dispose()
+
+    assert feature.lifecycle is ConfigLifecycle.ACTIVE
+    assert strategy.lifecycle is ConfigLifecycle.ACTIVE
+    assert old_feature is not None
+    assert old_feature.lifecycle is ConfigLifecycle.DEPRECATED
+    assert old_strategy is not None
+    assert old_strategy.lifecycle is ConfigLifecycle.DEPRECATED
+    assert active_feature is not None
+    assert active_feature.version_id == "quant-feature-7-new"
+    assert active_strategy is not None
+    assert active_strategy.version_id == "quant-strategy-7-new"

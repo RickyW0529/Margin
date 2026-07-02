@@ -372,8 +372,8 @@ class TestTushareProvider:
         assert financials[0]["source"] == "tushare"
         assert financials[0]["roe_ttm"] == 0.12
 
-    def test_get_financials_derives_ttm_profit_from_pit_income_rows(self):
-        """TTM profit uses latest annual plus current minus prior-year period."""
+    def test_get_financials_lands_raw_income_profit_from_pit_income_rows(self):
+        """Raw parent-company profit is landed without provider-time derivation."""
         p = TushareProvider(token="fake")
         mock_pro = MagicMock()
         mock_pro.fina_indicator.return_value = pd.DataFrame(
@@ -422,9 +422,10 @@ class TestTushareProvider:
             datetime(2026, 6, 18),
         )
 
-        assert financials[0]["net_profit_ttm"] == 110.0
-        assert financials[0]["net_profit_y1"] == 100.0
-        assert financials[0]["net_profit_y2"] == 80.0
+        assert financials[0]["n_income_attr_p"] == 30.0
+        assert "net_profit_ttm" not in financials[0]
+        assert "net_profit_y1" not in financials[0]
+        assert "net_profit_y2" not in financials[0]
 
     def test_large_universe_financials_use_paginated_cross_section(self):
         """Financial sync uses paginated market-wide calls for a large universe."""
@@ -469,7 +470,7 @@ class TestTushareProvider:
         assert "ts_code" not in mock_pro.income.call_args.kwargs
         assert financials[0]["roe_ttm"] == 0.12
         assert financials[0]["liability_ratio"] == 0.45
-        assert financials[0]["net_profit_ttm"] == 100.0
+        assert financials[0]["n_income_attr_p"] == 100.0
 
     def test_get_valuations(self):
         """``get_valuations`` maps daily_basic rows to canonical valuation fields."""

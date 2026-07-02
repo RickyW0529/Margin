@@ -38,7 +38,7 @@ It implements the acquisition, web search, deduplication, and source-leveling bo
 | Compliance enforcement | Respect robots.txt, reject paywalled or blocked content, and refuse to bypass login walls or anti-scraping mechanisms. |
 | Deduplication | Detect duplicates by URL, content hash, title/date, SimHash, vector similarity, and repost-chain detection. |
 | Quality scoring | Score events on authority, completeness, timeliness, and uniqueness. |
-| Persistence | Store cursors, snapshots, document events, search records, duplicate decisions, repost edges, and outbox messages in PostgreSQL. |
+| Persistence | Store cursors, snapshots, document events, search records, duplicate decisions, repost edges, and outbox messages in PostgreSQL; document-event title, content, source, and error text are stripped of PostgreSQL-invalid NUL bytes before insert so binary/complex extracted text does not block refreshes. |
 | Outbox publishing | Enqueue ready document events for vector indexing via a transactional outbox. |
 
 ### Pipeline Flow
@@ -83,7 +83,7 @@ It implements the acquisition, web search, deduplication, and source-leveling bo
 | `src/margin/news/parsed.py` | Block-oriented parsed document models and `StructuredDocumentParser` for HTML, CSV, JSON, PDF, and text. |
 | `src/margin/news/providers/__init__.py` | Provider package docstring; third-party adapters live under this package. |
 | `src/margin/news/providers/tavily.py` | `TavilySearchAdapter` plus token-safe `TavilyProviderError` and stable error codes. |
-| `src/margin/news/repository.py` | `NewsRepository` and domain record models for PostgreSQL-backed persistence, including v0.3 agentic run/task/plan/finding/brief records. |
+| `src/margin/news/repository.py` | `NewsRepository` and domain record models for PostgreSQL-backed persistence, including v0.3 agentic run/task/plan/finding/brief records; sanitizes `DocumentEvent` text fields before PostgreSQL insert. |
 | `src/margin/news/robots.py` | `RobotsChecker` and `RobotsRules` for robots.txt longest-prefix Allow/Disallow compliance. |
 | `src/margin/news/scheduler.py` | `IncrementalAcquisitionRunner` and `AcquisitionRunResult` for restart-safe incremental acquisition. |
 | `src/margin/news/websearch.py` | Web search models, `WebSearchProvider`, `ComplianceChecker`, `OriginalContentVerifier`, and `WebSearchService`. |

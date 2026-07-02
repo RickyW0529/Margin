@@ -16,7 +16,7 @@ class QuantConfig(BaseModel):
     financial_liability_ratio_max: float = 0.95
     goodwill_to_equity_risk: float = 0.40
     min_ocf_to_net_profit: float = 0.50
-    critical_financial_fields: tuple[str, ...] = ("net_profit_ttm",)
+    critical_financial_fields: tuple[str, ...] = ("roe_ttm",)
     financial_industry_families: tuple[str, ...] = ("bank", "insurance", "brokerage", "financial")
     abnormal_audit_opinions: tuple[str, ...] = (
         "qualified",

@@ -73,3 +73,16 @@ def test_fina_indicator_natural_key_matches_real_response_fields() -> None:
     )
 
     assert endpoint.natural_key_fields == ("ts_code", "end_date", "ann_date")
+
+
+def test_income_requirement_uses_raw_parent_profit_not_provider_ttm() -> None:
+    """Income sync admits raw profit; y1/y2 are derived later by Feature Mart ETL."""
+    catalog = QuantDataRequirementCatalog.default()
+    requirement = next(
+        item
+        for item in catalog.requirements()
+        if item.code == "income_fundamentals"
+    )
+
+    assert "n_income_attr_p" in requirement.warehouse_fields
+    assert "net_profit_ttm" not in requirement.warehouse_fields

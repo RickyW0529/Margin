@@ -55,6 +55,20 @@ def test_step_worker_runs_pipeline_in_order() -> None:
 
     steps = dependencies.repository.list_steps(run.run_id)
     assert processed == 12
+    assert list(steps) == [
+        "DATA_FRESHNESS_CHECK",
+        "DATA_SYNC",
+        "SCOPE_RESOLVE",
+        "QUANT_INPUT_BUILD",
+        "QUANT_RUN",
+        "NEWS_TARGET_SELECTION",
+        "NEWS_REFRESH",
+        "NEWS_INDEXING",
+        "RESEARCH_CONTEXT_BUILD",
+        "DASHBOARD_REFRESH",
+        "AI_DELTA_REVIEW",
+        "VALUATION_PUBLISH",
+    ]
     assert all(step.state == "succeeded" for step in steps.values())
     assert dependencies.quant_service.call_count == 1
     assert dependencies.repository.get_run(run.run_id).state == "succeeded"

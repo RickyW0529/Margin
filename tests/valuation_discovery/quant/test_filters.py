@@ -34,6 +34,7 @@ def quant_frame() -> pd.DataFrame:
                 "decision_at": datetime(2026, 6, 22, tzinfo=UTC),
                 "avg_amount_20d": 80_000_000,
                 "net_profit_ttm": 1_000_000_000,
+                "roe_ttm": 0.15,
                 "net_profit_y1": 900_000_000,
                 "net_profit_y2": 800_000_000,
                 "liability_ratio": 0.40,
@@ -92,10 +93,29 @@ def test_required_financial_missing_marks_data_insufficient(quant_frame: pd.Data
     Returns:
         None.
     """
-    quant_frame.loc["000001.SZ", "net_profit_ttm"] = None
+    quant_frame.loc["000001.SZ", "roe_ttm"] = None
     result = HardFilterEngine(QuantConfig()).apply(quant_frame)
 
     filtered = result.by_security["000001.SZ"]
     assert filtered.data_status == DataStatus.INSUFFICIENT
     assert filtered.allowed_for_scoring is False
     assert filtered.reason_by_code("missing_critical_financial") is not None
+
+
+def test_legacy_ttm_profit_missing_is_not_a_critical_financial(
+    quant_frame: pd.DataFrame,
+) -> None:
+    """Verify the old net_profit_ttm canary no longer blocks a valid row.
+
+    Args:
+        quant_frame: Deterministic quant cross-section DataFrame fixture.
+
+    Returns:
+        None.
+    """
+    quant_frame.loc["000001.SZ", "net_profit_ttm"] = None
+    result = HardFilterEngine(QuantConfig()).apply(quant_frame)
+
+    filtered = result.by_security["000001.SZ"]
+    assert filtered.data_status == DataStatus.OK
+    assert filtered.reason_by_code("missing_critical_financial") is None

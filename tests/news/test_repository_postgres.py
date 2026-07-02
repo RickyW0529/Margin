@@ -178,6 +178,27 @@ def test_parse_failed_events_are_persisted_but_not_published(news_repository):
     assert news_repository.claim_outbox(topic="vector_index", limit=10) == []
 
 
+def test_document_event_strips_nul_bytes_before_postgres_insert(news_repository):
+    """Document text with NUL bytes is sanitized before PostgreSQL persistence."""
+    news_repository.add_snapshot(_snapshot())
+    event = _event("evt_nul").model_copy(
+        update={
+            "title": "公告\x00标题",
+            "content": "正文\x00内容",
+            "processing_error": "错误\x00信息",
+        }
+    )
+
+    news_repository.add_document_event(event, publishable=True)
+
+    stored = news_repository.get_document_event("evt_nul")
+    assert stored is not None
+    assert stored.title == "公告标题"
+    assert stored.content == "正文内容"
+    assert stored.processing_error == "错误信息"
+    assert news_repository.claim_outbox(topic="vector_index", limit=10)[0].event_id == "evt_nul"
+
+
 def test_dedup_and_repost_chain_are_persistent(news_repository):
     """Dedup records and repost edges are queryable after persistence.
 

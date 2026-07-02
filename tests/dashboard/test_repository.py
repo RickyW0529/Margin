@@ -13,7 +13,14 @@ from margin.dashboard.db_models import (
     DashboardItemRow,
     DashboardRunRow,
 )
-from margin.dashboard.models import FeedbackRecord, FeedbackType, ResearchItem, ResearchRun
+from margin.dashboard.models import (
+    DashboardFilters,
+    DashboardSort,
+    FeedbackRecord,
+    FeedbackType,
+    ResearchItem,
+    ResearchRun,
+)
 from margin.dashboard.repository import (
     MemoryDashboardRepository,
     SQLAlchemyDashboardRepository,
@@ -110,6 +117,68 @@ def test_sqlalchemy_repository_round_trips_run_items_and_feedback(database_url):
         assert fresh.get_run(run.run_id) == run
         assert fresh.list_items(run.run_id) == [item]
         assert fresh.list_feedback(item.item_id) == [feedback]
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+
+
+def test_sqlalchemy_candidate_list_prefers_complete_run_for_same_decision_time(database_url):
+    """Candidate queries choose the newer complete projection when PIT times tie."""
+    engine = create_database_engine(DatabaseSettings(url=database_url))
+    Base.metadata.create_all(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory.begin() as session:
+        for row in (DashboardFeedbackRow, DashboardItemRow, DashboardRunRow):
+            session.query(row).delete()
+
+    repo = SQLAlchemyDashboardRepository(session_factory)
+    old_run = _run("dr_old").model_copy(
+        update={
+            "version_id": "scope-current",
+            "item_count": 1,
+            "created_at": datetime(2026, 6, 22, tzinfo=UTC),
+        }
+    )
+    new_run = _run("dr_new").model_copy(
+        update={
+            "version_id": "scope-current",
+            "universe": ["002416.SZ", "600740.SH"],
+            "item_count": 2,
+            "published_count": 2,
+            "created_at": datetime(2026, 6, 22, tzinfo=UTC),
+        }
+    )
+    old_item = _item(old_run.run_id).model_copy(
+        update={"item_id": "di_old", "symbol": "000001.SZ"}
+    )
+    new_items = [
+        _item(new_run.run_id).model_copy(
+            update={"item_id": "di_new_1", "symbol": "002416.SZ"}
+        ),
+        _item(new_run.run_id).model_copy(
+            update={"item_id": "di_new_2", "symbol": "600740.SH"}
+        ),
+    ]
+
+    try:
+        repo.add_run(old_run)
+        repo.add_items([old_item])
+        repo.add_run(new_run)
+        repo.add_items(new_items)
+
+        response = repo.list_research_candidates_v2(
+            scope_version_id="scope-current",
+            universe_code="ALL_A",
+            filters=DashboardFilters(),
+            sort=DashboardSort(field="final_score", direction="desc"),
+            cursor=None,
+            limit=20,
+        )
+
+        assert {item.security_id for item in response.items} == {
+            "002416.SZ",
+            "600740.SH",
+        }
     finally:
         Base.metadata.drop_all(engine)
         engine.dispose()

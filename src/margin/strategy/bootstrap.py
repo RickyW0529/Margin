@@ -1,4 +1,4 @@
-"""Idempotent bootstrap for the single-user v0.2 research configuration."""
+"""Idempotent bootstrap for the single-user v0.3 research configuration."""
 
 from __future__ import annotations
 
@@ -27,6 +27,9 @@ from margin.valuation_discovery.quant.pool_defaults import (
 )
 
 OWNER_ID = "local-admin"
+DEFAULT_QUANT_FEATURE_SET_VERSION_ID = "quant-feature-default-v0.3.0"
+DEFAULT_QUANT_STRATEGY_VERSION_ID = "quant-strategy-default-v0.3.0"
+DEFAULT_SCOPE_VERSION_ID = "scope-default-v0.3.0"
 
 DEFAULT_INDEX_UNIVERSES = {
     "CSI300": {
@@ -117,7 +120,7 @@ class StrategyBootstrapService:
                 missing_provider_names=missing,
             )
 
-        scope_id = "scope-default-v0.2.0"
+        scope_id = DEFAULT_SCOPE_VERSION_ID
         scope = self._repository.get_research_scope(scope_id)
         if scope is None:
             scope = self._service.create_research_scope(
@@ -126,10 +129,10 @@ class StrategyBootstrapService:
                     owner_id=OWNER_ID,
                     universe_version_id="universe-all-a-default-v0.2.0",
                     indicator_view_version_id="indicator-view-default-v0.2.0",
-                    quant_feature_set_version_id="quant-feature-default-v0.2.0",
-                    quant_strategy_version_id="quant-strategy-default-v0.2.0",
+                    quant_feature_set_version_id=DEFAULT_QUANT_FEATURE_SET_VERSION_ID,
+                    quant_strategy_version_id=DEFAULT_QUANT_STRATEGY_VERSION_ID,
                     ai_prompt_version_id="style-prompt-default-v0.2.0",
-                    canonical_rule_version="canonical-v0.2.0",
+                    canonical_rule_version="canonical-v0.3.0",
                     tool_policy_version_id="tool-policy-default-v0.2.0",
                     provider_config_version_ids=tuple(
                         sorted(
@@ -140,13 +143,13 @@ class StrategyBootstrapService:
                     lifecycle=ConfigLifecycle.REVIEW,
                 ),
                 actor_id=OWNER_ID,
-                idempotency_key="bootstrap-scope-create-v0.2.0",
+                idempotency_key="bootstrap-scope-create-v0.3.0",
             )
         if scope.lifecycle is not ConfigLifecycle.ACTIVE:
             self._service.activate_research_scope(
                 scope.version_id,
                 actor_id=OWNER_ID,
-                idempotency_key="bootstrap-scope-activate-v0.2.0",
+                idempotency_key="bootstrap-scope-activate-v0.3.0",
             )
         return BootstrapResult(
             scope_version_id=scope_id,
@@ -237,16 +240,15 @@ class StrategyBootstrapService:
 
     def _ensure_quant_feature_set(self) -> None:
         """Ensure the PIT quant input contract."""
-        version_id = "quant-feature-default-v0.2.0"
+        version_id = DEFAULT_QUANT_FEATURE_SET_VERSION_ID
         version = self._repository.get_quant_feature_set(version_id)
         if version is None:
             version = self._service.create_quant_feature_set(
                 QuantFeatureSetVersion(
                     version_id=version_id,
                     owner_id=OWNER_ID,
-                    required_indicators=("net_profit_ttm", "pe_ttm"),
+                    required_indicators=("n_income_attr_p", "roe_ttm", "pe_ttm"),
                     optional_indicators=(
-                        "roe_ttm",
                         "roic_ttm",
                         "gross_margin_ttm",
                         "net_margin_ttm",
@@ -283,18 +285,18 @@ class StrategyBootstrapService:
                     lifecycle=ConfigLifecycle.REVIEW,
                 ),
                 actor_id=OWNER_ID,
-                idempotency_key="bootstrap-quant-feature-create-v0.2.0",
+                idempotency_key="bootstrap-quant-feature-create-v0.3.0",
             )
         if version.lifecycle is not ConfigLifecycle.ACTIVE:
             self._service.activate_quant_feature_set(
                 version_id,
                 actor_id=OWNER_ID,
-                idempotency_key="bootstrap-quant-feature-activate-v0.2.0",
+                idempotency_key="bootstrap-quant-feature-activate-v0.3.0",
             )
 
     def _ensure_quant_strategy(self) -> None:
-        """Ensure the approved deterministic v0.2 factor policy."""
-        version_id = "quant-strategy-default-v0.2.0"
+        """Ensure the approved deterministic v0.3 manual All-A policy."""
+        version_id = DEFAULT_QUANT_STRATEGY_VERSION_ID
         version = self._repository.get_quant_strategy(version_id)
         if version is None:
             version = self._service.create_quant_strategy(
@@ -308,13 +310,13 @@ class StrategyBootstrapService:
                     lifecycle=ConfigLifecycle.REVIEW,
                 ),
                 actor_id=OWNER_ID,
-                idempotency_key="bootstrap-quant-strategy-create-v0.2.0",
+                idempotency_key="bootstrap-quant-strategy-create-v0.3.0",
             )
         if version.lifecycle is not ConfigLifecycle.ACTIVE:
             self._service.activate_quant_strategy(
                 version_id,
                 actor_id=OWNER_ID,
-                idempotency_key="bootstrap-quant-strategy-activate-v0.2.0",
+                idempotency_key="bootstrap-quant-strategy-activate-v0.3.0",
             )
 
     def _ensure_style_prompt(self) -> None:

@@ -14,6 +14,7 @@ Current responsibilities:
 - home recommendation Q&A that answers from candidate data and rejects refresh, sync, settings, or trading intent;
 - a recommendation dashboard for stocks, reasons, confidence, quant score, valuation discount, and risk hints;
 - one-click "刷新今日研究" on the recommendation dashboard, using default `scope-current` and current time to start valuation discovery, best-effort wake a worker after API acceptance, and show the latest refresh as a live React Flow node graph; while the latest run is non-terminal, starting another refresh is disabled to avoid duplicate queueing;
+- dashboard projection is published as soon as the latest quant run finishes, before expensive AI review; when runs share the same decision time, selection is stable by `created_at`, `item_count`, and `run_id` so a newer full-market projection is not hidden by an older one-stock run;
 - Provider key configuration with write-only secret handling.
 - personal-research information architecture: user-facing pages are limited to Q&A, recommendations, settings, and settings subpages; backend defaults and settings absorb Provider, scope, run, and candidate concepts.
 
@@ -32,6 +33,7 @@ Removed responsibilities:
 | `src/margin/dashboard/db_models.py` | SQLAlchemy rows for `dashboard_runs`, `dashboard_items`, and `dashboard_feedback`. |
 | `src/margin/dashboard/repository.py` | Memory/PostgreSQL repository with candidate pagination, filtering, sorting, facets, and feedback storage. |
 | `src/margin/dashboard/service.py` | `DashboardQueryService`, `FeedbackService`, `ProviderStatusService`, `JobService`, and `DashboardServiceBundle`. |
+| `src/margin/dashboard/detail_context.py` | Detail-page context loader. It uses centralized SQL query factories to read research contexts, AI delta reviews, effective assessments, and news documents, and reads PIT-safe trends from the warehouse. |
 | `src/margin/api/routes/dashboard.py` | `/api/v1/research`, `/api/v1/research/items/{item_id}`, `/api/v1/research/copilot`, feedback, provider status, and job endpoints. |
 | `src/margin/api/routes/valuation_discovery.py` | Refresh entrypoints: `POST /api/v1/valuation-discovery/refreshes` and `GET /api/v1/valuation-discovery/runs/{run_id}`; the start route wakes a valuation worker once in the background so new work does not sit queued until the next polling tick. |
 | `web/app/layout.tsx` | Global application shell; sidebar exposes only Q&A, today's recommendations, and settings, while the top bar shows personal research mode. |
@@ -43,6 +45,7 @@ Removed responsibilities:
 | `web/lib/api.ts` | Frontend API client for v0.2 dashboard, valuation discovery, and provider settings. |
 | `web/components/current-vs-effective-panel.tsx` | Current review vs effective assessment panel. |
 | `web/components/evidence-locator-list.tsx` | Evidence locator rendering; external text is rendered as text. |
+| `web/components/metric-trend-chart.tsx` | Compact fixed-size SVG trend chart for price, valuation, ROE, profit, and other detail metrics. |
 | `web/hooks/use-dashboard-refresh-run.ts` | Latest dashboard refresh-run state owner: start, load newest run, poll run detail, toggle open/collapsed state, and block duplicate starts while the latest run is non-terminal. |
 | `web/lib/refresh-run-graph.ts` | Normalizes sparse valuation discovery step payloads into fixed React Flow node states: completed, active, queued, pending, waiting, and failed. |
 | `web/components/dashboard-refresh-control.tsx` | One-click dashboard refresh controller that hides scope/decision inputs, starts valuation discovery with defaults, shows the latest refresh graph in a modal overlay, and disables the action while a non-terminal run exists. |
@@ -81,8 +84,8 @@ Removed responsibilities:
 
 | Service | Method | Role |
 | --- | --- | --- |
-| `DashboardQueryService` | `list_research_candidates_v2(...)` | Returns server-side paginated candidate lists. |
-| `DashboardQueryService` | `get_item_detail_v2(item_id)` | Returns company detail with current/effective separation. |
+| `DashboardQueryService` | `list_research_candidates_v2(...)` | Returns server-side paginated candidate lists and overlays display fields such as Chinese security names from quant profiles. |
+| `DashboardQueryService` | `get_item_detail_v2(item_id)` | Returns company detail by merging quant profiles, research contexts, AI delta reviews, news documents, effective assessments, valuation state, and key trends. |
 | `FeedbackService` | `record_feedback(item_id, feedback_type, comment)` | Appends feedback without mutating research items. |
 | `ProviderStatusService` | `list_status()` | Runs provider health checks and reports degraded/unhealthy states. |
 | `JobService` | `record_completed_job(run_id)` / `get_job(job_run_id)` | Stores and reads lightweight job records. |
@@ -90,7 +93,7 @@ Removed responsibilities:
 
 ## 5. Repository and Pagination
 
-`DashboardRepository.list_research_candidates_v2(...)` reads only the latest dashboard run for one scope, then performs filtering, sorting, cursor pagination, and facets on the server so older refreshes do not leak into today's recommendations.
+`DashboardRepository.list_research_candidates_v2(...)` reads only the latest dashboard run for one scope, then performs filtering, sorting, cursor pagination, and facets on the server so older refreshes do not leak into today's recommendations. Runs are selected by `decision_at desc, created_at desc, item_count desc, run_id desc`; when manual or automated refreshes reuse the same PIT, the newer fuller projection wins over an older one-stock projection.
 
 Filters:
 
@@ -159,7 +162,8 @@ Removed public endpoints:
 | `CompanyPoolSelector` | Scope-settings selector for company pools; only persisted pools with real members can be switched, and the current pool is disabled with a "当前使用" state. |
 | `RecommendationChatPanel` | User-facing home Q&A with default question, read-only Copilot call, and loading/disabled/error/success states. |
 | `CurrentVsEffectivePanel` | Separates current review from effective assessment. |
-| `EvidenceLocatorList` | Renders evidence ids, source levels, locators, and snapshot ids. |
+| `EvidenceLocatorList` | Renders evidence ids, source levels, locators, snapshot ids, news snippets, and whether the document is linked to the current security. |
+| `MetricTrendChart` | Renders detail-page metric trends with a stable empty state when fewer than two points are available. |
 | `ProviderSettingsPanel` | Write-only Provider secret form. |
 | `ProviderStatusPanel` | Provider health list with healthy/blocker counts in the header. |
 
@@ -169,6 +173,7 @@ Backend coverage:
 
 - candidate pagination, filters, and facets;
 - item detail current/effective separation;
+- detail-context merging for Chinese names, deferred AI status, news evidence, missing valuation state, and trend data;
 - read-only Copilot mutation rejection;
 - feedback append-only behavior;
 - memory and PostgreSQL repository conversion;
@@ -184,6 +189,7 @@ Frontend coverage:
 - user-facing refresh blocker messages for Tavily/service-not-configured errors;
 - provider settings;
 - current/effective, evidence locator, Q&A, refresh graph, and settings components.
+- news snippets/security-link status in evidence locators and metric trend chart empty states.
 
 Useful commands:
 
@@ -199,7 +205,7 @@ python scripts/smoke_dashboard_e2e.py --base-url http://localhost:3000
 | Module | Relationship |
 | --- | --- |
 | `07-strategy_config` | Settings subpages rely on versioned config and Secret Store; the main navigation hides low-level configuration details. |
-| `11-valuation_discovery` | `DASHBOARD_REFRESH` publishes the latest quant run's pass/near_threshold/watchlist results as the dashboard projection; `/dashboard` and the home preview consume that projection; `/dashboard` can start refreshes and render the latest run status as a React Flow node graph. |
+| `11-valuation_discovery` | `DASHBOARD_REFRESH` publishes the latest quant run's pass/near_threshold/watchlist results as the dashboard projection; `/dashboard` and the home preview consume that projection; `/dashboard` can start refreshes and render the latest run status as a React Flow node graph. Detail pages consume research-context and Analysis Mart lineage to show Chinese names, news documents, valuation empty states, and key trends. |
 | `06-multi_agent_research` | `/dashboard/items/[itemId]` detail displays AI delta-review current/effective output. |
 | `05-rag_evidence` | `/dashboard/items/[itemId]` detail shows evidence locators for the RAG evidence system. |
 | `10-deployment_audit` | Provider status, jobs, traces, and smoke checks rely on deployment audit and observability. |

@@ -6,7 +6,6 @@ from datetime import datetime
 from typing import Any
 
 from margin.data.providers.tushare_provider import (
-    _derive_income_metrics,
     _map_adjustment_row,
     _map_financial_row,
     _map_valuation_row,
@@ -145,20 +144,15 @@ class TushareWarehousePublisher:
                 for row in records
             ]
         if api_name == "income":
-            derived = _derive_income_metrics(records)
             return [
                 {
                     **_financial_base(row, fetched_at),
                     "revenue": _number(row.get("revenue") or row.get("total_revenue")),
                     "operating_profit": _number(row.get("operate_profit")),
                     "total_profit": _number(row.get("total_profit")),
-                    "net_profit": _number(row.get("n_income_attr_p")),
+                    "n_income_attr_p": _number(row.get("n_income_attr_p")),
                     "ebit": _number(row.get("ebit")),
                     "ebitda": _number(row.get("ebitda")),
-                    **derived.get(
-                        (str(row.get("ts_code") or ""), str(row.get("end_date") or "")),
-                        {},
-                    ),
                 }
                 for row in records
             ]

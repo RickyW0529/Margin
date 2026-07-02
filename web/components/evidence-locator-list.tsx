@@ -60,7 +60,10 @@ export function EvidenceLocatorList({ evidence }: EvidenceLocatorListProps) {
         {evidence.map((item) => {
           const Icon = SOURCE_ICON[item.source_level] ?? Link2;
           return (
-            <div key={item.evidence_id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+            <div
+              key={item.evidence_id}
+              className="flex items-start gap-3 py-3 first:pt-0 last:pb-0"
+            >
               <div className="grid size-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
                 <Icon className="size-3.5" />
               </div>
@@ -71,9 +74,15 @@ export function EvidenceLocatorList({ evidence }: EvidenceLocatorListProps) {
                 <span className="text-xs text-muted-foreground">
                   {item.locator}
                 </span>
+                {item.snippet ? (
+                  <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                    {item.snippet}
+                  </p>
+                ) : null}
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <span>snapshot</span>
                   <span>{item.snapshot_id || "--"}</span>
+                  {item.source_name ? <span>{item.source_name}</span> : null}
                   {item.pit_timestamp ? (
                     <span>PIT {item.pit_timestamp}</span>
                   ) : null}
@@ -83,6 +92,11 @@ export function EvidenceLocatorList({ evidence }: EvidenceLocatorListProps) {
                 <Badge tone={sourceTone(item.source_level)}>
                   {item.source_level}
                 </Badge>
+                {typeof item.linked_to_security === "boolean" ? (
+                  <Badge tone={item.linked_to_security ? "positive" : "caution"}>
+                    {item.linked_to_security ? "已关联本股票" : "需复核关联"}
+                  </Badge>
+                ) : null}
                 {item.source_url ? (
                   <a
                     className="text-xs text-accent no-underline hover:underline"

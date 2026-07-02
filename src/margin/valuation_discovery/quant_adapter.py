@@ -12,7 +12,7 @@ import math
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, Protocol
 
 import pandas as pd
@@ -48,6 +48,9 @@ from margin.valuation_discovery.scope import (
     ScopeBinding,
     UserIndicatorView,
 )
+
+HARD_FILTER_INDICATORS = ("is_suspended", "suspend_type")
+MARKET_DATE_MIN_COVERAGE_RATIO = 0.8
 
 
 class ScopeBindingProvider(Protocol):
@@ -274,7 +277,9 @@ def build_cross_section_loader(
 
         indicator_ids = tuple(
             dict.fromkeys(
-                snapshot.required_indicators + snapshot.optional_indicators
+                snapshot.required_indicators
+                + snapshot.optional_indicators
+                + HARD_FILTER_INDICATORS
             )
         )
         values = (
@@ -310,11 +315,21 @@ def build_cross_section_loader(
                 max_points_per_indicator=260,
             )
         )
+        profit_history = warehouse.indicator_history(
+            IndicatorHistoryQuery(
+                security_ids=snapshot.security_ids,
+                indicator_ids=("n_income_attr_p",),
+                start_date=snapshot.decision_at.date() - timedelta(days=1095),
+                end_date=snapshot.decision_at.date(),
+                decision_at=snapshot.decision_at,
+                max_points_per_indicator=20,
+            )
+        )
         return _build_quant_cross_section(
             values=values,
             profiles=profiles,
             industries=industries,
-            history=history,
+            history=history + profit_history,
             security_ids=snapshot.security_ids,
             decision_at=snapshot.decision_at,
         )
@@ -386,6 +401,8 @@ def _build_quant_cross_section(
         frame.loc[security_id, "industry_family"] = _industry_family(
             industry_name
         )
+    if "is_suspended" in frame.columns:
+        frame["is_suspended"] = frame["is_suspended"].astype("object")
 
     history_by_security: dict[
         str,
@@ -395,14 +412,9 @@ def _build_quant_cross_section(
         history_by_security[value.security_id][value.event_at.date()][
             value.indicator_id
         ] = float(value.numeric_value)
-    latest_market_date = max(
-        (
-            event_date
-            for points in history_by_security.values()
-            for event_date, fields in points.items()
-            if "close" in fields
-        ),
-        default=None,
+    latest_market_date = _latest_covered_market_date(
+        history_by_security,
+        security_ids,
     )
     for security_id in security_ids:
         features, latest_security_date = _market_features(
@@ -410,13 +422,34 @@ def _build_quant_cross_section(
         )
         for field_name, value in features.items():
             frame.loc[security_id, field_name] = value
-        frame.loc[security_id, "is_suspended"] = bool(
-            latest_market_date is not None
-            and (
-                latest_security_date is None
-                or latest_security_date < latest_market_date
+        explicit_suspension = _optional_bool(frame.loc[security_id].get("is_suspended"))
+        if explicit_suspension is not None:
+            frame.loc[security_id, "is_suspended"] = explicit_suspension
+        else:
+            frame.loc[security_id, "is_suspended"] = bool(
+                latest_market_date is not None
+                and (
+                    latest_security_date is None
+                    or latest_security_date < latest_market_date
+                )
             )
+        annual_profits = sorted(
+            (
+                event_date,
+                fields["n_income_attr_p"],
+            )
+            for event_date, fields in history_by_security.get(
+                security_id,
+                {},
+            ).items()
+            if event_date.month == 12
+            and event_date.day == 31
+            and "n_income_attr_p" in fields
         )
+        if annual_profits:
+            frame.loc[security_id, "net_profit_y1"] = annual_profits[-1][1]
+            if len(annual_profits) > 1:
+                frame.loc[security_id, "net_profit_y2"] = annual_profits[-2][1]
 
     return_6m = pd.to_numeric(
         frame.get(
@@ -442,6 +475,28 @@ def _build_quant_cross_section(
         lambda value: False if pd.isna(value) else bool(value)
     )
     return frame
+
+
+def _latest_covered_market_date(
+    history_by_security: dict[str, dict[date, dict[str, float]]],
+    security_ids: tuple[str, ...],
+) -> date | None:
+    """Return the latest market date with broad close coverage."""
+    if not security_ids:
+        return None
+    securities_by_date: dict[date, set[str]] = defaultdict(set)
+    for security_id, points in history_by_security.items():
+        for event_date, fields in points.items():
+            close = fields.get("close")
+            if close is not None and close > 0:
+                securities_by_date[event_date].add(security_id)
+    required_coverage = math.ceil(
+        len(set(security_ids)) * MARKET_DATE_MIN_COVERAGE_RATIO
+    )
+    for event_date in sorted(securities_by_date, reverse=True):
+        if len(securities_by_date[event_date]) >= required_coverage:
+            return event_date
+    return None
 
 
 def _market_features(
@@ -500,6 +555,19 @@ def _market_features(
     if trend_checks:
         features["ma_trend"] = 100.0 * sum(trend_checks) / len(trend_checks)
     return features, rows[-1][0]
+
+
+def _optional_bool(value: Any) -> bool | None:
+    """Convert a warehouse boolean-like value to bool while preserving missing."""
+    if value is None or bool(pd.isna(value)):
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "t", "yes", "y"}:
+            return True
+        if normalized in {"0", "false", "f", "no", "n"}:
+            return False
+    return bool(value)
 
 
 def _industry_family(industry_name: str) -> str:

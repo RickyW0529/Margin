@@ -22,6 +22,7 @@ from margin.core.provider import (
     ProviderType,
 )
 from margin.core.secret_store import SecretStore, SQLAlchemySecretRepository
+from margin.dashboard.detail_context import make_dashboard_detail_context_loader
 from margin.dashboard.repository import SQLAlchemyDashboardRepository
 from margin.dashboard.service import DashboardServiceBundle
 from margin.data.company_pool import SQLAlchemyCompanyPoolRepository
@@ -1069,6 +1070,10 @@ def get_dashboard_services() -> DashboardServiceBundle:
         secret_store,
     )
     quant_profile_loader = _build_dashboard_quant_profile_loader()
+    detail_context_loader = make_dashboard_detail_context_loader(
+        session_factory=session_factory,
+        warehouse_repository=SQLAlchemyWarehouseRepository(session_factory),
+    )
     return DashboardServiceBundle.from_repositories(
         dashboard_repository=dashboard_repository,
         providers=build_provider_status_providers(
@@ -1076,6 +1081,7 @@ def get_dashboard_services() -> DashboardServiceBundle:
             health_service,
         ),
         quant_profile_loader=quant_profile_loader,
+        detail_context_loader=detail_context_loader,
     )
 
 
@@ -1092,6 +1098,7 @@ def _build_dashboard_quant_profile_loader() -> Callable[[str], dict[str, Any] | 
         if profile is None:
             return None
         return {
+            "display_name": profile.factor_details.get("name"),
             "final_score": profile.final_score,
             "factor_scores": [
                 {
@@ -1107,6 +1114,7 @@ def _build_dashboard_quant_profile_loader() -> Callable[[str], dict[str, Any] | 
             "screening_status": profile.screening_status,
             "research_guardrail": profile.research_guardrail,
             "reason_summary": profile.reason_summary,
+            "factor_details": profile.factor_details,
         }
 
     return loader

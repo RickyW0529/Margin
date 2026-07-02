@@ -265,6 +265,12 @@ class NewsRefreshAdapter:
                     run.error_summary.get("retry_after_seconds", 60) or 60
                 ),
             )
+        if run.status in {NewsRefreshStatus.PENDING, NewsRefreshStatus.RUNNING}:
+            raise RetryableStepError(
+                "news_refresh_incomplete",
+                retry_after=datetime.now(UTC) + timedelta(minutes=1),
+                output_ref=f"news:{run.run_id}",
+            )
         return NewsRefreshAdapterResult(
             run_id=run.run_id,
             status=run.status.value,
@@ -1073,6 +1079,7 @@ def _dashboard_run_from_quant_results(
     results: tuple[QuantResult, ...],
 ) -> ResearchRun:
     """Build the latest user-facing dashboard run from quant output."""
+    created_at = datetime.now(UTC)
     published_count = sum(
         1 for result in results if _dashboard_item_status(result) is ItemStatus.PUBLISHED
     )
@@ -1096,7 +1103,7 @@ def _dashboard_run_from_quant_results(
         published_count=published_count,
         abstained_count=abstained_count,
         aborted_count=0,
-        created_at=decision_at,
+        created_at=created_at,
     )
 
 

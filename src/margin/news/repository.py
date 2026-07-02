@@ -1338,21 +1338,21 @@ def _event_to_row(event: DocumentEvent) -> DocumentEventRow:
     return DocumentEventRow(
         event_id=event.event_id,
         document_id=event.document_id,
-        source_url=event.source_url,
-        source_name=event.source_name,
+        source_url=_postgres_text(event.source_url),
+        source_name=_postgres_text(event.source_name),
         source_level=int(event.source_level),
-        title=event.title,
-        content=event.content,
+        title=_postgres_text(event.title),
+        content=_postgres_text(event.content),
         content_hash=event.content_hash,
         snapshot_id=event.snapshot_id,
         snapshot_hash=event.snapshot_hash,
         symbols=list(event.symbols),
-        doc_type=event.doc_type,
+        doc_type=_postgres_text(event.doc_type),
         published_at=event.published_at,
         available_at=event.available_at,
         retrieved_at=event.retrieved_at,
         processing_status=event.processing_status.value,
-        processing_error=event.processing_error,
+        processing_error=_postgres_text(event.processing_error),
         is_original=event.is_original,
         duplicate_of=event.duplicate_of,
     )
@@ -1388,6 +1388,13 @@ def _event_from_row(row: DocumentEventRow) -> DocumentEvent:
         is_original=row.is_original,
         duplicate_of=row.duplicate_of,
     )
+
+
+def _postgres_text(value: str | None) -> str | None:
+    """Return text safe for PostgreSQL text/varchar columns."""
+    if value is None:
+        return None
+    return value.replace("\x00", "")
 
 
 def _search_query_to_row(record: SearchQueryRecord) -> SearchQueryRow:

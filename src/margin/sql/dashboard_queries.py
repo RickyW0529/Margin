@@ -9,6 +9,13 @@ from margin.dashboard.db_models import (
     DashboardItemRow,
     DashboardRunRow,
 )
+from margin.news.db_models import DocumentEventRow
+from margin.research.db_models import ResearchDeltaReviewRow
+from margin.valuation_discovery.db_models import (
+    EffectiveAssessmentPointerRow,
+    ResearchContextSnapshotRow,
+    ValuationAssessmentRow,
+)
 
 
 def dashboard_runs(
@@ -48,7 +55,12 @@ def dashboard_runs_by_scope(scope_version_id: str) -> Select:
     return (
         select(DashboardRunRow)
         .where(DashboardRunRow.version_id == scope_version_id)
-        .order_by(DashboardRunRow.decision_at.desc(), DashboardRunRow.created_at.desc())
+        .order_by(
+            DashboardRunRow.decision_at.desc(),
+            DashboardRunRow.created_at.desc(),
+            DashboardRunRow.item_count.desc(),
+            DashboardRunRow.run_id.desc(),
+        )
     )
 
 
@@ -56,4 +68,71 @@ def dashboard_items_by_run_ids(run_ids: tuple[str, ...]) -> Select:
     """Return dashboard items for a set of run IDs."""
     return select(DashboardItemRow).where(
         DashboardItemRow.run_id.in_(run_ids)
+    )
+
+
+def latest_dashboard_research_context(
+    *,
+    security_id: str,
+    scope_version_id: str,
+    quant_run_id: str,
+) -> Select:
+    """Return the latest research context for one dashboard item."""
+    return (
+        select(ResearchContextSnapshotRow)
+        .where(
+            ResearchContextSnapshotRow.security_id == security_id,
+            ResearchContextSnapshotRow.scope_version_id == scope_version_id,
+            ResearchContextSnapshotRow.payload_json["quant_run_id"].as_string()
+            == quant_run_id,
+        )
+        .order_by(
+            ResearchContextSnapshotRow.decision_at.desc(),
+            ResearchContextSnapshotRow.created_at.desc(),
+        )
+        .limit(1)
+    )
+
+
+def latest_dashboard_delta_review(context_snapshot_id: str) -> Select:
+    """Return the latest AI delta review for one research context snapshot."""
+    return (
+        select(ResearchDeltaReviewRow)
+        .where(ResearchDeltaReviewRow.context_snapshot_id == context_snapshot_id)
+        .order_by(ResearchDeltaReviewRow.created_at.desc())
+        .limit(1)
+    )
+
+
+def dashboard_effective_assessment(
+    *,
+    security_id: str,
+    scope_version_id: str,
+) -> Select:
+    """Return the current effective valuation assessment for one security."""
+    return (
+        select(ValuationAssessmentRow)
+        .join(
+            EffectiveAssessmentPointerRow,
+            ValuationAssessmentRow.assessment_id
+            == EffectiveAssessmentPointerRow.effective_assessment_id,
+        )
+        .where(
+            EffectiveAssessmentPointerRow.security_id == security_id,
+            EffectiveAssessmentPointerRow.scope_version_id == scope_version_id,
+        )
+        .order_by(
+            EffectiveAssessmentPointerRow.effective_from.desc(),
+            EffectiveAssessmentPointerRow.created_at.desc(),
+        )
+        .limit(1)
+    )
+
+
+def dashboard_document_events(event_ids: tuple[str, ...]) -> Select:
+    """Return document events referenced by a dashboard research context."""
+    return (
+        select(DocumentEventRow)
+        .where(DocumentEventRow.event_id.in_(event_ids))
+        .order_by(DocumentEventRow.published_at.desc(), DocumentEventRow.event_id.desc())
     )
