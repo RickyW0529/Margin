@@ -158,11 +158,9 @@ def build_worker_provider_runtime_factory(
     Returns:
         A ``ProviderRuntimeFactory`` wired to the active versioned strategy config.
 
-    Raises:
-        RuntimeError: If ``MARGIN_SECRET_MASTER_KEY`` is not configured.
+    The encrypted secret store uses a stable local default key unless
+    ``MARGIN_SECRET_MASTER_KEY`` overrides it.
     """
-    if settings.secret_master_key is None:
-        raise RuntimeError("MARGIN_SECRET_MASTER_KEY is not configured")
     engine = create_database_engine(
         DatabaseSettings(
             url=str(settings.database_url),

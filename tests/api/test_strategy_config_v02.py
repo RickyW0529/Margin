@@ -33,15 +33,12 @@ from margin.strategy.service import StrategyService
 
 @pytest.fixture
 def admin_headers() -> dict[str, str]:
-    """Return admin authentication headers for protected API calls.
+    """Return no auth headers for personal-mode API calls.
 
     Returns:
-        A dict with Authorization and X-CSRF-Token headers.
+        An empty header dict; mutating endpoints only require idempotency keys.
     """
-    return {
-        "Authorization": "Bearer admin-test-token",
-        "X-CSRF-Token": "valid",
-    }
+    return {}
 
 
 @pytest.fixture
@@ -58,8 +55,6 @@ def strategy_config_client(
     Returns:
         A ``TestClient`` with seeded provider config and research scope.
     """
-    monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin-test-token")
-    monkeypatch.setenv("MARGIN_CSRF_TOKEN", "valid")
     get_settings.cache_clear()
 
     engine = create_database_engine(DatabaseSettings(url=database_url))
@@ -153,6 +148,109 @@ def test_list_provider_configs_returns_safe_secret_metadata(
     assert "abcdef1234567890" not in str(body)
 
 
+def test_writing_secret_for_new_provider_config_does_not_deactivate_existing_config_secret(
+    strategy_config_client: TestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """Secret rotation should be scoped to a provider config version."""
+    first = strategy_config_client.put(
+        "/api/v1/provider-configs/provider-tushare-1/secret",
+        json={"secret_name": "api_token", "secret_value": "first-token-1234"},
+        headers={
+            **admin_headers,
+            "Idempotency-Key": "idem-secret-first-config",
+        },
+    )
+    assert first.status_code == 200
+
+    created = strategy_config_client.post(
+        "/api/v1/provider-configs",
+        json={
+            "version_id": "provider-tushare-2",
+            "owner_id": "local-admin",
+            "provider_name": "tushare",
+            "provider_type": "market_data",
+            "base_url": "https://api.tushare.pro",
+            "model_name": None,
+            "non_sensitive_config": {"provider_category": "data_source"},
+            "enabled": True,
+            "lifecycle": "draft",
+        },
+        headers={
+            **admin_headers,
+            "Idempotency-Key": "idem-provider-create-tushare-2",
+        },
+    )
+    assert created.status_code == 200
+
+    second = strategy_config_client.put(
+        "/api/v1/provider-configs/provider-tushare-2/secret",
+        json={"secret_name": "api_token", "secret_value": "second-token-5678"},
+        headers={
+            **admin_headers,
+            "Idempotency-Key": "idem-secret-second-config",
+        },
+    )
+    assert second.status_code == 200
+
+    response = strategy_config_client.get("/api/v1/provider-configs")
+
+    assert response.status_code == 200
+    by_id = {item["version_id"]: item for item in response.json()}
+    assert by_id["provider-tushare-1"]["secret_metadata"]["configured"] is True
+    assert by_id["provider-tushare-1"]["secret_metadata"]["last_four"] == "1234"
+    assert by_id["provider-tushare-2"]["secret_metadata"]["configured"] is True
+    assert by_id["provider-tushare-2"]["secret_metadata"]["last_four"] == "5678"
+
+
+def test_write_secret_to_active_provider_config_does_not_create_orphan_secret(
+    strategy_config_client: TestClient,
+    admin_headers: dict[str, str],
+    database_url: str,
+) -> None:
+    """Rejected active-config writes must not mutate encrypted secrets."""
+    written = strategy_config_client.put(
+        "/api/v1/provider-configs/provider-tushare-1/secret",
+        json={"secret_name": "api_token", "secret_value": "first-token-1234"},
+        headers={
+            **admin_headers,
+            "Idempotency-Key": "idem-secret-before-active",
+        },
+    )
+    assert written.status_code == 200
+    original_secret_id = written.json()["version_id"]
+
+    engine = create_database_engine(DatabaseSettings(url=database_url))
+    session_factory = create_session_factory(engine)
+    with session_factory.begin() as session:
+        provider = session.get(ProviderConfigVersionRow, "provider-tushare-1")
+        assert provider is not None
+        provider.lifecycle = ConfigLifecycle.ACTIVE.value
+
+    rejected = strategy_config_client.put(
+        "/api/v1/provider-configs/provider-tushare-1/secret",
+        json={"secret_name": "api_token", "secret_value": "second-token-5678"},
+        headers={
+            **admin_headers,
+            "Idempotency-Key": "idem-secret-rejected-active",
+        },
+    )
+
+    assert rejected.status_code == 400
+    with session_factory() as session:
+        secrets = (
+            session.query(ProviderSecretVersionRow)
+            .filter_by(secret_name="api_token")
+            .all()
+        )
+        original = session.get(ProviderSecretVersionRow, original_secret_id)
+    engine.dispose()
+
+    assert len(secrets) == 1
+    assert original is not None
+    assert original.status == "active"
+
+
 def test_list_provider_configs_returns_category_and_detected_label(
     strategy_config_client: TestClient,
 ) -> None:
@@ -196,11 +294,11 @@ def test_create_provider_config_enriches_router_metadata(
     assert body["non_sensitive_config"]["router_rule_id"] == "llm.deepseek"
 
 
-def test_list_provider_configs_works_without_secret_master_key(
+def test_list_provider_configs_works_with_local_default_secret_key(
     database_url: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test that read-only config discovery does not require decrypt authority."""
+    """Test that read-only config discovery works with the local default key."""
     monkeypatch.delenv("MARGIN_SECRET_MASTER_KEY", raising=False)
     get_settings.cache_clear()
     engine = create_database_engine(DatabaseSettings(url=database_url))
@@ -388,17 +486,18 @@ def test_duplicate_provider_config_create_replays_prior_result(
     assert audit_count == 1
 
 
-def test_write_secret_requires_admin_and_csrf(
+def test_write_secret_accepts_personal_mode_without_admin_and_csrf(
     strategy_config_client: TestClient,
 ) -> None:
-    """Test that writing a secret requires admin token and CSRF header."""
+    """Test that personal-mode secret writes do not require admin/CSRF headers."""
     response = strategy_config_client.put(
         "/api/v1/provider-configs/provider-tushare-1/secret",
         json={"secret_name": "api_token", "secret_value": "abcdef"},
         headers={"Idempotency-Key": "idem-secret-1"},
     )
 
-    assert response.status_code in {401, 403}
+    assert response.status_code == 200
+    assert response.json()["configured"] is True
 
 
 def test_activate_scope_rejects_missing_idempotency_key(

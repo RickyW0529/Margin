@@ -383,9 +383,7 @@ def _candidate_item_from_research_item(
     run: ResearchRun,
 ) -> ResearchCandidateListItemV2:
     """Build the list/detail item DTO without exposing internal prompts."""
-    screening_status = (
-        "pass" if item.status == ItemStatus.PUBLISHED else item.status.value
-    )
+    screening_status = _screening_status_from_item(item)
     return ResearchCandidateListItemV2(
         item_id=item.item_id,
         security_id=item.symbol,
@@ -414,3 +412,11 @@ def _candidate_item_from_research_item(
         confidence=item.confidence,
         last_checked_at=item.created_at,
     )
+
+
+def _screening_status_from_item(item: ResearchItem) -> str:
+    """Return the quant screening status carried by a dashboard item."""
+    prefix = "quant_screen:"
+    if item.signal_type.startswith(prefix):
+        return item.signal_type.removeprefix(prefix)
+    return "pass" if item.status == ItemStatus.PUBLISHED else item.status.value

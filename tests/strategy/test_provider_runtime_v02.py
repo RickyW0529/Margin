@@ -24,11 +24,13 @@ from margin.storage.database import (
     create_session_factory,
 )
 from margin.strategy.models import ConfigLifecycle, ProviderConfigVersion
+from margin.strategy.provider_config import ProviderConfigHealthService
 from margin.strategy.provider_runtime import (
     ProviderRuntimeFactory,
     ProviderRuntimeResolver,
 )
 from margin.strategy.repository import MemoryStrategyRepository
+from margin.strategy.service import StrategyService
 
 
 @pytest.fixture
@@ -216,6 +218,55 @@ def test_runtime_factory_builds_llm_from_active_provider_category(
     ).build_llm()
 
     assert runtime.config_version_id == "provider-deepseek-active"
+    assert runtime.adapter.descriptor.config["base_url"] == "https://api.deepseek.com/v1"
+    assert runtime.adapter.descriptor.config["model"] == "deepseek-chat"
+
+
+def test_runtime_factory_uses_secret_written_by_provider_settings_flow(
+    secret_store: SecretStore,
+) -> None:
+    """Runtime factory must use encrypted secrets written by Provider Settings."""
+    repository = MemoryStrategyRepository()
+    service = StrategyService(repository)
+    version_id = "provider-llm-settings-flow"
+    suffix = uuid4().hex
+    service.create_provider_config(
+        ProviderConfigVersion(
+            version_id=version_id,
+            provider_name="llm",
+            provider_type="llm",
+            base_url="https://api.deepseek.com/v1",
+            model_name="deepseek-chat",
+            non_sensitive_config={"provider_category": "llm"},
+        ),
+        actor_id="local-admin",
+        idempotency_key=f"create-{version_id}-{suffix}",
+    )
+    service.write_provider_secret(
+        provider_config_version_id=version_id,
+        secret_name="api_key",
+        secret_value="deepseek-settings-secret",
+        actor_id="local-admin",
+        idempotency_key=f"secret-{version_id}-{suffix}",
+        secret_store=secret_store,
+    )
+    health_service = ProviderConfigHealthService(
+        repository,
+        secret_store,
+        health_adapters={"llm": lambda _config, _secret: None},
+    )
+    service.activate_provider_config(
+        version_id,
+        health_service=health_service,
+        actor_id="local-admin",
+        idempotency_key=f"activate-{version_id}-{suffix}",
+    )
+
+    runtime = ProviderRuntimeFactory(
+        ProviderRuntimeResolver(repository, secret_store)
+    ).build_llm()
+
+    assert runtime.config_version_id == version_id
     assert runtime.adapter.descriptor.config["base_url"] == "https://api.deepseek.com/v1"
     assert runtime.adapter.descriptor.config["model"] == "deepseek-chat"
 

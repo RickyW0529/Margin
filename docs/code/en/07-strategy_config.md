@@ -46,7 +46,9 @@ The current code also implements an independent v0.2 versioned configuration bou
 - `UserStylePromptVersion` and `ToolPolicyVersionRef` freeze style and tool permissions.
 - `ResearchScopeVersion` freezes all referenced version IDs and computes a deterministic SHA-256 `scope_hash`.
 
-The lifecycle is `draft -> review -> active -> deprecated`. Repository transactions and PostgreSQL partial unique indexes enforce one active version per configuration family. Provider runtime families are additionally grouped by `llm`, `web_search`, `data_source`, `embedding`, and `rerank`, allowing one active provider per category. Quant strategies require a calibration report before activation, and Research Scope activation rejects missing, inactive, or deprecated references.
+The lifecycle is `draft -> review -> active -> deprecated`. Repository transactions and PostgreSQL partial unique indexes enforce one active version per configuration family. Provider runtime families are additionally grouped by `llm`, `web_search`, `data_source`, `embedding`, and `rerank`, allowing one active provider per category. Quant strategies require a calibration report before activation, and Research Scope activation rejects missing, inactive, or deprecated references. Activating a universe, quant strategy, quant feature set, indicator view, style prompt, or tool policy copies the current active Research Scope, replaces the changed child version, and activates the new scope so `scope-current` follows the latest config. API boundaries also call `ensure_current_research_scope()` to reconcile stale scopes left by older runs.
+
+`StrategyBootstrapService.ensure_default_index_universes()` creates default `CSI300` / `CSI500` universe versions (`universe-csi300-default-v0.3.0`, `universe-csi500-default-v0.3.0`) from already-ingested Tushare index members. These versions remain in `review` and do not switch the active scope until the user explicitly selects them in settings. `ALL_A` remains backed by the data-layer company pool.
 
 Provider URLs are routed by `provider_router` within each category. LLM detection covers DeepSeek, OpenAI, OpenRouter, Qwen, Gemini, Anthropic, ModelScope, Zhipu, Ollama, VLLM, and local OpenAI-compatible endpoints. WebSearch detection covers Tavily, Exa, SerpAPI, and Bing; data sources cover Tushare and AKShare; embedding covers OpenAI-compatible, DashScope, and Jina; rerank covers Jina and Cohere. Unmatched URLs are reflected as `Custom` and retain the user-supplied URL. Tokens remain write-only encrypted secrets and are not persisted as plaintext detection inputs.
 
@@ -56,11 +58,14 @@ Provider URLs are routed by `provider_router` within each category. LLM detectio
 
 - Provider secrets use AES-GCM-256 with a random 96-bit nonce and associated data containing provider, secret name, version ID, and key version.
 - Persistence stores ciphertext and safe metadata only. APIs never return plaintext, ciphertext, nonce, or key material.
-- Active provider configs are immutable; secret rotation requires a new provider config version.
-- Mutating v0.2 APIs require local-admin Bearer authentication, CSRF, and `Idempotency-Key`, and fail closed when security configuration is absent.
+- The strategy-config layer scopes provider secrets by provider config version ID, so writing a token for a new config version does not deactivate tokens bound to other config versions.
+- Active provider configs are immutable; when saving a new token for an active provider, the frontend creates a draft provider config version and binds the encrypted secret to that new version.
+- Mutating v0.2 APIs run in local personal mode without local-admin Bearer or CSRF checks, while still requiring `Idempotency-Key` for replay-safe audit writes.
 - Every v0.2 create/activate mutation writes an append-only `strategy_config_audits` event; a partial unique index on actor/action/idempotency key prevents concurrent replay duplication.
-- Provider Settings clears password inputs after save/test and renders only `•••• last_four`. Local admin credentials live only in tab-scoped `sessionStorage`.
+- Provider Settings loads safe metadata from `/api/v1/provider-configs` on startup and prefers the most recently configured encrypted-secret version. Password inputs never receive plaintext values; after save/test they are cleared and only `•••• last_four` is rendered.
+- Provider Settings fetches `/api/v1/provider-configs` and `/api/v1/provider-status` with `no-store` so newly saved or activated configs are not hidden by short revalidation caches; successful activation immediately renders `active` locally.
 - Health checks use frozen config/secret versions and invoke real lightweight Tushare, AKShare, Tavily, LLM, Embedding, or Rerank adapter health checks with secret redaction.
+- Successful provider activation clears dashboard/news/agentic-news/valuation-discovery runtime caches so the next research refresh reloads active configs and encrypted secrets from the database.
 - Provider URLs enforce scheme, DNS/IP forbidden-range checks, and provider host allowlists. Custom public hosts require explicit opt-in and cannot bypass loopback/private/link-local rejection.
 
 ## File-Level Summaries
@@ -78,6 +83,7 @@ Provider URLs are routed by `provider_router` within each category. LLM detectio
 | `src/margin/strategy/repository.py` | Persistence protocol and in-memory/PostgreSQL implementations. |
 | `src/margin/strategy/service.py` | High-level service orchestrating creation, validation, and lifecycle. |
 | `src/margin/strategy/scope.py` | Resolves active config versions into a frozen Research Scope. |
+| `src/margin/strategy/bootstrap.py` | Bootstraps default Providers, the ALL_A scope, and CSI300/CSI500 universe versions. |
 | `src/margin/strategy/provider_config.py` | Provider health checks, SSRF guard, and safe health results. |
 | `src/margin/strategy/provider_router.py` | Provider category routing and URL-regex detection for safe `detected_label`, `router_rule_id`, and Custom metadata. |
 | `src/margin/strategy/provider_runtime.py` | Resolves active providers by category and decrypts tokens only at adapter construction time. |
@@ -538,11 +544,11 @@ All routes are defined in `src/margin/api/routes/strategy.py` under the `/strate
 | `GET/POST` | `/api/v1/research-scopes` | Frozen Research Scope versions |
 | `POST` | `/api/v1/research-scopes/{id}/activate` | Validate references and activate a scope |
 
-All mutating v0.2 endpoints require local-admin Bearer auth, CSRF, and an `Idempotency-Key`. Production requires `MARGIN_ADMIN_API_TOKEN`, `MARGIN_CSRF_TOKEN`, and a 32-byte/base64 `MARGIN_SECRET_MASTER_KEY`.
+All mutating v0.2 endpoints run in local personal mode without local-admin Bearer auth or CSRF, but still require an `Idempotency-Key` for idempotent audit writes. Secret Store uses a stable local default key, and production can override it with a 32-byte/base64 `MARGIN_SECRET_MASTER_KEY`.
 
 ### Real provider smoke
 
-Real smoke is not replaced by unit tests. Configure Tushare, Tavily, LLM, Embedding, and Rerank credentials locally, then call `POST /api/v1/provider-configs/{id}/test`. Tushare, AKShare, Tavily, LLM, Embedding, and Rerank execute their existing lightweight health checks. Logs and responses may contain provider/status/latency/error code and redacted errors only; headers, tokens, ciphertext, and raw responses must not be emitted. External network, quota, proxy, or provider failures remain explicit real-smoke failures rather than mock successes.
+Real smoke is not replaced by unit tests. Configure Tushare, Tavily, LLM, Embedding, and Rerank credentials through Provider Settings, then call `POST /api/v1/provider-configs/{id}/test`. Manual smoke scripts may still accept explicit environment variables, but the application runtime no longer reads provider tokens from `.env`. Tushare, AKShare, Tavily, LLM, Embedding, and Rerank execute their existing lightweight health checks. Logs and responses may contain provider/status/latency/error code and redacted errors only; headers, tokens, ciphertext, and raw responses must not be emitted. External network, quota, proxy, or provider failures remain explicit real-smoke failures rather than mock successes.
 
 Request schemas:
 

@@ -109,7 +109,7 @@ class ProviderRuntimeResolver:
             raise RuntimeError(
                 f"active provider references inactive secret: {lookup_name}"
             )
-        if metadata.ref.provider_name != config.provider_name.strip().lower():
+        if not _secret_ref_matches_config(metadata.ref.provider_name, config):
             raise RuntimeError(
                 f"provider secret reference mismatch: {lookup_name}"
             )
@@ -220,3 +220,15 @@ def _required_secret(runtime: ResolvedProviderRuntime) -> str:
             f"provider secret not configured: {runtime.config.provider_name}"
         )
     return runtime.secret.get_secret_value()
+
+
+def _secret_ref_matches_config(
+    secret_provider_name: str,
+    config: ProviderConfigVersion,
+) -> bool:
+    """Return true when a secret is bound to the provider or config version."""
+    normalized_secret_provider = secret_provider_name.strip().lower()
+    return normalized_secret_provider in {
+        config.provider_name.strip().lower(),
+        config.version_id.strip().lower(),
+    }

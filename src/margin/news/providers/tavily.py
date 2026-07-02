@@ -1,13 +1,12 @@
 """Tavily WebSearch adapter.
 
-Provides a thin HTTP client around the Tavily search API and maps responses into a simple
-list of raw result dictionaries. The adapter expects the API key to be supplied explicitly or
-via the ``MARGIN_WEBSEARCH_API_KEY`` environment variable.
+Provides a thin HTTP client around the Tavily search API and maps responses
+into raw result dictionaries. Runtime configuration is supplied explicitly by
+the provider runtime layer after it resolves encrypted database config.
 """
 
 from __future__ import annotations
 
-import os
 from enum import StrEnum
 from typing import Any
 
@@ -90,7 +89,7 @@ class TavilySearchAdapter:
         """Initialize the Tavily search adapter.
 
         Args:
-            api_key: Tavily API key. If omitted, read from ``MARGIN_WEBSEARCH_API_KEY``.
+            api_key: Tavily API key resolved by the caller.
             client: Optional pre-configured HTTP client. Defaults to a new ``httpx.Client``.
             base_url: Tavily search endpoint URL.
             timeout: Request timeout in seconds.
@@ -98,9 +97,9 @@ class TavilySearchAdapter:
         Raises:
             RuntimeError: If no API key is available.
         """
-        self._api_key = api_key or os.getenv("MARGIN_WEBSEARCH_API_KEY")
+        self._api_key = api_key
         if not self._api_key:
-            raise RuntimeError("MARGIN_WEBSEARCH_API_KEY is required for Tavily")
+            raise RuntimeError("Tavily API key is required")
         if client is None:
             import httpx
 
@@ -113,7 +112,7 @@ class TavilySearchAdapter:
             version="tavily_search",
             provider_type=ProviderType.WEB_SEARCH,
             capabilities=["search"],
-            secret_refs=["MARGIN_WEBSEARCH_API_KEY"],
+            secret_refs=["websearch_api_key"],
             config={"base_url": self._base_url},
         )
 

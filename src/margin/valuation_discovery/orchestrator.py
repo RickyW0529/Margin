@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any, Protocol, TypeVar
 from uuid import uuid4
@@ -239,9 +239,11 @@ class ValuationDiscoveryOrchestrator:
     ) -> OrchestrationRun:
         """Create an idempotent run and enqueue its first step."""
         _validate_aware(decision_at)
+        lifecycle_started_at = min(_utc_now(), decision_at)
         run = _new_run(
             scope_version_id=scope_version_id,
             decision_at=decision_at,
+            started_at=lifecycle_started_at,
             idempotency_key=idempotency_key,
         )
         try:
@@ -255,7 +257,7 @@ class ValuationDiscoveryOrchestrator:
             _pending_event(
                 run,
                 ValuationDiscoveryStep.DATA_FRESHNESS_CHECK,
-                decision_at,
+                lifecycle_started_at,
             )
         )
         return run
@@ -298,7 +300,7 @@ class ValuationDiscoveryStepWorker:
         if latest is None or latest.state is not StepState.RUNNING:
             raise RuntimeError("claimed step is not running")
         step = ValuationDiscoveryStep(claim.step_id)
-        decision_at = run.started_at or run.created_at
+        decision_at = _decision_at_from_run(run)
         try:
             output_ref = self._execute(
                 run=run,
@@ -576,11 +578,14 @@ class ValuationDiscoveryStepWorker:
             self._dependencies.valuation_publisher,
             "valuation publisher",
         )
+        quant_run = self._quant_run_artifact(run, artifacts)
         return _reference(
             "dashboard",
             publisher.refresh_dashboard(
                 scope_version_id=scope_version_id,
                 decision_at=decision_at,
+                quant_run_id=str(getattr(quant_run, "quant_run_id", "")),
+                quant_results=getattr(quant_run, "results", ()),
             ),
         )
 
@@ -830,6 +835,7 @@ def _pending_event(
         input_ref=f"scope:{run.scope_version_id}",
         trace_id=run.trace_id,
         started_at=now,
+        created_at=now,
     )
 
 
@@ -837,6 +843,7 @@ def _new_run(
     *,
     scope_version_id: str,
     decision_at: datetime,
+    started_at: datetime,
     idempotency_key: str | None,
 ) -> OrchestrationRun:
     """Build a deterministic run when an idempotency key is supplied."""
@@ -858,8 +865,26 @@ def _new_run(
         scope_version_id=scope_version_id,
         idempotency_key_hash=key_hash,
         trace_id=f"trace_{uuid4().hex[:24]}",
-        started_at=decision_at,
+        metadata_json={"decision_at": decision_at.isoformat()},
+        created_at=started_at,
+        started_at=started_at,
     )
+
+
+def _decision_at_from_run(run: OrchestrationRun) -> datetime:
+    """Return the business PIT timestamp carried by a valuation run."""
+    raw_value = run.metadata_json.get("decision_at")
+    if isinstance(raw_value, str):
+        normalized = raw_value.replace("Z", "+00:00")
+        decision_at = datetime.fromisoformat(normalized)
+        _validate_aware(decision_at)
+        return decision_at
+    return run.started_at or run.created_at
+
+
+def _utc_now() -> datetime:
+    """Return the current UTC lifecycle timestamp."""
+    return datetime.now(UTC)
 
 
 def _hash_optional(value: str | None) -> str | None:

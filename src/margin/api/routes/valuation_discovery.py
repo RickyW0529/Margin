@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from margin.api.dependencies import (
     get_company_profile_service,
+    get_strategy_service,
     get_valuation_discovery_service_for_api,
     require_idempotency_key,
     require_local_admin,
 )
+from margin.strategy.service import StrategyService
 from margin.valuation_discovery.service import (
     CompanyAnalysisProfile,
     CompanyProfileService,
@@ -23,6 +26,7 @@ from margin.valuation_discovery.service import (
 )
 
 router = APIRouter(prefix="/api/v1/valuation-discovery", tags=["valuation-discovery"])
+logger = logging.getLogger(__name__)
 
 
 class StartRefreshRequest(BaseModel):
@@ -122,8 +126,10 @@ def _has_next(items: list, limit: int) -> str | None:
 )
 def start_refresh(
     request: StartRefreshRequest,
+    background_tasks: BackgroundTasks,
     idempotency_key: Annotated[str, Depends(require_idempotency_key)],
     _actor_id: Annotated[str, Depends(require_local_admin)],
+    strategy_service: Annotated[StrategyService, Depends(get_strategy_service)],
     service: Annotated[
         ValuationDiscoveryService,
         Depends(get_valuation_discovery_service_for_api),
@@ -140,16 +146,51 @@ def start_refresh(
     Returns:
         StartRefreshResponse with the run id, status, and HTTP status code.
     """
+    scope_version_id = _resolve_scope_alias(
+        request.scope_version_id,
+        strategy_service=strategy_service,
+    )
     response = service.start_refresh(
-        scope_version_id=request.scope_version_id,
+        scope_version_id=scope_version_id,
         decision_at=request.decision_at,
         idempotency_key=idempotency_key,
     )
+    background_tasks.add_task(_wake_refresh_worker, service)
     return StartRefreshResponse(
         run_id=response.run_id,
         status=response.status,
         http_status=response.http_status,
     )
+
+
+def _wake_refresh_worker(service: ValuationDiscoveryService) -> None:
+    """Best-effort worker wake after a refresh request is accepted."""
+    try:
+        service.wake_refresh_worker(max_steps=1)
+    except Exception:  # noqa: BLE001
+        logger.exception("valuation_refresh_worker_wakeup_failed")
+
+
+def _resolve_scope_alias(
+    scope_version_id: str,
+    *,
+    strategy_service: StrategyService,
+    owner_id: str = "local-admin",
+) -> str:
+    """Resolve user-facing scope aliases to persisted scope version IDs."""
+    if scope_version_id != "scope-current":
+        return scope_version_id
+    try:
+        scope = strategy_service.ensure_current_research_scope(owner_id)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "service_not_configured",
+                "message": "active research scope not found",
+            },
+        ) from exc
+    return str(scope.version_id)
 
 
 @router.get(

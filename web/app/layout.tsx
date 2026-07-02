@@ -1,12 +1,11 @@
 /**
  * @fileoverview Root layout for the Margin research workspace.
  * Provides the application shell, dark sidebar navigation, top bar with
- * system guardrails and the admin unlock gate, plus shared metadata.
+ * system guardrails, plus shared metadata.
  */
 
 import type { Metadata } from "next";
 
-import { AdminGate } from "@/components/admin-gate";
 import { Sidebar } from "@/components/sidebar";
 
 import "./globals.css";
@@ -32,19 +31,10 @@ export default function RootLayout({
         <div className="grid min-h-screen grid-cols-[15rem_minmax(0,1fr)]">
           <Sidebar />
           <div className="grid min-h-screen grid-rows-[auto_minmax(0,1fr)]">
-            <header className="sticky top-0 z-20 flex min-h-14 items-center justify-between gap-3 border-b border-border bg-background/80 px-6 py-2.5 backdrop-blur">
-              <div className="flex flex-wrap gap-2">
-                <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                  只读优先
-                </span>
-                <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                  无持仓 / 无交易
-                </span>
-                <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                  Provider fail-closed
-                </span>
-              </div>
-              <AdminGate />
+            <header className="sticky top-0 z-20 flex min-h-14 items-center justify-end border-b border-border bg-background/80 px-6 py-2.5 backdrop-blur">
+              <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                个人研究模式
+              </span>
             </header>
             <main className="min-h-0">{children}</main>
           </div>

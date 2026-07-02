@@ -250,6 +250,8 @@ class MemoryDashboardRepository:
         runs = [
             run for run in self._runs.values() if run.version_id == scope_version_id
         ]
+        runs.sort(key=lambda run: (run.decision_at, run.created_at), reverse=True)
+        runs = runs[:1]
         run_by_id = {run.run_id: run for run in runs}
         candidates = [
             _candidate_from_item(item, run_by_id[item.run_id])
@@ -419,7 +421,7 @@ class SQLAlchemyDashboardRepository:
         with self._session_factory() as session:
             run_rows = session.scalars(
                 dashboard_runs_by_scope(scope_version_id)
-            ).all()
+            ).all()[:1]
             run_by_id = {row.run_id: _run_from_row(row) for row in run_rows}
             if not run_by_id:
                 return ResearchCandidateListResponse(
@@ -531,7 +533,7 @@ def _candidate_from_item(
     run: ResearchRun,
 ) -> ResearchCandidateListItemV2:
     """Build a v0.2 candidate list item from a research item and its run."""
-    screening_status = "pass" if item.status == ItemStatus.PUBLISHED else item.status.value
+    screening_status = _screening_status_from_item(item)
     data_status = "complete" if item.status == ItemStatus.PUBLISHED else "partial"
     return ResearchCandidateListItemV2(
         item_id=item.item_id,
@@ -561,6 +563,14 @@ def _candidate_from_item(
         confidence=item.confidence,
         last_checked_at=item.created_at,
     )
+
+
+def _screening_status_from_item(item: ResearchItem) -> str:
+    """Return the quant screening status carried by a dashboard item."""
+    prefix = "quant_screen:"
+    if item.signal_type.startswith(prefix):
+        return item.signal_type.removeprefix(prefix)
+    return "pass" if item.status == ItemStatus.PUBLISHED else item.status.value
 
 
 def _candidate_page(

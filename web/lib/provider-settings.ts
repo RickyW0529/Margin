@@ -194,11 +194,27 @@ export function chooseProviderForCategory(
   const matches = providers.filter(
     (provider) => categoryForProvider(provider) === category,
   );
+  const configured = matches
+    .filter((provider) => provider.secret_metadata?.configured)
+    .sort(
+      (left, right) =>
+        secretUpdatedAt(right) - secretUpdatedAt(left),
+    );
   return (
+    configured[0] ??
     matches.find((provider) => provider.lifecycle === "active") ??
     matches[0] ??
     null
   );
+}
+
+function secretUpdatedAt(provider: ProviderConfigSummary): number {
+  const updatedAt = provider.secret_metadata?.updated_at;
+  if (!updatedAt) {
+    return 0;
+  }
+  const timestamp = Date.parse(updatedAt);
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 export function providerNameForCategory(

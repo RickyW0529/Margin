@@ -15,6 +15,7 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -33,6 +34,7 @@ class OrchestrationRunRow(Base):
         scope_hash: Optional hash of the scope configuration.
         idempotency_key_hash: Optional hash of the idempotency key.
         trace_id: Request trace identifier.
+        metadata_json: JSON metadata for business context such as PIT timestamps.
         degradation_reasons: List of degradation reason strings.
         created_at: UTC timestamp when the run was created.
         started_at: UTC timestamp when the run started, if started.
@@ -59,6 +61,12 @@ class OrchestrationRunRow(Base):
     scope_hash: Mapped[str | None] = mapped_column(String(96))
     idempotency_key_hash: Mapped[str | None] = mapped_column(String(96))
     trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
     degradation_reasons: Mapped[list[str]] = mapped_column(
         JSONB,
         nullable=False,

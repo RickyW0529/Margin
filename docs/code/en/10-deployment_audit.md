@@ -73,6 +73,7 @@ Responsibilities:
 | `scripts/worker_health_check.py` | Worker health check that verifies database connectivity and migration head. |
 | `scripts/smoke_full_v02.py` | v0.2 smoke harness with real-provider enforcement, structured blockers, and redacted output. |
 | `scripts/bootstrap_config.py` | One-shot versioned configuration bootstrap used by Compose; imports provider secrets from env into Secret Store. |
+| `scripts/dev.py` | Local development supervisor that cleans stale API/worker/web processes, starts one loopback-bound instance of each service, writes `.margin/dev` PID/log files, and uses `lsof` listen checks. |
 | `scripts/health_check.py` | Container readiness probe used by Docker healthcheck. |
 | `scripts/snapshot_store.py` | CLI for writing, reading, and listing snapshots. |
 
@@ -203,6 +204,31 @@ marked `skipped: stage_registered_by_downstream_module`.
 Use `docker compose config --quiet` or `docker compose config --no-interpolate`
 for validation so local real provider secrets are not expanded into command
 output.
+
+### Local Development Supervisor
+
+For host-based development, use:
+
+```bash
+python scripts/dev.py restart
+```
+
+The supervisor:
+
+- stops existing API, worker, and web dev processes for this checkout;
+- keeps only one `margin.worker`;
+- starts FastAPI on `127.0.0.1:8000` and Next.js on `127.0.0.1:3000`;
+- sets `NO_PROXY/no_proxy=localhost,127.0.0.1,::1` for child processes to reduce VPN/proxy interference;
+- writes PID files to `.margin/dev/pids/` and logs to `.margin/dev/logs/`;
+- checks readiness with `lsof` listen state instead of relying on the current shell being able to `curl localhost`.
+
+Common commands:
+
+| Command | Role |
+|---|---|
+| `python scripts/dev.py restart` | Clean stale processes and start local API/worker/web. |
+| `python scripts/dev.py status` | Show whether ports 8000, 3000, and the worker are running as single instances. |
+| `python scripts/dev.py stop` | Stop local development processes. |
 
 ## Audit
 

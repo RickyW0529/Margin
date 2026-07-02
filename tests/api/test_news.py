@@ -18,8 +18,6 @@ def test_news_refresh_status_returns_reconciliation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test that news refresh status returns reconciliation details."""
-    monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin-test-token")
-    monkeypatch.setenv("MARGIN_CSRF_TOKEN", "valid")
     get_settings.cache_clear()
     client = TestClient(create_app(news_service=_FakeNewsService()))
 
@@ -35,8 +33,6 @@ def test_news_refresh_submit_returns_accepted_run_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test that news refresh submit returns an accepted run id."""
-    monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin-test-token")
-    monkeypatch.setenv("MARGIN_CSRF_TOKEN", "valid")
     get_settings.cache_clear()
     service = _FakeNewsService()
     client = TestClient(create_app(news_service=service))
@@ -58,8 +54,6 @@ def test_news_refresh_submit_returns_accepted_run_id(
             ],
         },
         headers={
-            "Authorization": "Bearer admin-test-token",
-            "X-CSRF-Token": "valid",
             "Idempotency-Key": "news-refresh-1",
         },
     )

@@ -174,7 +174,13 @@ class _RealLLMDecisionHandler:
 
     def __init__(self) -> None:
         """Initialize the real-LLM decision handler with a fresh provider."""
-        self._provider = LLMProvider(name="smoke_llm", timeout=30.0)
+        self._provider = LLMProvider(
+            name="smoke_llm",
+            api_key=os.getenv("MARGIN_LLM_API_KEY"),
+            base_url=os.getenv("MARGIN_LLM_BASE_URL"),
+            model=os.getenv("MARGIN_LLM_MODEL") or "deepseek-v4-pro",
+            timeout=30.0,
+        )
         self.success = False
         self.call_count = 0
 

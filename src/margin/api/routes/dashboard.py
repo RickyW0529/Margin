@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from margin.api.dependencies import get_dashboard_services
+from margin.api.dependencies import get_dashboard_services, get_strategy_service
 from margin.dashboard.models import (
     DashboardFilters,
     DashboardSort,
@@ -26,12 +26,15 @@ from margin.dashboard.models import (
     ResearchItemDetailV2,
 )
 from margin.dashboard.service import DashboardServiceBundle
+from margin.strategy.service import StrategyService
 
 router = APIRouter(prefix="/api/v1", tags=["dashboard"])
 """APIRouter exposing dashboard-related endpoints under ``/api/v1``."""
 
 Services = Annotated[DashboardServiceBundle, Depends(get_dashboard_services)]
 """FastAPI dependency type that injects the dashboard service bundle."""
+StrategyServices = Annotated[StrategyService, Depends(get_strategy_service)]
+"""FastAPI dependency type that injects the strategy service."""
 
 
 class FeedbackCreate(BaseModel):
@@ -63,6 +66,7 @@ class CopilotRequest(BaseModel):
 @router.get("/research", response_model=ResearchCandidateListResponse)
 def list_research_candidates_v2(
     services: Services,
+    strategy_service: StrategyServices,
     scope_version_id: str,
     universe: Annotated[str, Query(alias="universe")] = "ALL_A",
     limit: int = 50,
@@ -94,8 +98,12 @@ def list_research_candidates_v2(
     Returns:
         ResearchCandidateListResponse containing one page of candidates.
     """
+    resolved_scope_version_id = _resolve_scope_alias(
+        scope_version_id,
+        strategy_service=strategy_service,
+    )
     return services.query.list_research_candidates_v2(
-        scope_version_id=scope_version_id,
+        scope_version_id=resolved_scope_version_id,
         universe_code=universe,
         filters=DashboardFilters(
             screening_status=screening_status,
@@ -135,6 +143,7 @@ def get_research_item_detail_v2(
 def research_read_only_copilot(
     request: CopilotRequest,
     services: Services,
+    strategy_service: StrategyServices,
 ) -> ReadOnlyCopilotResponse | JSONResponse:
     """Answer dashboard questions using only read-only BFF data.
 
@@ -164,18 +173,22 @@ def research_read_only_copilot(
                 "retryable": False,
             },
         )
+    resolved_scope_version_id = _resolve_scope_alias(
+        request.scope_version_id,
+        strategy_service=strategy_service,
+    )
     candidates = services.query.list_research_candidates_v2(
-        scope_version_id=request.scope_version_id,
+        scope_version_id=resolved_scope_version_id,
         universe_code=request.universe,
-        filters=DashboardFilters(screening_status="pass"),
+        filters=DashboardFilters(),
         sort=DashboardSort(field="final_score", direction="desc"),
         cursor=None,
         limit=5,
     )
     symbols = [item.symbol for item in candidates.items]
     answer = (
-        "当前可继续看的候选来自研究候选只读列表："
-        + ("、".join(symbols) if symbols else "暂无 PASS 候选")
+        "当前可继续看的公司来自今日推荐只读数据："
+        + ("、".join(symbols) if symbols else "暂无可见推荐")
         + "。该回答不触发同步、新闻刷新、AI 复核或交易动作。"
     )
     return ReadOnlyCopilotResponse(
@@ -183,11 +196,33 @@ def research_read_only_copilot(
         references=(
             {
                 "api": "GET /api/v1/research",
-                "scope_version_id": request.scope_version_id,
+                "scope_version_id": resolved_scope_version_id,
                 "universe": request.universe,
             },
         ),
     )
+
+
+def _resolve_scope_alias(
+    scope_version_id: str,
+    *,
+    strategy_service: StrategyService,
+    owner_id: str = "local-admin",
+) -> str:
+    """Resolve user-facing scope aliases to persisted scope version IDs."""
+    if scope_version_id != "scope-current":
+        return scope_version_id
+    try:
+        scope = strategy_service.ensure_current_research_scope(owner_id)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "service_not_configured",
+                "message": "active research scope not found",
+            },
+        ) from exc
+    return str(scope.version_id)
 
 
 def _item_not_found(item_id: str) -> JSONResponse:

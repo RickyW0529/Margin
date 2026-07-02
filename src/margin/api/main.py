@@ -7,6 +7,8 @@ simple health check endpoint.
 
 from __future__ import annotations
 
+from urllib.parse import urlsplit
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -40,6 +42,47 @@ from margin.valuation_discovery.service import (
     CompanyProfileService,
     ValuationDiscoveryService,
 )
+
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def _loopback_origin_aliases(origin: str) -> tuple[str, ...]:
+    """Return equivalent local origins for browser dev-server CORS checks."""
+    parsed = urlsplit(origin)
+    if parsed.scheme not in {"http", "https"} or parsed.hostname not in _LOOPBACK_HOSTS:
+        return ()
+    try:
+        port = parsed.port
+    except ValueError:
+        return ()
+
+    port_suffix = f":{port}" if port is not None else ""
+    return (
+        f"{parsed.scheme}://localhost{port_suffix}",
+        f"{parsed.scheme}://127.0.0.1{port_suffix}",
+        f"{parsed.scheme}://[::1]{port_suffix}",
+    )
+
+
+def _web_origins_from_setting(web_origin: str) -> list[str]:
+    """Parse comma-separated web origins and expand local loopback aliases."""
+    web_origins: list[str] = []
+    seen: set[str] = set()
+
+    def add(origin: str) -> None:
+        normalized = origin.strip().rstrip("/")
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            web_origins.append(normalized)
+
+    for raw_origin in web_origin.split(","):
+        origin = raw_origin.strip().rstrip("/")
+        if not origin:
+            continue
+        add(origin)
+        for alias in _loopback_origin_aliases(origin):
+            add(alias)
+    return web_origins
 
 
 def create_app(
@@ -77,12 +120,9 @@ def create_app(
     configure_logging(log_level=settings.log_level, log_format=settings.log_format)
     application = FastAPI(title="Margin API", version=settings.service_version)
     # CORS: the Next.js web client is served on a different origin (default
-    # http://localhost:3000) and issues authenticated mutating requests.
-    web_origins = [
-        origin.strip()
-        for origin in settings.web_origin.split(",")
-        if origin.strip()
-    ]
+    # http://localhost:3000) and issues authenticated mutating requests. Local
+    # browser sessions may use localhost, 127.0.0.1, or ::1 interchangeably.
+    web_origins = _web_origins_from_setting(settings.web_origin)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=web_origins,
@@ -93,7 +133,6 @@ def create_app(
             "Content-Type",
             "Accept",
             "Idempotency-Key",
-            "X-CSRF-Token",
         ],
         expose_headers=[settings.trace_id_header],
     )

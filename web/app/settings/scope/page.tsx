@@ -2,6 +2,7 @@
  * @fileoverview Research scope settings page.
  */
 
+import { CompanyPoolSelector } from "@/components/company-pool-selector";
 import { ConfigVersionList } from "@/components/config-version-list";
 import {
   fetchIndicatorViews,
@@ -32,13 +33,11 @@ export default async function ScopeSettingsPage() {
           公司池、指标视图与冻结研究作用域均为 append-only 版本，激活后生成新研究作用域。
         </p>
       </header>
+      <CompanyPoolSelector
+        scopes={fulfilled(scopes)}
+        universes={fulfilled(universes)}
+      />
       <div className="grid gap-6 md:grid-cols-2">
-        <ConfigVersionList
-          title="公司池版本"
-          kind="universe-configs"
-          records={fulfilled(universes)}
-          empty="暂无公司池配置"
-        />
         <ConfigVersionList
           title="指标视图版本"
           kind="indicator-views"

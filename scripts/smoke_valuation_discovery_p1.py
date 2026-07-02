@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -19,8 +18,7 @@ def main() -> int:
     """Run the P1 valuation-discovery refresh API smoke.
 
     Returns:
-        int: 0 on success, 2 when admin secrets are missing or the API returns
-            an error.
+        int: 0 on success, 2 when the API returns an error.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scope-version-id", required=True)
@@ -30,11 +28,6 @@ def main() -> int:
     args = parser.parse_args()
 
     decision_at = _parse_datetime(args.decision_at)
-    admin_token = os.getenv("MARGIN_ADMIN_API_TOKEN")
-    csrf_token = os.getenv("MARGIN_CSRF_TOKEN")
-    if not admin_token or not csrf_token:
-        return _emit_failure("missing_admin_secret", {})
-
     payload = json.dumps(
         {
             "scope_version_id": args.scope_version_id,
@@ -47,8 +40,6 @@ def main() -> int:
         method="POST",
         headers={
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {admin_token}",
-            "X-CSRF-Token": csrf_token,
             "Idempotency-Key": args.idempotency_key,
         },
     )

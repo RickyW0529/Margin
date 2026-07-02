@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -20,8 +19,6 @@ def test_agentic_news_refresh_starts_from_quant_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test that the agentic news endpoint starts a PASS-only quant-run refresh."""
-    monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin-test-token")
-    monkeypatch.setenv("MARGIN_CSRF_TOKEN", "valid")
     get_settings.cache_clear()
     fake_service = FakeAgenticNewsService()
     app = create_app()
@@ -37,8 +34,6 @@ def test_agentic_news_refresh_starts_from_quant_run(
             "max_workers": 2,
         },
         headers={
-            "Authorization": "Bearer admin-test-token",
-            "X-CSRF-Token": "valid",
             "Idempotency-Key": "agentic-news-test",
         },
     )
@@ -60,38 +55,24 @@ def test_agentic_news_refresh_starts_from_quant_run(
     }
 
 
-def test_agentic_provider_builder_falls_back_to_env_providers(
+def test_agentic_provider_builder_requires_active_runtime_providers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test that agentic news falls back to env providers without runtime secrets."""
+    """Test that agentic news does not fall back to env provider settings."""
 
     class MissingRuntimeFactory:
         def build_llm(self) -> Any:
-            """Raise an error simulating missing runtime secret configuration."""
-            raise RuntimeError("MARGIN_SECRET_MASTER_KEY is not configured")
+            """Raise an error simulating missing active provider configuration."""
+            raise LookupError("active provider config not found: llm")
 
     monkeypatch.setattr(
         dependency_module,
         "get_provider_runtime_factory",
         lambda: MissingRuntimeFactory(),
     )
-    monkeypatch.setattr(
-        dependency_module,
-        "build_llm_provider",
-        lambda settings: "env-llm",
-    )
-    monkeypatch.setattr(
-        dependency_module,
-        "build_websearch_provider",
-        lambda settings: "env-websearch",
-    )
 
-    llm_provider, websearch_provider = dependency_module._build_agentic_news_providers(
-        SimpleNamespace()
-    )
-
-    assert llm_provider == "env-llm"
-    assert websearch_provider == "env-websearch"
+    with pytest.raises(RuntimeError, match="active LLM or websearch provider"):
+        dependency_module._build_agentic_news_providers(object())
 
 
 def test_agentic_llm_service_uses_non_graph_audit() -> None:

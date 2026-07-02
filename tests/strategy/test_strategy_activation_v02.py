@@ -233,6 +233,133 @@ def test_cannot_activate_quant_strategy_without_calibration(
         strategy_service.activate_quant_strategy(version.version_id)
 
 
+def test_quant_strategy_activation_rolls_active_scope(
+    strategy_service: StrategyService,
+    strategy_repository: MemoryStrategyRepository,
+) -> None:
+    """Verify quant strategy activation updates the active research scope binding."""
+    old_scope = ResearchScopeVersion(
+        version_id="scope-old",
+        universe_version_id="univ-active",
+        indicator_view_version_id="view-active",
+        quant_feature_set_version_id="feature-active",
+        quant_strategy_version_id="qstrat-active",
+        ai_prompt_version_id="prompt-active",
+        canonical_rule_version="canonical-v0.2.0",
+        tool_policy_version_id="tool-policy-active",
+        provider_config_version_ids=("provider-tushare-active",),
+        lifecycle=ConfigLifecycle.ACTIVE,
+    )
+    strategy_repository.save_research_scope(old_scope)
+    strategy_repository.save_quant_strategy(
+        QuantStrategyVersion(
+            version_id="qstrat-new",
+            factor_weights={"quality": 0.5, "value": 0.5},
+            calibration_report_id="calibration-2",
+            lifecycle=ConfigLifecycle.REVIEW,
+        )
+    )
+
+    activated = strategy_service.activate_quant_strategy("qstrat-new")
+
+    active_scope = strategy_repository.get_active_research_scope("local-admin")
+    assert activated.lifecycle is ConfigLifecycle.ACTIVE
+    assert active_scope is not None
+    assert active_scope.version_id != old_scope.version_id
+    assert active_scope.quant_strategy_version_id == "qstrat-new"
+    assert active_scope.universe_version_id == old_scope.universe_version_id
+    assert active_scope.quant_feature_set_version_id == old_scope.quant_feature_set_version_id
+    assert active_scope.ai_prompt_version_id == old_scope.ai_prompt_version_id
+    assert active_scope.lifecycle is ConfigLifecycle.ACTIVE
+    assert active_scope.scope_hash != old_scope.scope_hash
+    assert (
+        strategy_repository.get_research_scope(old_scope.version_id).lifecycle
+        is ConfigLifecycle.DEPRECATED
+    )
+
+
+def test_universe_activation_switches_active_scope_across_pool_codes(
+    strategy_service: StrategyService,
+    strategy_repository: MemoryStrategyRepository,
+) -> None:
+    """Verify selecting a different company pool updates scope-current."""
+    old_scope = ResearchScopeVersion(
+        version_id="scope-csi300",
+        universe_version_id="univ-active",
+        indicator_view_version_id="view-active",
+        quant_feature_set_version_id="feature-active",
+        quant_strategy_version_id="qstrat-active",
+        ai_prompt_version_id="prompt-active",
+        canonical_rule_version="canonical-v0.2.0",
+        tool_policy_version_id="tool-policy-active",
+        provider_config_version_ids=("provider-tushare-active",),
+        lifecycle=ConfigLifecycle.ACTIVE,
+    )
+    strategy_repository.save_research_scope(old_scope)
+    strategy_repository.save_universe_definition(
+        UniverseDefinitionVersion(
+            version_id="univ-csi500",
+            universe_code="CSI500",
+            name="中证500",
+            selection_rule={"type": "index_membership", "index_code": "000905.SH"},
+            member_security_ids=("000009.SZ", "600000.SH"),
+            lifecycle=ConfigLifecycle.REVIEW,
+        )
+    )
+
+    activated = strategy_service.activate_universe_definition("univ-csi500")
+
+    active_scope = strategy_repository.get_active_research_scope("local-admin")
+    assert activated.lifecycle is ConfigLifecycle.ACTIVE
+    assert active_scope is not None
+    assert active_scope.version_id != old_scope.version_id
+    assert active_scope.universe_version_id == "univ-csi500"
+    assert active_scope.quant_strategy_version_id == old_scope.quant_strategy_version_id
+    assert (
+        strategy_repository.get_research_scope(old_scope.version_id).lifecycle
+        is ConfigLifecycle.DEPRECATED
+    )
+
+
+def test_current_scope_reconciliation_repairs_stale_quant_binding(
+    strategy_service: StrategyService,
+    strategy_repository: MemoryStrategyRepository,
+) -> None:
+    """Verify scope-current can self-heal old scopes after config activation bugs."""
+    old_scope = ResearchScopeVersion(
+        version_id="scope-stale",
+        universe_version_id="univ-active",
+        indicator_view_version_id="view-active",
+        quant_feature_set_version_id="feature-active",
+        quant_strategy_version_id="qstrat-active",
+        ai_prompt_version_id="prompt-active",
+        canonical_rule_version="canonical-v0.2.0",
+        tool_policy_version_id="tool-policy-active",
+        provider_config_version_ids=("provider-tushare-active",),
+        lifecycle=ConfigLifecycle.ACTIVE,
+    )
+    strategy_repository.save_research_scope(old_scope)
+    strategy_repository.save_quant_strategy(
+        QuantStrategyVersion(
+            version_id="qstrat-already-active",
+            factor_weights={"quality": 0.6, "value": 0.4},
+            calibration_report_id="calibration-3",
+            lifecycle=ConfigLifecycle.REVIEW,
+        )
+    )
+    strategy_repository.activate_quant_strategy("qstrat-already-active")
+
+    reconciled = strategy_service.ensure_current_research_scope("local-admin")
+
+    assert reconciled.version_id != old_scope.version_id
+    assert reconciled.quant_strategy_version_id == "qstrat-already-active"
+    assert reconciled.lifecycle is ConfigLifecycle.ACTIVE
+    assert (
+        strategy_repository.get_research_scope(old_scope.version_id).lifecycle
+        is ConfigLifecycle.DEPRECATED
+    )
+
+
 def test_provider_activation_deprecates_prior_active_in_same_category() -> None:
     """Activating AKShare should deactivate the prior active Tushare data source."""
     repository = MemoryStrategyRepository()

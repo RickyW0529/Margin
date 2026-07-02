@@ -16,7 +16,7 @@ from margin.settings import get_settings
 
 @pytest.fixture
 def data_policy_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    """Return an authenticated API client with an isolated policy repository.
+    """Return an API client with an isolated policy repository.
 
     Args:
         monkeypatch: Pytest fixture for patching environment variables.
@@ -24,8 +24,6 @@ def data_policy_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     Returns:
         A ``TestClient`` wired to an in-memory data policy service.
     """
-    monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin-test-token")
-    monkeypatch.setenv("MARGIN_CSRF_TOKEN", "valid")
     get_settings.cache_clear()
     service = DataAcquisitionPolicyService(
         MemoryDataAcquisitionPolicyRepository()
@@ -36,10 +34,8 @@ def data_policy_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 def _headers(key: str) -> dict[str, str]:
-    """Build authenticated request headers with the given idempotency key."""
+    """Build request headers with the given idempotency key."""
     return {
-        "Authorization": "Bearer admin-test-token",
-        "X-CSRF-Token": "valid",
         "Idempotency-Key": key,
     }
 

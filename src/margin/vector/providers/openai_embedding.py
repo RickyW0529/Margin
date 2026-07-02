@@ -7,7 +7,6 @@ or compatible proxies) to obtain dense vector representations of text.
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 from margin.core.provider import HealthCheckResult, ProviderDescriptor, ProviderStatus, ProviderType
@@ -17,8 +16,8 @@ from margin.news.models import utc_now
 class OpenAIEmbeddingProvider:
     """Embedding provider for OpenAI-compatible ``/embeddings`` APIs.
 
-    The provider resolves configuration from explicit arguments or environment
-    variables, validates that required credentials are present, and exposes
+    The provider receives configuration explicitly from the provider runtime
+    layer, validates that required credentials are present, and exposes
     ``embed`` and ``embed_batch`` methods for single-text and batch inference.
 
     Attributes:
@@ -43,20 +42,11 @@ class OpenAIEmbeddingProvider:
     ) -> None:
         """Initialize the OpenAI-compatible embedding provider.
 
-        Configuration is resolved with the following precedence:
-        1. Explicit arguments.
-        2. Environment variables (``MARGIN_EMBEDDING_*``).
-        3. Sensible defaults for ``model`` and ``dimension``.
-
         Args:
-            api_key: API key for the embedding endpoint. Defaults to
-                ``MARGIN_EMBEDDING_API_KEY``.
-            base_url: Base URL of the embedding endpoint. Defaults to
-                ``MARGIN_EMBEDDING_BASE_URL``.
-            model: Model identifier. Defaults to ``MARGIN_EMBEDDING_MODEL`` or
-                ``text-embedding-3-small``.
-            dimension: Vector dimension. Defaults to
-                ``MARGIN_EMBEDDING_DIMENSION`` or ``1536``.
+            api_key: API key for the embedding endpoint.
+            base_url: Base URL of the embedding endpoint.
+            model: Model identifier. Defaults to ``text-embedding-3-small``.
+            dimension: Vector dimension. Defaults to ``1536``.
             client: Optional pre-configured HTTP client. If omitted, an ``httpx``
                 client is created.
             timeout: Request timeout in seconds.
@@ -64,15 +54,15 @@ class OpenAIEmbeddingProvider:
         Raises:
             RuntimeError: If ``api_key`` or ``base_url`` cannot be resolved.
         """
-        self._api_key = api_key or os.getenv("MARGIN_EMBEDDING_API_KEY")
-        self._base_url = (base_url or os.getenv("MARGIN_EMBEDDING_BASE_URL") or "").rstrip("/")
-        self._model = model or os.getenv("MARGIN_EMBEDDING_MODEL") or "text-embedding-3-small"
-        self._dimension = int(dimension or os.getenv("MARGIN_EMBEDDING_DIMENSION", "1536"))
+        self._api_key = api_key
+        self._base_url = (base_url or "").rstrip("/")
+        self._model = model or "text-embedding-3-small"
+        self._dimension = int(dimension or 1536)
         self._timeout = timeout
         if not self._api_key:
-            raise RuntimeError("MARGIN_EMBEDDING_API_KEY is required")
+            raise RuntimeError("Embedding API key is required")
         if not self._base_url:
-            raise RuntimeError("MARGIN_EMBEDDING_BASE_URL is required")
+            raise RuntimeError("Embedding base URL is required")
         if client is None:
             import httpx
 
@@ -83,7 +73,7 @@ class OpenAIEmbeddingProvider:
             version=self._model,
             provider_type=ProviderType.EMBEDDING,
             capabilities=["embed", "embed_batch"],
-            secret_refs=["MARGIN_EMBEDDING_API_KEY"],
+            secret_refs=["embedding_api_key"],
             config={"base_url": self._base_url, "model": self._model, "dimension": self._dimension},
         )
 

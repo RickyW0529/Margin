@@ -67,6 +67,8 @@ v0.3 将数据链路明确为：
 
 当前已打通 Tushare 主链路：独立 `source_tushare` schema、endpoint 专用 landing 表、量化需求 endpoint 目录、质量决策表、统一 warehouse publication、非 ST/非退市/非未来上市公司池快照，以及公司池到 QuantInputSnapshot、量化结果和 Analysis Mart 第四层分析结果的真实落库。AKShare 已建立独立 `source_akshare` schema 与 endpoint landing 表骨架；当前环境 AKShare 外部代理不可控时不阻断 Tushare 验收。
 
+用户侧默认公司池已收敛到设置页的三种选择：中证500、全 A、沪深300。CSI300/CSI500 由 Tushare 指数成分生成真实成员版本，用户切换后会滚动 active Research Scope；2026-07-02 本地端到端 refresh `vdr_abcdbd61a870a9e1e8024343` 已验证 CSI300 真实输入 300 家并完成新闻、索引、AI 复核和 Dashboard 发布。
+
 Analysis Mart 第四层由 `analysis_snapshots`、`analysis_metrics`、`analysis_findings` 与 `analysis_evidence_links` 组成，从第三层 canonical/company-pool/quant-input 与量化结果派生，向 Dashboard 和 LangGraph scoped read tools 提供可复用的数据分析摘要、指标、发现与 lineage。
 
 滚动窗口默认近 24 个月，可通过 `/settings/data` 前端页面和 `/api/v1/data-policies` API 配置；只采集能回链量化需求的数据，排除龙虎榜、大宗交易、pledge detail 等无当前消费方数据，避免数据库膨胀。

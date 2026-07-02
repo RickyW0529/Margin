@@ -64,8 +64,6 @@ def test_smoke_posts_to_local_api_without_proxy(
     """
     api_server, api_port = _serve(_AcceptedHandler)
     proxy_server, proxy_port = _serve(_ProxyFailHandler)
-    monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin")
-    monkeypatch.setenv("MARGIN_CSRF_TOKEN", "csrf")
     monkeypatch.setenv("http_proxy", f"http://127.0.0.1:{proxy_port}")
     monkeypatch.setenv("HTTP_PROXY", f"http://127.0.0.1:{proxy_port}")
     monkeypatch.setenv("no_proxy", "")

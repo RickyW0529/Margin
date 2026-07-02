@@ -32,7 +32,7 @@ def main() -> int:
     settings = MarginSettings(_env_file=None)
     providers = _parse_csv(args.providers)
     symbols = tuple(_parse_csv(args.symbols or settings.data_smoke_symbols))
-    token = _resolve_tushare_token(settings)
+    token = _resolve_tushare_token()
     if args.dry_run:
         print(
             json.dumps(
@@ -60,7 +60,7 @@ def main() -> int:
             exit_code = 2
             continue
         try:
-            provider = _build_provider(provider_name, token, settings.tushare_http_url)
+            provider = _build_provider(provider_name, token)
             result = stack.sync_daily_bars(
                 provider,
                 symbols=symbols,
@@ -137,21 +137,17 @@ def _build_stack(settings: MarginSettings) -> DataWarehouseIngestionStack:
     )
 
 
-def _build_provider(provider_name: str, tushare_token: str | None, tushare_http_url: str | None):
+def _build_provider(provider_name: str, tushare_token: str | None):
     """Instantiate a data provider by name."""
     if provider_name == "akshare":
         return AKShareProvider()
     if provider_name == "tushare":
-        return TushareProvider(token=tushare_token, http_url=tushare_http_url)
+        return TushareProvider(token=tushare_token)
     raise ValueError(f"unsupported data provider: {provider_name}")
 
 
-def _resolve_tushare_token(settings: MarginSettings) -> str | None:
-    """Resolve the Tushare API token from settings or secret manager."""
-    if settings.tushare_token is not None:
-        token = settings.tushare_token.get_secret_value().strip()
-        if token:
-            return token
+def _resolve_tushare_token() -> str | None:
+    """Resolve the Tushare API token from the legacy smoke secret manager."""
     try:
         token = SecretManager().resolve("tushare_token").strip()
     except SecretNotFoundError:

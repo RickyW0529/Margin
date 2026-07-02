@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from margin.news.models import utc_now
 from margin.strategy.lifecycle import StrategyLifecycle
 from margin.strategy.models import (
+    ConfigLifecycle,
     IndicatorViewVersion,
     ProviderConfigVersion,
     QuantFeatureSetVersion,
@@ -59,6 +62,26 @@ def _deep_merge_config_delta(
         else:
             merged[key] = value
     return merged
+
+
+def _rolled_scope_version_id(
+    scope: ResearchScopeVersion,
+    field_name: str,
+    resource_version_id: str,
+) -> str:
+    """Return a deterministic scope version ID for an activated child config."""
+    resource_slug = field_name.removesuffix("_version_id").replace("_", "-")
+    digest = hashlib.sha256(
+        "|".join(
+            (
+                scope.version_id,
+                scope.scope_hash,
+                field_name,
+                resource_version_id,
+            )
+        ).encode("utf-8")
+    ).hexdigest()
+    return f"scope-{resource_slug}-{digest[:16]}"
 
 
 class StrategyService:
@@ -337,13 +360,22 @@ class StrategyService:
             raise KeyError(f"quant strategy '{version_id}' not found")
         self._activation_validator.validate_quant_strategy_activation(version)
         activated = self._repository.activate_quant_strategy(version_id)
+        rolled_scope = self._roll_active_research_scope(
+            owner_id=activated.owner_id,
+            field_name="quant_strategy_version_id",
+            resource_version_id=activated.version_id,
+        )
+        details: dict[str, object] = {"lifecycle": activated.lifecycle.value}
+        if rolled_scope is not None:
+            details["active_scope_version_id"] = rolled_scope.version_id
+            details["active_scope_hash"] = rolled_scope.scope_hash
         self._record_config_mutation(
             actor_id=actor_id,
             action="quant_strategy.activate",
             idempotency_key=idempotency_key,
             resource_type="quant_strategy",
             resource_version_id=version_id,
-            details={"lifecycle": activated.lifecycle.value},
+            details=details,
         )
         return activated
 
@@ -459,6 +491,11 @@ class StrategyService:
             "universe definition",
         )
         activated = self._repository.activate_universe_definition(version_id)
+        self._roll_active_research_scope(
+            owner_id=activated.owner_id,
+            field_name="universe_version_id",
+            resource_version_id=activated.version_id,
+        )
         self._record_config_mutation(
             actor_id=actor_id,
             action="universe_definition.activate",
@@ -496,6 +533,11 @@ class StrategyService:
             "indicator view",
         )
         activated = self._repository.activate_indicator_view(version_id)
+        self._roll_active_research_scope(
+            owner_id=activated.owner_id,
+            field_name="indicator_view_version_id",
+            resource_version_id=activated.version_id,
+        )
         self._record_config_mutation(
             actor_id=actor_id,
             action="indicator_view.activate",
@@ -533,6 +575,11 @@ class StrategyService:
             "quant feature set",
         )
         activated = self._repository.activate_quant_feature_set(version_id)
+        self._roll_active_research_scope(
+            owner_id=activated.owner_id,
+            field_name="quant_feature_set_version_id",
+            resource_version_id=activated.version_id,
+        )
         self._record_config_mutation(
             actor_id=actor_id,
             action="quant_feature_set.activate",
@@ -567,6 +614,11 @@ class StrategyService:
             raise KeyError(f"style prompt '{version_id}' not found")
         self._activation_validator.validate_style_prompt_activation(version)
         activated = self._repository.activate_user_style_prompt(version_id)
+        self._roll_active_research_scope(
+            owner_id=activated.owner_id,
+            field_name="ai_prompt_version_id",
+            resource_version_id=activated.version_id,
+        )
         self._record_config_mutation(
             actor_id=actor_id,
             action="style_prompt.activate",
@@ -601,6 +653,11 @@ class StrategyService:
             raise KeyError(f"tool policy '{version_id}' not found")
         self._activation_validator.validate_tool_policy_activation(version)
         activated = self._repository.activate_tool_policy(version_id)
+        self._roll_active_research_scope(
+            owner_id=activated.owner_id,
+            field_name="tool_policy_version_id",
+            resource_version_id=activated.version_id,
+        )
         self._record_config_mutation(
             actor_id=actor_id,
             action="tool_policy.activate",
@@ -710,9 +767,13 @@ class StrategyService:
             raise KeyError(
                 f"provider config '{provider_config_version_id}' not found"
             )
+        if config.lifecycle is ConfigLifecycle.ACTIVE:
+            raise ValueError(
+                "active provider config is immutable; create a new config version"
+            )
         metadata = secret_store.create_or_replace(
             WriteSecretCommand(
-                provider_name=config.provider_name,
+                provider_name=provider_config_version_id,
                 secret_name=secret_name,
                 secret_value=secret_value,
                 actor_id=actor_id,
@@ -951,6 +1012,87 @@ class StrategyService:
         """List research scope versions for an owner."""
         return self._repository.list_research_scopes(owner_id)
 
+    def ensure_current_research_scope(self, owner_id: str) -> ResearchScopeVersion:
+        """Return the active scope after reconciling stale child config references."""
+        scope = self._repository.get_active_research_scope(owner_id)
+        if scope is None:
+            raise KeyError("active research scope not found")
+
+        universe = self._repository.get_universe_definition(scope.universe_version_id)
+        if universe is not None:
+            active_universes = self._repository.list_active_universe_definitions(
+                owner_id,
+                universe_code=universe.universe_code,
+            )
+            if len(active_universes) == 1:
+                scope = self._roll_scope_if_needed(
+                    scope,
+                    field_name="universe_version_id",
+                    resource_version_id=active_universes[0].version_id,
+                )
+
+        active_indicator_view = self._repository.get_active_indicator_view(owner_id)
+        if active_indicator_view is not None:
+            scope = self._roll_scope_if_needed(
+                scope,
+                field_name="indicator_view_version_id",
+                resource_version_id=active_indicator_view.version_id,
+            )
+
+        active_feature_set = self._repository.get_active_quant_feature_set(owner_id)
+        if active_feature_set is not None:
+            scope = self._roll_scope_if_needed(
+                scope,
+                field_name="quant_feature_set_version_id",
+                resource_version_id=active_feature_set.version_id,
+            )
+
+        current_strategy = self._repository.get_quant_strategy(
+            scope.quant_strategy_version_id
+        )
+        strategy_family = (
+            current_strategy.strategy_family
+            if current_strategy is not None
+            else "default"
+        )
+        active_quant_strategy = self._repository.get_active_quant_strategy(
+            owner_id,
+            strategy_family=strategy_family,
+        )
+        if active_quant_strategy is not None:
+            scope = self._roll_scope_if_needed(
+                scope,
+                field_name="quant_strategy_version_id",
+                resource_version_id=active_quant_strategy.version_id,
+            )
+
+        current_prompt = self._repository.get_user_style_prompt(
+            scope.ai_prompt_version_id
+        )
+        prompt_name = (
+            current_prompt.prompt_name if current_prompt is not None else "default"
+        )
+        active_prompt = self._repository.get_active_user_style_prompt(
+            owner_id,
+            prompt_name=prompt_name,
+        )
+        if active_prompt is not None:
+            scope = self._roll_scope_if_needed(
+                scope,
+                field_name="ai_prompt_version_id",
+                resource_version_id=active_prompt.version_id,
+            )
+
+        active_tool_policy = self._repository.get_active_tool_policy(owner_id)
+        if active_tool_policy is not None:
+            scope = self._roll_scope_if_needed(
+                scope,
+                field_name="tool_policy_version_id",
+                resource_version_id=active_tool_policy.version_id,
+            )
+
+        return scope
+
     def suspend_version(
         self,
         strategy_id: str,
@@ -1064,6 +1206,60 @@ class StrategyService:
             templates.
         """
         return list_templates()
+
+    def _roll_active_research_scope(
+        self,
+        *,
+        owner_id: str,
+        field_name: str,
+        resource_version_id: str,
+    ) -> ResearchScopeVersion | None:
+        """Create and activate a new scope when an active child config changes."""
+        active_scope = self._repository.get_active_research_scope(owner_id)
+        if active_scope is None:
+            return None
+        if getattr(active_scope, field_name) == resource_version_id:
+            return active_scope
+
+        version_id = _rolled_scope_version_id(
+            active_scope,
+            field_name,
+            resource_version_id,
+        )
+        target_scope = self._repository.get_research_scope(version_id)
+        if target_scope is None:
+            target_scope = active_scope.model_copy(
+                update={
+                    "version_id": version_id,
+                    field_name: resource_version_id,
+                    "lifecycle": ConfigLifecycle.REVIEW,
+                    "created_at": utc_now(),
+                }
+            )
+            self._repository.save_research_scope(target_scope)
+
+        self._activation_validator.validate_research_scope_activation(
+            target_scope,
+            self._repository,
+        )
+        return self._repository.activate_research_scope(target_scope.version_id)
+
+    def _roll_scope_if_needed(
+        self,
+        scope: ResearchScopeVersion,
+        *,
+        field_name: str,
+        resource_version_id: str,
+    ) -> ResearchScopeVersion:
+        """Roll from a provided active scope if a referenced version is stale."""
+        if getattr(scope, field_name) == resource_version_id:
+            return scope
+        rolled = self._roll_active_research_scope(
+            owner_id=scope.owner_id,
+            field_name=field_name,
+            resource_version_id=resource_version_id,
+        )
+        return rolled or scope
 
     def _config_mutation_replay(
         self,

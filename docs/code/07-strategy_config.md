@@ -41,7 +41,9 @@
 - `UserStylePromptVersion`、`ToolPolicyVersionRef`：冻结用户表达风格和工具权限版本。
 - `ResearchScopeVersion`：冻结上述版本 ID、Canonical rule 和 Provider config；`scope_hash` 使用 canonical JSON + SHA-256 确定性计算。
 
-配置生命周期为 `draft -> review -> active -> deprecated`。PostgreSQL partial unique index 和 repository 激活事务共同保证同一配置 family 只有一个 active 版本；Provider config 的运行时 family 进一步按 `llm`、`web_search`、`data_source`、`embedding`、`rerank` 分类互斥，允许每类各有一个 active。量化策略没有 calibration report 时不能激活；Research Scope 引用缺失、非 active 或 deprecated 版本时不能激活。
+配置生命周期为 `draft -> review -> active -> deprecated`。PostgreSQL partial unique index 和 repository 激活事务共同保证同一配置 family 只有一个 active 版本；Provider config 的运行时 family 进一步按 `llm`、`web_search`、`data_source`、`embedding`、`rerank` 分类互斥，允许每类各有一个 active。量化策略没有 calibration report 时不能激活；Research Scope 引用缺失、非 active 或 deprecated 版本时不能激活。激活公司池、量化策略、量化特征集、指标视图、风格 Prompt 或工具策略时，`StrategyService` 会复制当前 active Research Scope、替换对应版本引用并激活新的 scope，保证 `scope-current` 与最新配置一致；API 边界还会通过 `ensure_current_research_scope()` 校准历史遗留的 stale scope。
+
+`StrategyBootstrapService.ensure_default_index_universes()` 会从数据层已落地的 Tushare 指数成分创建默认 `CSI300` / `CSI500` 公司池版本（`universe-csi300-default-v0.3.0`、`universe-csi500-default-v0.3.0`），状态保持 `review`，不自动切换当前 scope；用户在设置页显式切换后才会滚动新的 active Research Scope。`ALL_A` 仍由数据层 company pool 维护。
 
 Provider URL 会通过 `provider_router` 在分类内自动识别供应商标签：LLM 支持 DeepSeek、OpenAI、OpenRouter、Qwen、Gemini、Anthropic、ModelScope、Zhipu、Ollama、VLLM 和本地 OpenAI-compatible；WebSearch 支持 Tavily、Exa、SerpAPI、Bing；数据源支持 Tushare、AKShare；Embedding 支持 OpenAI-compatible、DashScope、Jina；Rerank 支持 Jina、Cohere。未匹配 URL 反显为 `Custom` 并保留用户提供的 URL。Token 仍只做加密写入，不参与持久化明文检测。
 
@@ -51,11 +53,14 @@ Provider URL 会通过 `provider_router` 在分类内自动识别供应商标签
 
 - `SecretStore` 使用 AES-GCM-256、每次写入随机 96-bit nonce，并把 provider、secret name、version ID、key version 作为 associated data。
 - 数据库只保存密文、nonce、key version、algorithm、last four 和审计元数据；API 不返回明文、密文、nonce 或 key material。
-- Secret 按版本保存；替换 secret 会停用旧版本。active Provider config 不允许原地换 secret，必须创建新 config version。
-- Provider secret API 要求 local admin Bearer、`X-CSRF-Token` 和 `Idempotency-Key`。配置缺失时 fail closed。
+- Secret 按版本保存；策略配置层把 provider config version ID 作为 secret scope，因此替换一个新 config version 的 token 不会停用其他 config version 绑定的 token。
+- active Provider config 不允许原地换 secret；前端在保存 active 配置的新 token 时会自动创建 draft config version，再把加密 secret 绑定到新版本。
+- Provider secret API 在个人本地模式下不要求 admin Bearer 或 CSRF；写入仍要求 `Idempotency-Key` 并记录 append-only 审计。
 - 所有 v0.2 create/activate mutation 都把 actor/action/idempotency key 写入 append-only `strategy_config_audits`；数据库唯一 partial index 保证并发重放只产生一个审计事件。
-- 前端 Provider Settings 只用密码输入框，保存/测试后立即清空明文；只显示 `•••• last_four`。本地管理员凭据只保存在当前标签页 `sessionStorage`。
+- 前端 Provider Settings 启动时读取 `/api/v1/provider-configs` 的安全元数据，优先展示最近已配置 encrypted secret 的版本；密码输入框永远不反显明文，保存/测试后立即清空，只显示 `•••• last_four`，不再要求用户输入管理员 token 或 CSRF token。
+- 前端读取 `/api/v1/provider-configs` 与 `/api/v1/provider-status` 使用 `no-store`，避免保存/激活后被 30 秒 revalidate 缓存挡住；激活成功后本地状态立即反显 `active`。
 - Provider health 使用冻结的 config/secret version，真实调用 Tushare、AKShare、Tavily、LLM、Embedding 或 Rerank 的轻量 `healthcheck()`；错误经过 secret redaction。
+- Provider 激活成功后会清理 dashboard/news/agentic news/valuation discovery runtime cache，后续研究刷新会重新从数据库读取 active config 和加密 secret。
 - Provider URL 同时执行 scheme、DNS/IP 禁止网段和 provider host allowlist 校验；自定义公网 host 必须显式 `allow_custom_base_url=true`，且不能绕过 loopback/private/link-local 限制。
 
 ---
@@ -75,6 +80,7 @@ Provider URL 会通过 `provider_router` 在分类内自动识别供应商标签
 | `src/margin/strategy/repository.py` | 仓库协议及内存、SQLAlchemy 两种实现。 |
 | `src/margin/strategy/service.py` | 业务入口 `StrategyService`，编排创建、更新、校验、生命周期与 Prompt。 |
 | `src/margin/strategy/scope.py` | `ScopeResolver`，解析 active 配置并生成冻结 Research Scope。 |
+| `src/margin/strategy/bootstrap.py` | 默认 Provider、ALL_A scope、CSI300/CSI500 公司池版本 bootstrap。 |
 | `src/margin/strategy/provider_config.py` | Provider health、SSRF guard、secret-safe 结果。 |
 | `src/margin/strategy/provider_router.py` | Provider 分类与 URL 正则识别；输出安全的 `detected_label` / `router_rule_id` / Custom metadata。 |
 | `src/margin/strategy/provider_runtime.py` | 按 active Provider category 解析运行时 adapter，并只在构造 adapter 时内存解密 token。 |
@@ -529,13 +535,13 @@ PostgreSQL 实现。
 | `GET/POST` | `/research-scopes` | 冻结 Research Scope |
 | `POST` | `/research-scopes/{version_id}/activate` | 校验引用并激活 Scope |
 
-所有 v0.2 mutating API 都要求 local admin Bearer、CSRF 和 `Idempotency-Key`。生产环境需要配置 `MARGIN_ADMIN_API_TOKEN`、`MARGIN_CSRF_TOKEN` 和 32-byte/base64 `MARGIN_SECRET_MASTER_KEY`。
+所有 v0.2 mutating API 在个人本地模式下不要求 local admin Bearer 或 CSRF，但仍要求 `Idempotency-Key` 以支持幂等重放和审计。Secret Store 默认使用稳定本地 key 加密，生产环境可配置 32-byte/base64 `MARGIN_SECRET_MASTER_KEY` 覆盖。
 
 ### 8.2 真实 Provider smoke
 
 真实 smoke 不由单元测试替代：
 
-1. 在本地环境或前端 Provider Settings 写入 Tushare、Tavily、LLM、Embedding、Rerank 凭据。
+1. 在前端 Provider Settings 写入 Tushare、Tavily、LLM、Embedding、Rerank 凭据；手工 smoke 脚本可使用显式环境变量，但应用运行路径不再从 `.env` 读取 provider token。
 2. 对对应 config version 调用 `POST /api/v1/provider-configs/{id}/test`。
 3. Tushare/AKShare/Tavily/LLM/Embedding/Rerank adapter 分别执行现有轻量 `healthcheck()`。
 4. 输出只记录 provider、status、latency、error code 和脱敏错误；不得打印 header、token、密文或原始响应。

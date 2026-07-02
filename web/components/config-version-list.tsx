@@ -53,8 +53,8 @@ export function ConfigVersionList({
     try {
       await activateVersionedConfig(kind, versionId);
       setSuccess(`${versionId} 已激活。`);
-    } catch {
-      setError("激活失败，请检查管理员会话与版本状态。");
+    } catch (caught) {
+      setError(`激活失败：${messageFromError(caught)}`);
     } finally {
       setBusy(null);
     }
@@ -120,4 +120,35 @@ export function ConfigVersionList({
       </CardContent>
     </Card>
   );
+}
+
+function messageFromError(caught: unknown): string {
+  if (!(caught instanceof Error) || !caught.message) {
+    return "请检查版本状态。";
+  }
+  const jsonStart = caught.message.indexOf("{");
+  if (jsonStart === -1) {
+    return caught.message;
+  }
+  try {
+    const payload = JSON.parse(caught.message.slice(jsonStart)) as {
+      detail?: unknown;
+    };
+    if (typeof payload.detail === "string") {
+      return payload.detail;
+    }
+    if (
+      payload.detail &&
+      typeof payload.detail === "object" &&
+      "message" in payload.detail
+    ) {
+      const detail = payload.detail as { message?: unknown };
+      if (typeof detail.message === "string") {
+        return detail.message;
+      }
+    }
+  } catch {
+    return caught.message;
+  }
+  return caught.message;
 }

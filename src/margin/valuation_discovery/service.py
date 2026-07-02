@@ -74,6 +74,31 @@ class ValuationDiscoveryService:
         )
         return _response_from_run(run)
 
+    def wake_refresh_worker(
+        self,
+        *,
+        max_steps: int = 1,
+        now: datetime | None = None,
+        worker_id: str = "api-refresh-wakeup",
+    ) -> int:
+        """Wake a valuation-discovery worker once after accepting a refresh.
+
+        The persistent worker still owns normal execution, but this short wake
+        prevents a new refresh from waiting for the next polling tick before its
+        first step is claimed.
+        """
+        if max_steps <= 0:
+            raise ValueError("max_steps must be positive")
+        processed = 0
+        worker = self.create_step_worker(worker_id=worker_id)
+        claimed_at = now or datetime.now(UTC)
+        for _ in range(max_steps):
+            if not worker.run_once(now=claimed_at):
+                break
+            processed += 1
+            claimed_at = datetime.now(UTC)
+        return processed
+
     def get_refresh_status(self, run_id: str) -> RefreshStatus | None:
         """Return the status of a refresh run, or ``None`` if not found."""
         run = self._orchestrator.get_run(run_id)

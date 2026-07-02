@@ -35,6 +35,7 @@ The shared / core layer of the current Margin implementation provides the founda
 - **Resilience**: Token-bucket rate limiting and configurable exponential-backoff retry.
 - **Secret management**: Resolving credential references from environment variables or local secret files without storing plain-text values in code or configuration.
 - **Background execution**: Scheduling recurring holdings monitoring and document indexing jobs.
+- **Durable orchestration state**: `OrchestrationRun` / `StepAttempt` store durable runs and append-only step events. Run `metadata_json` carries business context such as valuation-discovery `decision_at`; `started_at` / `finished_at` represent lifecycle timing only so PIT timestamps cannot poison worker scheduling or terminal-state validation.
 - **Document normalization pipeline**: `margin.documents` exposes a shared Docling interface that converts PDF/HTML/DOCX/XLSX/CSV/JSON/Text into Markdown, then runs Review / Repair / Verifier / Slimming to emit final Markdown, JSON, and RAG chunks. RAG chunking preserves paragraph/table-line boundaries where possible and hard-splits any single oversized block so every chunk stays within the configured `max_chunk_chars`; this prevents embedding providers from rejecting overlong inputs. PDF conversion enables RapidOCR by default and pins the backend to `onnxruntime`; visual verification runs only when the verifier supports multimodal inputs and page images exist, otherwise it is skipped with an explicit status.
 
 ---
@@ -54,6 +55,9 @@ The shared / core layer of the current Margin implementation provides the founda
 | `src/margin/core/registry.py` | Central provider registry with retry, fallback, audit, and cost tracking. |
 | `src/margin/core/resilience.py` | Rate limiter, retry configuration, and retry wrapper. |
 | `src/margin/core/secret.py` | Reference-based secret manager. |
+| `src/margin/core/run_states.py` | Durable orchestration run and step-event domain models; `metadata_json` carries business context while lifecycle timestamps remain scheduler/audit time. |
+| `src/margin/core/db_orchestration.py` | ORM rows for orchestration runs, step attempts, outbox, and capacity tables; `orchestration_runs.metadata_json` persists run business metadata. |
+| `src/margin/core/orchestration_repository.py` | Memory/PostgreSQL repositories for durable runs and append-only step events, including atomic claim and state append behavior. |
 | `src/margin/documents/markdown.py` | Shared Docling Markdown conversion interface: format routing, request/result models, Docling backend, PDF OCR configuration, and lightweight fallback. |
 | `src/margin/documents/pipeline.py` | Shared document normalization pipeline: Review/Repair/Verifier/Slimming agent protocols and default rule-based implementations, final Markdown/JSON/RAG chunks with oversized-block splitting under `max_chunk_chars`, and multimodal visual-verification fallback. |
 
@@ -71,30 +75,21 @@ Single source of truth for all Margin environment configuration.
 
 **Key attributes / properties**:
 
+`MarginSettings` only owns runtime infrastructure settings such as database,
+logging, monitoring, and SSRF guards. Provider URL/token/model values for LLM,
+web search, Tushare, embedding, and rerank are not read from `.env`; they are
+written by the settings UI into provider config tables and encrypted by
+AES-GCM Secret Store.
+
 | Attribute | Type | Default | Description |
 | --- | --- | --- | --- |
 | `database_url` | `PostgresDsn` | `postgresql+psycopg://margin:margin@localhost:5432/margin` | SQLAlchemy database connection URL. |
 | `database_echo` | `bool` | `False` | Whether SQLAlchemy logs emitted SQL statements. |
 | `database_pool_pre_ping` | `bool` | `True` | Verify connections before checkout from the pool. |
-| `llm_api_key` | `SecretStr \| None` | `None` | API key for the OpenAI-compatible LLM provider. |
-| `llm_base_url` | `HttpUrl \| None` | `None` | Base URL for the OpenAI-compatible LLM provider. |
-| `llm_model` | `str` | `deepseek-v4-pro` | Default LLM model name. |
-| `embedding_base_url` | `HttpUrl \| None` | `None` | Base URL for the OpenAI-compatible embedding provider. |
-| `embedding_api_key` | `SecretStr \| None` | `None` | API key for the embedding provider. |
-| `embedding_model` | `str` | `text-embedding-3-small` | Default embedding model name. |
-| `embedding_dimension` | `int` | `1536` | Dimension of generated embedding vectors. |
-| `rerank_base_url` | `HttpUrl \| None` | `None` | Base URL for the rerank provider. |
-| `rerank_api_key` | `SecretStr \| None` | `None` | API key for the rerank provider. |
-| `rerank_model` | `str` | `""` | Default rerank model name. |
-| `websearch_api_key` | `SecretStr \| None` | `None` | API key for the Tavily web search provider. |
-| `admin_api_token` | `SecretStr \| None` | `None` | Local-admin Bearer for v0.2 config mutations; missing config fails closed. |
-| `csrf_token` | `SecretStr \| None` | `None` | CSRF token for v0.2 config mutations. |
-| `secret_master_key` | `SecretStr \| None` | `None` | 32-byte/base64 AES-GCM-256 Secret Store master key. |
+| `secret_master_key` | `SecretStr` | `dev-only-change-me-32-byte-key!!` | 32-byte/base64 AES-GCM-256 Secret Store master key; local personal mode has a stable default and production can override it. |
 | `secret_key_version` | `str` | `local-v1` | Key version included in encryption associated data. |
 | `allow_local_provider_urls` | `bool` | `False` | Allow explicitly local provider URLs for development. |
 | `resolve_provider_dns` | `bool` | `True` | Resolve DNS targets for SSRF IP checks. |
-| `tushare_token` | `SecretStr \| None` | `None` | Tushare token. It is masked in representations and must not be logged. |
-| `tushare_http_url` | `str \| None` | `None` | Optional Tushare-compatible API URL. |
 | `data_snapshot_root` | `Path` | `.margin/snapshots/data` | Root directory for v0.2 compressed raw provider snapshots. |
 | `data_sync_on_startup` | `bool` | `True` | Whether the worker enables the data-provider sync job. |
 | `data_freshness_timezone` | `str` | `Asia/Shanghai` | Timezone used for data freshness calculations. |
@@ -115,16 +110,6 @@ Single source of truth for all Margin environment configuration.
 - `env_file=".env"`
 - `env_file_encoding="utf-8"`
 - `extra="ignore"`
-
-### Method: `MarginSettings.empty_optional_url_is_none`
-
-| Aspect | Description |
-| --- | --- |
-| Signature | `cls, value: object -> object` |
-| Decorators | `@field_validator("llm_base_url", "embedding_base_url", "rerank_base_url", mode="before")`, `@classmethod` |
-| Purpose | Converts empty optional URL strings to `None` so Docker Compose unset variables do not cause validation failures. |
-| Parameters | `value` — raw value being validated. |
-| Returns | `None` if the value is an empty or whitespace-only string; otherwise the original value. |
 
 ### Function: `get_settings`
 
@@ -324,42 +309,6 @@ Provider-status placeholder for an external provider whose configuration is miss
 | Parameters | `settings` — `MarginSettings` instance. |
 | Returns | Configured SQLAlchemy `Engine`. |
 
-### Function: `build_llm_provider`
-
-| Aspect | Description |
-| --- | --- |
-| Signature | `(settings: MarginSettings) -> LLMProvider \| None` |
-| Purpose | Builds the configured OpenAI-compatible LLM provider. |
-| Parameters | `settings` — `MarginSettings` instance. |
-| Returns | `LLMProvider` if both API key and base URL are configured; otherwise `None`. |
-
-### Function: `build_embedding_provider`
-
-| Aspect | Description |
-| --- | --- |
-| Signature | `(settings: MarginSettings) -> OpenAIEmbeddingProvider \| None` |
-| Purpose | Builds the configured OpenAI-compatible embedding provider. |
-| Parameters | `settings` — `MarginSettings` instance. |
-| Returns | `OpenAIEmbeddingProvider` if both API key and base URL are configured; otherwise `None`. |
-
-### Function: `build_websearch_provider`
-
-| Aspect | Description |
-| --- | --- |
-| Signature | `(settings: MarginSettings) -> TavilySearchAdapter \| None` |
-| Purpose | Builds the configured Tavily web search provider. |
-| Parameters | `settings` — `MarginSettings` instance. |
-| Returns | `TavilySearchAdapter` if the web search API key is configured; otherwise `None`. |
-
-### Function: `build_rerank_provider`
-
-| Aspect | Description |
-| --- | --- |
-| Signature | `(settings: MarginSettings) -> HTTPRerankProvider \| None` |
-| Purpose | Builds the configured HTTP rerank provider. |
-| Parameters | `settings` — `MarginSettings` instance. |
-| Returns | `HTTPRerankProvider` if both API key and base URL are configured; otherwise `None`. |
-
 ### Function: `_missing_provider`
 
 | Aspect | Description |
@@ -373,10 +322,14 @@ Provider-status placeholder for an external provider whose configuration is miss
 
 | Aspect | Description |
 | --- | --- |
-| Signature | `(settings: MarginSettings) -> list[Any]` |
-| Purpose | Builds all providers surfaced by the dashboard status endpoint. Missing integrations are represented as degraded placeholders. |
-| Parameters | `settings` — `MarginSettings` instance. |
-| Returns | List containing LLM, embedding, web search, and rerank providers (or degraded placeholders). |
+| Signature | `(repository, health_service, *, owner_id: str = "local-admin") -> list[Any]` |
+| Purpose | Loads active provider configs from the provider database, checks them through `ProviderConfigHealthService`, and emits degraded placeholders for missing LLM, embedding, web search, and rerank integrations. |
+| Parameters | `repository` — strategy repository. <br> `health_service` — encrypted provider health service. <br> `owner_id` — local owner ID. |
+| Returns | `ProviderConfigStatusProbe` and degraded placeholder list. |
+
+### Provider Runtime Boundary
+
+LLM, embedding, web search, rerank, and Tushare adapters are no longer built from `MarginSettings` or `.env`. Runtime consumers use `ProviderRuntimeFactory` to load the active provider config version, read non-sensitive URL/model fields, and decrypt the token from `SecretStore` only at the final trusted adapter-construction boundary. Secrets may be scoped by provider name or provider config version ID; the settings UI scopes them by config version ID so draft tokens do not deactivate older active tokens. Successful provider activation clears dashboard/news/agentic-news/valuation-discovery runtime caches through `clear_provider_runtime_caches()`.
 
 ### Function: `build_data_warehouse_stack`
 
@@ -952,19 +905,19 @@ Secret reference metadata for display; does not contain the secret value.
 
 ### v0.2 `SecretStore`
 
-`src/margin/core/secret_store.py` implements AES-GCM-256 versioned provider secrets. `create_or_replace` encrypts with a random nonce and deactivates the prior active version; `metadata` returns configured/last-four/version/status/time only; `resolve` returns a masked `SecretValue` to trusted provider adapters. Production `get_secret_store()` requires `MARGIN_SECRET_MASTER_KEY` and never generates an ephemeral replacement key.
+`src/margin/core/secret_store.py` implements AES-GCM-256 versioned provider secrets. `create_or_replace` encrypts with a random nonce and deactivates the prior active version in the same scope; `metadata` returns configured/last-four/version/status/time only; `resolve` returns a masked `SecretValue` to trusted provider adapters. Strategy provider configs use the provider config version ID as the secret scope so tokens bound to different config versions do not deactivate each other. `get_secret_store()` uses a stable local default master key for personal mode; production may override the master key at process level, but provider tokens themselves are stored only as provider-database ciphertext.
 
 ---
 
 ## 14. Cross-Module Usage Notes
 
-- **`settings.py` is the root dependency**: `worker.py`, `dependencies.py`, and `api/main.py` all call `get_settings()` to obtain database URLs, API keys, logging configuration, and service metadata.
+- **`settings.py` is the root dependency**: `worker.py`, `dependencies.py`, and `api/main.py` all call `get_settings()` to obtain database URLs, logging configuration, SSRF guard settings, and service metadata. Provider credentials are loaded through provider config tables, not `.env`.
 - **Engine reuse**: `build_database_engine(get_settings())` is the canonical path for creating a shared engine. Both the API dependencies and the background worker use this pattern.
 - **Session factory lifecycle**: `create_session_factory(engine)` produces `sessionmaker` factories with `expire_on_commit=False`. Repositories receive the factory and create their own sessions.
 - **Dependency caching**: All service factories in `dependencies.py` are decorated with `@lru_cache`, ensuring the same engine and repository instances are reused across requests within a process.
 - **Test wiring**: `create_app()` accepts optional service overrides and maps them through `application.dependency_overrides`, allowing tests to inject fakes without changing route code.
 - **Provider pluggability**: New external integrations should implement `BaseProvider`, expose a `ProviderDescriptor`, and can then be registered in `ProviderRegistry` with retry, rate limiting, fallback, and audit.
-- **Secret discipline**: `ProviderDescriptor` stores only secret reference names, never values. The registry and `SecretManager` resolve values at runtime from `MARGIN_SECRET_<REF>` environment variables or `.margin/secrets/<ref>` files.
+- **Secret discipline**: `ProviderDescriptor` stores only secret reference names, never values. Application runtime adapters are built by `ProviderRuntimeFactory`, which resolves active provider config versions and decrypts the matching database secret only at the trusted adapter-construction boundary.
 - **Resilience defaults**: `RateLimiter` and `RetryConfig` use sensible defaults (`60 calls / 60 s`, `3` retries with exponential backoff). They are intentionally not thread-safe, matching the MVP single-threaded worker model.
 - **Worker scheduling**: The worker schedules two interval jobs (`holdings-monitoring` and `document-indexing`) with coalescing and single-instance constraints to prevent overlapping sweeps.
 - **Dashboard transparency**: `build_provider_status_providers` deliberately returns degraded placeholders for missing integrations so the dashboard can display explicit configuration gaps instead of omitting providers silently.

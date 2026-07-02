@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,10 +17,9 @@ def test_start_valuation_discovery_refresh_returns_accepted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test that starting a valuation discovery refresh returns 202 Accepted."""
-    monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin-test-token")
-    monkeypatch.setenv("MARGIN_CSRF_TOKEN", "valid")
     get_settings.cache_clear()
-    client = TestClient(create_app(valuation_discovery_service=_FakeValuationService()))
+    valuation_service = _FakeValuationService()
+    client = TestClient(create_app(valuation_discovery_service=valuation_service))
 
     response = client.post(
         "/api/v1/valuation-discovery/refreshes",
@@ -28,8 +28,6 @@ def test_start_valuation_discovery_refresh_returns_accepted(
             "decision_at": "2026-06-22T00:00:00+00:00",
         },
         headers={
-            "Authorization": "Bearer admin-test-token",
-            "X-CSRF-Token": "valid",
             "Idempotency-Key": "valuation-refresh-1",
         },
     )
@@ -40,6 +38,33 @@ def test_start_valuation_discovery_refresh_returns_accepted(
         "status": "accepted",
         "http_status": 202,
     }
+    assert valuation_service.wake_calls == [{"max_steps": 1}]
+
+
+def test_start_refresh_resolves_scope_current_alias_to_active_scope() -> None:
+    """Test that scope-current is resolved before the refresh run is created."""
+    valuation_service = _FakeValuationService()
+    client = TestClient(
+        create_app(
+            strategy_service=_FakeStrategyService(),
+            valuation_discovery_service=valuation_service,
+        )
+    )
+
+    response = client.post(
+        "/api/v1/valuation-discovery/refreshes",
+        json={
+            "scope_version_id": "scope-current",
+            "decision_at": "2026-07-01T09:00:00+08:00",
+        },
+        headers={
+            "Idempotency-Key": "valuation-refresh-scope-current",
+        },
+    )
+
+    assert response.status_code == 202
+    assert valuation_service.calls[0]["scope_version_id"] == "scope-active"
+    assert valuation_service.wake_calls == [{"max_steps": 1}]
 
 
 def test_valuation_discovery_dependency_maps_provider_config_error_to_503(
@@ -67,9 +92,42 @@ def test_valuation_discovery_dependency_maps_provider_config_error_to_503(
 class _FakeValuationService:
     """Fake valuation discovery service stub for API tests."""
 
-    def start_refresh(self, **_: object) -> _FakeRefreshResponse:
+    def __init__(self) -> None:
+        """Initialize call recording."""
+        self.calls: list[dict[str, object]] = []
+        self.wake_calls: list[dict[str, object]] = []
+
+    def start_refresh(self, **kwargs: object) -> _FakeRefreshResponse:
         """Return a fake accepted refresh response."""
+        self.calls.append(kwargs)
         return _FakeRefreshResponse(run_id="vdr-api-1")
+
+    def wake_refresh_worker(self, **kwargs: object) -> int:
+        """Record a best-effort background wake call."""
+        self.wake_calls.append(kwargs)
+        return 1
+
+
+class _FakeStrategyService:
+    """Fake strategy config service exposing one active scope."""
+
+    def ensure_current_research_scope(self, owner_id: str) -> SimpleNamespace:
+        """Return the reconciled current scope."""
+        return SimpleNamespace(
+            owner_id=owner_id,
+            version_id="scope-active",
+            lifecycle="active",
+        )
+
+    def list_research_scopes(self, owner_id: str) -> list[SimpleNamespace]:
+        """Return active scope metadata."""
+        return [
+            SimpleNamespace(
+                owner_id=owner_id,
+                version_id="scope-active",
+                lifecycle="active",
+            )
+        ]
 
 
 @dataclass(frozen=True)

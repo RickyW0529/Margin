@@ -103,10 +103,25 @@ flowchart TB
 
 ## Quick Start
 
+Local development, using your host Python/Node processes and local Postgres:
+
 ```bash
 cp .env.example .env
-# Edit .env, add the provider keys you want (missing ones degrade gracefully).
+# .env only contains runtime basics such as database/logging/web origin.
+# Provider URL/token/model settings are configured from the app Settings page.
 
+python scripts/dev.py restart
+```
+
+`scripts/dev.py` keeps one API process, one worker, and one Next.js dev server
+for this checkout. It binds local services to `127.0.0.1`, forces localhost
+proxy bypass in child processes, stores PIDs/logs under `.margin/dev/`, and uses
+`lsof` readiness checks so restricted shells or VPN settings do not produce
+false localhost HTTP failures.
+
+Containerized full stack:
+
+```bash
 docker compose up -d --build
 ```
 
@@ -119,14 +134,15 @@ Open:
 
 Frontend entrypoints:
 
-- `/`: research workspace overview, candidate snapshot, recommended workflow, provider status
-- `/research`: candidate list, filters, refresh triggers, evidence expansion, read-only Copilot
+- `/`: question-first research entry
+- `/dashboard`: today's recommendations and one-click research refresh
+- `/settings`: settings hub
 - `/settings/data`: rolling data acquisition window config
 - `/settings/providers`: provider keys write-in and health checks
 
 ## Provider Configuration
 
-See `.env.example`. `MARGIN_ADMIN_API_TOKEN` and `MARGIN_CSRF_TOKEN` protect local mutating endpoints (provider settings, refresh triggers, etc.); replace the defaults outside local development.
+See `/settings/providers` in the web app. Local personal-mode mutating endpoints no longer require admin or CSRF tokens; they still require idempotency keys and append audit records. Provider API tokens are managed through Provider Settings, encrypted into the provider database tables, and loaded from safe metadata on startup. Provider env vars are not part of the application runtime path.
 
 When an optional provider is missing, the system degrades conservatively: if core quotes, evidence or citations are unavailable, the research result is `ABSTAINED` rather than a high-confidence conclusion. Tavily quota exhaustion, AKShare upstream failures, and missing rerank config are exposed explicitly as degraded / unhealthy / `service_not_configured` — never as fake success.
 
@@ -153,11 +169,11 @@ npm run build
 Compose and local smoke:
 
 ```bash
+python scripts/dev.py status
 docker compose config --quiet
 
 python scripts/smoke_dashboard_e2e.py --base-url http://localhost:3000
-MARGIN_ADMIN_API_TOKEN=dev-admin-token MARGIN_CSRF_TOKEN=dev-csrf-token \
-  python scripts/smoke_valuation_discovery_p1.py \
+python scripts/smoke_valuation_discovery_p1.py \
   --scope-version-id scope-current \
   --decision-at 2026-06-23T00:00:00+00:00 \
   --api-url http://localhost:8000

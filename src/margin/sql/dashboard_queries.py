@@ -45,8 +45,10 @@ def dashboard_feedback_by_item(item_id: str) -> Select:
 
 def dashboard_runs_by_scope(scope_version_id: str) -> Select:
     """Return dashboard runs for a scope version."""
-    return select(DashboardRunRow).where(
-        DashboardRunRow.version_id == scope_version_id
+    return (
+        select(DashboardRunRow)
+        .where(DashboardRunRow.version_id == scope_version_id)
+        .order_by(DashboardRunRow.decision_at.desc(), DashboardRunRow.created_at.desc())
     )
 
 

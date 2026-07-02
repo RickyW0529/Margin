@@ -11,9 +11,12 @@ import {
   activateDataPolicy,
   createDataPolicy,
   createResearchItemFeedback,
+  fetchProviderConfigs,
+  fetchProviderStatus,
   fetchQuantStrategyDefaults,
   fetchResearchCandidates,
   fetchResearchRunDetailV2,
+  fetchValuationDiscoveryRuns,
   startValuationDiscoveryRefresh,
 } from "./api";
 
@@ -37,10 +40,8 @@ describe("api mutation helpers", () => {
     vi.unstubAllGlobals();
   });
 
-  it("posts a valuation-discovery refresh with local admin headers", async () => {
+  it("posts a valuation-discovery refresh with local idempotency", async () => {
     json.mockResolvedValueOnce({ run_id: "run_1", status: "pending" });
-    window.localStorage.setItem("margin.adminApiToken", "admin-token");
-    window.localStorage.setItem("margin.csrfToken", "csrf-token");
     vi.stubGlobal("crypto", { randomUUID: () => "idempotency-1" });
 
     await startValuationDiscoveryRefresh({
@@ -54,9 +55,7 @@ describe("api mutation helpers", () => {
         method: "POST",
         cache: "no-store",
         headers: expect.objectContaining({
-          Authorization: "Bearer admin-token",
           "Idempotency-Key": "idempotency-1",
-          "X-CSRF-Token": "csrf-token",
         }),
         body: JSON.stringify({
           decision_at: "2026-06-23T08:30:00.000Z",
@@ -89,8 +88,6 @@ describe("api mutation helpers", () => {
 
   it("creates and activates rolling data policy versions", async () => {
     json.mockResolvedValue({});
-    window.localStorage.setItem("margin.adminApiToken", "admin-token");
-    window.localStorage.setItem("margin.csrfToken", "csrf-token");
     vi.stubGlobal("crypto", {
       randomUUID: vi
         .fn()
@@ -111,9 +108,7 @@ describe("api mutation helpers", () => {
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
-          Authorization: "Bearer admin-token",
           "Idempotency-Key": "policy-create-idem",
-          "X-CSRF-Token": "csrf-token",
         }),
       }),
     );
@@ -162,6 +157,30 @@ describe("api mutation helpers", () => {
     );
   });
 
+  it("fetches provider configs and status without stale revalidation", async () => {
+    json.mockResolvedValue([]);
+
+    await fetchProviderConfigs();
+    await fetchProviderStatus();
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8000/api/v1/provider-configs",
+      expect.objectContaining({
+        cache: "no-store",
+      }),
+    );
+    expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]).not.toHaveProperty("next");
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:8000/api/v1/provider-status",
+      expect.objectContaining({
+        cache: "no-store",
+      }),
+    );
+    expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[1][1]).not.toHaveProperty("next");
+  });
+
   it("maps valuation-discovery run status into research progress detail", async () => {
     json.mockResolvedValueOnce({
       run_id: "vdr-1",
@@ -194,7 +213,7 @@ describe("api mutation helpers", () => {
     expect(fetch).toHaveBeenCalledWith(
       "http://localhost:8000/api/v1/valuation-discovery/runs/vdr-1",
       expect.objectContaining({
-        next: { revalidate: 30 },
+        cache: "no-store",
       }),
     );
     expect(detail).toMatchObject({
@@ -212,5 +231,25 @@ describe("api mutation helpers", () => {
       status: "succeeded",
       step: "QUANT_RUN",
     });
+  });
+
+  it("fetches recent valuation refresh runs without cache for dashboard polling", async () => {
+    json.mockResolvedValueOnce({
+      items: [],
+      next_cursor: null,
+      page_size: 1,
+    });
+
+    await fetchValuationDiscoveryRuns({
+      limit: 1,
+      scope_version_id: "scope-current",
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/valuation-discovery/runs?scope_version_id=scope-current&limit=1",
+      expect.objectContaining({
+        cache: "no-store",
+      }),
+    );
   });
 });

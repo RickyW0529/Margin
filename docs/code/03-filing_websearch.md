@@ -831,7 +831,7 @@ news_agent_tasks / news_search_plans / news_article_findings / news_security_bri
 
 Agentic 层不直接写 `chunks`、`chunk_embeddings` 或任何向量表；原文索引仍由 `04-text_indexing` 的 `IndexingRunner` 消费 `document_outbox(topic=vector_index)` 完成。LLM 不能执行自由 SQL，量化目标读取由服务端 repository 完成。
 
-Agentic news 的 provider 构造优先使用 strategy active provider；本地 smoke 环境如果没有 `MARGIN_SECRET_MASTER_KEY`，但 `.env` 已配置 LLM/WebSearch key，则回退到直接环境变量 provider。该流程不是 LangGraph run，因此 LLMService 不使用带 `ai_graph_runs` 外键的 SQL audit repository；prompt/response hash 落在 news 自身 run/plan/finding 表中。WebSearch provider 出现预算、paygo 或认证类稳定错误码时，run 状态进入 `waiting_provider` 并记录 token-safe `error_summary`，不再归为普通 `partial`。
+Agentic news 的 provider 构造优先使用 strategy active provider；本地 smoke 环境也可在未写入策略 provider 时回退到 `.env` 中的 LLM/WebSearch provider。该流程不是 LangGraph run，因此 LLMService 不使用带 `ai_graph_runs` 外键的 SQL audit repository；prompt/response hash 落在 news 自身 run/plan/finding 表中。WebSearch provider 出现预算、paygo 或认证类稳定错误码时，run 状态进入 `waiting_provider` 并记录 token-safe `error_summary`，不再归为普通 `partial`。
 
 ### 10.5 来源等级语义
 
@@ -890,8 +890,6 @@ record, events = service.search_and_acquire("平安银行 公告", max_results=5
 
 ```http
 POST /api/v1/news/agentic-refresh
-Authorization: Bearer <admin-token>
-X-CSRF-Token: <csrf-token>
 Idempotency-Key: <key>
 
 {

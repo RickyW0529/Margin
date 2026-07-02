@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from margin.api.dependencies import (
+    clear_provider_runtime_caches,
     get_optional_secret_store,
     get_provider_config_health_service,
     get_secret_store,
@@ -293,7 +294,7 @@ def activate_provider_config(
     Returns:
         The activated ProviderConfigVersion.
     """
-    return _call_service(
+    activated = _call_service(
         lambda: service.activate_provider_config(
             version_id,
             health_service=health_service,
@@ -301,6 +302,8 @@ def activate_provider_config(
             idempotency_key=idempotency_key,
         )
     )
+    clear_provider_runtime_caches()
+    return activated
 
 
 @router.get("/universe-configs")

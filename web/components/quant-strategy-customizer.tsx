@@ -125,7 +125,7 @@ export function QuantStrategyCustomizer({
       });
       setSuccess(`${String(created.version_id ?? versionId)} 已保存，激活前不会生效。`);
     } catch {
-      setError("保存失败，请检查管理员会话和后端策略配置服务。");
+      setError("保存失败，请检查版本内容或后端策略配置服务。");
     } finally {
       setBusy(false);
     }
@@ -145,7 +145,7 @@ export function QuantStrategyCustomizer({
       <CardContent className="grid gap-4">
         <div className="grid gap-3 md:grid-cols-4">
           <div className="grid gap-1.5 md:col-span-2">
-            <Label htmlFor="quant-universe">公司池</Label>
+            <Label htmlFor="quant-universe">评分预设</Label>
             <Select
               id="quant-universe"
               value={universe}
@@ -157,6 +157,9 @@ export function QuantStrategyCustomizer({
                 </option>
               ))}
             </Select>
+            <span className="text-xs text-muted-foreground">
+              只调整阈值和权重；股票池在研究范围页配置。
+            </span>
           </div>
           <Metric label="默认买入" value={selectedPreset.buy_threshold} />
           <Metric label="默认卖出" value={selectedPreset.sell_threshold} />

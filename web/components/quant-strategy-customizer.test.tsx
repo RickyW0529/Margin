@@ -42,7 +42,7 @@ test("quant customizer saves a no-top-n strategy version for selected pool", asy
     <QuantStrategyCustomizer defaults={defaults} createConfig={createConfig} />,
   );
 
-  fireEvent.change(screen.getByLabelText("公司池"), {
+  fireEvent.change(screen.getByLabelText("评分预设"), {
     target: { value: "CSI300" },
   });
   fireEvent.change(screen.getByLabelText("买入阈值"), {

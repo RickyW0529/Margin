@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -74,15 +73,15 @@ class LLMProvider(BaseProvider):
 
         Args:
             name: Provider name used in the registry.
-            api_key: LLM API key. Falls back to ``MARGIN_LLM_API_KEY``.
-            base_url: LLM API base URL. Falls back to ``MARGIN_LLM_BASE_URL``.
-            model: Model identifier. Falls back to ``MARGIN_LLM_MODEL``.
+            api_key: LLM API key resolved by the caller.
+            base_url: LLM API base URL resolved by the caller.
+            model: Model identifier resolved by the caller.
             client: Optional ``httpx.Client`` instance.
             timeout: Request timeout in seconds.
         """
-        self._api_key = api_key or os.getenv("MARGIN_LLM_API_KEY")
-        self._base_url = (base_url or os.getenv("MARGIN_LLM_BASE_URL") or "").rstrip("/")
-        self._model = model or os.getenv("MARGIN_LLM_MODEL") or "deepseek-v4-pro"
+        self._api_key = api_key
+        self._base_url = (base_url or "").rstrip("/")
+        self._model = model or "deepseek-v4-pro"
         self._timeout = timeout
         self._client = client or httpx.Client()
         self._descriptor = ProviderDescriptor(

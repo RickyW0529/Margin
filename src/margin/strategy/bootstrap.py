@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -26,6 +27,19 @@ from margin.valuation_discovery.quant.pool_defaults import (
 )
 
 OWNER_ID = "local-admin"
+
+DEFAULT_INDEX_UNIVERSES = {
+    "CSI300": {
+        "index_code": "000300.SH",
+        "name": "沪深300",
+        "version_id": "universe-csi300-default-v0.3.0",
+    },
+    "CSI500": {
+        "index_code": "000905.SH",
+        "name": "中证500",
+        "version_id": "universe-csi500-default-v0.3.0",
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -139,6 +153,40 @@ class StrategyBootstrapService:
             provider_version_ids=provider_ids,
             missing_provider_names=(),
         )
+
+    def ensure_default_index_universes(
+        self,
+        *,
+        index_members_by_code: Mapping[str, tuple[str, ...]],
+    ) -> tuple[str, ...]:
+        """Ensure default CSI300/CSI500 universe versions without activating them."""
+        ensured_ids: list[str] = []
+        for universe_code in ("CSI300", "CSI500"):
+            spec = DEFAULT_INDEX_UNIVERSES[universe_code]
+            members = tuple(sorted(set(index_members_by_code.get(universe_code, ()))))
+            if not members:
+                continue
+            version_id = spec["version_id"]
+            version = self._repository.get_universe_definition(version_id)
+            if version is None:
+                self._service.create_universe_definition(
+                    UniverseDefinitionVersion(
+                        version_id=version_id,
+                        owner_id=OWNER_ID,
+                        universe_code=universe_code,
+                        name=spec["name"],
+                        selection_rule={
+                            "type": "index_membership",
+                            "index_code": spec["index_code"],
+                        },
+                        member_security_ids=members,
+                        lifecycle=ConfigLifecycle.REVIEW,
+                    ),
+                    actor_id=OWNER_ID,
+                    idempotency_key=f"bootstrap-{version_id}-create",
+                )
+            ensured_ids.append(version_id)
+        return tuple(ensured_ids)
 
     def _ensure_universe(self, members: tuple[str, ...]) -> None:
         """Ensure the data-driven ALL_A universe."""

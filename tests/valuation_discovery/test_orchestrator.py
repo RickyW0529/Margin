@@ -172,6 +172,44 @@ def test_service_start_refresh_returns_accepted_response() -> None:
     assert response.run_id.startswith("vdr_")
 
 
+def test_service_wake_refresh_worker_claims_first_pending_step() -> None:
+    """Verify API wake-up claims work without waiting for the polling tick."""
+    dependencies = _dependencies()
+    service = ValuationDiscoveryService(ValuationDiscoveryOrchestrator(dependencies))
+    response = service.start_refresh(
+        scope_version_id="scope-1",
+        decision_at=_decision_at(),
+        idempotency_key="k1",
+    )
+
+    processed = service.wake_refresh_worker(max_steps=1, now=_decision_at())
+
+    steps = service.get_refresh_status(response.run_id).steps
+    assert processed == 1
+    assert steps[0]["step_id"] == "DATA_FRESHNESS_CHECK"
+    assert steps[0]["state"] == "succeeded"
+    assert steps[1]["step_id"] == "DATA_SYNC"
+    assert steps[1]["state"] == "pending"
+
+
+def test_future_decision_at_does_not_make_step_timestamps_invalid() -> None:
+    """Verify business PIT time cannot poison worker lifecycle timestamps."""
+    dependencies = _dependencies()
+    orchestrator = ValuationDiscoveryOrchestrator(dependencies)
+    decision_at = datetime.now(UTC) + timedelta(minutes=10)
+    run = orchestrator.start(scope_version_id="scope-1", decision_at=decision_at)
+    worker_now = datetime.now(UTC) + timedelta(seconds=1)
+
+    assert ValuationDiscoveryStepWorker(
+        dependencies,
+        worker_id="worker-1",
+    ).run_once(now=worker_now)
+
+    steps = dependencies.repository.list_steps(run.run_id)
+    assert steps["DATA_FRESHNESS_CHECK"].state == "succeeded"
+    assert dependencies.data_readiness_service.last_check_decision_at == decision_at
+
+
 def _decision_at() -> datetime:
     """Return the deterministic decision timestamp used across orchestrator tests."""
     return datetime(2026, 6, 22, tzinfo=UTC)
@@ -277,8 +315,13 @@ class _FakeNewsService:
 class _FakeDataReadinessService:
     """Fake data readiness service returning deterministic readiness decisions."""
 
-    def check(self, **_: object) -> str:
+    def __init__(self) -> None:
+        """Initialize the fake data readiness service with no observed calls."""
+        self.last_check_decision_at: datetime | None = None
+
+    def check(self, **kwargs: object) -> str:
         """Return a real readiness decision reference."""
+        self.last_check_decision_at = kwargs.get("decision_at")  # type: ignore[assignment]
         return "fresh"
 
     def ensure_sync(self, **_: object) -> str:

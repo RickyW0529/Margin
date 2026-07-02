@@ -7,16 +7,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import RootLayout from "./layout";
 
-vi.mock("@/components/admin-gate", () => ({
-  AdminGate: () => <button type="button">未解锁</button>,
-}));
-
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",
 }));
 
 describe("RootLayout", () => {
-  it("renders only implemented top-level navigation targets", () => {
+  it("renders a simplified user-facing navigation", () => {
     render(
       <RootLayout>
         <div>页面内容</div>
@@ -25,33 +21,22 @@ describe("RootLayout", () => {
 
     const nav = screen.getByRole("navigation", { name: "主导航分组" });
 
-    expect(within(nav).getByRole("link", { name: "工作台" })).toHaveAttribute(
+    expect(within(nav).getByRole("link", { name: "问答" })).toHaveAttribute(
       "href",
       "/",
     );
-    expect(within(nav).getByRole("link", { name: "研究候选" })).toHaveAttribute(
+    expect(within(nav).getByRole("link", { name: "今日推荐" })).toHaveAttribute(
       "href",
-      "/research",
+      "/dashboard",
     );
-    expect(within(nav).getByRole("link", { name: "公司池" })).toHaveAttribute(
+    expect(within(nav).getByRole("link", { name: "设置" })).toHaveAttribute(
       "href",
-      "/research/universe",
+      "/settings",
     );
-    expect(within(nav).getByRole("link", { name: "刷新记录" })).toHaveAttribute(
-      "href",
-      "/research/runs",
-    );
-    expect(within(nav).getByRole("link", { name: "策略模板" })).toHaveAttribute(
-      "href",
-      "/strategies",
-    );
-    expect(
-      within(nav).getByRole("link", { name: "Provider 密钥" }),
-    ).toHaveAttribute("href", "/settings/providers");
-    expect(within(nav).getByRole("link", { name: "数据策略" })).toHaveAttribute(
-      "href",
-      "/settings/data",
-    );
-    expect(within(nav).queryByRole("link", { name: "运行记录" })).toBeNull();
+    expect(within(nav).queryByRole("link", { name: "研究候选" })).toBeNull();
+    expect(within(nav).queryByRole("link", { name: "Provider 密钥" })).toBeNull();
+    expect(within(nav).queryByRole("link", { name: "数据策略" })).toBeNull();
+    expect(within(nav).queryByRole("link", { name: "策略模板" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "未解锁" })).toBeNull();
   });
 });

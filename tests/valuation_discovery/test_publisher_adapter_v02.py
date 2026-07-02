@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from margin.dashboard.models import DashboardFilters, DashboardSort
+from margin.dashboard.repository import MemoryDashboardRepository
 from margin.research.delta_repository import (
     MemoryResearchDeltaRepository,
     ResearchDeltaReview,
@@ -18,6 +20,12 @@ from margin.research.delta_repository import (
 from margin.research.graph.state import ReviewMode, ReviewOutcome
 from margin.valuation_discovery.adapters import ValuationPublisherAdapter
 from margin.valuation_discovery.assessments import EffectiveAssessmentService
+from margin.valuation_discovery.models import (
+    DataStatus,
+    QuantResult,
+    ResearchGuardrail,
+    ScreeningStatus,
+)
 from margin.valuation_discovery.repository import MemoryValuationDiscoveryRepository
 
 DECISION_AT = datetime(2026, 6, 23, 8, 30, tzinfo=UTC)
@@ -208,6 +216,59 @@ def test_dashboard_refresh_reports_persisted_effective_projection() -> None:
     assert projection.as_of == DECISION_AT
 
 
+def test_dashboard_refresh_publishes_latest_quant_projection_items() -> None:
+    """Verify refresh writes visible quant results into the dashboard repository."""
+    reviews = MemoryResearchDeltaRepository()
+    valuations = MemoryValuationDiscoveryRepository()
+    dashboard = MemoryDashboardRepository()
+    publisher = ValuationPublisherAdapter(
+        assessment_service=EffectiveAssessmentService(),
+        review_repository=reviews,
+        valuation_repository=valuations,
+        dashboard_repository=dashboard,
+    )
+
+    projection = publisher.refresh_dashboard(
+        scope_version_id="scope-1",
+        decision_at=DECISION_AT,
+        quant_run_id="quant-1",
+        quant_results=(
+            _quant_result(
+                "000001.SZ",
+                score=88,
+                screening_status=ScreeningStatus.PASS,
+            ),
+            _quant_result(
+                "000002.SZ",
+                score=76,
+                screening_status=ScreeningStatus.NEAR_THRESHOLD,
+                review_required=True,
+                review_reasons=("接近阈值",),
+            ),
+            _quant_result(
+                "000003.SZ",
+                score=20,
+                screening_status=ScreeningStatus.REJECT,
+            ),
+        ),
+    )
+
+    response = dashboard.list_research_candidates_v2(
+        scope_version_id="scope-1",
+        universe_code="ALL_A",
+        filters=DashboardFilters(),
+        sort=DashboardSort(field="final_score", direction="desc"),
+        cursor=None,
+        limit=20,
+    )
+    assert projection.dashboard_run_id is not None
+    assert projection.visible_item_count == 2
+    assert [item.security_id for item in response.items] == ["000001.SZ", "000002.SZ"]
+    assert response.items[0].screening_status == "pass"
+    assert response.items[1].screening_status == "near_threshold"
+    assert response.items[1].review_required is True
+
+
 def _review(
     *,
     review_id: str,
@@ -249,5 +310,33 @@ def _review(
         valuation_view="undervalued",
         evidence_ids=evidence_ids,
         result_hash=f"sha256:{review_id}",
+        created_at=DECISION_AT,
+    )
+
+
+def _quant_result(
+    security_id: str,
+    *,
+    score: float,
+    screening_status: ScreeningStatus,
+    review_required: bool = False,
+    review_reasons: tuple[str, ...] = (),
+) -> QuantResult:
+    """Build one deterministic quant result for dashboard projection tests."""
+    return QuantResult(
+        quant_run_id="quant-1",
+        security_id=security_id,
+        final_score=score,
+        quality_score=score,
+        value_score=score,
+        growth_score=score,
+        momentum_score=score,
+        risk_score=score,
+        screening_status=screening_status,
+        data_status=DataStatus.OK,
+        review_required=review_required,
+        review_reasons=review_reasons,
+        research_guardrail=ResearchGuardrail.RESEARCH_ALLOWED,
+        reason_summary=f"{security_id} score {score}",
         created_at=DECISION_AT,
     )

@@ -5,8 +5,6 @@
  * All helpers use a configurable base URL and default to `http://localhost:8000`.
  */
 
-import { getAdminSession, setAdminSession } from "./admin-session";
-
 /** Cursor pagination metadata returned by v0.2 dashboard list endpoints. */
 export type DashboardPageInfo = {
   next_cursor: string | null;
@@ -263,6 +261,7 @@ const API_BASE_URL =
 /** Fetch init variant that expects a plain JSON header record. */
 type JsonRequestInit = Omit<RequestInit, "headers"> & {
   headers?: Record<string, string>;
+  next?: { revalidate?: number | false };
 };
 
 /**
@@ -279,8 +278,12 @@ type JsonRequestInit = Omit<RequestInit, "headers"> & {
  */
 async function request<T>(path: string, init: JsonRequestInit = {}): Promise<T> {
   const method = init.method?.toUpperCase() ?? "GET";
-  const cacheOptions =
-    method === "GET" ? { next: { revalidate: 30 } } : { cache: "no-store" as const };
+  const hasExplicitCache = init.cache !== undefined || init.next !== undefined;
+  const cacheOptions = hasExplicitCache
+    ? {}
+    : method === "GET"
+      ? { next: { revalidate: 30 } }
+      : { cache: "no-store" as const };
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...cacheOptions,
     ...init,
@@ -365,6 +368,7 @@ export function fetchResearchRunDetailV2(
 ): Promise<ResearchRunDetailV2> {
   return request<ValuationDiscoveryRunStatus>(
     `/api/v1/valuation-discovery/runs/${runId}`,
+    { cache: "no-store" },
   ).then(mapValuationDiscoveryRunStatus);
 }
 
@@ -386,12 +390,16 @@ export function askReadOnlyCopilot(requestBody: {
  * @returns A promise resolving to the provider status list.
  */
 export function fetchProviderStatus(): Promise<ProviderStatus[]> {
-  return request<ProviderStatus[]>("/api/v1/provider-status");
+  return request<ProviderStatus[]>("/api/v1/provider-status", {
+    cache: "no-store",
+  });
 }
 
 /** Fetches safe provider config metadata without secret contents. */
 export function fetchProviderConfigs(): Promise<ProviderConfigSummary[]> {
-  return request<ProviderConfigSummary[]>("/api/v1/provider-configs");
+  return request<ProviderConfigSummary[]>("/api/v1/provider-configs", {
+    cache: "no-store",
+  });
 }
 
 /** Fetches all rolling-window policy versions and the active version ID. */
@@ -466,24 +474,12 @@ export function fetchStylePrompts(): Promise<VersionedConfigRecord[]> {
   return request<VersionedConfigRecord[]>("/api/v1/style-prompts");
 }
 
-/**
- * Writes a provider secret using a browser-session admin credential.
- *
- * The admin token and CSRF token are read from sessionStorage so they are not
- * compiled into the browser bundle or persisted across browser restarts.
- */
+/** Writes a provider secret in local personal mode. */
 export function saveProviderSecret(
   providerConfigId: string,
   secretName: string,
   secretValue: string,
 ): Promise<ProviderSecretMetadata> {
-  const adminToken = readSessionCredential("margin.adminApiToken");
-  const csrfToken = readSessionCredential("margin.csrfToken");
-  if (!adminToken || !csrfToken) {
-    return Promise.reject(
-      new Error("Local admin session is not configured in this browser tab"),
-    );
-  }
   return request<ProviderSecretMetadata>(
     `/api/v1/provider-configs/${providerConfigId}/secret`,
     {
@@ -491,9 +487,7 @@ export function saveProviderSecret(
       cache: "no-store",
       headers: {
         "content-type": "application/json",
-        Authorization: `Bearer ${adminToken}`,
         "Idempotency-Key": globalThis.crypto.randomUUID(),
-        "X-CSRF-Token": csrfToken,
       },
       body: JSON.stringify({
         secret_name: secretName,
@@ -507,22 +501,13 @@ export function saveProviderSecret(
 export function testProviderConfig(
   providerConfigId: string,
 ): Promise<ProviderHealthResult> {
-  const adminToken = readSessionCredential("margin.adminApiToken");
-  const csrfToken = readSessionCredential("margin.csrfToken");
-  if (!adminToken || !csrfToken) {
-    return Promise.reject(
-      new Error("Local admin session is not configured in this browser tab"),
-    );
-  }
   return request<ProviderHealthResult>(
     `/api/v1/provider-configs/${providerConfigId}/test`,
     {
       method: "POST",
       cache: "no-store",
       headers: {
-        Authorization: `Bearer ${adminToken}`,
         "Idempotency-Key": globalThis.crypto.randomUUID(),
-        "X-CSRF-Token": csrfToken,
       },
     },
   );
@@ -533,37 +518,21 @@ function authenticatedMutation<T>(
   method: "POST" | "PUT",
   body?: unknown,
 ): Promise<T> {
-  const adminToken = readSessionCredential("margin.adminApiToken");
-  const csrfToken = readSessionCredential("margin.csrfToken");
-  if (!adminToken || !csrfToken) {
-    return Promise.reject(
-      new Error("Local admin session is not configured in this browser tab"),
-    );
-  }
   return request<T>(path, {
     method,
     cache: "no-store",
     headers: {
       ...(body === undefined ? {} : { "content-type": "application/json" }),
-      Authorization: `Bearer ${adminToken}`,
       "Idempotency-Key": globalThis.crypto.randomUUID(),
-      "X-CSRF-Token": csrfToken,
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 }
 
-/** Starts the v0.2 valuation-discovery pipeline using local admin credentials. */
+/** Starts the v0.2 valuation-discovery pipeline in local personal mode. */
 export function startValuationDiscoveryRefresh(
   refresh: ValuationDiscoveryRefreshCreate,
 ): Promise<ValuationDiscoveryRefreshStart> {
-  const adminToken = readSessionCredential("margin.adminApiToken");
-  const csrfToken = readSessionCredential("margin.csrfToken");
-  if (!adminToken || !csrfToken) {
-    return Promise.reject(
-      new Error("Local admin session is not configured in this browser tab"),
-    );
-  }
   return request<ValuationDiscoveryRefreshStart>(
     "/api/v1/valuation-discovery/refreshes",
     {
@@ -571,38 +540,11 @@ export function startValuationDiscoveryRefresh(
       cache: "no-store",
       headers: {
         "content-type": "application/json",
-        Authorization: `Bearer ${adminToken}`,
         "Idempotency-Key": globalThis.crypto.randomUUID(),
-        "X-CSRF-Token": csrfToken,
       },
       body: JSON.stringify(refresh),
     },
   );
-}
-
-/** Stores local admin credentials for the current browser tab only. */
-export function configureLocalAdminSession(
-  adminToken: string,
-  csrfToken: string,
-): void {
-  setAdminSession(adminToken, csrfToken, true);
-}
-
-function readSessionCredential(key: string): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  const session = getAdminSession();
-  if (session === null) {
-    return null;
-  }
-  if (key === "margin.adminApiToken") {
-    return session.adminToken;
-  }
-  if (key === "margin.csrfToken") {
-    return session.csrfToken;
-  }
-  return null;
 }
 
 function appendQuery(
@@ -723,6 +665,7 @@ export function fetchValuationDiscoveryRuns(
   appendQuery(query, "limit", String(filters.limit ?? 50));
   return request<ValuationDiscoveryRefreshListResponse>(
     `/api/v1/valuation-discovery/runs?${query.toString()}`,
+    { cache: "no-store" },
   );
 }
 

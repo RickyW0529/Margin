@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from margin.dashboard.models import ItemStatus, ResearchItem, ResearchRun, RunStatus
+from margin.dashboard.repository import DashboardRepository
 from margin.data.freshness import DataDomain, FreshnessStatus
 from margin.data.ingestion import DataWarehouseIngestionStack
 from margin.data.sync_models import DataSyncRequest, DataSyncStatus
@@ -54,6 +56,8 @@ from margin.valuation_discovery.etl import AnalysisResultMartETLPipeline
 from margin.valuation_discovery.models import (
     DataStatus,
     QuantResult,
+    ResearchGuardrail,
+    ScreeningStatus,
     ValuationAssessment,
     ValuationAssessmentEvidence,
 )
@@ -838,6 +842,8 @@ class DashboardProjectionResult:
     scope_version_id: str
     effective_assessment_count: int
     as_of: datetime
+    dashboard_run_id: str | None = None
+    visible_item_count: int = 0
 
 
 class ValuationPublisherAdapter:
@@ -854,6 +860,7 @@ class ValuationPublisherAdapter:
         assessment_service: EffectiveAssessmentService,
         review_repository: ResearchDeltaRepository,
         valuation_repository: ValuationDiscoveryRepository,
+        dashboard_repository: DashboardRepository | None = None,
     ) -> None:
         """Initialize the publisher with assessment and repository dependencies.
 
@@ -861,10 +868,13 @@ class ValuationPublisherAdapter:
             assessment_service: Service for building effective assessment pointers.
             review_repository: Repository for loading immutable AI reviews.
             valuation_repository: Repository for publishing assessment results.
+            dashboard_repository: Optional repository for the user-facing
+                recommendation read projection.
         """
         self._assessment_service = assessment_service
         self._review_repository = review_repository
         self._valuation_repository = valuation_repository
+        self._dashboard_repository = dashboard_repository
 
     def publish(
         self,
@@ -974,16 +984,47 @@ class ValuationPublisherAdapter:
         *,
         scope_version_id: str,
         decision_at: datetime,
+        quant_run_id: str | None = None,
+        quant_results: Any = (),
     ) -> DashboardProjectionResult:
-        """Read the persisted effective-assessment dashboard projection.
+        """Persist and read the dashboard projection for the latest refresh.
 
         Args:
             scope_version_id: The frozen scope version.
             decision_at: Timezone-aware decision timestamp.
+            quant_run_id: Optional quant run identifier to bind the projection.
+            quant_results: Optional quant result set from the current run.
 
         Returns:
             A projection summary backed by immutable pointer rows.
         """
+        dashboard_run_id: str | None = None
+        visible_item_count = 0
+        if self._dashboard_repository is not None and quant_run_id:
+            visible_results = _dashboard_visible_quant_results(quant_results)
+            dashboard_run_id = _dashboard_run_id(
+                scope_version_id=scope_version_id,
+                quant_run_id=quant_run_id,
+            )
+            dashboard_run = _dashboard_run_from_quant_results(
+                run_id=dashboard_run_id,
+                scope_version_id=scope_version_id,
+                quant_run_id=quant_run_id,
+                decision_at=decision_at,
+                results=visible_results,
+            )
+            dashboard_items = [
+                _dashboard_item_from_quant_result(
+                    run_id=dashboard_run_id,
+                    quant_run_id=quant_run_id,
+                    result=result,
+                    decision_at=decision_at,
+                )
+                for result in visible_results
+            ]
+            self._dashboard_repository.add_run(dashboard_run)
+            self._dashboard_repository.add_items(dashboard_items)
+            visible_item_count = len(dashboard_items)
         return DashboardProjectionResult(
             scope_version_id=scope_version_id,
             effective_assessment_count=(
@@ -993,7 +1034,132 @@ class ValuationPublisherAdapter:
                 )
             ),
             as_of=decision_at,
+            dashboard_run_id=dashboard_run_id,
+            visible_item_count=visible_item_count,
         )
+
+
+def _dashboard_visible_quant_results(quant_results: Any) -> tuple[QuantResult, ...]:
+    """Return quant results that should be visible on the user dashboard."""
+    visible_statuses = {
+        ScreeningStatus.PASS,
+        ScreeningStatus.NEAR_THRESHOLD,
+        ScreeningStatus.WATCHLIST,
+    }
+    results: list[QuantResult] = []
+    for result in tuple(quant_results or ()):
+        if not isinstance(result, QuantResult):
+            continue
+        if result.screening_status not in visible_statuses:
+            continue
+        if result.research_guardrail is ResearchGuardrail.RESEARCH_BLOCKED:
+            continue
+        results.append(result)
+    return tuple(
+        sorted(
+            results,
+            key=lambda item: (item.final_score, item.security_id),
+            reverse=True,
+        )
+    )
+
+
+def _dashboard_run_from_quant_results(
+    *,
+    run_id: str,
+    scope_version_id: str,
+    quant_run_id: str,
+    decision_at: datetime,
+    results: tuple[QuantResult, ...],
+) -> ResearchRun:
+    """Build the latest user-facing dashboard run from quant output."""
+    published_count = sum(
+        1 for result in results if _dashboard_item_status(result) is ItemStatus.PUBLISHED
+    )
+    abstained_count = len(results) - published_count
+    status = (
+        RunStatus.PUBLISHED
+        if results and abstained_count == 0
+        else RunStatus.PARTIAL
+        if results
+        else RunStatus.ABSTAINED
+    )
+    return ResearchRun(
+        run_id=run_id,
+        decision_at=decision_at,
+        strategy_id=quant_run_id,
+        version_id=scope_version_id,
+        universe=[result.security_id for result in results],
+        status=status,
+        summary=f"latest quant projection from {quant_run_id}",
+        item_count=len(results),
+        published_count=published_count,
+        abstained_count=abstained_count,
+        aborted_count=0,
+        created_at=decision_at,
+    )
+
+
+def _dashboard_item_from_quant_result(
+    *,
+    run_id: str,
+    quant_run_id: str,
+    result: QuantResult,
+    decision_at: datetime,
+) -> ResearchItem:
+    """Build one dashboard item from a quant result without exposing internals."""
+    status = _dashboard_item_status(result)
+    return ResearchItem(
+        item_id=_dashboard_item_id(run_id, result.security_id),
+        run_id=run_id,
+        symbol=result.security_id,
+        signal_type=f"quant_screen:{result.screening_status.value}",
+        confidence=_score_to_confidence(result.final_score),
+        statement=result.reason_summary or result.screening_status.value,
+        workflow_run_id=quant_run_id,
+        snapshot_id=result.result_id,
+        status=status,
+        abstain_reason=(
+            "; ".join(result.review_reasons)
+            if result.review_reasons
+            else None
+            if status is ItemStatus.PUBLISHED
+            else result.screening_status.value
+        ),
+        rejection_reasons=list(
+            dict.fromkeys((*result.risk_flags, *result.review_reasons))
+        ),
+        risk_score=result.risk_score,
+        counter_arguments=list(result.review_reasons),
+        created_at=decision_at,
+    )
+
+
+def _dashboard_item_status(result: QuantResult) -> ItemStatus:
+    """Map quant status into the dashboard item's current-review state."""
+    if (
+        result.screening_status is ScreeningStatus.PASS
+        and not result.review_required
+    ):
+        return ItemStatus.PUBLISHED
+    return ItemStatus.ABSTAINED
+
+
+def _score_to_confidence(score: float) -> float:
+    """Convert a 0-100 quant score into a 0-1 dashboard confidence."""
+    return max(0.0, min(float(score) / 100.0, 1.0))
+
+
+def _dashboard_run_id(*, scope_version_id: str, quant_run_id: str) -> str:
+    """Build a stable dashboard run ID for idempotent refresh retries."""
+    material = f"{scope_version_id}|{quant_run_id}"
+    return "dr_" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
+
+
+def _dashboard_item_id(run_id: str, security_id: str) -> str:
+    """Build a stable dashboard item ID for idempotent refresh retries."""
+    material = f"{run_id}|{security_id}"
+    return "di_" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
 
 
 def _required_assessment_id(review: Any) -> str:

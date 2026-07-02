@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
@@ -33,6 +34,26 @@ def test_research_list_returns_paged_items_and_facets() -> None:
     assert set(body) == {"items", "page_info", "facets", "as_of", "scope_version_id"}
     assert len(body["items"]) <= 50
     assert body["items"][0]["current_review_outcome"] == "update_assessment"
+
+
+def test_research_list_resolves_scope_current_alias() -> None:
+    """Test that the dashboard list resolves scope-current before querying."""
+    client, _, _ = _client_with_seeded_v2_data(active_scope_id="scope-active")
+
+    response = client.get(
+        "/api/v1/research",
+        params={
+            "scope_version_id": "scope-current",
+            "universe": "ALL_A",
+            "limit": 50,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["scope_version_id"] == "scope-active"
+    assert body["items"][0]["scope_version_id"] == "scope-active"
+
 
 def test_research_item_detail_returns_current_and_effective_context() -> None:
     """Test that v2 item detail separates current review from effective assessment."""
@@ -86,7 +107,10 @@ def test_copilot_answer_contains_business_api_references() -> None:
     assert "GET /api/v1/research" in body["references"][0]["api"]
 
 
-def _client_with_seeded_v2_data() -> tuple[TestClient, str, str]:
+def _client_with_seeded_v2_data(
+    *,
+    active_scope_id: str = "scope-1",
+) -> tuple[TestClient, str, str]:
     """Build a test client seeded with v2 dashboard data."""
     dashboard_repository = MemoryDashboardRepository()
     bundle = DashboardServiceBundle.in_memory(
@@ -96,7 +120,7 @@ def _client_with_seeded_v2_data() -> tuple[TestClient, str, str]:
         run_id="run-1",
         decision_at=DECISION_AT,
         strategy_id="strategy-1",
-        version_id="scope-1",
+        version_id=active_scope_id,
         universe=["000001.SZ"],
         status="partial",
         item_count=1,
@@ -115,5 +139,34 @@ def _client_with_seeded_v2_data() -> tuple[TestClient, str, str]:
     )
     dashboard_repository.add_run(run)
     dashboard_repository.add_items([item])
-    app = create_app(dashboard_services=bundle)
+    app = create_app(
+        dashboard_services=bundle,
+        strategy_service=_FakeStrategyService(active_scope_id),
+    )
     return TestClient(app), run.run_id, item.item_id
+
+
+class _FakeStrategyService:
+    """Fake strategy service exposing one active research scope."""
+
+    def __init__(self, active_scope_id: str) -> None:
+        """Store the active scope ID."""
+        self._active_scope_id = active_scope_id
+
+    def ensure_current_research_scope(self, owner_id: str) -> SimpleNamespace:
+        """Return the reconciled current scope."""
+        return SimpleNamespace(
+            owner_id=owner_id,
+            version_id=self._active_scope_id,
+            lifecycle="active",
+        )
+
+    def list_research_scopes(self, owner_id: str) -> list[SimpleNamespace]:
+        """Return active scope metadata."""
+        return [
+            SimpleNamespace(
+                owner_id=owner_id,
+                version_id=self._active_scope_id,
+                lifecycle="active",
+            )
+        ]

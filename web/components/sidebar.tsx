@@ -3,13 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Database,
-  KeyRound,
-  Layers,
-  LayoutGrid,
-  LineChart,
+  MessageCircle,
+  MonitorUp,
+  Settings,
   ShieldCheck,
-  SlidersHorizontal,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -20,39 +17,13 @@ type NavItem = {
   icon: React.ElementType;
 };
 
-type NavGroup = {
-  heading: string;
-  items: NavItem[];
-};
-
-const NAV_GROUPS: NavGroup[] = [
-  {
-    heading: "研究主线",
-    items: [
-      { href: "/", label: "工作台", icon: LayoutGrid },
-      { href: "/research", label: "研究候选", icon: LineChart },
-      { href: "/research/universe", label: "公司池", icon: Layers },
-      { href: "/research/runs", label: "刷新记录", icon: ShieldCheck },
-    ],
-  },
-  {
-    heading: "策略配置",
-    items: [
-      { href: "/strategies", label: "策略模板", icon: SlidersHorizontal },
-    ],
-  },
-  {
-    heading: "设置",
-    items: [
-      { href: "/settings/providers", label: "Provider 密钥", icon: KeyRound },
-      { href: "/settings/data", label: "数据策略", icon: Database },
-      { href: "/settings/scope", label: "Scope", icon: Layers },
-      { href: "/settings/strategy", label: "Strategy", icon: SlidersHorizontal },
-    ],
-  },
+const NAV_ITEMS: NavItem[] = [
+  { href: "/", label: "问答", icon: MessageCircle },
+  { href: "/dashboard", label: "今日推荐", icon: MonitorUp },
+  { href: "/settings", label: "设置", icon: Settings },
 ];
 
-/** Dark application sidebar with active-route highlighting. */
+/** Minimal application sidebar for the user-facing workspace. */
 export function Sidebar() {
   const pathname = usePathname() ?? "/";
 
@@ -67,54 +38,44 @@ export function Sidebar() {
             Margin
           </span>
           <span className="block text-xs text-sidebar-foreground/70">
-            安全边际 · v0.2
+            安全边际
           </span>
         </span>
       </Link>
 
-      <nav className="grid flex-1 gap-5" aria-label="主导航分组">
-        {NAV_GROUPS.map((group) => (
-          <section key={group.heading}>
-            <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/50">
-              {group.heading}
-            </p>
-            <ul className="grid gap-0.5">
-              {group.items.map((item) => {
-                const active = pathname === item.href;
-                const Icon = item.icon;
-                return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      aria-current={active ? "page" : undefined}
-                      className={cn(
-                        "flex items-center gap-3 rounded-md px-3 py-2 text-sm no-underline transition-colors",
-                        active
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                          : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-                      )}
-                    >
-                      <Icon
-                        className={cn(
-                          "size-4 shrink-0",
-                          active
-                            ? "text-accent"
-                            : "text-sidebar-foreground/60",
-                        )}
-                      />
-                      {item.label}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ))}
+      <nav className="grid flex-1 content-start gap-1" aria-label="主导航分组">
+        {NAV_ITEMS.map((item) => {
+          const Icon = item.icon;
+          const active =
+            pathname === item.href ||
+            (item.href !== "/" && pathname.startsWith(`${item.href}/`));
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm no-underline transition-colors",
+                active
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+              )}
+            >
+              <Icon
+                className={cn(
+                  "size-4 shrink-0",
+                  active ? "text-accent" : "text-sidebar-foreground/60",
+                )}
+              />
+              {item.label}
+            </Link>
+          );
+        })}
       </nav>
 
       <div className="border-t border-sidebar-border px-3 py-4">
         <p className="text-xs leading-relaxed text-sidebar-foreground/60">
-          本地优先 · 证据驱动 · 用户保留最终决策权
+          证据驱动 · 只读优先
         </p>
       </div>
     </aside>

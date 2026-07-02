@@ -50,7 +50,7 @@ flowchart LR
     Pool --> Quant[量化筛选候选]
     Quant --> News[公告 / 新闻抓取]
     News --> AI[AI 复核每条结论<br/>带证据引用]
-    AI --> Panel[研究候选面板<br/>证据可回溯]
+    AI --> Panel[今日推荐大屏<br/>证据可回溯]
     Panel -.->|每步落库快照| Audit[(不可变审计)]
 ```
 
@@ -103,10 +103,24 @@ flowchart TB
 
 ## 快速开始
 
+本地开发模式，使用宿主机 Python/Node 进程和本地 PostgreSQL：
+
 ```bash
 cp .env.example .env
-# 编辑 .env，填入你要用的 Provider key（缺哪个就降级哪个）。
+# .env 只保留数据库、日志、Web Origin 等运行基础配置。
+# Provider URL/token/model 在前端设置页写入数据库并加密保存。
 
+python scripts/dev.py restart
+```
+
+`scripts/dev.py` 会为当前仓库维护一个 API、一个 worker、一个 Next.js dev
+server，统一清理旧进程，绑定 `127.0.0.1`，对子进程强制绕过 localhost
+代理，并把 PID 和日志写到 `.margin/dev/`。健康判断使用 `lsof` 监听检查，
+避免 VPN 或受限 shell 导致 localhost HTTP 探测误判。
+
+容器化全栈模式：
+
+```bash
 docker compose up -d --build
 ```
 
@@ -119,14 +133,15 @@ docker compose up -d --build
 
 前端入口：
 
-- `/`：研究工作台总览、候选快照、推荐操作顺序与 Provider 状态
-- `/research`：候选列表、筛选、刷新、证据展开与只读 Copilot
+- `/`：问答优先入口，默认问题“今日推荐股票是什么？”
+- `/dashboard`：今日推荐与一键刷新研究
+- `/settings`：设置中心
 - `/settings/data`：滚动数据采集窗口配置
 - `/settings/providers`：Provider 密钥写入与健康检查
 
 ## Provider 配置
 
-详见 `.env.example`。`MARGIN_ADMIN_API_TOKEN` 与 `MARGIN_CSRF_TOKEN` 保护本地写操作（Provider 设置、刷新触发等），非本地环境必须替换默认值。
+详见前端 `/settings/providers`。本地个人模式不再需要管理员 token 或 CSRF token；写操作仍使用幂等键并记录审计。Provider API token 通过设置页写入，使用 Secret Store 加密落库，启动时从数据库配置读取，完整密钥不会回显到前端。
 
 缺少可选 Provider 时系统保守降级：关键行情、证据或引用不可用时，研究结果为 `ABSTAINED` 而不是高置信结论。Tavily 配额耗尽、AKShare 上游不可达、Rerank 未配置等会以 degraded / unhealthy / `service_not_configured` 显式暴露，不伪装成功。
 
@@ -148,6 +163,12 @@ npm ci
 npm run lint
 npm test
 npm run build
+```
+
+本地启动状态：
+
+```bash
+python scripts/dev.py status
 ```
 
 Compose 与本地 smoke：

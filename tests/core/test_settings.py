@@ -23,12 +23,6 @@ def test_settings_reads_database_url():
     assert settings.log_level in {"DEBUG", "INFO", "WARNING", "ERROR"}
 
 
-def test_settings_default_llm_model_is_deepseek_pro():
-    """Test that the default LLM model is deepseek-v4-pro."""
-    settings = MarginSettings(_env_file=None)
-    assert settings.llm_model == "deepseek-v4-pro"
-
-
 def test_settings_default_audit_log_path_is_project_relative():
     """Test that the default audit log path is project-relative."""
     settings = MarginSettings(_env_file=None)
@@ -41,7 +35,6 @@ def test_settings_default_data_snapshot_root_is_project_relative():
     settings = MarginSettings(_env_file=None)
     assert settings.data_snapshot_root == Path(".margin/snapshots/data")
     assert settings.data_sync_on_startup is True
-    assert settings.tushare_http_url is None
     assert not settings.data_snapshot_root.is_absolute()
 
 
@@ -50,38 +43,15 @@ def test_settings_caches_instance():
     assert get_settings() is get_settings()
 
 
-def test_settings_secrets_are_masked():
-    """Test that secret fields are masked in repr to avoid leaking keys."""
+def test_settings_secret_master_key_is_masked():
+    """Test that the local encryption master key is masked in repr."""
     settings = MarginSettings(
         _env_file=None,
-        llm_api_key="secret-key",
-        tushare_token="tushare-secret",
-        admin_api_token="admin-secret",
-        csrf_token="csrf-secret",
         secret_master_key="master-key-secret",
     )
     # SecretStr must hide the raw value in repr() to avoid leaking keys in logs.
-    assert "secret-key" not in repr(settings)
-    assert "tushare-secret" not in repr(settings)
-    assert "admin-secret" not in repr(settings)
-    assert "csrf-secret" not in repr(settings)
     assert "master-key-secret" not in repr(settings)
-    assert settings.llm_api_key.get_secret_value() == "secret-key"
-    assert settings.tushare_token.get_secret_value() == "tushare-secret"
-
-
-def test_settings_treats_empty_optional_urls_as_unconfigured():
-    """Test that empty optional URLs are treated as unconfigured (None)."""
-    settings = MarginSettings(
-        _env_file=None,
-        llm_base_url="",
-        embedding_base_url="",
-        rerank_base_url="",
-    )
-
-    assert settings.llm_base_url is None
-    assert settings.embedding_base_url is None
-    assert settings.rerank_base_url is None
+    assert settings.secret_master_key.get_secret_value() == "master-key-secret"
 
 
 def test_settings_exposes_versioned_capacity_defaults() -> None:

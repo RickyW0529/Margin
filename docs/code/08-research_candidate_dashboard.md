@@ -1,6 +1,6 @@
 # 08-research_candidate_dashboard 模块文档
 
-本文件描述当前仓库中的研究候选面板实现。v0.2 已删除持仓/交易相关页面，以及 v0.1 同步 research run、候选卡片、首页摘要、证据/估值/report/export 独立端点；当前 Dashboard 是一个只读为主的 BFF，展示 valuation discovery 与 AI delta review 产生的候选公司、有效结论、证据定位和 Provider 状态。
+本文件描述当前仓库中的研究候选面板实现。v0.2 已删除持仓/交易相关页面，以及 v0.1 同步 research run、候选卡片、首页摘要、证据/估值/report/export 独立端点；当前 Dashboard 是一个只读为主的用户入口，默认把 Provider、Scope、BFF、run 等底层概念收进后端和设置页，面向用户展示问答、今日推荐、证据理由与置信度。
 
 ## 1. 模块职责
 
@@ -8,14 +8,14 @@
 
 当前职责：
 
-- 服务端分页查询研究候选列表；
-- 展示单个公司的 current review 与 effective assessment；
-- 展示量化分数、风险标记、证据 locator、版本信息和用户反馈；
-- 提供只读 Copilot，只能基于候选列表回答，拒绝同步、刷新、配置、交易等写意图；
-- 提供 Provider 状态展示；
-- 提供启动 valuation discovery refresh 的前端表单；
+- 服务端分页查询今日推荐可见候选列表；
+- 在 `/dashboard/items/[itemId]` 子页展示单个公司的 current review、effective assessment、量化可视化和 RAG 证据；
+- 展示量化分数、风险标记、证据 locator 与版本信息；
+- 提供首页推荐问答，只能基于候选列表回答，拒绝同步、刷新、配置、交易等写意图；
+- 提供今日推荐大屏，展示推荐股票、推荐理由、置信度、量化评分、估值折价和风险提示；
+- 在今日推荐大屏提供“一键刷新今日研究”，使用默认 `scope-current` 与当前时间启动 valuation discovery，API 接受后会 best-effort 唤醒一次 worker，并用 React Flow 弹出最近一次刷新节点图，实时展示已完成/运行中/排队中/未开始/失败状态；最近一次 run 非终态时禁用再次刷新，避免重复入队；
 - 提供 Provider 密钥配置页面，密钥只写不读，保存/测试后清空输入。
-- 提供面向研究流程的前端信息架构：先处理 Provider/Scope，再查看候选与证据，不展示持仓或交易入口。
+- 提供面向个人研究的前端信息架构：用户侧页面只保留问答、今日推荐、设置及设置子页；底层 Provider、scope、run、candidate 等概念由后端默认值和设置页承接。
 
 不再承担：
 
@@ -33,14 +33,13 @@
 | `src/margin/dashboard/repository.py` | 内存/PostgreSQL repository；提供候选列表分页、过滤、排序、facets 与反馈存取。 |
 | `src/margin/dashboard/service.py` | `DashboardQueryService`、`FeedbackService`、`ProviderStatusService`、`JobService` 与 `DashboardServiceBundle`。 |
 | `src/margin/api/routes/dashboard.py` | `/api/v1/research`、`/api/v1/research/items/{item_id}`、`/api/v1/research/copilot`、feedback、provider status、job 端点。 |
-| `src/margin/api/routes/valuation_discovery.py` | Dashboard 刷新入口：`POST /api/v1/valuation-discovery/refreshes` 与 `GET /api/v1/valuation-discovery/runs/{run_id}`。 |
-| `web/app/layout.tsx` | 全局应用框架；Tailwind v4 + Vercel Geist 设计系统，深色侧栏（`Sidebar` client 组件 + active 路由高亮）+ 顶栏 guardrail + `AdminGate`（Radix Dialog）。 |
-| `web/app/page.tsx` | 研究工作台首页，从 v0.2 candidate API 读取摘要数据，展示候选快照、推荐操作顺序和 Provider blocker。 |
-| `web/app/research/runs/[runId]/page.tsx` | 估值发现运行进度页，调用 valuation-discovery run status API。 |
-| `web/app/research/items/[itemId]/page.tsx` | 公司研究详情页，展示 current/effective、thesis、量化快照、FactorScoreBar、证据 locators、反馈。 |
-| `web/app/research/universe/page.tsx` | 公司池/Universe 状态页，按 universe 查询候选 facets。 |
-| `web/app/strategies/[strategyId]/strategy-detail-client.tsx` | 策略详情 client，版本生命周期（validate/backtest/paper-trade/activate/archive）+ Prompt 预览。 |
-| `web/app/settings/` | Provider、scope、strategy、data 配置页面；scope/strategy 使用 `ConfigVersionList` 触发 append-only 激活。 |
+| `src/margin/api/routes/valuation_discovery.py` | Dashboard 刷新入口：`POST /api/v1/valuation-discovery/refreshes` 与 `GET /api/v1/valuation-discovery/runs/{run_id}`；创建 refresh 后后台唤醒一次 valuation worker，避免新任务长时间停在排队态。 |
+| `web/app/layout.tsx` | 全局应用框架；Tailwind v4 + Vercel Geist 设计系统，深色侧栏只暴露问答、今日推荐、设置，顶栏显示个人研究模式。 |
+| `web/app/page.tsx` | 问答优先首页；读取今日可见推荐预览，默认问题“今日推荐股票是什么？”调用只读 Copilot。 |
+| `web/app/dashboard/page.tsx` | 今日推荐大屏；读取最新 dashboard 投影的可见候选，只展示推荐列表、关键理由、置信度、量化评分和估值折价；顶部提供一键刷新研究。 |
+| `web/app/dashboard/items/[itemId]/page.tsx` | 今日推荐详情子页；展示公司 current review、effective assessment、量化可视化、风险复核和 RAG 证据。 |
+| `web/app/settings/page.tsx` | 设置中心入口；把密钥、数据、研究范围、策略配置分成四个子页。 |
+| `web/app/settings/` | Provider、scope、strategy、data 配置子页；scope 页用公司池选择器切换中证500、全 A、沪深300，scope/strategy 的高级版本列表使用 `ConfigVersionList` 触发 append-only 激活。 |
 | `web/lib/api.ts` | 前端 API client；v0.2 dashboard、valuation discovery、provider settings、strategy，补齐 `createVersionedConfig`/`activateVersionedConfig`、`createProviderConfig`/`activateProviderConfig`、`fetchNewsRun`、`fetchJobRun`。 |
 | `web/lib/utils.ts` | `cn` 类名合并 + 日期/分数/百分比/带符号百分比格式化。 |
 | `web/components/sidebar.tsx` | 深色侧栏 client 组件，`usePathname` active 高亮，保留已实现导航入口。 |
@@ -48,14 +47,15 @@
 | `web/components/valuation-bar.tsx` | 内在价值区间条 + 现价标记，缺数据时静默降级。 |
 | `web/components/factor-score-bar.tsx` | 因子分数横向条。 |
 | `web/components/config-version-list.tsx` | 通用版本化配置列表 + append-only 激活按钮（universe/indicator/quant/style/scope）。 |
-| `web/components/research-run-form.tsx` | 启动 valuation discovery refresh 的表单。 |
-| `web/components/research-filter-bar.tsx` | 候选列表筛选控件。 |
-| `web/components/research-results-table.tsx` | 候选公司表格。 |
+| `web/components/company-pool-selector.tsx` | 用户侧公司池选择器；反显中证500、全 A、沪深300的真实成员数和当前使用状态，缺少真实成员时禁用切换，自定义公司池入口暂为后续开放。 |
 | `web/components/current-vs-effective-panel.tsx` | 当前复核 vs 生效结论展示。 |
 | `web/components/evidence-locator-list.tsx` | 证据 locator 展示，所有外部文本均按文本渲染。 |
-| `web/components/read-only-copilot-panel.tsx` | 只读 Copilot。 |
+| `web/hooks/use-dashboard-refresh-run.ts` | 今日推荐页最近一次 refresh run 状态管理；负责启动、加载最近 run、轮询 run detail、打开/收起状态，并在最近 run 非终态时阻止重复启动。 |
+| `web/lib/refresh-run-graph.ts` | 将 valuation discovery sparse step payload 标准化为固定 React Flow 节点状态，区分 completed、active、queued、pending、waiting、failed。 |
+| `web/components/dashboard-refresh-control.tsx` | 今日推荐页刷新控制器；隐藏 scope/decision 参数，默认启动 valuation discovery，以浮层弹窗展示最近一次刷新节点图，并在已有非终态 run 时禁用“刷新今日研究”。 |
+| `web/components/dashboard-refresh-node-graph.tsx` | React Flow 节点图；固定展示 valuation discovery 12 个阶段，运行中节点脉冲闪烁，完成为绿色，排队/等待为黄色，未开始为灰色，失败/上游阻断为红色。 |
+| `web/components/recommendation-chat-panel.tsx` | 首页问答组件；固定默认问题、loading/error/disabled 状态和业务化引用标签。 |
 | `web/components/provider-settings-panel.tsx` | Provider 密钥配置。 |
-| `web/components/research-run-progress.tsx` | valuation discovery 运行进度展示。 |
 
 ## 3. 后端模型
 
@@ -96,7 +96,7 @@
 
 ## 5. Repository 与分页
 
-`DashboardRepository.list_research_candidates_v2(...)` 在服务端完成过滤、排序、cursor 分页和 facets 统计。
+`DashboardRepository.list_research_candidates_v2(...)` 只读取同一 scope 下最新 dashboard run 的 item，在服务端完成过滤、排序、cursor 分页和 facets 统计，避免历史 run 的候选混入今日推荐。
 
 过滤字段：
 
@@ -131,7 +131,7 @@
 | `POST` | `/research-items/{item_id}/feedback` | 追加用户反馈。 |
 | `GET` | `/provider-status` | 查询 Provider 状态。 |
 | `GET` | `/jobs/{job_run_id}` | 查询后台 job record。 |
-| `POST` | `/valuation-discovery/refreshes` | 启动估值发现 refresh，需要 local admin、CSRF、idempotency key。 |
+| `POST` | `/valuation-discovery/refreshes` | 启动估值发现 refresh；个人本地模式无需 local admin/CSRF，仍需要 idempotency key；请求返回后会 best-effort 唤醒一次 worker，持久 worker 继续按配置轮询兜底。 |
 | `GET` | `/valuation-discovery/runs/{run_id}` | 查询 valuation discovery refresh/run 进度。 |
 
 已删除的公开端点：
@@ -152,36 +152,30 @@
 
 | 页面 | 数据来源 | 说明 |
 | --- | --- | --- |
-| `/` | `fetchResearchCandidates`、`fetchProviderStatus`、provider configs | 研究工作台首页；展示候选摘要、最新候选快照、推荐操作顺序和 Provider 状态。 |
-| `/research` | `fetchResearchCandidates`、`startValuationDiscoveryRefresh` | 研究候选工作台；用户先筛选候选，再在右侧触发 valuation discovery refresh 并查看 Provider blocker。 |
-| `/research/runs/[runId]` | `fetchResearchRunDetailV2` → `/api/v1/valuation-discovery/runs/{run_id}` | 运行进度页，展示 target count、completed、pending、failed、wait state、trace。 |
-| `/research/items/[itemId]` | `fetchResearchItemDetailV2` | 公司详情页，展示 current/effective、factor snapshot、证据 locator、反馈表单；顶部含"查看量化指标"链接到公司量化页。 |
-| `/research/companies/[symbol]` | `fetchCompanyQuantProfile`、`fetchCompanyAnalysisProfile` | 公司量化与分析 profile 页；并行拉取量化结果（5 因子雷达图、排名、状态、淘汰原因）和第四层 Analysis Mart（metrics 百分位、findings 卡片）；Tabs 拆「因子雷达」「分析指标」「关键发现」「筛选原因」四栏。 |
-| `/research/universe` | 静态/配置说明 | 展示沪深300、中证500、全 A 等公司池配置逻辑。 |
+| `/` | `fetchResearchCandidates`、`askReadOnlyCopilot` | 问答首页；第一屏是自然语言输入，默认问题“今日推荐股票是什么？”调用只读推荐工具，并展示最多 3 个今日推荐预览。 |
+| `/dashboard` | `fetchResearchCandidates`、`startValuationDiscoveryRefresh`、`fetchValuationDiscoveryRuns`、`fetchResearchRunDetailV2` | 今日推荐大屏；展示最新可见候选列表、理由标签、置信度、量化评分和估值折价；顶部“刷新今日研究”用默认参数启动 valuation discovery，并用浮层弹窗展示/更新最近一次刷新 React Flow 节点图；点击推荐卡进入详情子页。 |
+| `/dashboard/items/[itemId]` | `fetchResearchItemDetailV2` | 今日推荐详情子页；展示研究结论、量化可视化、current/effective review、风险复核和 RAG 证据 locator。 |
+| `/settings` | 静态子页索引 | 设置中心；把密钥配置、数据配置、研究范围、策略配置分成子页，主流程不直接暴露底层配置。 |
 | `/settings/providers` | provider config API | 配置 Tushare、Tavily、LLM、Embedding、Rerank 等密钥。 |
-| `/settings/scope` | scope config API | 配置用户可见公司池与指标视图。 |
+| `/settings/scope` | scope config API | 配置用户可见公司池与指标视图；公司池区直接展示中证500、全 A、沪深300三种默认池和当前使用状态，切换后滚动新的 active Research Scope。 |
 | `/settings/strategy` | strategy config API | 配置策略模板、自定义 prompt 与版本。 |
 
 ## 8. 前端组件
 
 | 组件 | 说明 |
 | --- | --- |
-| `ResearchRunForm` | 启动 valuation discovery refresh；不再创建旧 research run；对 local admin、Provider/scope 未配置、Tavily 未激活等错误给出明确操作提示。 |
-| `ResearchFilterBar` | 服务端筛选候选列表。 |
-| `ResearchResultsTable` | 表格展示候选公司、状态、风险、分数和 effective assessment。 |
-| `ResearchRunProgress` | 展示 valuation discovery run 进度。 |
+| `DashboardRefreshControl` | 今日推荐页的一键刷新入口；点击后用 `scope-current` 与当前时间调用 refresh API，成功后用浮层弹窗展示最近一次刷新节点图，不挤压列表内容；最近一次 run 非终态时按钮显示“刷新进行中”并禁用，失败时显示业务化配置提示；不再跳转内部 run 详情页。 |
+| `DashboardRefreshNodeGraph` | React Flow 运行节点图；运行中节点脉冲闪烁，完成节点绿色，排队/等待节点黄色，未开始节点灰色，失败或 `upstream_failed` 节点红色。 |
+| `CompanyPoolSelector` | 研究范围页的用户侧公司池配置；只允许切换已落库且有真实成员的默认池，当前池禁用并显示“当前使用”。 |
+| `RecommendationChatPanel` | 用户首页问答，默认问题“今日推荐股票是什么？”，调用只读 Copilot，展示 loading/disabled/error/success 和业务化引用标签。 |
 | `CurrentVsEffectivePanel` | 区分本轮 current review 与当前生效结论。 |
 | `EvidenceLocatorList` | 展示 evidence id、source level、locator、snapshot id。 |
-| `ReadOnlyCopilotPanel` | 提交只读问题；拒绝写意图。 |
 | `ProviderSettingsPanel` | Provider 密钥写入；前端永不回显完整密钥。 |
 | `ProviderStatusPanel` | Provider 健康状态列表，标题区展示 healthy/blocker 数量。 |
-| `ResearchFeedbackForm` | 追加用户反馈。 |
-| `ResearchStatusBadge` | 状态徽章。 |
 | `ValuationBar` | 内在价值区间条 + 现价标记。 |
 | `FactorScoreBar` | 因子分数横向条。 |
 | `ConfigVersionList` | 通用版本化配置列表 + 激活按钮。 |
 | `Sidebar` | 深色侧栏，active 路由高亮。 |
-| `AdminGate` | 顶栏管理员解锁（Radix Dialog + localStorage 凭据）。 |
 | `PageLoading` | 路由级 Skeleton 占位。 |
 | `ui/*` | shadcn 风格 UI 原语（Button/Card/Badge/Input/Dialog/Tabs 等）。 |
 
@@ -209,14 +203,14 @@
 
 前端覆盖：
 
-- 首页候选摘要；
-- 全局导航只暴露已实现入口；
-- `/research` refresh 表单与候选表；
+- 问答首页和今日推荐预览；
+- 今日推荐大屏的推荐列表、详情子页、量化可视化、RAG 证据、指标和空状态；
+- 今日推荐大屏一键刷新的默认参数、后端 worker 唤醒、非终态 run 禁重复触发、最近一次 React Flow 节点图、排队/运行状态、实时轮询、打开/收起和错误提示；
+- 设置中心子页入口；
+- 全局导航只暴露问答、今日推荐、设置三个用户入口；
 - Tavily/service_not_configured 等 refresh blocker 的用户提示；
-- valuation discovery run 进度页；
-- item detail 页；
 - provider settings；
-- current/effective、evidence locator、read-only Copilot、filter/table 组件。
+- current/effective、evidence locator、问答、刷新节点图和设置组件。
 
 常用命令：
 
@@ -232,8 +226,8 @@ python scripts/smoke_dashboard_e2e.py --base-url http://localhost:3000
 
 | 模块 | 关系 |
 | --- | --- |
-| `07-strategy_config` | Provider settings、scope、strategy 页面依赖版本化配置和 Secret Store。 |
-| `11-valuation_discovery` | `/research` 的启动按钮触发 refresh；运行页读取 valuation discovery run 状态。 |
-| `06-multi_agent_research` | 详情页展示 AI delta review 的 current/effective 结果。 |
-| `05-rag_evidence` | 详情页展示 evidence locator，为后续 RAG 证据系统服务。 |
+| `07-strategy_config` | 设置子页依赖版本化配置和 Secret Store；主导航隐藏底层配置细节。 |
+| `11-valuation_discovery` | `DASHBOARD_REFRESH` 将最新 quant run 的 pass/near_threshold/watchlist 结果发布为 dashboard 投影；`/dashboard` 和首页预览消费该投影；`/dashboard` 顶部可一键触发 refresh，并通过最近一次 run status 渲染 React Flow 节点图。 |
+| `06-multi_agent_research` | `/dashboard/items/[itemId]` 详情展示 AI delta review 的 current/effective 结果。 |
+| `05-rag_evidence` | `/dashboard/items/[itemId]` 详情展示 evidence locator，为后续 RAG 证据系统服务。 |
 | `10-deployment_audit` | Provider status、job、trace 和 smoke 验证依赖部署审计与可观测能力。 |

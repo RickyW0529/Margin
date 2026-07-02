@@ -15,7 +15,7 @@ def test_smoke_script_dry_run_masks_configured_tokens(database_url, tmp_path) ->
         "PYTHONPATH": "src",
         "MARGIN_DATABASE_URL": database_url,
         "MARGIN_DATA_SNAPSHOT_ROOT": str(tmp_path),
-        "MARGIN_TUSHARE_TOKEN": "tushare-secret",
+        "MARGIN_SECRET_TUSHARE_TOKEN": "tushare-secret",
     }
 
     result = subprocess.run(

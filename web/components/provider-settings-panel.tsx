@@ -13,7 +13,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   activateProviderConfig,
-  configureLocalAdminSession,
   createProviderConfig,
   saveProviderSecret,
   testProviderConfig,
@@ -23,6 +22,7 @@ import {
   type VersionedConfigRecord,
 } from "@/lib/api";
 import {
+  categoryForProvider,
   chooseProviderForCategory,
   defaultSecretName,
   detectProviderLabel,
@@ -52,7 +52,7 @@ type DraftState = {
 };
 
 function healthTone(status: string): BadgeProps["tone"] {
-  if (status === "ok") {
+  if (status === "ok" || status === "active") {
     return "positive";
   }
   if (status === "failed") {
@@ -70,6 +70,9 @@ export function ProviderSettingsPanel({
   activate = activateProviderConfig,
 }: ProviderSettingsPanelProps) {
   const [configs, setConfigs] = useState<ProviderConfigSummary[]>(providers);
+  const [selectedVersionIds, setSelectedVersionIds] = useState<
+    Partial<Record<ProviderCategoryId, string>>
+  >({});
   const initialDrafts = useMemo(() => buildInitialDrafts(providers), [providers]);
   const [drafts, setDrafts] = useState<Record<ProviderCategoryId, DraftState>>(
     initialDrafts,
@@ -108,28 +111,24 @@ export function ProviderSettingsPanel({
     rerank: null,
     web_search: null,
   });
-  const [adminToken, setAdminToken] = useState("");
-  const [csrfToken, setCsrfToken] = useState("");
-  const [sessionReady, setSessionReady] = useState(false);
-
-  function saveAdminSession() {
-    if (!adminToken || !csrfToken) {
-      return;
-    }
-    configureLocalAdminSession(adminToken, csrfToken);
-    setAdminToken("");
-    setCsrfToken("");
-    setSessionReady(true);
-  }
 
   async function ensureConfig(
     category: ProviderCategoryDefinition,
   ): Promise<ProviderConfigSummary> {
-    const existing = chooseProviderForCategory(configs, category.id);
+    const existing = chooseProviderFromSelection(
+      configs,
+      category.id,
+      selectedVersionIds[category.id],
+    );
     const draft = drafts[category.id];
     const urlChanged = draft.url.trim() !== (existing?.base_url ?? "");
     const modelChanged = draft.model.trim() !== (existing?.model_name ?? "");
-    if (existing && !urlChanged && !modelChanged) {
+    if (
+      existing &&
+      existing.lifecycle !== "active" &&
+      !urlChanged &&
+      !modelChanged
+    ) {
       return existing;
     }
 
@@ -157,6 +156,10 @@ export function ProviderSettingsPanel({
       ...current.filter((provider) => provider.version_id !== summary.version_id),
       summary,
     ]);
+    setSelectedVersionIds((current) => ({
+      ...current,
+      [category.id]: summary.version_id,
+    }));
     return summary;
   }
 
@@ -201,7 +204,7 @@ export function ProviderSettingsPanel({
     } catch {
       setErrors((current) => ({
         ...current,
-        [category.id]: "保存失败，请检查管理员会话、URL 和后端日志。",
+        [category.id]: "保存失败，请检查 URL 和后端日志。",
       }));
     } finally {
       setBusy((current) => ({ ...current, [category.id]: false }));
@@ -209,7 +212,11 @@ export function ProviderSettingsPanel({
   }
 
   async function handleTest(category: ProviderCategoryDefinition) {
-    const provider = chooseProviderForCategory(configs, category.id);
+    const provider = chooseProviderFromSelection(
+      configs,
+      category.id,
+      selectedVersionIds[category.id],
+    );
     if (!provider) {
       setErrors((current) => ({
         ...current,
@@ -234,7 +241,11 @@ export function ProviderSettingsPanel({
   }
 
   async function handleActivate(category: ProviderCategoryDefinition) {
-    const provider = chooseProviderForCategory(configs, category.id);
+    const provider = chooseProviderFromSelection(
+      configs,
+      category.id,
+      selectedVersionIds[category.id],
+    );
     if (!provider) {
       setErrors((current) => ({
         ...current,
@@ -246,7 +257,27 @@ export function ProviderSettingsPanel({
     setErrors((current) => ({ ...current, [category.id]: null }));
     setSuccess((current) => ({ ...current, [category.id]: null }));
     try {
-      await activate(provider.version_id);
+      const activated = await activate(provider.version_id);
+      setConfigs((current) =>
+        current.map((candidate) => {
+          if (candidate.version_id === provider.version_id) {
+            return {
+              ...candidate,
+              enabled: (activated.enabled as boolean | undefined) ?? candidate.enabled,
+              lifecycle: (activated.lifecycle as string | undefined) ?? "active",
+              secret_metadata:
+                metadata[provider.version_id] ?? candidate.secret_metadata,
+            };
+          }
+          if (
+            categoryForProvider(candidate) === category.id &&
+            candidate.lifecycle === "active"
+          ) {
+            return { ...candidate, lifecycle: "deprecated" };
+          }
+          return candidate;
+        }),
+      );
       setSuccess((current) => ({
         ...current,
         [category.id]: "Provider 配置已激活。",
@@ -266,7 +297,7 @@ export function ProviderSettingsPanel({
       <CardHeader>
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-accent">
-            Local admin
+            Provider Settings
           </p>
           <CardTitle id="provider-settings-title" className="mt-1">
             Provider 设置
@@ -277,17 +308,13 @@ export function ProviderSettingsPanel({
         </span>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <AdminSessionForm
-          adminToken={adminToken}
-          csrfToken={csrfToken}
-          sessionReady={sessionReady}
-          onAdminTokenChange={setAdminToken}
-          onCsrfTokenChange={setCsrfToken}
-          onSave={saveAdminSession}
-        />
         <div className="grid gap-4 xl:grid-cols-2">
           {PROVIDER_CATEGORIES.map((category) => {
-            const provider = chooseProviderForCategory(configs, category.id);
+            const provider = chooseProviderFromSelection(
+              configs,
+              category.id,
+              selectedVersionIds[category.id],
+            );
             const draft = drafts[category.id];
             const detection = displayDetection(
               category.id,
@@ -324,58 +351,6 @@ export function ProviderSettingsPanel({
   );
 }
 
-type AdminSessionFormProps = {
-  adminToken: string;
-  csrfToken: string;
-  sessionReady: boolean;
-  onAdminTokenChange: (value: string) => void;
-  onCsrfTokenChange: (value: string) => void;
-  onSave: () => void;
-};
-
-function AdminSessionForm({
-  adminToken,
-  csrfToken,
-  sessionReady,
-  onAdminTokenChange,
-  onCsrfTokenChange,
-  onSave,
-}: AdminSessionFormProps) {
-  return (
-    <div className="grid gap-3 rounded-md border border-border bg-muted/40 p-4 md:grid-cols-[1fr_1fr_auto]">
-      <div className="grid gap-1.5">
-        <Label>管理员 token</Label>
-        <Input
-          aria-label="local admin token"
-          autoComplete="off"
-          type="password"
-          value={adminToken}
-          onChange={(event) => onAdminTokenChange(event.target.value)}
-        />
-      </div>
-      <div className="grid gap-1.5">
-        <Label>CSRF token</Label>
-        <Input
-          aria-label="CSRF token"
-          autoComplete="off"
-          type="password"
-          value={csrfToken}
-          onChange={(event) => onCsrfTokenChange(event.target.value)}
-        />
-      </div>
-      <Button
-        variant="secondary"
-        disabled={!adminToken || !csrfToken}
-        onClick={onSave}
-        type="button"
-        className="self-end"
-      >
-        {sessionReady ? "会话已启用" : "仅在此标签页启用"}
-      </Button>
-    </div>
-  );
-}
-
 type ProviderCategorySectionProps = {
   category: ProviderCategoryDefinition;
   detection: { label: string; isCustom: boolean };
@@ -407,6 +382,8 @@ function ProviderCategorySection({
   onSave,
   onTest,
 }: ProviderCategorySectionProps) {
+  const statusLabel =
+    health?.status ?? (provider?.lifecycle === "active" ? "active" : "not tested");
   return (
     <section className="grid gap-4 rounded-md border border-border bg-card p-4">
       <header className="flex items-start justify-between gap-3">
@@ -422,8 +399,8 @@ function ProviderCategorySection({
           <Badge tone={detection.isCustom ? "muted" : "positive"}>
             {detection.label}
           </Badge>
-          <Badge tone={healthTone(health?.status ?? "not_configured")}>
-            {health?.status ?? "not tested"}
+          <Badge tone={healthTone(statusLabel)}>
+            {statusLabel}
           </Badge>
         </div>
       </header>
@@ -527,6 +504,22 @@ function buildInitialDrafts(
       ];
     }),
   ) as Record<ProviderCategoryId, DraftState>;
+}
+
+function chooseProviderFromSelection(
+  providers: ProviderConfigSummary[],
+  category: ProviderCategoryId,
+  selectedVersionId?: string,
+): ProviderConfigSummary | null {
+  if (selectedVersionId) {
+    const selected = providers.find(
+      (provider) => provider.version_id === selectedVersionId,
+    );
+    if (selected) {
+      return selected;
+    }
+  }
+  return chooseProviderForCategory(providers, category);
 }
 
 function providerSummaryFromRecord(

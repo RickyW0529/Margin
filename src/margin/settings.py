@@ -1,7 +1,8 @@
 """Centralized application settings for Margin.
 
 MarginSettings consolidates environment-driven configuration for the API,
-storage, LLM providers, observability, and deployment metadata. The module
+storage, observability, and deployment metadata. Provider credentials are stored
+in encrypted provider database tables instead of environment variables. The module
 exposes a cached ``get_settings()`` factory so that configuration is parsed
 once per process.
 """
@@ -13,11 +14,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, HttpUrl, PostgresDsn, SecretStr, field_validator
+from pydantic import Field, PostgresDsn, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://margin:margin@localhost:5432/margin"
 """Default PostgreSQL URL used when no environment override is configured."""
+
+DEFAULT_SECRET_MASTER_KEY = "dev-only-change-me-32-byte-key!!"
+"""Stable local default key for encrypted provider secrets in personal mode."""
 
 
 class MarginSettings(BaseSettings):
@@ -27,17 +31,6 @@ class MarginSettings(BaseSettings):
         database_url: SQLAlchemy connection URL for PostgreSQL.
         database_echo: Whether SQLAlchemy logs emitted SQL statements.
         database_pool_pre_ping: Whether to verify pool connections before checkout.
-        llm_api_key: API key for the configured LLM provider.
-        llm_base_url: Optional base URL for the LLM provider.
-        llm_model: Model name used for LLM calls.
-        embedding_base_url: Optional base URL for the embedding provider.
-        embedding_api_key: Optional API key for the embedding provider.
-        embedding_model: Model name used for embedding calls.
-        embedding_dimension: Dimension of generated embedding vectors.
-        rerank_base_url: Optional base URL for the rerank provider.
-        rerank_api_key: Optional API key for the rerank provider.
-        rerank_model: Model name used for reranking calls.
-        websearch_api_key: Optional API key for web search integrations.
         log_level: Logging level name (e.g. "INFO").
         log_format: Output format for logs, either "json" or "console".
         metrics_enabled: Whether observability metrics are enabled.
@@ -47,8 +40,6 @@ class MarginSettings(BaseSettings):
         data_sync_on_startup: Whether startup should enqueue stale data sync work.
         data_freshness_timezone: Timezone used for data freshness calculations.
         data_smoke_symbols: Comma-separated A-share symbols used by smoke checks.
-        tushare_token: Optional Tushare token used by real provider smoke.
-        tushare_http_url: Optional Tushare-compatible API endpoint URL.
         audit_log_path: Filesystem path for the provider audit log.
         environment: Deployment environment name.
         service_name: Service identifier used in logs and metrics.
@@ -67,39 +58,16 @@ class MarginSettings(BaseSettings):
     database_echo: bool = False
     database_pool_pre_ping: bool = True
 
-    # LLM
-    llm_api_key: SecretStr | None = None
-    llm_base_url: HttpUrl | None = None
-    llm_model: str = "deepseek-v4-pro"
-
-    # Embedding
-    embedding_base_url: HttpUrl | None = None
-    embedding_api_key: SecretStr | None = None
-    embedding_model: str = "text-embedding-3-small"
-    embedding_dimension: int = 1536
-
-    # Rerank
-    rerank_base_url: HttpUrl | None = None
-    rerank_api_key: SecretStr | None = None
-    rerank_model: str = ""
-
-    # WebSearch
-    websearch_api_key: SecretStr | None = None
-
     # CORS / web frontend origin
     web_origin: str = "http://localhost:3000"
 
-    # Local admin / encrypted provider secrets
-    admin_api_token: SecretStr | None = None
-    csrf_token: SecretStr | None = None
-    secret_master_key: SecretStr | None = None
+    # Encrypted provider secrets / SSRF controls
+    secret_master_key: SecretStr = SecretStr(DEFAULT_SECRET_MASTER_KEY)
     secret_key_version: str = "local-v1"
     allow_local_provider_urls: bool = False
     resolve_provider_dns: bool = True
 
     # Data provider / warehouse sync
-    tushare_token: SecretStr | None = None
-    tushare_http_url: str | None = None
     data_snapshot_root: Path = Path(".margin") / "snapshots" / "data"
     data_sync_on_startup: bool = True
     data_freshness_timezone: str = "Asia/Shanghai"
@@ -133,31 +101,6 @@ class MarginSettings(BaseSettings):
     environment: Literal["development", "test", "production"] = "development"
     service_name: str = "margin-api"
     service_version: str = "0.1.0"
-
-    @field_validator(
-        "llm_base_url",
-        "embedding_base_url",
-        "rerank_base_url",
-        mode="before",
-    )
-    @classmethod
-    def empty_optional_url_is_none(cls, value: object) -> object:
-        """Allow Compose to pass empty optional URL variables.
-
-        Docker Compose interpolates unset env vars as empty strings, but Pydantic
-        would otherwise reject them for optional HttpUrl fields. Convert blanks
-        to ``None`` so the field remains truly optional.
-
-        Args:
-            value: Raw value supplied for an optional URL field.
-
-        Returns:
-            object: ``None`` when the value is an empty or whitespace-only string,
-                otherwise the original value.
-        """
-        if isinstance(value, str) and not value.strip():
-            return None
-        return value
 
 
 @lru_cache

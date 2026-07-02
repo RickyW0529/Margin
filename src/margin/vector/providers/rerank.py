@@ -7,7 +7,6 @@ documents by relevance to a query.
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 from margin.core.provider import HealthCheckResult, ProviderDescriptor, ProviderStatus, ProviderType
@@ -41,18 +40,10 @@ class HTTPRerankProvider:
     ) -> None:
         """Initialize the HTTP rerank provider.
 
-        Configuration is resolved with the following precedence:
-        1. Explicit arguments.
-        2. Environment variables (``MARGIN_RERANK_*``).
-        3. Sensible defaults for ``model``.
-
         Args:
-            api_key: API key for the rerank endpoint. Defaults to
-                ``MARGIN_RERANK_API_KEY``.
-            base_url: Base URL of the rerank endpoint. Defaults to
-                ``MARGIN_RERANK_BASE_URL``.
-            model: Model identifier. Defaults to ``MARGIN_RERANK_MODEL`` or
-                ``rerank``.
+            api_key: API key for the rerank endpoint.
+            base_url: Base URL of the rerank endpoint.
+            model: Model identifier. Defaults to ``rerank``.
             client: Optional pre-configured HTTP client. If omitted, an ``httpx``
                 client is created.
             timeout: Request timeout in seconds.
@@ -60,14 +51,14 @@ class HTTPRerankProvider:
         Raises:
             RuntimeError: If ``api_key`` or ``base_url`` cannot be resolved.
         """
-        self._api_key = api_key or os.getenv("MARGIN_RERANK_API_KEY")
-        self._base_url = (base_url or os.getenv("MARGIN_RERANK_BASE_URL") or "").rstrip("/")
-        self._model = model or os.getenv("MARGIN_RERANK_MODEL") or "rerank"
+        self._api_key = api_key
+        self._base_url = (base_url or "").rstrip("/")
+        self._model = model or "rerank"
         self._timeout = timeout
         if not self._api_key:
-            raise RuntimeError("MARGIN_RERANK_API_KEY is required")
+            raise RuntimeError("Rerank API key is required")
         if not self._base_url:
-            raise RuntimeError("MARGIN_RERANK_BASE_URL is required")
+            raise RuntimeError("Rerank base URL is required")
         if client is None:
             import httpx
 
@@ -78,7 +69,7 @@ class HTTPRerankProvider:
             version=self._model,
             provider_type=ProviderType.RERANK,
             capabilities=["rerank"],
-            secret_refs=["MARGIN_RERANK_API_KEY"],
+            secret_refs=["rerank_api_key"],
             config={"base_url": self._base_url, "model": self._model},
         )
 

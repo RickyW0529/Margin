@@ -29,8 +29,6 @@ def test_default_data_sync_request_creates_executable_work_items(
     tmp_path,
 ) -> None:
     """Test that a default API request never creates a zero-work pending run."""
-    monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin-test-token")
-    monkeypatch.setenv("MARGIN_CSRF_TOKEN", "valid")
     get_settings.cache_clear()
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -61,8 +59,6 @@ def test_default_data_sync_request_creates_executable_work_items(
         "/api/v1/data-sync",
         json={"requested_by": "api-test"},
         headers={
-            "Authorization": "Bearer admin-test-token",
-            "X-CSRF-Token": "valid",
             "Idempotency-Key": "data-sync-api-test",
         },
     )
@@ -86,12 +82,13 @@ def test_default_data_sync_request_creates_executable_work_items(
     engine.dispose()
 
 
-def test_data_sync_rejects_unauthenticated_frontend_write() -> None:
-    """Test that manual sync is a protected mutation, not a public trigger."""
+def test_data_sync_accepts_personal_mode_frontend_write() -> None:
+    """Test that manual sync accepts personal-mode writes with idempotency."""
     response = TestClient(create_app()).post(
         "/api/v1/data-sync",
-        json={"requested_by": "anonymous"},
-        headers={"Idempotency-Key": "anonymous-sync"},
+        json={"requested_by": "local-user"},
+        headers={"Idempotency-Key": "personal-sync"},
     )
 
-    assert response.status_code in {401, 503}
+    assert response.status_code == 202
+    assert response.json()["status"] == "pending"

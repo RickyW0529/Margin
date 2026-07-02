@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { detectProviderLabel } from "./provider-settings";
+import { chooseProviderForCategory, detectProviderLabel } from "./provider-settings";
 
 describe("provider settings detection", () => {
   it("detects ModelScope and local OpenAI-compatible LLM URLs", () => {
@@ -13,5 +13,93 @@ describe("provider settings detection", () => {
     expect(
       detectProviderLabel("llm", "http://127.0.0.1:8000/v1"),
     ).toMatchObject({ providerId: "vllm", label: "VLLM" });
+  });
+
+  it("prefers configured provider versions over empty active versions", () => {
+    const selected = chooseProviderForCategory(
+      [
+        {
+          version_id: "provider-llm-active-empty",
+          provider_name: "llm",
+          provider_type: "llm",
+          provider_category: "llm",
+          enabled: true,
+          lifecycle: "active",
+          base_url: "https://api.deepseek.com/v1",
+          model_name: "deepseek-chat",
+          secret_metadata: null,
+        },
+        {
+          version_id: "provider-llm-draft-configured",
+          provider_name: "llm",
+          provider_type: "llm",
+          provider_category: "llm",
+          enabled: true,
+          lifecycle: "draft",
+          base_url: "https://api.deepseek.com/v1",
+          model_name: "deepseek-chat",
+          secret_metadata: {
+            configured: true,
+            last_four: "1234",
+            provider_name: "provider-llm-draft-configured",
+            secret_name: "api_key",
+            status: "active",
+            updated_at: "2026-07-01T00:00:00Z",
+            version_id: "sec-1",
+          },
+        },
+      ],
+      "llm",
+    );
+
+    expect(selected?.version_id).toBe("provider-llm-draft-configured");
+  });
+
+  it("uses the most recently saved configured provider version on startup", () => {
+    const selected = chooseProviderForCategory(
+      [
+        {
+          version_id: "provider-llm-active-old",
+          provider_name: "llm",
+          provider_type: "llm",
+          provider_category: "llm",
+          enabled: true,
+          lifecycle: "active",
+          base_url: "https://api.deepseek.com/v1",
+          model_name: "deepseek-chat",
+          secret_metadata: {
+            configured: true,
+            last_four: "1111",
+            provider_name: "provider-llm-active-old",
+            secret_name: "api_key",
+            status: "active",
+            updated_at: "2026-07-01T00:00:00Z",
+            version_id: "sec-old",
+          },
+        },
+        {
+          version_id: "provider-llm-draft-new",
+          provider_name: "llm",
+          provider_type: "llm",
+          provider_category: "llm",
+          enabled: true,
+          lifecycle: "draft",
+          base_url: "https://api.deepseek.com/v1",
+          model_name: "deepseek-chat",
+          secret_metadata: {
+            configured: true,
+            last_four: "2222",
+            provider_name: "provider-llm-draft-new",
+            secret_name: "api_key",
+            status: "active",
+            updated_at: "2026-07-01T01:00:00Z",
+            version_id: "sec-new",
+          },
+        },
+      ],
+      "llm",
+    );
+
+    expect(selected?.version_id).toBe("provider-llm-draft-new");
   });
 });

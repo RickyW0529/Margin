@@ -110,6 +110,47 @@ def test_bootstrap_does_not_activate_scope_when_required_provider_is_missing() -
     assert repository.get_active_research_scope("local-admin") is None
 
 
+def test_bootstrap_creates_default_index_universes_without_switching_scope() -> None:
+    """Verify CSI300/CSI500 defaults are visible but do not change scope."""
+    repository = MemoryStrategyRepository()
+    bootstrap = StrategyBootstrapService(
+        repository=repository,
+        strategy_service=StrategyService(repository=repository),
+    )
+
+    first = bootstrap.ensure_default_index_universes(
+        index_members_by_code={
+            "CSI300": ("000002.SZ", "000001.SZ", "000001.SZ"),
+            "CSI500": ("600000.SH",),
+        }
+    )
+    second = bootstrap.ensure_default_index_universes(
+        index_members_by_code={
+            "CSI300": ("000002.SZ", "000001.SZ"),
+            "CSI500": ("600000.SH",),
+        }
+    )
+
+    csi300 = repository.get_universe_definition("universe-csi300-default-v0.3.0")
+    csi500 = repository.get_universe_definition("universe-csi500-default-v0.3.0")
+    assert first == (
+        "universe-csi300-default-v0.3.0",
+        "universe-csi500-default-v0.3.0",
+    )
+    assert second == first
+    assert csi300 is not None
+    assert csi300.lifecycle.value == "review"
+    assert csi300.selection_rule == {
+        "type": "index_membership",
+        "index_code": "000300.SH",
+    }
+    assert csi300.member_security_ids == ("000001.SZ", "000002.SZ")
+    assert csi500 is not None
+    assert csi500.member_security_ids == ("600000.SH",)
+    assert len(repository.list_universe_definitions("local-admin")) == 2
+    assert repository.get_active_research_scope("local-admin") is None
+
+
 def test_optional_provider_health_failure_does_not_abort_bootstrap(
     database_url: str,
 ) -> None:

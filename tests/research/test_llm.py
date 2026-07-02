@@ -82,14 +82,9 @@ def test_deterministic_provider_can_fail():
     assert result.error == "injected failure"
 
 
-def test_llm_provider_direct_default_model_is_deepseek_pro(monkeypatch):
+def test_llm_provider_direct_default_model_is_deepseek_pro():
     """Verify the LLM provider defaults to the deepseek-pro model.
-
-    Args:
-        monkeypatch: Pytest fixture for temporarily modifying environment
-            variables.
     """
-    monkeypatch.delenv("MARGIN_LLM_MODEL", raising=False)
     provider = LLMProvider(api_key=None, base_url=None)
 
     assert provider.descriptor.version == "deepseek-v4-pro"

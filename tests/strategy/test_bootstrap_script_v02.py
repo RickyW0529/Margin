@@ -19,18 +19,7 @@ def test_bootstrap_provider_specs_contain_no_plaintext_secrets() -> None:
     Returns:
         None.
     """
-    settings = MarginSettings(
-        _env_file=None,
-        llm_api_key="llm-secret",
-        llm_base_url="https://api.deepseek.com",
-        llm_model="deepseek-v4-pro",
-        embedding_api_key="embedding-secret",
-        embedding_base_url="https://open.bigmodel.cn/api/paas/v4",
-        embedding_model="embedding-3",
-        websearch_api_key="tavily-secret",
-        tushare_token="tushare-secret",
-        tushare_http_url="https://teajoin.com",
-    )
+    settings = MarginSettings(_env_file=None)
 
     specs = build_provider_specs(settings)
 
@@ -41,9 +30,15 @@ def test_bootstrap_provider_specs_contain_no_plaintext_secrets() -> None:
         "tavily",
         "llm",
         "embedding",
+        "rerank",
     }
     tavily = next(spec for spec in specs if spec.provider_name == "tavily")
+    llm = next(spec for spec in specs if spec.provider_name == "llm")
+    embedding = next(spec for spec in specs if spec.provider_name == "embedding")
     assert tavily.base_url == "https://api.tavily.com/search"
+    assert llm.base_url is None
+    assert llm.model_name is None
+    assert embedding.non_sensitive_config["dimension"] == 1536
     assert "llm-secret" not in rendered
     assert "embedding-secret" not in rendered
     assert "tavily-secret" not in rendered

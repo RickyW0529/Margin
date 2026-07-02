@@ -74,6 +74,7 @@
 - **Provider 抽象与注册中心**：统一 Provider 元数据、健康检查、调用结果、重试/限流/降级/审计。
 - **弹性组件**：令牌桶限流器、指数退避重试、Provider 错误类型。
 - **密钥管理**：基于引用名称的 Secret 解析器，支持环境变量与本地文件两种来源，避免明文落盘。
+- **持久化编排状态**：`OrchestrationRun` / `StepAttempt` 维护 durable run 与 append-only step event；run 的 `metadata_json` 存放业务上下文（例如估值发现的 `decision_at`），`started_at` / `finished_at` 仅表达真实运行生命周期，避免业务 PIT 时间污染 worker 调度时间。
 - **文档标准化流水线**：`margin.documents` 提供共享 Docling 接口，将 PDF/HTML/DOCX/XLSX/CSV/JSON/Text 统一转换为 Markdown；随后执行 Review / Repair / Verifier / Slimming，输出最终 Markdown、JSON 和 RAG chunks。RAG chunking 默认保留段落/表格行边界，并对单个超长 block 做硬切分，保证任一 chunk 不超过配置的 `max_chunk_chars`，避免 embedding provider 因输入过长拒绝请求。PDF 默认启用 RapidOCR，并固定使用 `onnxruntime` 后端；视觉校验仅在 verifier 支持多模态且存在 page images 时执行，否则自动跳过并记录状态。
 
 ---
@@ -93,6 +94,9 @@
 | `src/margin/core/registry.py` | Provider 注册中心，封装注册、发现、健康检查、限流、重试、降级、审计。 |
 | `src/margin/core/resilience.py` | 限流器、重试配置与带重试/限流的通用调用包装函数。 |
 | `src/margin/core/secret.py` | 引用式 Secret 管理器，支持环境变量与本地密钥文件。 |
+| `src/margin/core/run_states.py` | durable orchestration run / step event 领域模型；`metadata_json` 承载业务上下文，生命周期时间只用于调度与审计。 |
+| `src/margin/core/db_orchestration.py` | orchestration runs、step attempts、outbox、capacity 等核心运行表 ORM；`orchestration_runs.metadata_json` 持久化 run 业务元数据。 |
+| `src/margin/core/orchestration_repository.py` | durable run 与 append-only step event 的内存/PostgreSQL 仓储，提供原子 claim、状态追加和 run 摘要更新。 |
 | `src/margin/documents/markdown.py` | 共享 Docling Markdown 转换接口：格式路由、转换请求/结果模型、Docling 后端、PDF OCR 配置与轻量 fallback。 |
 | `src/margin/documents/pipeline.py` | 共享文档标准化流水线：Review/Repair/Verifier/Slimming agent 协议与默认规则实现，输出 final Markdown/JSON/RAG chunks；chunking 对超长 block 二次切分并遵守 `max_chunk_chars`，同时支持多模态视觉校验自动降级。 |
 
@@ -103,7 +107,7 @@
 ### 3.1 `MarginSettings`
 
 - **位置**：`src/margin/settings.py`
-- **说明**：基于 `pydantic_settings.BaseSettings` 的单一配置源。所有字段默认以 `MARGIN_` 为前缀从环境变量读取，并支持 `.env` 文件。`
+- **说明**：基于 `pydantic_settings.BaseSettings` 的基础运行配置源。`.env` 仅保留数据库、日志、监控、SSRF 开关等基础运行参数；LLM、WebSearch、Tushare、Embedding、Rerank 等 Provider 的 URL、token、model 不再从环境变量读取，统一由前端设置页写入 Provider 配置表，并通过 AES-GCM Secret Store 加密保存。
 - **关键配置项**：
 
 | 分组 | 字段 | 类型 | 默认值 | 说明 |
@@ -111,26 +115,11 @@
 | 数据库 | `database_url` | `PostgresDsn` | `postgresql+psycopg://margin:margin@localhost:5432/margin` | PostgreSQL 连接 URL。 |
 |  | `database_echo` | `bool` | `False` | 是否打印每条 SQL。 |
 |  | `database_pool_pre_ping` | `bool` | `True` | 取出连接前是否探测可用性。 |
-| LLM | `llm_api_key` | `SecretStr \| None` | `None` | LLM API 密钥。 |
-|  | `llm_base_url` | `HttpUrl \| None` | `None` | LLM 服务基地址。 |
-|  | `llm_model` | `str` | `deepseek-v4-pro` | 默认 LLM 模型。 |
-| Embedding | `embedding_base_url` | `HttpUrl \| None` | `None` | Embedding 服务基地址。 |
-|  | `embedding_api_key` | `SecretStr \| None` | `None` | Embedding API 密钥。 |
-|  | `embedding_model` | `str` | `text-embedding-3-small` | 默认 Embedding 模型。 |
-|  | `embedding_dimension` | `int` | `1536` | 向量维度。 |
-| Rerank | `rerank_base_url` | `HttpUrl \| None` | `None` | Rerank 服务基地址。 |
-|  | `rerank_api_key` | `SecretStr \| None` | `None` | Rerank API 密钥。 |
-|  | `rerank_model` | `str` | `""` | 默认 Rerank 模型。 |
-| WebSearch | `websearch_api_key` | `SecretStr \| None` | `None` | Tavily WebSearch API 密钥。 |
-| Admin/Secret Store | `admin_api_token` | `SecretStr \| None` | `None` | v0.2 配置写接口 local-admin Bearer；缺失时 fail closed。 |
-|  | `csrf_token` | `SecretStr \| None` | `None` | v0.2 配置写接口 CSRF token。 |
-|  | `secret_master_key` | `SecretStr \| None` | `None` | AES-GCM-256 Secret Store master key，要求 32-byte 或等价 base64。 |
+| Secret Store | `secret_master_key` | `SecretStr` | `dev-only-change-me-32-byte-key!!` | AES-GCM-256 Secret Store master key；个人本地模式有稳定默认值，生产可用环境变量覆盖为 32-byte 或等价 base64。 |
 |  | `secret_key_version` | `str` | `local-v1` | 写入密文 associated data 的 key version。 |
 |  | `allow_local_provider_urls` | `bool` | `False` | 是否允许本地开发 Provider URL。 |
 |  | `resolve_provider_dns` | `bool` | `True` | SSRF guard 是否解析 DNS 并检查目标 IP。 |
-| Data Provider | `tushare_token` | `SecretStr \| None` | `None` | Tushare token。会在 repr 中掩码，不应写入日志。 |
-|  | `tushare_http_url` | `str \| None` | `None` | 可选 Tushare 兼容 API 地址。 |
-|  | `data_snapshot_root` | `Path` | `.margin/snapshots/data` | v0.2 compressed raw snapshot 根目录。 |
+| Data Provider | `data_snapshot_root` | `Path` | `.margin/snapshots/data` | v0.2 compressed raw snapshot 根目录。 |
 |  | `data_sync_on_startup` | `bool` | `True` | Worker 是否启用 data provider sync job。 |
 |  | `data_freshness_timezone` | `str` | `Asia/Shanghai` | data freshness 判断时区。 |
 |  | `data_smoke_symbols` | `str` | `000001.SZ` | 真实 data provider smoke 使用的股票代码列表。 |
@@ -344,47 +333,20 @@
 | **说明** | 根据 `MarginSettings` 构建 SQLAlchemy 引擎。 |
 | **返回值** | 配置好的 `Engine` 实例。 |
 
-#### 6.4.2 `build_llm_provider()`
+#### 6.4.2 `build_provider_status_providers()`
 
 | 项目 | 内容 |
 | --- | --- |
-| **签名** | `def build_llm_provider(settings: MarginSettings) -> LLMProvider \| None` |
-| **说明** | 若 `llm_api_key` 与 `llm_base_url` 均有效，则构建 OpenAI 兼容 LLM Provider。 |
-| **返回值** | `LLMProvider` 实例，或配置缺失时返回 `None`。 |
+| **签名** | `def build_provider_status_providers(repository, health_service, *, owner_id: str = "local-admin") -> list[Any]` |
+| **说明** | 从 Provider 配置表读取当前 active 配置，通过 `ProviderConfigHealthService` 使用加密 Secret Store 做健康检查；缺失的 LLM、Embedding、WebSearch、Rerank 以 degraded placeholder 展示并指向设置页。 |
+| **返回值** | `ProviderConfigStatusProbe` 与 degraded placeholder 列表。 |
 
-#### 6.4.3 `build_embedding_provider()`
+#### 6.4.3 Provider runtime 构建边界
 
-| 项目 | 内容 |
-| --- | --- |
-| **签名** | `def build_embedding_provider(settings: MarginSettings) -> OpenAIEmbeddingProvider \| None` |
-| **说明** | 若 Embedding 配置有效，则构建 OpenAI 兼容 Embedding Provider。 |
-| **返回值** | `OpenAIEmbeddingProvider` 实例，或配置缺失时返回 `None`。 |
+LLM、Embedding、WebSearch、Rerank、Tushare 的真实 adapter 不再由 `MarginSettings` 或 `.env` 构建。运行时通过 `ProviderRuntimeFactory` 从 active provider config version 读取 base URL/model 等非敏感配置，并在最后可信边界从 `SecretStore` 解密 token 后显式传入 adapter。
+Secret 允许绑定到 provider name 或 provider config version ID；当前设置页使用 config version ID 作为 scope，避免新草稿 token 停用旧 active token。`POST /api/v1/provider-configs/{id}/activate` 成功后会调用 `clear_provider_runtime_caches()`，清理 dashboard/news/agentic news/valuation discovery 中已绑定旧 adapter 的进程级缓存。
 
-#### 6.4.4 `build_websearch_provider()`
-
-| 项目 | 内容 |
-| --- | --- |
-| **签名** | `def build_websearch_provider(settings: MarginSettings) -> TavilySearchAdapter \| None` |
-| **说明** | 若 `websearch_api_key` 有效，则构建 Tavily WebSearch Provider。 |
-| **返回值** | `TavilySearchAdapter` 实例，或配置缺失时返回 `None`。 |
-
-#### 6.4.5 `build_rerank_provider()`
-
-| 项目 | 内容 |
-| --- | --- |
-| **签名** | `def build_rerank_provider(settings: MarginSettings) -> HTTPRerankProvider \| None` |
-| **说明** | 若 Rerank 配置有效，则构建 HTTP Rerank Provider。 |
-| **返回值** | `HTTPRerankProvider` 实例，或配置缺失时返回 `None`。 |
-
-#### 6.4.6 `build_provider_status_providers()`
-
-| 项目 | 内容 |
-| --- | --- |
-| **签名** | `def build_provider_status_providers(settings: MarginSettings) -> list[Any]` |
-| **说明** | 构建仪表盘状态端点展示的所有 Provider。缺失配置时返回对应的 `MissingConfiguredProvider` 降级占位。 |
-| **返回值** | LLM、Embedding、WebSearch、Rerank Provider 或占位对象列表。 |
-
-#### 6.4.7 `build_data_warehouse_stack()`
+#### 6.4.4 `build_data_warehouse_stack()`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -392,7 +354,7 @@
 | **说明** | 根据集中配置构建 DB-backed data warehouse ingestion stack，供 API 或测试注入。 |
 | **返回值** | `DataWarehouseIngestionStack` 实例。 |
 
-#### 6.4.8 `get_data_warehouse_stack()`
+#### 6.4.5 `get_data_warehouse_stack()`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -400,7 +362,7 @@
 | **说明** | 返回生产 data warehouse ingestion stack 的进程级缓存实例。 |
 | **返回值** | 缓存的 `DataWarehouseIngestionStack` 实例。 |
 
-#### 6.4.9 `get_portfolio_service()`
+#### 6.4.6 `get_portfolio_service()`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -408,7 +370,7 @@
 | **说明** | 返回基于 PostgreSQL 的 PortfolioService，供 Portfolio 路由注入。 |
 | **返回值** | 缓存的 `PortfolioService` 实例。 |
 
-#### 6.4.10 `get_research_service()`
+#### 6.4.7 `get_research_service()`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -416,7 +378,7 @@
 | **说明** | 返回基于 PostgreSQL 与配置化 LLM/Embedding 的 ResearchService。 |
 | **返回值** | 缓存的 `ResearchService` 实例。 |
 
-#### 6.4.11 `get_strategy_service()`
+#### 6.4.8 `get_strategy_service()`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -762,8 +724,8 @@
 ### 11.4 v0.2 `SecretStore`
 
 - **位置**：`src/margin/core/secret_store.py`
-- **说明**：AES-GCM-256 版本化 Provider Secret Store。`create_or_replace` 写入随机 nonce 密文并停用旧 active secret；`metadata` 只返回 configured、last four、version/status/time；`resolve` 仅向受信 Provider adapter 返回 masked `SecretValue`。
-- `get_secret_store()` 从 `MARGIN_SECRET_MASTER_KEY` 构建生产实例；缺失 master key 时拒绝启动 secret API，不生成临时 key。
+- **说明**：AES-GCM-256 版本化 Provider Secret Store。`create_or_replace` 写入随机 nonce 密文并停用同一 scope 下的旧 active secret；`metadata` 只返回 configured、last four、version/status/time；`resolve` 仅向受信 Provider adapter 返回 masked `SecretValue`。策略 Provider 配置把 provider config version ID 作为 secret scope，避免不同配置版本的 token 互相停用。
+- `get_secret_store()` 使用稳定本地默认 master key 构建 Secret Store；生产环境可通过进程级密钥覆盖 master key，但 provider token 本身不走 `.env`，只存 provider 数据库密文。
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |

@@ -146,8 +146,6 @@ def _build_service(
 @pytest.fixture()
 def api_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     """Return a TestClient with company profile service injected."""
-    monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin-test-token")
-    monkeypatch.setenv("MARGIN_CSRF_TOKEN", "valid")
     get_settings.cache_clear()
     service = _build_service()
     app = create_app(company_profile_service=service)
@@ -205,8 +203,6 @@ def test_get_company_analysis_profile_empty_when_no_snapshot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Analysis profile endpoint returns empty when no snapshot exists."""
-    monkeypatch.setenv("MARGIN_ADMIN_API_TOKEN", "admin-test-token")
-    monkeypatch.setenv("MARGIN_CSRF_TOKEN", "valid")
     get_settings.cache_clear()
     service = _build_service(with_analysis=False)
     app = create_app(company_profile_service=service)

@@ -6,17 +6,14 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  fetchProviderConfigs,
-  fetchProviderStatus,
+  askReadOnlyCopilot,
   fetchResearchCandidates,
 } from "@/lib/api";
 
 import HomePage from "./page";
 
 vi.mock("@/lib/api", () => ({
-  configureLocalAdminSession: vi.fn(),
-  fetchProviderConfigs: vi.fn(),
-  fetchProviderStatus: vi.fn(),
+  askReadOnlyCopilot: vi.fn(),
   fetchResearchCandidates: vi.fn(),
   saveProviderSecret: vi.fn(),
   testProviderConfig: vi.fn(),
@@ -30,10 +27,10 @@ vi.mock("next/navigation", () => ({
 
 describe("HomePage", () => {
   beforeEach(() => {
-    vi.mocked(fetchProviderStatus).mockResolvedValue([
-      { provider: "postgres", status: "ready", message: "connected" },
-    ]);
-    vi.mocked(fetchProviderConfigs).mockResolvedValue([]);
+    vi.mocked(askReadOnlyCopilot).mockResolvedValue({
+      answer: "今日推荐关注 000001。",
+      references: [{ api: "GET /api/v1/research", scope_version_id: "scope-current" }],
+    });
     vi.mocked(fetchResearchCandidates).mockResolvedValue({
       as_of: "2026-06-23T08:30:00Z",
       facets: {
@@ -71,25 +68,26 @@ describe("HomePage", () => {
     });
   });
 
-  it("renders a real API-backed product home instead of hard-redirecting to demo", async () => {
+  it("renders a focused question-first home page", async () => {
     render(await HomePage());
 
     expect(fetchResearchCandidates).toHaveBeenCalledWith(
-      expect.objectContaining({
-        limit: 8,
+      {
+        limit: 3,
         scope_version_id: "scope-current",
         universe: "ALL_A",
-      }),
+      },
     );
-    expect(fetchProviderStatus).toHaveBeenCalled();
-    expect(fetchProviderConfigs).toHaveBeenCalled();
-    expect(screen.getByRole("heading", { name: "研究工作台" })).toBeInTheDocument();
-    expect(screen.queryByText(/组合|持仓/)).not.toBeInTheDocument();
-    expect(screen.getByText("今日候选")).toBeInTheDocument();
-    expect(screen.getByText("v0.2 candidate BFF")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "打开研究候选" })).toHaveAttribute(
+    expect(screen.getByRole("heading", { name: "今天想研究什么？" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "今日推荐股票是什么？" })).toBeInTheDocument();
+    expect(screen.getByText("今日推荐预览")).toBeInTheDocument();
+    expect(screen.getByText("平安银行")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /平安银行/ })).toHaveAttribute(
       "href",
-      "/research",
+      "/dashboard?item_id=item-1#recommendation-detail",
     );
+    expect(screen.queryByText(/组合|持仓/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Provider|Scope|BFF|fail-closed/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "打开今日推荐" })).toHaveAttribute("href", "/dashboard");
   });
 });

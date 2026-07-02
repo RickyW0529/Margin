@@ -301,6 +301,7 @@ class OrchestrationRun(BaseModel):
     scope_hash: str | None = Field(default=None, max_length=96)
     idempotency_key_hash: str | None = Field(default=None, max_length=96)
     trace_id: str = Field(min_length=1, max_length=64)
+    metadata_json: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=_utc_now)
     started_at: datetime | None = None
     finished_at: datetime | None = None

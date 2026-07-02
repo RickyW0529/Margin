@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import margin.api.dependencies as dependencies
 from margin.api.dependencies import (
     build_data_warehouse_stack,
-    build_embedding_provider,
-    build_llm_provider,
     build_provider_status_providers,
     get_provider_runtime_factory,
 )
@@ -26,84 +25,52 @@ from margin.storage.database import (
     create_session_factory,
 )
 from margin.strategy.models import ConfigLifecycle, ProviderConfigVersion
+from margin.strategy.provider_config import ProviderHealth
 from margin.strategy.repository import MemoryStrategyRepository
 
 
-def test_build_llm_provider_uses_centralized_settings():
-    """Test that build_llm_provider uses centralized settings."""
-    settings = MarginSettings(
-        _env_file=None,
-        llm_api_key="test-key",
-        llm_base_url="https://api.deepseek.com",
-        llm_model="deepseek-v4-flash",
+def test_provider_status_providers_use_active_provider_configs() -> None:
+    """Test that provider status reads active provider DB configs, not env."""
+    repository = MemoryStrategyRepository()
+    repository.save_provider_config(
+        ProviderConfigVersion(
+            version_id="provider-llm-active-v1",
+            provider_name="llm",
+            provider_type="llm",
+            base_url="https://api.deepseek.com",
+            model_name="deepseek-v4-pro",
+            secret_version_id="secret-llm-v1",
+            lifecycle=ConfigLifecycle.ACTIVE,
+        )
     )
 
-    provider = build_llm_provider(settings)
+    class FakeHealthService:
+        """Minimal provider health service for status-probe tests."""
 
-    assert provider is not None
-    assert provider.descriptor.version == "deepseek-v4-flash"
-    assert provider.descriptor.config["base_url"] == "https://api.deepseek.com"
+        def test_connection(self, version_id: str) -> ProviderHealth:
+            """Return a healthy DB-backed provider health result."""
+            return ProviderHealth(
+                provider_name="llm",
+                provider_config_version_id=version_id,
+                status="ok",
+                checked_at=datetime(2026, 7, 1, tzinfo=UTC),
+            )
 
-
-def test_build_embedding_provider_uses_centralized_settings():
-    """Test that build_embedding_provider uses centralized settings."""
-    settings = MarginSettings(
-        _env_file=None,
-        embedding_api_key="test-key",
-        embedding_base_url="https://open.bigmodel.cn/api/paas/v4",
-        embedding_model="embedding-3",
-        embedding_dimension=2048,
-    )
-
-    provider = build_embedding_provider(settings)
-
-    assert provider is not None
-    assert provider.version == "embedding-3"
-    assert provider.dim == 2048
-
-
-def test_provider_factories_fail_closed_when_unconfigured():
-    """Test that provider factories fail closed when unconfigured."""
-    settings = MarginSettings(_env_file=None)
-
-    assert build_llm_provider(settings) is None
-    assert build_embedding_provider(settings) is None
-
-
-def test_provider_factories_fail_closed_for_empty_container_secrets():
-    """Test that provider factories fail closed for empty container secrets."""
-    settings = MarginSettings(
-        _env_file=None,
-        llm_api_key="",
-        llm_base_url="https://api.deepseek.com",
-        embedding_api_key="",
-        embedding_base_url="https://open.bigmodel.cn/api/paas/v4",
-    )
-
-    assert build_llm_provider(settings) is None
-    assert build_embedding_provider(settings) is None
-
-
-def test_provider_status_providers_report_missing_optional_external_providers():
-    """Test that provider status reports missing optional external providers."""
-    settings = MarginSettings(
-        _env_file=None,
-        llm_api_key="test-key",
-        llm_base_url="https://api.deepseek.com",
-        embedding_api_key="embedding-key",
-        embedding_base_url="https://open.bigmodel.cn/api/paas/v4",
-    )
-
-    providers = build_provider_status_providers(settings)
+    providers = build_provider_status_providers(repository, FakeHealthService())
     names = [provider.descriptor.name for provider in providers]
     statuses = {provider.descriptor.name: provider.healthcheck() for provider in providers}
 
-    assert "openai_llm" in names
-    assert "openai_embedding" in names
-    assert "tavily_websearch" in names
-    assert "http_rerank" in names
-    assert statuses["tavily_websearch"].status.value == "degraded"
-    assert statuses["http_rerank"].status.value == "degraded"
+    assert "llm" in names
+    assert "embedding" in names
+    assert "websearch" in names
+    assert "rerank" in names
+    assert statuses["llm"].status.value == "healthy"
+    assert statuses["embedding"].status.value == "degraded"
+    assert "provider_database" in providers[0].descriptor.secret_refs
+    assert all(
+        "MARGIN_" not in ",".join(provider.descriptor.secret_refs)
+        for provider in providers
+    )
 
 
 def test_build_data_warehouse_stack_uses_centralized_settings(database_url, tmp_path):

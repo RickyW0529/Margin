@@ -8,6 +8,7 @@ import json
 import sys
 from datetime import UTC, datetime
 
+from margin.core.secret import SecretManager, SecretNotFoundError
 from margin.data.company_pool import SQLAlchemyCompanyPoolRepository
 from margin.data.ingestion import DataWarehouseIngestionStack
 from margin.data.policy import DataAcquisitionPolicyVersion
@@ -34,14 +35,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     settings = get_settings()
-    if settings.tushare_token is None:
+    token = _resolve_tushare_token()
+    if token is None:
         print(json.dumps({"status": "failed", "error": "token_not_configured"}))
         return 2
     import tushare as ts
 
-    client = ts.pro_api(token=settings.tushare_token.get_secret_value())
-    if settings.tushare_http_url:
-        client._DataApi__http_url = settings.tushare_http_url
+    client = ts.pro_api(token=token)
     engine = create_database_engine()
     session_factory = create_session_factory(engine)
     repository = SQLAlchemyTushareSourceRepository(session_factory)
@@ -102,6 +102,15 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(output)
     return 0
+
+
+def _resolve_tushare_token() -> str | None:
+    """Resolve the Tushare token for this manual backfill script."""
+    try:
+        token = SecretManager().resolve("tushare_token").strip()
+    except SecretNotFoundError:
+        return None
+    return token or None
 
 
 if __name__ == "__main__":

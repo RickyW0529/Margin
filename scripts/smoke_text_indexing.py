@@ -145,40 +145,13 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _embedding_config() -> dict[str, str | None]:
-    """Resolve embedding provider config from env or settings."""
-    raw_env = {
+    """Resolve explicit smoke embedding provider config from environment."""
+    return {
         "api_key": os.getenv("MARGIN_EMBEDDING_API_KEY"),
         "base_url": os.getenv("MARGIN_EMBEDDING_BASE_URL"),
-        "model": os.getenv("MARGIN_EMBEDDING_MODEL"),
-        "dimension": os.getenv("MARGIN_EMBEDDING_DIMENSION"),
+        "model": os.getenv("MARGIN_EMBEDDING_MODEL") or "text-embedding-3-small",
+        "dimension": os.getenv("MARGIN_EMBEDDING_DIMENSION") or "1536",
     }
-    if any(value is not None for value in raw_env.values()):
-        return raw_env
-
-    settings = MarginSettings()
-    return {
-        "api_key": _secret_value(settings.embedding_api_key),
-        "base_url": _string_value(settings.embedding_base_url),
-        "model": settings.embedding_model,
-        "dimension": str(settings.embedding_dimension)
-        if settings.embedding_dimension
-        else None,
-    }
-
-
-def _secret_value(value: object | None) -> str | None:
-    """Extract a plaintext value from a SecretStr-like object."""
-    if value is None:
-        return None
-    get_secret_value = getattr(value, "get_secret_value", None)
-    if callable(get_secret_value):
-        return str(get_secret_value())
-    return str(value)
-
-
-def _string_value(value: object | None) -> str | None:
-    """Convert a value to string or return None."""
-    return str(value) if value is not None else None
 
 
 def _parse_decision_at(value: str) -> datetime:

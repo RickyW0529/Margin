@@ -4,7 +4,7 @@
 
 `src/margin/valuation_discovery/` 实现 v0.2/v0.3 的公司池、量化筛选、第四层 Quant Feature Mart / Analysis Mart、新闻目标选择、行业估值、置信度校准、有效结论指针和刷新编排。模块只消费冻结的数据仓库输入和策略 scope，不直接调用 AKShare、Tushare、Tavily、LLM 或交易接口。
 
-v0.3 中，公司池来源切到数据层 materialized company pool：`SQLAlchemyScopeBindingProvider` 对 `ALL_A` / `ALL_A_NON_ST` scope 优先读取最新 `company_pool_snapshots`，量化输入不再使用静态 universe membership。公司池排除 ST、`退市*` 名称、未来上市和已退市证券。
+v0.3 中，公司池来源切到数据层 materialized company pool：`SQLAlchemyScopeBindingProvider` 对 `ALL_A` / `ALL_A_NON_ST` scope 优先读取最新 `company_pool_snapshots`，量化输入不再使用静态 universe membership。公司池排除 ST、`退市*` 名称、未来上市和已退市证券。指数池 `CSI300` / `CSI500` 由策略配置层从 Tushare `index_weight` 最新成分生成 `UniverseDefinitionVersion.member_security_ids`，用户切换公司池后，`scope-current` 会滚动到对应 universe version，量化输入按该成员集合构建。
 
 当前量化服务支持版本化手工池策略：当 `QuantInputSnapshot.quant_feature_set.metadata.quant_strategy.thresholds.presets` 提供因子权重时，`QuantService` 使用 `manual_all_a_score` 作为真实 `QuantResult.final_score`、rank 和 screening status 的输入。`theme_hotness` 是确认后的题材/行业热点加分项，来自 PIT 安全 cross-section 中的 `theme_hot_score`、`theme_member_confidence`、`theme_signal_confirmed` 字段；未确认或非成员公司不加分。无版本化策略 metadata 的兼容路径仍使用旧五组分 `FactorScorer.combine()`。
 
@@ -91,7 +91,7 @@ Repository 行为：
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `POST` | `/api/v1/valuation-discovery/refreshes` | 启动估值发现刷新，要求本地 admin、CSRF 和 `Idempotency-Key`，返回 `202` 与 `run_id`。默认未配置 service 时 fail-closed 为 `503`。 |
+| `POST` | `/api/v1/valuation-discovery/refreshes` | 启动估值发现刷新；个人本地模式无需本地 admin/CSRF，仍要求 `Idempotency-Key`，返回 `202` 与 `run_id`。请求中的 `scope-current` 会在 API 边界先校准 active Research Scope 与最新激活配置，再解析为冻结 scope 版本；未配置 service 或 active scope 时 fail-closed 为 `503`。 |
 | `GET` | `/api/v1/valuation-discovery/runs` | 分页列出最近的 valuation discovery refresh run。 |
 | `GET` | `/api/v1/valuation-discovery/runs/{run_id}` | 查询单个 refresh run 的状态与各步骤。 |
 | `GET` | `/api/v1/valuation-discovery/companies/{security_id}/quant` | 返回某证券最新的量化筛选 profile，含 5 大因子组分数、排名、筛选状态、风险标记、复核原因和原因摘要。无结果时返回 `404`。 |
@@ -114,6 +114,17 @@ python scripts/smoke_valuation_discovery_p1.py \
 P0/P1 smoke 不生成假数据。缺少真实快照、真实截面、API 或密钥时输出明确 `external_blocker`。
 
 ## v0.3 真实量化输出
+
+2026-07-02 本地端到端 refresh 验证：
+
+- 激活公司池：`universe-csi300-default-v0.3.0`
+- active scope：`scope-universe-b03f5214e056900f`
+- refresh run：`vdr_abcdbd61a870a9e1e8024343`
+- Feature snapshot：`qfsnap_f8f45785b803e4c2cc9b37f7`，`row_count=300`
+- Quant run：`qr_b0b6297bde0e43f8`
+- 结果分布：300 条结果，0 `pass`，1 `near_threshold`，299 `reject`
+- Dashboard run：`dr_5e4501525fbe8434615c1994`，发布 1 条可见候选 `000001.SZ`
+- 该 run 真实走完 DATA_FRESHNESS_CHECK、DATA_SYNC、SCOPE_RESOLVE、QUANT_INPUT_BUILD、QUANT_RUN、NEWS_TARGET_SELECTION、NEWS_REFRESH、NEWS_INDEXING、RESEARCH_CONTEXT_BUILD、AI_DELTA_REVIEW、VALUATION_PUBLISH、DASHBOARD_REFRESH；Tavily 与 embedding provider 均有真实 HTTP 调用记录。
 
 最新 Tushare 数据链路验收 run：
 

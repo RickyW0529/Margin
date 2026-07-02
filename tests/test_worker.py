@@ -61,12 +61,10 @@ def test_worker_refuses_hash_embedding_in_production_path(
     settings = MarginSettings(
         _env_file=None,
         database_url=database_url,
-        embedding_api_key=None,
-        embedding_base_url=None,
     )
     monkeypatch.setattr("margin.worker.get_settings", lambda: settings)
 
-    with pytest.raises(RuntimeError, match="MARGIN_SECRET_MASTER_KEY"):
+    with pytest.raises(LookupError, match="active provider config not found"):
         build_document_indexing_runner()
 
 
