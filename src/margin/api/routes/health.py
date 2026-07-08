@@ -10,13 +10,16 @@ Provides Kubernetes-style probes:
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Annotated
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import Engine
 
+from margin.api.dependencies import get_strategy_repository
+from margin.bootstrap.features import build_feature_capabilities
 from margin.core.provider import HealthCheckResult, ProviderStatus
 from margin.settings import get_settings
 from margin.sql.health_queries import (
@@ -29,6 +32,7 @@ from margin.sql.health_queries import (
 from margin.storage.database import DatabaseSettings, create_database_engine
 
 router = APIRouter(tags=["health"])
+StrategyRepositoryDep = Annotated[object, Depends(get_strategy_repository)]
 
 
 @router.get("/health")
@@ -208,4 +212,23 @@ def degraded() -> dict[str, object]:
         **counts,
         "service": settings.service_name,
         "version": settings.service_version,
+    }
+
+
+@router.get("/health/capabilities")
+def capabilities(
+    repository: StrategyRepositoryDep,
+) -> dict[str, object]:
+    """Return feature availability derived from active local provider config."""
+    statuses = build_feature_capabilities(
+        tuple(repository.list_active_provider_configs("local-admin"))
+    )
+    return {
+        "capabilities": {
+            name: {
+                "enabled": status.enabled,
+                "missing": list(status.missing),
+            }
+            for name, status in statuses.items()
+        }
     }

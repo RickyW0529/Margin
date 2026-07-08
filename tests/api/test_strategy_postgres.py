@@ -30,6 +30,7 @@ def test_strategy_api_persists_across_default_service_instances(database_url, mo
         first_client = TestClient(create_app())
         response = first_client.post(
             "/strategies",
+            headers={"Idempotency-Key": "strategy-postgres-create"},
             json={"owner_id": "user_1", "template": "value_quality"},
         )
         assert response.status_code == 200

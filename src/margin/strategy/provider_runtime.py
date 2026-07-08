@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
@@ -10,6 +11,26 @@ from margin.strategy.models import ProviderConfigVersion
 from margin.strategy.provider_router import provider_category_for_config
 
 T = TypeVar("T")
+
+_DEFAULT_PROVIDER_CAPABILITIES: dict[str, frozenset[str]] = {
+    "tushare": frozenset(
+        {
+            "market_quote",
+            "financials",
+            "daily_basic",
+            "index_constituents",
+            "suspensions",
+            "limit_prices",
+            "quant_required_financials",
+        }
+    ),
+    "akshare": frozenset(
+        {
+            "market_quote",
+            "financials",
+        }
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -87,6 +108,42 @@ class ProviderRuntimeResolver:
                 f"multiple active provider configs found: {normalized_category}"
             )
         return self._resolve_config(matches[0], normalized_category)
+
+    def resolve_capability(
+        self,
+        provider_category: str,
+        capability: str,
+    ) -> ResolvedProviderRuntime:
+        """Return the active provider config that supports a capability."""
+        normalized_category = provider_category.strip().lower()
+        normalized_capability = capability.strip().lower()
+        matches = [
+            config
+            for config in self._repository.list_active_provider_configs(
+                self._owner_id
+            )
+            if provider_category_for_config(
+                config.provider_type,
+                config.provider_name,
+                config.non_sensitive_config,
+            )
+            == normalized_category
+            and normalized_capability in provider_capabilities_for_config(config)
+        ]
+        if not matches:
+            raise LookupError(
+                f"active provider config not found for capability: "
+                f"{normalized_category}.{normalized_capability}"
+            )
+        if len(matches) != 1:
+            raise RuntimeError(
+                f"multiple active provider configs found for capability: "
+                f"{normalized_category}.{normalized_capability}"
+            )
+        return self._resolve_config(
+            matches[0],
+            f"{normalized_category}.{normalized_capability}",
+        )
 
     def _resolve_config(
         self,
@@ -198,6 +255,29 @@ class ProviderRuntimeFactory:
             config_version_id=runtime.config.version_id,
         )
 
+    def build_market_data(self, capability: str) -> RuntimeBoundProvider:
+        """Build a market-data adapter by declared capability."""
+        runtime = self._resolver.resolve_capability("data_source", capability)
+        provider_name = runtime.config.provider_name.strip().lower()
+        if provider_name == "tushare":
+            from margin.data.providers.tushare_provider import TushareProvider
+
+            return RuntimeBoundProvider(
+                adapter=TushareProvider(
+                    token=_required_secret(runtime),
+                    http_url=runtime.config.base_url,
+                ),
+                config_version_id=runtime.config.version_id,
+            )
+        if provider_name == "akshare":
+            from margin.data.providers.akshare_provider import AKShareProvider
+
+            return RuntimeBoundProvider(
+                adapter=AKShareProvider(),
+                config_version_id=runtime.config.version_id,
+            )
+        raise RuntimeError(f"unsupported market-data provider: {provider_name}")
+
     def build_rerank(self) -> RuntimeBoundProvider:
         """Build the configured HTTP rerank adapter."""
         from margin.vector.providers.rerank import HTTPRerankProvider
@@ -220,6 +300,29 @@ def _required_secret(runtime: ResolvedProviderRuntime) -> str:
             f"provider secret not configured: {runtime.config.provider_name}"
         )
     return runtime.secret.get_secret_value()
+
+
+def provider_capabilities_for_config(config: ProviderConfigVersion) -> frozenset[str]:
+    """Return normalized provider capabilities for a config version."""
+    configured = config.non_sensitive_config.get("capabilities")
+    if configured:
+        return frozenset(_normalize_capabilities(configured))
+    provider_name = config.provider_name.strip().lower()
+    return _DEFAULT_PROVIDER_CAPABILITIES.get(provider_name, frozenset())
+
+
+def _normalize_capabilities(value: object) -> Iterable[str]:
+    """Yield normalized capability names from config metadata."""
+    if isinstance(value, str):
+        raw_items = value.split(",")
+    elif isinstance(value, Iterable):
+        raw_items = value
+    else:
+        raw_items = ()
+    for item in raw_items:
+        normalized = str(item).strip().lower()
+        if normalized:
+            yield normalized
 
 
 def _secret_ref_matches_config(

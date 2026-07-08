@@ -6,19 +6,25 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DEFAULT_TIMEOUT=300 \
-    PIP_RETRIES=10
+    PIP_RETRIES=10 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PATH="/app/.venv/bin:$PATH"
+
+COPY --from=ghcr.io/astral-sh/uv:0.9.17 /uv /uvx /bin/
 
 WORKDIR /app
 
-# Install dependencies before copying the full source to maximize layer caching.
-COPY pyproject.toml README.md ./
+# Install locked dependencies before copying the full source to maximize layer caching.
+COPY pyproject.toml uv.lock README.md ./
 COPY src/margin/__init__.py ./src/margin/__init__.py
-RUN pip install -e ".[data]"
+RUN uv sync --frozen --no-dev --extra data --no-install-project
 
 COPY src ./src
 COPY scripts ./scripts
 COPY alembic ./alembic
 COPY alembic.ini ./
+RUN uv sync --frozen --no-dev --extra data
 
 # Run as a non-root user and prepare persistent directories for audit/snapshots.
 RUN useradd --create-home --uid 10001 margin \

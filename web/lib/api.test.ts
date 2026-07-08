@@ -67,6 +67,7 @@ describe("api mutation helpers", () => {
 
   it("posts research item feedback", async () => {
     json.mockResolvedValueOnce({ feedback_id: "fb_1" });
+    vi.stubGlobal("crypto", { randomUUID: () => "feedback-idem" });
 
     await createResearchItemFeedback("item_1", {
       feedback_type: "reject",
@@ -78,6 +79,9 @@ describe("api mutation helpers", () => {
       expect.objectContaining({
         method: "POST",
         cache: "no-store",
+        headers: expect.objectContaining({
+          "Idempotency-Key": "feedback-idem",
+        }),
         body: JSON.stringify({
           feedback_type: "reject",
           comment: "证据不足",

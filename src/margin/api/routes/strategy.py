@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, ValidationError
 
-from margin.api.dependencies import get_strategy_service
+from margin.api.dependencies import get_strategy_service, require_idempotency_key
 from margin.strategy.service import StrategyService
 
 router = APIRouter(prefix="/strategies", tags=["strategy"])
@@ -106,6 +106,7 @@ def list_templates(
 def create_strategy(
     request: CreateStrategyRequest,
     service: StrategyService = Depends(get_strategy_service),
+    _idempotency_key: str = Depends(require_idempotency_key),
 ) -> dict[str, Any]:
     """Create a new strategy from a built-in template.
 
@@ -140,6 +141,7 @@ def create_strategy(
 def create_custom_strategy(
     request: CreateCustomStrategyRequest,
     service: StrategyService = Depends(get_strategy_service),
+    _idempotency_key: str = Depends(require_idempotency_key),
 ) -> dict[str, Any]:
     """Create a new strategy from a fully custom configuration.
 
@@ -221,6 +223,7 @@ def update_strategy(
     strategy_id: str,
     request: UpdateStrategyRequest,
     service: StrategyService = Depends(get_strategy_service),
+    _idempotency_key: str = Depends(require_idempotency_key),
 ) -> dict[str, Any]:
     """Create a new version of an existing strategy.
 
@@ -263,6 +266,7 @@ def validate_version(
     strategy_id: str,
     version_id: str,
     service: StrategyService = Depends(get_strategy_service),
+    _idempotency_key: str = Depends(require_idempotency_key),
 ) -> dict[str, Any]:
     """Validate a strategy version and advance it to the backtesting stage.
 
@@ -297,6 +301,7 @@ def backtest_version(
     strategy_id: str,
     version_id: str,
     service: StrategyService = Depends(get_strategy_service),
+    _idempotency_key: str = Depends(require_idempotency_key),
 ) -> dict[str, Any]:
     """Advance a strategy version from backtesting to paper trading.
 
@@ -331,6 +336,7 @@ def paper_trade_version(
     strategy_id: str,
     version_id: str,
     service: StrategyService = Depends(get_strategy_service),
+    _idempotency_key: str = Depends(require_idempotency_key),
 ) -> dict[str, Any]:
     """Advance a strategy version from paper trading to active-ready.
 
@@ -365,6 +371,7 @@ def activate_version(
     strategy_id: str,
     version_id: str,
     service: StrategyService = Depends(get_strategy_service),
+    _idempotency_key: str = Depends(require_idempotency_key),
 ) -> dict[str, Any]:
     """Activate a strategy version for live research runs.
 
@@ -398,6 +405,7 @@ def activate_version(
 def archive_strategy(
     strategy_id: str,
     service: StrategyService = Depends(get_strategy_service),
+    _idempotency_key: str = Depends(require_idempotency_key),
 ) -> dict[str, Any]:
     """Archive the active version of a strategy.
 

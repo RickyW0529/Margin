@@ -13,7 +13,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from margin.api.dependencies import get_dashboard_services, get_strategy_service
+from margin.api.dependencies import (
+    get_dashboard_services,
+    get_strategy_service,
+    require_idempotency_key,
+)
 from margin.dashboard.models import (
     DashboardFilters,
     DashboardSort,
@@ -173,6 +177,7 @@ def create_research_item_feedback(
     item_id: str,
     request: FeedbackCreate,
     services: Services,
+    _idempotency_key: Annotated[str, Depends(require_idempotency_key)],
 ) -> FeedbackRecord:
     """Append feedback for a research item.
 

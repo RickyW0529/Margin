@@ -14,8 +14,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, PostgresDsn, SecretStr
+from pydantic import Field, PostgresDsn, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://margin:margin@localhost:5432/margin"
 """Default PostgreSQL URL used when no environment override is configured."""
@@ -64,6 +65,7 @@ class MarginSettings(BaseSettings):
     # Encrypted provider secrets / SSRF controls
     secret_master_key: SecretStr = SecretStr(DEFAULT_SECRET_MASTER_KEY)
     secret_key_version: str = "local-v1"
+    admin_api_token: SecretStr | None = None
     allow_local_provider_urls: bool = False
     resolve_provider_dns: bool = True
 
@@ -101,6 +103,25 @@ class MarginSettings(BaseSettings):
     environment: Literal["development", "test", "production"] = "development"
     service_name: str = "margin-api"
     service_version: str = "0.1.0"
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> MarginSettings:
+        """Reject local development credentials in production mode."""
+        if self.environment != "production":
+            return self
+        if self.secret_master_key.get_secret_value() == DEFAULT_SECRET_MASTER_KEY:
+            raise ValueError(
+                "MARGIN_SECRET_MASTER_KEY must be set to a non-default value in production"
+            )
+        if self.admin_api_token is None or not self.admin_api_token.get_secret_value():
+            raise ValueError("MARGIN_ADMIN_API_TOKEN is required in production")
+        database_url = make_url(str(self.database_url))
+        if database_url.username == "margin" and database_url.password == "margin":
+            raise ValueError(
+                "MARGIN_DATABASE_URL must not use default margin:margin credentials "
+                "in production"
+            )
+        return self
 
 
 @lru_cache

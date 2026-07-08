@@ -387,22 +387,6 @@ async function request<T>(path: string, init: JsonRequestInit = {}): Promise<T> 
 }
 
 /**
- * Performs a JSON POST request against the Margin API.
- *
- * @param path - API path to request.
- * @param body - Serializable request body.
- * @returns A promise resolving to the parsed JSON response.
- */
-function post<T>(path: string, body: unknown): Promise<T> {
-  return request<T>(path, {
-    method: "POST",
-    cache: "no-store",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-/**
  * Fetches the v0.2 server-paginated research candidate list.
  *
  * @param filters Scope, universe, pagination, and facet filters.
@@ -735,8 +719,9 @@ export function createResearchItemFeedback(
   itemId: string,
   request: ResearchFeedbackCreate,
 ): Promise<FeedbackRecord> {
-  return post<FeedbackRecord>(
+  return authenticatedMutation<FeedbackRecord>(
     `/api/v1/research-items/${itemId}/feedback`,
+    "POST",
     request,
   );
 }
@@ -845,14 +830,18 @@ export function fetchStrategyDetail(strategyId: string): Promise<StrategyProfile
 export function createStrategy(
   body: CreateStrategyRequest,
 ): Promise<StrategyProfile> {
-  return post<StrategyProfile>(`/strategies`, body);
+  return authenticatedMutation<StrategyProfile>("/strategies", "POST", body);
 }
 
 /** Creates a strategy from a fully custom configuration. */
 export function createCustomStrategy(
   body: CreateCustomStrategyRequest,
 ): Promise<StrategyProfile> {
-  return post<StrategyProfile>(`/strategies/custom`, body);
+  return authenticatedMutation<StrategyProfile>(
+    "/strategies/custom",
+    "POST",
+    body,
+  );
 }
 
 /** Creates a new version of an existing strategy. */
@@ -860,12 +849,11 @@ export function updateStrategy(
   strategyId: string,
   body: UpdateStrategyRequest,
 ): Promise<StrategyProfile> {
-  return request<StrategyProfile>(`/strategies/${strategyId}`, {
-    method: "PUT",
-    cache: "no-store",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  return authenticatedMutation<StrategyProfile>(
+    `/strategies/${strategyId}`,
+    "PUT",
+    body,
+  );
 }
 
 /** Validates a strategy version, advancing it to the backtesting stage. */
@@ -873,8 +861,9 @@ export function validateStrategyVersion(
   strategyId: string,
   versionId: string,
 ): Promise<StrategyProfile> {
-  return post<StrategyProfile>(
+  return authenticatedMutation<StrategyProfile>(
     `/strategies/${strategyId}/versions/${versionId}/validate`,
+    "POST",
     {},
   );
 }
@@ -884,8 +873,9 @@ export function backtestStrategyVersion(
   strategyId: string,
   versionId: string,
 ): Promise<StrategyProfile> {
-  return post<StrategyProfile>(
+  return authenticatedMutation<StrategyProfile>(
     `/strategies/${strategyId}/versions/${versionId}/backtest`,
+    "POST",
     {},
   );
 }
@@ -895,8 +885,9 @@ export function paperTradeStrategyVersion(
   strategyId: string,
   versionId: string,
 ): Promise<StrategyProfile> {
-  return post<StrategyProfile>(
+  return authenticatedMutation<StrategyProfile>(
     `/strategies/${strategyId}/versions/${versionId}/paper-trade`,
+    "POST",
     {},
   );
 }
@@ -906,15 +897,20 @@ export function activateStrategyVersion(
   strategyId: string,
   versionId: string,
 ): Promise<StrategyProfile> {
-  return post<StrategyProfile>(
+  return authenticatedMutation<StrategyProfile>(
     `/strategies/${strategyId}/versions/${versionId}/activate`,
+    "POST",
     {},
   );
 }
 
 /** Archives the active version of a strategy. */
 export function archiveStrategy(strategyId: string): Promise<StrategyProfile> {
-  return post<StrategyProfile>(`/strategies/${strategyId}/archive`, {});
+  return authenticatedMutation<StrategyProfile>(
+    `/strategies/${strategyId}/archive`,
+    "POST",
+    {},
+  );
 }
 
 /** Returns the merged prompt for a strategy version and optional task name. */

@@ -210,7 +210,18 @@ def build_data_sync_worker(
         version_ids[provider_name] = runtime.config_version_id
     if not providers:
         raise RuntimeError("no active market-data Provider is configured")
-    default_provider = "tushare" if "tushare" in providers else "akshare"
+    try:
+        default_runtime = factory.build_market_data("quant_required_financials")
+    except (AttributeError, LookupError, RuntimeError, ValueError):
+        try:
+            default_runtime = factory.build_market_data("market_quote")
+        except (AttributeError, LookupError, RuntimeError, ValueError):
+            default_runtime = None
+    default_provider = (
+        default_runtime.adapter.descriptor.name
+        if default_runtime is not None
+        else ("tushare" if "tushare" in providers else next(iter(providers)))
+    )
     return DataSyncWorker(
         stack=build_data_ingestion_stack(
             resolved,

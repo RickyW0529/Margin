@@ -20,6 +20,7 @@ from margin.agent_runtime.expert_agents import StockAnalystAgent
 from margin.agent_runtime.main_agent import MainAgentRuntime
 from margin.agent_runtime.schedules import SQLAlchemyAgentScheduleRepository
 from margin.agent_runtime.step_definitions import load_scheduled_stock_analysis_flow
+from margin.bootstrap.container import AppContainer
 from margin.core.orchestration_repository import SQLAlchemyOrchestrationRepository
 from margin.core.provider import (
     HealthCheckResult,
@@ -27,7 +28,7 @@ from margin.core.provider import (
     ProviderStatus,
     ProviderType,
 )
-from margin.core.secret_store import SecretStore, SQLAlchemySecretRepository
+from margin.core.secret_store import SecretStore
 from margin.dashboard.detail_context import make_dashboard_detail_context_loader
 from margin.dashboard.repository import SQLAlchemyDashboardRepository
 from margin.dashboard.service import DashboardServiceBundle
@@ -64,11 +65,6 @@ from margin.research.graph_audit_repository import (
 from margin.research.llm import LLMProvider
 from margin.research.service import ResearchService
 from margin.settings import MarginSettings, get_settings
-from margin.storage.database import (
-    DatabaseSettings,
-    create_database_engine,
-    create_session_factory,
-)
 from margin.strategy.models import ProviderConfigVersion
 from margin.strategy.provider_config import HealthCheckCallable, ProviderConfigHealthService
 from margin.strategy.provider_runtime import (
@@ -191,19 +187,17 @@ class ProviderConfigStatusProbe:
         )
 
 
-def build_database_engine(settings: MarginSettings):
-    """Build the database engine from centralized application settings.
-
-    Args:
-        settings: Application settings containing the database URL and pool options.
-
-    Returns:
-        A SQLAlchemy engine configured from the provided settings.
-    """
-    return create_database_engine(DatabaseSettings.from_settings(settings))
+@lru_cache
+def get_app_container() -> AppContainer:
+    """Return the process-level application container."""
+    return AppContainer(get_settings())
 
 
-def build_data_warehouse_stack(settings: MarginSettings) -> DataWarehouseIngestionStack:
+def build_data_warehouse_stack(
+    settings: MarginSettings,
+    *,
+    default_provider: str = "akshare",
+) -> DataWarehouseIngestionStack:
     """Build the data warehouse ingestion stack from centralized settings.
 
     Args:
@@ -213,11 +207,11 @@ def build_data_warehouse_stack(settings: MarginSettings) -> DataWarehouseIngesti
     Returns:
         A DataWarehouseIngestionStack ready for ingestion operations.
     """
-    engine = build_database_engine(settings)
+    container = AppContainer(settings)
     return DataWarehouseIngestionStack(
-        session_factory=create_session_factory(engine),
+        session_factory=container.session_factory,
         snapshot_root=settings.data_snapshot_root,
-        default_provider="akshare",
+        default_provider=default_provider,
     )
 
 
@@ -332,8 +326,7 @@ def get_strategy_repository() -> SQLAlchemyStrategyRepository:
     Returns:
         A cached SQLAlchemyStrategyRepository instance.
     """
-    engine = build_database_engine(get_settings())
-    return SQLAlchemyStrategyRepository(create_session_factory(engine))
+    return get_app_container().strategy_repository
 
 
 @lru_cache
@@ -344,9 +337,7 @@ def get_strategy_service() -> StrategyService:
         StrategyService: A cached strategy service with append-only version
         persistence backed by PostgreSQL.
     """
-    engine = build_database_engine(get_settings())
-    repository = SQLAlchemyStrategyRepository(create_session_factory(engine))
-    return StrategyService(repository=repository)
+    return get_app_container().strategy_service
 
 
 @lru_cache
@@ -358,14 +349,7 @@ def get_secret_store() -> SecretStore:
     ephemeral key because doing so would make stored secrets undecryptable after
     process restart.
     """
-    settings = get_settings()
-    engine = build_database_engine(settings)
-    repository = SQLAlchemySecretRepository(create_session_factory(engine))
-    return SecretStore(
-        repository,
-        master_key=settings.secret_master_key.get_secret_value(),
-        key_version=settings.secret_key_version,
-    )
+    return get_app_container().secret_store
 
 
 def get_optional_secret_store() -> SecretStore | None:
@@ -409,10 +393,10 @@ def get_llm_provider_factory(
 @lru_cache
 def get_main_agent_runtime() -> MainAgentRuntime:
     """Return the v0.4 MainAgent runtime foundation."""
+    container = get_app_container()
     runtime_factory = get_provider_runtime_factory()
-    engine = build_database_engine(get_settings())
     return MainAgentRuntime(
-        context_store=SQLAlchemyAgentContextStore(create_session_factory(engine)),
+        context_store=SQLAlchemyAgentContextStore(container.session_factory),
         card_registry=default_agent_card_registry(),
         scheduled_flow=load_scheduled_stock_analysis_flow(),
         llm_provider_factory=lambda: runtime_factory.build_llm().adapter,
@@ -422,8 +406,7 @@ def get_main_agent_runtime() -> MainAgentRuntime:
 @lru_cache
 def get_agent_schedule_repository() -> SQLAlchemyAgentScheduleRepository:
     """Return the persisted agent schedule repository."""
-    engine = build_database_engine(get_settings())
-    return SQLAlchemyAgentScheduleRepository(create_session_factory(engine))
+    return SQLAlchemyAgentScheduleRepository(get_app_container().session_factory)
 
 
 def get_provider_config_health_service(
@@ -567,15 +550,32 @@ def _require_healthy(result: HealthCheckResult) -> None:
         )
 
 
-def require_local_admin() -> str:
+def require_local_admin(
+    authorization: Annotated[
+        str | None,
+        Header(alias="Authorization"),
+    ] = None,
+) -> str:
     """Resolve the local personal-mode actor for mutating API calls.
 
-    Margin currently runs as a personal local workspace, so mutating endpoints
-    do not require an admin bearer token or CSRF token.
+    Development/test runs as a personal local workspace. Production requires a
+    configured bearer token so mutating endpoints are not publicly writable.
 
     Returns:
         The string ``"local-admin"`` for audit attribution.
     """
+    settings = get_settings()
+    if settings.environment == "production":
+        expected = (
+            settings.admin_api_token.get_secret_value()
+            if settings.admin_api_token is not None
+            else ""
+        )
+        if authorization != f"Bearer {expected}":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="admin bearer token is required",
+            )
     return "local-admin"
 
 
@@ -613,17 +613,17 @@ def get_valuation_discovery_service() -> ValuationDiscoveryService:
 
     Returns:
         ValuationDiscoveryService: A cached service ready for dependency
-        injection.
+    injection.
     """
     settings = get_settings()
-    engine = build_database_engine(settings)
-    session_factory = create_session_factory(engine)
+    container = get_app_container()
+    session_factory = container.session_factory
 
     orchestration_repository = ValuationDiscoveryOrchestrationRepository(
         SQLAlchemyOrchestrationRepository(session_factory)
     )
 
-    strategy_repository = SQLAlchemyStrategyRepository(session_factory)
+    strategy_repository = container.strategy_repository
     company_pool_repository = SQLAlchemyCompanyPoolRepository(session_factory)
     scope_provider = SQLAlchemyScopeBindingProvider(
         strategy_repository,
@@ -659,11 +659,11 @@ def get_valuation_discovery_service() -> ValuationDiscoveryService:
     news_target_selector = NewsTargetSelector()
 
     runtime_factory = get_provider_runtime_factory()
-    market_runtime = runtime_factory.build_tushare()
+    market_runtime = runtime_factory.build_market_data("quant_required_financials")
     ingestion_stack = DataWarehouseIngestionStack(
         session_factory=session_factory,
         snapshot_root=settings.data_snapshot_root,
-        default_provider="tushare",
+        default_provider=market_runtime.adapter.descriptor.name,
     )
     data_readiness_service = DataReadinessAdapter(
         warehouse=warehouse_repository,
@@ -803,9 +803,7 @@ def get_company_profile_service() -> CompanyProfileService:
     Builds standalone SQLAlchemy repositories sharing the same engine as the
     valuation discovery service. Read-only: no orchestrator dependencies.
     """
-    settings = get_settings()
-    engine = build_database_engine(settings)
-    session_factory = create_session_factory(engine)
+    session_factory = get_app_container().session_factory
     quant_repository = SQLAlchemyQuantRepository(
         session_factory,
         cross_section_loader=build_feature_mart_cross_section_loader(
@@ -949,8 +947,7 @@ def get_news_service() -> NewsService:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="active websearch provider is not available",
         ) from exc
-    engine = build_database_engine(settings)
-    session_factory = create_session_factory(engine)
+    session_factory = get_app_container().session_factory
     repository = NewsRepository(session_factory)
     provider = WebSearchProvider(
         name="tavily_websearch",
@@ -994,8 +991,7 @@ def get_agentic_news_service() -> AgenticNewsAcquisitionService:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="active LLM or websearch provider is not available",
         ) from exc
-    engine = build_database_engine(settings)
-    session_factory = create_session_factory(engine)
+    session_factory = get_app_container().session_factory
     repository = NewsRepository(session_factory)
     provider = WebSearchProvider(
         name="tavily_websearch",
@@ -1065,7 +1061,24 @@ def get_data_warehouse_stack() -> DataWarehouseIngestionStack:
     Returns:
         A cached DataWarehouseIngestionStack built from production settings.
     """
-    return build_data_warehouse_stack(get_settings())
+    return build_data_warehouse_stack(
+        get_settings(),
+        default_provider=_default_market_data_provider(),
+    )
+
+
+def _default_market_data_provider() -> str:
+    """Resolve the default data-sync provider by runtime capability."""
+    runtime_factory = get_provider_runtime_factory()
+    try:
+        return runtime_factory.build_market_data(
+            "quant_required_financials"
+        ).adapter.descriptor.name
+    except (LookupError, RuntimeError, ValueError):
+        try:
+            return runtime_factory.build_market_data("market_quote").adapter.descriptor.name
+        except (LookupError, RuntimeError, ValueError):
+            return "akshare"
 
 
 @lru_cache
@@ -1075,9 +1088,9 @@ def get_data_policy_service() -> DataAcquisitionPolicyService:
     Returns:
         A cached DataAcquisitionPolicyService instance.
     """
-    engine = build_database_engine(get_settings())
+    container = get_app_container()
     repository = SQLAlchemyDataAcquisitionPolicyRepository(
-        create_session_factory(engine)
+        container.session_factory
     )
     return DataAcquisitionPolicyService(repository)
 
@@ -1090,16 +1103,11 @@ def get_dashboard_services() -> DashboardServiceBundle:
         A cached DashboardServiceBundle wired with PostgreSQL repositories and
         provider status probes.
     """
-    engine = build_database_engine(get_settings())
-    session_factory = create_session_factory(engine)
+    container = get_app_container()
+    session_factory = container.session_factory
     dashboard_repository = SQLAlchemyDashboardRepository(session_factory)
-    settings = get_settings()
-    strategy_repository = SQLAlchemyStrategyRepository(session_factory)
-    secret_store = SecretStore(
-        SQLAlchemySecretRepository(session_factory),
-        master_key=settings.secret_master_key.get_secret_value(),
-        key_version=settings.secret_key_version,
-    )
+    strategy_repository = container.strategy_repository
+    secret_store = container.secret_store
     health_service = get_provider_config_health_service(
         strategy_repository,
         secret_store,
@@ -1157,6 +1165,7 @@ def _build_dashboard_quant_profile_loader() -> Callable[[str], dict[str, Any] | 
 
 def clear_provider_runtime_caches() -> None:
     """Clear cached services that bind active Provider runtime adapters."""
+    get_app_container.cache_clear()
     get_provider_runtime_factory.cache_clear()
     get_news_service.cache_clear()
     get_agentic_news_service.cache_clear()

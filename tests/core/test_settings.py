@@ -74,3 +74,50 @@ def test_settings_rejects_non_positive_capacity_values() -> None:
     """Test that settings rejects non-positive capacity values."""
     with pytest.raises(ValidationError):
         MarginSettings(_env_file=None, worker_max_concurrency=0)
+
+
+def test_production_rejects_default_secret_master_key() -> None:
+    """Production settings must not use the local development secret key."""
+    with pytest.raises(ValidationError, match="MARGIN_SECRET_MASTER_KEY"):
+        MarginSettings(
+            _env_file=None,
+            environment="production",
+            database_url="postgresql+psycopg://margin_app:strong@db:5432/margin",
+            admin_api_token="production-admin-token",
+        )
+
+
+def test_production_rejects_default_database_credentials() -> None:
+    """Production settings must not use the local development DB credentials."""
+    with pytest.raises(ValidationError, match="MARGIN_DATABASE_URL"):
+        MarginSettings(
+            _env_file=None,
+            environment="production",
+            database_url="postgresql+psycopg://margin:margin@db:5432/margin",
+            secret_master_key="production-secret-master-key-32b",
+            admin_api_token="production-admin-token",
+        )
+
+
+def test_production_rejects_missing_admin_api_token() -> None:
+    """Production settings must require an admin API token for mutations."""
+    with pytest.raises(ValidationError, match="MARGIN_ADMIN_API_TOKEN"):
+        MarginSettings(
+            _env_file=None,
+            environment="production",
+            database_url="postgresql+psycopg://margin_app:strong@db:5432/margin",
+            secret_master_key="production-secret-master-key-32b",
+        )
+
+
+def test_production_accepts_non_default_secret_and_database_credentials() -> None:
+    """Production settings accept explicit non-default deployment credentials."""
+    settings = MarginSettings(
+        _env_file=None,
+        environment="production",
+        database_url="postgresql+psycopg://margin_app:strong@db:5432/margin",
+        secret_master_key="production-secret-master-key-32b",
+        admin_api_token="production-admin-token",
+    )
+
+    assert settings.environment == "production"

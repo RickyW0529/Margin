@@ -143,6 +143,97 @@ def test_runtime_supports_explicit_secretless_provider(
     assert resolved.secret is None
 
 
+def test_runtime_resolves_data_source_by_capability(
+    secret_store: SecretStore,
+) -> None:
+    """Verify runtime consumers can request a capability instead of a provider name."""
+    metadata = secret_store.create_or_replace(
+        WriteSecretCommand(
+            provider_name="tushare",
+            secret_name="api_key",
+            secret_value="tushare-secret",
+            actor_id="local-admin",
+            idempotency_key=f"runtime-capability-{uuid4().hex}",
+        )
+    )
+    repository = MemoryStrategyRepository()
+    repository.save_provider_config(
+        ProviderConfigVersion(
+            version_id="provider-akshare-active",
+            provider_name="akshare",
+            provider_type="market_data",
+            non_sensitive_config={"secret_required": False},
+            lifecycle=ConfigLifecycle.ACTIVE,
+        )
+    )
+    repository.save_provider_config(
+        ProviderConfigVersion(
+            version_id="provider-tushare-active",
+            provider_name="tushare",
+            provider_type="market_data",
+            secret_version_id=metadata.version_id,
+            lifecycle=ConfigLifecycle.ACTIVE,
+        )
+    )
+
+    resolved = ProviderRuntimeResolver(
+        repository,
+        secret_store,
+    ).resolve_capability("data_source", "quant_required_financials")
+
+    assert resolved.config.provider_name == "tushare"
+    assert resolved.config.version_id == "provider-tushare-active"
+
+
+def test_runtime_rejects_ambiguous_provider_capability(
+    secret_store: SecretStore,
+) -> None:
+    """Verify explicit capabilities cannot silently select among duplicates."""
+    repository = MemoryStrategyRepository()
+    for provider_name in ("first-source", "second-source"):
+        repository.save_provider_config(
+            ProviderConfigVersion(
+                version_id=f"provider-{provider_name}",
+                provider_name=provider_name,
+                provider_type="market_data",
+                non_sensitive_config={
+                    "secret_required": False,
+                    "capabilities": ["custom_quote"],
+                },
+                lifecycle=ConfigLifecycle.ACTIVE,
+            )
+        )
+
+    with pytest.raises(RuntimeError, match="multiple active provider configs"):
+        ProviderRuntimeResolver(
+            repository,
+            secret_store,
+        ).resolve_capability("data_source", "custom_quote")
+
+
+def test_runtime_factory_builds_market_data_by_capability(
+    secret_store: SecretStore,
+) -> None:
+    """Verify market data adapters can be built by capability."""
+    repository = MemoryStrategyRepository()
+    repository.save_provider_config(
+        ProviderConfigVersion(
+            version_id="provider-akshare-capability",
+            provider_name="akshare",
+            provider_type="market_data",
+            non_sensitive_config={"secret_required": False},
+            lifecycle=ConfigLifecycle.ACTIVE,
+        )
+    )
+
+    runtime = ProviderRuntimeFactory(
+        ProviderRuntimeResolver(repository, secret_store)
+    ).build_market_data("market_quote")
+
+    assert runtime.config_version_id == "provider-akshare-capability"
+    assert runtime.adapter.descriptor.name == "akshare"
+
+
 def test_runtime_factory_builds_adapter_with_config_version_lineage(
     secret_store: SecretStore,
 ) -> None:

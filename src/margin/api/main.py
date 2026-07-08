@@ -8,6 +8,7 @@ simple health check endpoint.
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI
@@ -17,6 +18,7 @@ from margin.agent_runtime.main_agent import MainAgentRuntime
 from margin.agent_runtime.schedules import AgentScheduleRepository
 from margin.api.dependencies import (
     get_agent_schedule_repository,
+    get_app_container,
     get_company_profile_service,
     get_dashboard_services,
     get_llm_provider_factory,
@@ -130,7 +132,11 @@ def create_app(
     """
     settings = get_settings()
     configure_logging(log_level=settings.log_level, log_format=settings.log_format)
-    application = FastAPI(title="Margin API", version=settings.service_version)
+    application = FastAPI(
+        title="Margin API",
+        version=settings.service_version,
+        lifespan=_lifespan,
+    )
     # CORS: the Next.js web client is served on a different origin (default
     # http://localhost:3000) and issues authenticated mutating requests. Local
     # browser sessions may use localhost, 127.0.0.1, or ::1 interchangeably.
@@ -206,6 +212,23 @@ def create_app(
         )
 
     return application
+
+
+@asynccontextmanager
+async def _lifespan(_application: FastAPI):
+    """Run application startup/shutdown resource management."""
+    yield
+    _dispose_app_container()
+
+
+def _dispose_app_container() -> None:
+    """Dispose process-level bootstrap resources on application shutdown."""
+    try:
+        get_app_container().dispose()
+    finally:
+        cache_clear = getattr(get_app_container, "cache_clear", None)
+        if cache_clear is not None:
+            cache_clear()
 
 
 app = create_app()
