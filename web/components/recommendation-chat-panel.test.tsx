@@ -12,10 +12,31 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LanguageProvider } from "@/lib/i18n";
+import {
+  addRecentQuestion,
+  getRecentQuestion,
+  updateRecentQuestion,
+} from "@/lib/recent-questions";
 
 import { RecommendationChatPanel } from "./recommendation-chat-panel";
 
-afterEach(cleanup);
+const navigationMocks = vi.hoisted(() => ({
+  replace: vi.fn(),
+  search: "",
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    replace: navigationMocks.replace,
+  }),
+}));
+
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+  navigationMocks.replace.mockClear();
+  navigationMocks.search = "";
+});
 
 describe("RecommendationChatPanel", () => {
   it("asks the baseline recommendation question through the MainAgent runtime", async () => {
@@ -73,5 +94,61 @@ describe("RecommendationChatPanel", () => {
     expect(screen.getByText("分析表")).toBeInTheDocument();
     expect(screen.getByText("推荐列表")).toBeInTheDocument();
     expect(screen.queryByText("GET /api/v1/research")).not.toBeInTheDocument();
+
+    const href = navigationMocks.replace.mock.calls[0]?.[0] as string;
+    const chatId = new URL(`http://localhost${href}`).searchParams.get("chat");
+    expect(chatId).toBeTruthy();
+    expect(getRecentQuestion(chatId ?? "")?.response?.answer).toBe(
+      "今日推荐关注 000001、600000。",
+    );
+  });
+
+  it("restores a saved local conversation from the recent-chat link", async () => {
+    const savedResponse = {
+      run_id: "ar_qna_saved",
+      answer: "这是之前保存的回答。",
+      guardrail: {
+        allowed: true,
+        decision: "allow",
+        summary: "allowed",
+        triggered_policies: [],
+      },
+      agent_trace: {
+        steps: [
+          {
+            step_id: "qna_saved_dataanalyst",
+            expert_agent_name: "DataAnalystAgent",
+            skill_id: "answer_research_question",
+            status: "succeeded",
+          },
+        ],
+      },
+      artifacts: [],
+      references: [{ api: "GET /api/v1/research", scope_version_id: "scope-current" }],
+    };
+    const record = addRecentQuestion({
+      language: "zh",
+      scopeVersionId: "scope-current",
+      text: "之前问过的问题",
+      universe: "ALL_A",
+    });
+    expect(record).not.toBeNull();
+    updateRecentQuestion(record?.id ?? "", {
+      error: null,
+      response: savedResponse,
+    });
+
+    render(
+      <LanguageProvider>
+        <RecommendationChatPanel
+          ask={vi.fn()}
+          initialRecentQuestionId={record?.id}
+        />
+      </LanguageProvider>,
+    );
+
+    expect(screen.getByText("之前问过的问题")).toBeInTheDocument();
+    expect(screen.getByText("这是之前保存的回答。")).toBeInTheDocument();
+    expect(screen.getByText("研究智能体 → 数据分析师")).toBeInTheDocument();
   });
 });

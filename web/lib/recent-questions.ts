@@ -6,6 +6,9 @@
 
 import { useSyncExternalStore } from "react";
 
+import type { MainAgentQnaResponse } from "@/lib/api";
+import type { UiLanguage } from "@/lib/i18n";
+
 const STORAGE_KEY = "margin-recent-questions";
 const CHANGE_EVENT = "margin-recent-questions-change";
 const MAX_RECENT = 12;
@@ -17,28 +20,85 @@ export type RecentQuestion = {
   id: string;
   text: string;
   createdAt: string;
+  error?: string | null;
+  language?: UiLanguage;
+  response?: MainAgentQnaResponse | null;
+  scopeVersionId?: string;
+  universe?: string;
+  updatedAt?: string;
 };
 
-export function addRecentQuestion(text: string) {
+export type RecentQuestionCreate = {
+  language?: UiLanguage;
+  scopeVersionId?: string;
+  text: string;
+  universe?: string;
+};
+
+export type RecentQuestionUpdate = {
+  error?: string | null;
+  response?: MainAgentQnaResponse | null;
+};
+
+export function addRecentQuestion(
+  input: RecentQuestionCreate | string,
+): RecentQuestion | null {
   if (typeof window === "undefined") {
-    return;
+    return null;
   }
-  const trimmed = text.trim();
+  const normalizedInput =
+    typeof input === "string" ? { text: input } : input;
+  const trimmed = normalizedInput.text.trim();
   if (!trimmed) {
-    return;
+    return null;
   }
   const current = readRecentQuestions();
   const withoutDuplicate = current.filter((item) => item.text !== trimmed);
+  const timestamp = new Date().toISOString();
+  const record: RecentQuestion = {
+    id: `rq_${Date.now().toString(36)}`,
+    text: trimmed,
+    createdAt: timestamp,
+    language: normalizedInput.language,
+    scopeVersionId: normalizedInput.scopeVersionId,
+    universe: normalizedInput.universe,
+    updatedAt: timestamp,
+  };
   const next = [
-    {
-      id: `rq_${Date.now().toString(36)}`,
-      text: trimmed,
-      createdAt: new Date().toISOString(),
-    },
+    record,
     ...withoutDuplicate,
   ].slice(0, MAX_RECENT);
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  window.dispatchEvent(new Event(CHANGE_EVENT));
+  writeRecentQuestions(next);
+  return record;
+}
+
+export function updateRecentQuestion(
+  id: string,
+  patch: RecentQuestionUpdate,
+): RecentQuestion | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const current = readRecentQuestions();
+  const index = current.findIndex((item) => item.id === id);
+  if (index < 0) {
+    return null;
+  }
+  const updated: RecentQuestion = {
+    ...current[index],
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  };
+  const next = [updated, ...current.filter((item) => item.id !== id)].slice(
+    0,
+    MAX_RECENT,
+  );
+  writeRecentQuestions(next);
+  return updated;
+}
+
+export function getRecentQuestion(id: string): RecentQuestion | null {
+  return readRecentQuestions().find((item) => item.id === id) ?? null;
 }
 
 export function useRecentQuestions(): RecentQuestion[] {
@@ -46,6 +106,14 @@ export function useRecentQuestions(): RecentQuestion[] {
     subscribe,
     readRecentQuestions,
     getServerRecentQuestions,
+  );
+}
+
+export function useRecentQuestion(id: string | null): RecentQuestion | null {
+  return useSyncExternalStore(
+    subscribe,
+    () => (id ? getRecentQuestion(id) : null),
+    getServerRecentQuestion,
   );
 }
 
@@ -93,8 +161,18 @@ function readRecentQuestions(): RecentQuestion[] {
   }
 }
 
+function writeRecentQuestions(next: RecentQuestion[]): void {
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  lastRaw = null;
+  window.dispatchEvent(new Event(CHANGE_EVENT));
+}
+
 function getServerRecentQuestions(): RecentQuestion[] {
   return EMPTY_RECENT_QUESTIONS;
+}
+
+function getServerRecentQuestion(): RecentQuestion | null {
+  return null;
 }
 
 function isRecentQuestion(value: unknown): value is RecentQuestion {

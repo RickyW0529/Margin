@@ -5,6 +5,7 @@
  */
 
 import { ArrowUp, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 import { Textarea } from "@/components/ui/textarea";
@@ -13,7 +14,11 @@ import {
   type MainAgentQnaResponse,
 } from "@/lib/api";
 import { useLanguage, type UiLanguage } from "@/lib/i18n";
-import { addRecentQuestion } from "@/lib/recent-questions";
+import {
+  addRecentQuestion,
+  updateRecentQuestion,
+  useRecentQuestion,
+} from "@/lib/recent-questions";
 
 type RecommendationChatPanelProps = {
   ask?: (request: {
@@ -22,6 +27,7 @@ type RecommendationChatPanelProps = {
     universe?: string;
     language?: UiLanguage;
   }) => Promise<MainAgentQnaResponse>;
+  initialRecentQuestionId?: string | null;
   scopeVersionId?: string;
   universe?: string;
 };
@@ -43,15 +49,30 @@ function formatReferenceLabel(
 /** Renders the first-screen Q&A entry backed by read-only recommendation data. */
 export function RecommendationChatPanel({
   ask = askMainAgentQna,
+  initialRecentQuestionId = null,
   scopeVersionId = "scope-current",
   universe = "ALL_A",
 }: RecommendationChatPanelProps) {
+  const router = useRouter();
+  const savedQuestion = useRecentQuestion(initialRecentQuestionId);
   const { language, t } = useLanguage();
   const [message, setMessage] = useState("");
-  const [submittedMessage, setSubmittedMessage] = useState<string | null>(null);
-  const [response, setResponse] = useState<MainAgentQnaResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [draftConversation, setDraftConversation] = useState<{
+    error: string | null;
+    response: MainAgentQnaResponse | null;
+    submittedMessage: string;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
+  const submittedMessage =
+    draftConversation?.submittedMessage ?? savedQuestion?.text ?? null;
+  const response =
+    draftConversation !== null
+      ? draftConversation.response
+      : savedQuestion?.response ?? null;
+  const error =
+    draftConversation !== null
+      ? draftConversation.error
+      : savedQuestion?.error ?? null;
   const hasConversation = Boolean(submittedMessage || response || busy || error);
 
   async function submit(nextMessage = message) {
@@ -59,23 +80,50 @@ export function RecommendationChatPanel({
     if (!trimmed) {
       return;
     }
-    setSubmittedMessage(trimmed);
+    setDraftConversation({
+      error: null,
+      response: null,
+      submittedMessage: trimmed,
+    });
     setMessage("");
-    setResponse(null);
-    addRecentQuestion(trimmed);
+    const record = addRecentQuestion({
+      language,
+      scopeVersionId,
+      text: trimmed,
+      universe,
+    });
     setBusy(true);
-    setError(null);
     try {
-      setResponse(
-        await ask({
-          message: trimmed,
-          scope_version_id: scopeVersionId,
-          universe,
-          language,
-        }),
-      );
+      const answer = await ask({
+        message: trimmed,
+        scope_version_id: scopeVersionId,
+        universe,
+        language,
+      });
+      setDraftConversation({
+        error: null,
+        response: answer,
+        submittedMessage: trimmed,
+      });
+      if (record) {
+        updateRecentQuestion(record.id, { error: null, response: answer });
+        router.replace(`/?chat=${encodeURIComponent(record.id)}`, {
+          scroll: false,
+        });
+      }
     } catch {
-      setError(t("chatError"));
+      const errorMessage = t("chatError");
+      setDraftConversation({
+        error: errorMessage,
+        response: null,
+        submittedMessage: trimmed,
+      });
+      if (record) {
+        updateRecentQuestion(record.id, { error: errorMessage, response: null });
+        router.replace(`/?chat=${encodeURIComponent(record.id)}`, {
+          scroll: false,
+        });
+      }
     } finally {
       setBusy(false);
     }

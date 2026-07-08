@@ -139,7 +139,7 @@ export function Sidebar() {
               <Link
                 key={question.id}
                 className="truncate rounded-md px-3 py-2 text-sm text-sidebar-foreground/86 no-underline transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-                href="/"
+                href={`/?chat=${encodeURIComponent(question.id)}`}
                 title={question.text}
               >
                 {question.text}

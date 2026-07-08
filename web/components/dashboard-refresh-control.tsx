@@ -6,14 +6,11 @@
 
 import { ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 
-import { DashboardRefreshNodeGraph } from "@/components/dashboard-refresh-node-graph";
+import { AgentCollaborationFeed } from "@/components/agent-collaboration-feed";
 import { Button } from "@/components/ui/button";
-import {
-  useDashboardRefreshRun,
-  type DashboardRefreshRunState,
-} from "@/hooks/use-dashboard-refresh-run";
+import { useDashboardRefreshRun } from "@/hooks/use-dashboard-refresh-run";
 import type { ResearchRunDetailV2 } from "@/lib/api";
 import { useLanguage } from "@/lib/i18n";
 
@@ -41,6 +38,25 @@ export function DashboardRefreshControl({
     ...props,
     onRunSettled: handleRunSettled,
   });
+  const [dialogOverride, setDialogOverride] = useState<{
+    open: boolean;
+    runId: string | null;
+  } | null>(null);
+  const overrideOpen =
+    dialogOverride?.runId === state.latestRunId ? dialogOverride.open : null;
+  const progressVisible = Boolean(
+    state.latestRunId && (overrideOpen ?? state.open),
+  );
+
+  const openProgress = useCallback(() => {
+    setDialogOverride({ open: true, runId: state.latestRunId });
+    state.setOpen(true);
+  }, [state]);
+
+  const closeProgress = useCallback(() => {
+    setDialogOverride({ open: false, runId: state.latestRunId });
+    state.setOpen(false);
+  }, [state]);
 
   return (
     <div className="grid w-full justify-items-start gap-2 md:justify-items-end">
@@ -55,11 +71,12 @@ export function DashboardRefreshControl({
           <RefreshCw className="size-4" />
           {state.refreshInProgress ? t("refreshRunning") : t("refreshStart")}
         </Button>
-        {state.latestRunId && !state.open ? (
+        {state.latestRunId && !progressVisible ? (
           <GraphToggle
             closeLabel={t("refreshCloseGraph")}
             openLabel={t("refreshOpenGraph")}
-            state={state}
+            open={progressVisible}
+            onToggle={openProgress}
           />
         ) : null}
       </div>
@@ -71,14 +88,14 @@ export function DashboardRefreshControl({
           {state.error}
         </p>
       ) : null}
-      {state.latestRunId && state.open ? (
+      {state.latestRunId && progressVisible ? (
         <section
           aria-label={t("refreshGraphTitle")}
           aria-modal="true"
           className="fixed inset-0 z-50 grid place-items-center bg-background/70 px-4 py-6 backdrop-blur-sm"
           onClick={(event) => {
             if (event.target === event.currentTarget) {
-              state.setOpen(false);
+              closeProgress();
             }
           }}
           role="dialog"
@@ -101,7 +118,7 @@ export function DashboardRefreshControl({
                   {state.latestRun?.status ?? t("refreshLoading")}
                 </span>
                 <Button
-                  onClick={() => state.setOpen(false)}
+                  onClick={closeProgress}
                   size="sm"
                   type="button"
                   variant="secondary"
@@ -111,7 +128,7 @@ export function DashboardRefreshControl({
               </div>
             </div>
             <div className="p-3">
-              <DashboardRefreshNodeGraph run={state.latestRun} />
+              <AgentCollaborationFeed run={state.latestRun} />
             </div>
           </div>
         </section>
@@ -122,23 +139,25 @@ export function DashboardRefreshControl({
 
 function GraphToggle({
   closeLabel,
+  onToggle,
+  open,
   openLabel,
-  state,
 }: {
   closeLabel: string;
+  onToggle: () => void;
+  open: boolean;
   openLabel: string;
-  state: DashboardRefreshRunState;
 }) {
-  const Icon = state.open ? ChevronUp : ChevronDown;
+  const Icon = open ? ChevronUp : ChevronDown;
   return (
     <Button
-      onClick={() => state.setOpen(!state.open)}
+      onClick={onToggle}
       size="sm"
       type="button"
       variant="secondary"
     >
       <Icon className="size-4" />
-      {state.open ? closeLabel : openLabel}
+      {open ? closeLabel : openLabel}
     </Button>
   );
 }

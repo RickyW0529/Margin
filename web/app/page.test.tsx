@@ -20,6 +20,10 @@ vi.mock("next/navigation", () => ({
   redirect: vi.fn((path: string) => {
     throw new Error(`unexpected redirect to ${path}`);
   }),
+  useRouter: () => ({
+    replace: vi.fn(),
+  }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 describe("HomePage", () => {

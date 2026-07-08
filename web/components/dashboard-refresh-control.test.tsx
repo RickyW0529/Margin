@@ -9,7 +9,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { ComponentType, ReactElement } from "react";
+import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ResearchRunDetailV2 } from "@/lib/api";
@@ -25,31 +25,6 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({
     refresh: routerMocks.refresh,
   }),
-}));
-
-vi.mock("@xyflow/react", () => ({
-  Background: () => null,
-  BackgroundVariant: { Dots: "dots" },
-  Controls: () => null,
-  Handle: () => null,
-  MarkerType: { ArrowClosed: "arrowclosed" },
-  Position: { Left: "left", Right: "right" },
-  ReactFlow: ({
-    nodes,
-    nodeTypes,
-  }: {
-    nodes: Array<{ data: unknown; id: string; type?: string }>;
-    nodeTypes: Record<string, ComponentType<{ data: unknown }>>;
-  }) => (
-    <div data-testid="react-flow">
-      {nodes.map((node) => {
-        const NodeComponent = nodeTypes[node.type ?? ""];
-        return NodeComponent ? (
-          <NodeComponent data={node.data} key={node.id} />
-        ) : null;
-      })}
-    </div>
-  ),
 }));
 
 const baseRun = {
@@ -108,22 +83,20 @@ describe("DashboardRefreshControl", () => {
     expect(dialog).toBeInTheDocument();
     expect(dialog).toHaveClass("fixed");
     expect(screen.getByText("run-1")).toBeInTheDocument();
-    expect(screen.getByText("DataInspectionAgent")).toBeInTheDocument();
-    expect(screen.getByText("QuantAgent")).toBeInTheDocument();
-    expect(screen.getByTestId("refresh-node-data_inspection")).toHaveAttribute(
-      "data-node-state",
+    expect(screen.getByTestId("agent-collaboration-feed")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-lanyard-MA")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-lanyard-DI")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-message-data_inspection")).toHaveAttribute(
+      "data-agent-state",
       "queued",
     );
-    expect(screen.getByTestId("refresh-node-quant_analysis")).toHaveAttribute(
-      "data-node-state",
+    expect(screen.getByTestId("agent-message-quant_analysis")).toHaveAttribute(
+      "data-agent-state",
       "pending",
     );
-    expect(screen.getByTestId("refresh-node-data_inspection")).not.toHaveClass(
-      "animate-pulse",
-    );
-    expect(screen.getByTestId("refresh-node-quant_analysis")).not.toHaveClass(
-      "animate-pulse",
-    );
+    expect(
+      screen.getByRole("progressbar", { name: "量化分析 progress" }),
+    ).toHaveAttribute("aria-valuenow", "6");
     expect(screen.queryByRole("link", { name: "查看详情" })).toBeNull();
     expect(startRefresh).toHaveBeenCalledWith({
       decision_at: "2026-07-01T04:00:00.000Z",

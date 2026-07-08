@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@xyflow/react/dist/style.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -115,5 +114,139 @@
   .tabular {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  .lanyard-wrapper {
+    align-items: center;
+    display: flex;
+    height: 144px;
+    justify-content: center;
+    perspective: var(--lanyard-perspective);
+    position: relative;
+    transform: translateZ(var(--lanyard-z-depth)) scale(1);
+    transform-origin: center;
+    width: 104px;
+  }
+
+  .lanyard-wrapper-compact {
+    height: 112px;
+    transform: translateZ(var(--lanyard-z-depth)) scale(0.88);
+  }
+
+  .lanyard-band {
+    background:
+      linear-gradient(90deg, transparent 0 34%, rgba(17, 17, 17, 0.2) 35% 38%, transparent 39%),
+      repeating-linear-gradient(135deg, #111111 0 10px, #2d2d2d 10px 20px);
+    background-position: center;
+    background-size: cover;
+    border-radius: 999px;
+    height: 86px;
+    left: 50%;
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    width: var(--lanyard-band-width);
+  }
+
+  .lanyard-band::after {
+    background: var(--border);
+    border: 1px solid var(--card);
+    border-radius: 999px;
+    bottom: -8px;
+    content: "";
+    height: 16px;
+    left: 50%;
+    position: absolute;
+    transform: translateX(-50%);
+    width: 28px;
+  }
+
+  .lanyard-card {
+    align-items: center;
+    border-radius: var(--radius);
+    border-style: solid;
+    border-width: 1px;
+    bottom: 0;
+    box-shadow: 0 12px 30px rgba(17, 17, 17, 0.12);
+    display: flex;
+    height: 74px;
+    justify-content: center;
+    overflow: hidden;
+    padding: 6px;
+    position: absolute;
+    transform: rotateX(7deg) rotateZ(-2deg);
+    transform-origin: top center;
+    width: 74px;
+  }
+
+  .lanyard-card-face {
+    align-items: center;
+    background-position: center;
+    border-radius: calc(var(--radius) - 2px);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    justify-content: center;
+    padding: 6px;
+    width: 100%;
+  }
+
+  .lanyard-card-back {
+    background-position: center;
+    border-radius: calc(var(--radius) - 2px);
+    inset: 6px;
+    opacity: 0;
+    position: absolute;
+  }
+
+  .lanyard-card-drop {
+    animation:
+      lanyard-drop 560ms cubic-bezier(0.22, 1, 0.36, 1),
+      lanyard-sway 2600ms ease-in-out 560ms infinite;
+  }
+
+  .lanyard-wrapper-live .lanyard-band {
+    animation: lanyard-band-sway 2600ms ease-in-out 560ms infinite;
+  }
+
+  @keyframes lanyard-drop {
+    0% {
+      opacity: 0;
+      transform: translateY(calc(-1 * var(--lanyard-drop-distance))) rotateX(15deg) rotateZ(-10deg) scale(1.12);
+    }
+
+    70% {
+      opacity: 1;
+      transform: translateY(6px) rotateX(6deg) rotateZ(3deg) scale(1);
+    }
+
+    100% {
+      opacity: 1;
+      transform: translateY(0) rotateX(7deg) rotateZ(-2deg) scale(1);
+    }
+  }
+
+  @keyframes lanyard-sway {
+    0%,
+    100% {
+      transform: rotateX(7deg) rotateZ(-2deg);
+    }
+
+    50% {
+      transform: rotateX(5deg) rotateZ(2deg);
+    }
+  }
+
+  @keyframes lanyard-band-sway {
+    0%,
+    100% {
+      transform: translateX(-50%) rotateZ(-1deg);
+    }
+
+    50% {
+      transform: translateX(-50%) rotateZ(1deg);
+    }
   }
 }
