@@ -1,6 +1,8 @@
 .DS_Store
 .Codex-goal.md
 .Codex-goal.archive.md
+.claude-goal.md
+.claude-goal.archive.md
 docs/superpowers/
 docs/design/
 .idea/
@@ -12,6 +14,8 @@ __pycache__/
 .venv/
 venv/
 .margin/
+tmp/
+*.log
 tushare_cache/
 backtest_output/
 backtest_output_*/

@@ -12,7 +12,7 @@ A “today’s research” run roughly follows this order. This page only explai
 | 5 | `04-text_indexing` | Parses, chunks, and embeds text so retrieval can find relevant evidence. |
 | 6 | `05-rag_evidence` | Turns retrieved material into evidence packages with locators and traceable evidence links. |
 | 7 | `06-multi_agent_research` | MainAgent coordinates expert agents to combine quant results, evidence, and risk review. |
-| 8 | `08-research_candidate_dashboard` | Shows recommended stocks, reasons, risks, evidence, detail pages, and Agent progress. |
+| 8 | `08-research_candidate_dashboard` | Shows research candidates, reasons, risks, evidence, detail pages, and Agent progress. |
 | 9 | `10-deployment_audit` | Handles deployment, migrations, health checks, metrics, degradation, and runtime audit. |
 
 ## Data Direction

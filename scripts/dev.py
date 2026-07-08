@@ -81,6 +81,18 @@ def build_worker_command(config: DevConfig, *, python: str | None = None) -> lis
     return [executable, "-m", "margin.worker"]
 
 
+def build_migrate_command(config: DevConfig, *, python: str | None = None) -> list[str]:
+    """Build the local migration command."""
+    executable = python or _python_executable(config.root)
+    return [executable, "scripts/migrate.py"]
+
+
+def build_bootstrap_command(config: DevConfig, *, python: str | None = None) -> list[str]:
+    """Build the local config bootstrap command."""
+    executable = python or _python_executable(config.root)
+    return [executable, "scripts/bootstrap_config.py"]
+
+
 def build_web_command(config: DevConfig) -> list[str]:
     """Build the Next.js dev command without reusing package-script host flags."""
     return [
@@ -131,13 +143,23 @@ def project_worker_pids(
     return selected
 
 
-def start(config: DevConfig, *, clean: bool = True, skip_postgres: bool = False) -> int:
+def start(
+    config: DevConfig,
+    *,
+    clean: bool = True,
+    skip_postgres: bool = False,
+    skip_setup: bool = False,
+) -> int:
     """Start local API, worker, and web services."""
     _ensure_runtime_dirs(config)
     if clean:
         stop(config, quiet=True)
     if not skip_postgres:
         _ensure_postgres()
+    if not skip_setup:
+        setup_exit = _run_setup(config)
+        if setup_exit:
+            return setup_exit
 
     api_pid = _start_process(
         name="api",
@@ -216,6 +238,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--web-port", default=3000, type=int)
     parser.add_argument("--no-clean", action="store_true")
     parser.add_argument("--skip-postgres", action="store_true")
+    parser.add_argument("--skip-setup", action="store_true")
     args = parser.parse_args(argv)
 
     root = Path(__file__).resolve().parents[1]
@@ -226,12 +249,22 @@ def main(argv: list[str] | None = None) -> int:
         web_port=args.web_port,
     )
     if args.command == "start":
-        return start(config, clean=not args.no_clean, skip_postgres=args.skip_postgres)
+        return start(
+            config,
+            clean=not args.no_clean,
+            skip_postgres=args.skip_postgres,
+            skip_setup=args.skip_setup,
+        )
     if args.command == "stop":
         return stop(config)
     if args.command == "restart":
         stop(config)
-        return start(config, clean=False, skip_postgres=args.skip_postgres)
+        return start(
+            config,
+            clean=False,
+            skip_postgres=args.skip_postgres,
+            skip_setup=args.skip_setup,
+        )
     return status(config)
 
 
@@ -291,6 +324,24 @@ def _start_process(
     )
     _pid_file(config, name).write_text(str(process.pid), encoding="utf-8")
     return process.pid
+
+
+def _run_setup(config: DevConfig) -> int:
+    """Run migrations and versioned config bootstrap before starting services."""
+    for name, command in (
+        ("migrate", build_migrate_command(config)),
+        ("bootstrap", build_bootstrap_command(config)),
+    ):
+        result = subprocess.run(
+            command,
+            cwd=config.root,
+            env=with_local_no_proxy(),
+            check=False,
+        )
+        if result.returncode:
+            print(f"{name} failed exit={result.returncode}")
+            return result.returncode
+    return 0
 
 
 def _ensure_postgres() -> None:

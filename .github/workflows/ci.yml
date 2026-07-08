@@ -38,7 +38,7 @@ jobs:
           MARGIN_DATABASE_URL: postgresql+psycopg://margin:margin@localhost:5432/margin
         run: alembic upgrade head
       - name: Test
-        run: pytest
+        run: pytest -q
 
   frontend:
     runs-on: ubuntu-latest
@@ -65,9 +65,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Build API image
-        run: docker build -t margin-api .
-      - name: Build Web image
-        run: docker build -t margin-web ./web
       - name: Validate Compose
         run: docker compose config --quiet

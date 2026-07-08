@@ -12,7 +12,7 @@
 | 5 | `04-text_indexing` | 把文本解析、分块、向量化，让后续检索能找到相关证据。 |
 | 6 | `05-rag_evidence` | 把检索结果整理成证据包，保留引用定位和可追溯 evidence link。 |
 | 7 | `06-multi_agent_research` | MainAgent 调度专家 Agent，综合量化结果、证据和风险，形成最终复核。 |
-| 8 | `08-research_candidate_dashboard` | 展示推荐股票、理由、风险、证据、详情页和 Agent 任务进度。 |
+| 8 | `08-research_candidate_dashboard` | 展示研究候选、理由、风险、证据、详情页和 Agent 任务进度。 |
 | 9 | `10-deployment_audit` | 负责部署、迁移、健康检查、指标、降级和运行审计。 |
 
 ## 数据方向

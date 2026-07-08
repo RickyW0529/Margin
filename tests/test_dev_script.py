@@ -37,6 +37,20 @@ def test_dev_commands_bind_to_loopback_without_duplicate_next_flags() -> None:
     ]
 
 
+def test_dev_setup_commands_use_project_python() -> None:
+    """Local dev startup should run migration and bootstrap with project Python."""
+    config = dev.DevConfig(root=Path("/repo"))
+
+    assert dev.build_migrate_command(config, python="/repo/.venv/bin/python") == [
+        "/repo/.venv/bin/python",
+        "scripts/migrate.py",
+    ]
+    assert dev.build_bootstrap_command(config, python="/repo/.venv/bin/python") == [
+        "/repo/.venv/bin/python",
+        "scripts/bootstrap_config.py",
+    ]
+
+
 def test_dev_environment_forces_localhost_proxy_bypass() -> None:
     """The dev supervisor should keep localhost traffic out of proxies/VPN."""
     env = dev.with_local_no_proxy({"NO_PROXY": "example.com"})

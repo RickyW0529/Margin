@@ -1,5 +1,5 @@
 # Frontend web image for Margin (Next.js).
-FROM node:20-slim
+FROM node:22-slim
 
 WORKDIR /app
 
