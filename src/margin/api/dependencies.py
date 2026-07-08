@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Annotated, Any
 
@@ -22,6 +23,7 @@ from margin.agent_runtime.main_agent import MainAgentRuntime
 from margin.agent_runtime.schedules import SQLAlchemyAgentScheduleRepository
 from margin.agent_runtime.step_definitions import load_scheduled_stock_analysis_flow
 from margin.bootstrap.container import AppContainer
+from margin.config_runtime.repository import ConfigResolver, SQLAlchemyConfigRepository
 from margin.core.orchestration_repository import SQLAlchemyOrchestrationRepository
 from margin.core.provider import (
     HealthCheckResult,
@@ -392,6 +394,32 @@ def get_llm_provider_factory(
 
 
 @lru_cache
+def get_config_repository() -> SQLAlchemyConfigRepository:
+    """Return the domain-specific runtime config repository."""
+    return SQLAlchemyConfigRepository(get_app_container().session_factory)
+
+
+@lru_cache
+def get_config_resolver() -> ConfigResolver:
+    """Return the unified runtime config resolver."""
+    return ConfigResolver(
+        get_config_repository(),
+        environment=get_settings().environment,
+    )
+
+
+def _resolve_scheduled_stock_analysis_flow():
+    """Resolve the scheduled Agent flow from DB with a local default fallback."""
+    try:
+        return get_config_resolver().resolve_agent_flow(
+            flow_id="scheduled_stock_analysis",
+            decision_at=datetime.now(UTC),
+        ).to_flow()
+    except LookupError:
+        return load_scheduled_stock_analysis_flow()
+
+
+@lru_cache
 def get_main_agent_runtime() -> MainAgentRuntime:
     """Return the v0.4 MainAgent runtime foundation."""
     container = get_app_container()
@@ -399,7 +427,7 @@ def get_main_agent_runtime() -> MainAgentRuntime:
     return MainAgentRuntime(
         context_store=SQLAlchemyAgentContextStore(container.session_factory),
         card_registry=default_agent_card_registry(),
-        scheduled_flow=load_scheduled_stock_analysis_flow(),
+        scheduled_flow=_resolve_scheduled_stock_analysis_flow(),
         llm_provider_factory=lambda: runtime_factory.build_llm().adapter,
     )
 

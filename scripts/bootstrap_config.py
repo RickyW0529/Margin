@@ -6,6 +6,12 @@ import logging
 
 from sqlalchemy import bindparam, text
 
+from margin.config_runtime.bootstrap import RuntimeConfigBootstrapService
+from margin.config_runtime.repository import (
+    ConfigAdminService,
+    ConfigResolver,
+    SQLAlchemyConfigRepository,
+)
 from margin.settings import MarginSettings, get_settings
 from margin.sql.data_queries import active_stock_security_ids
 from margin.storage.database import (
@@ -73,6 +79,14 @@ def main() -> int:
     session_factory = create_session_factory(engine)
     repository = SQLAlchemyStrategyRepository(session_factory)
     service = StrategyService(repository=repository)
+    config_repository = SQLAlchemyConfigRepository(session_factory)
+    config_bootstrap = RuntimeConfigBootstrapService(
+        admin_service=ConfigAdminService(config_repository),
+        resolver=ConfigResolver(
+            config_repository,
+            environment=settings.environment,
+        ),
+    )
     bootstrap = StrategyBootstrapService(
         repository=repository,
         strategy_service=service,
@@ -89,6 +103,7 @@ def main() -> int:
     index_universe_ids = bootstrap.ensure_default_index_universes(
         index_members_by_code=index_members_by_code,
     )
+    agent_flow_version_id, quant_profile_version_id = config_bootstrap.ensure_defaults()
     logger.info(
         "strategy_bootstrap_completed",
         extra={
@@ -97,6 +112,8 @@ def main() -> int:
             "missing_provider_names": result.missing_provider_names,
             "universe_member_count": len(members),
             "index_universe_ids": index_universe_ids,
+            "agent_flow_version_id": agent_flow_version_id,
+            "quant_agent_profile_version_id": quant_profile_version_id,
         },
     )
     engine.dispose()

@@ -118,6 +118,40 @@ class AgentFlowDefinition(BaseModel):
         """Return steps ordered by explicit order."""
         return tuple(sorted(self.steps, key=lambda step: step.order))
 
+    def dependency_waves(self) -> tuple[tuple[AgentStepDefinition, ...], ...]:
+        """Return deterministic execution waves from artifact dependencies.
+
+        Steps in the same wave can run after the prior wave's artifacts exist.
+        The method intentionally derives the graph from the existing
+        required/produced artifact contract instead of introducing another flow
+        syntax.
+        """
+        remaining = list(self.ordered_steps())
+        available_artifacts: set[str] = set()
+        waves: list[tuple[AgentStepDefinition, ...]] = []
+
+        while remaining:
+            ready = [
+                step
+                for step in remaining
+                if set(step.required_artifacts).issubset(available_artifacts)
+            ]
+            if not ready:
+                blocked = {
+                    step.step_id: tuple(
+                        sorted(set(step.required_artifacts) - available_artifacts)
+                    )
+                    for step in remaining
+                }
+                raise ValueError(f"flow has unsatisfied artifact dependencies: {blocked}")
+            waves.append(tuple(ready))
+            for step in ready:
+                available_artifacts.update(step.produced_artifacts)
+            ready_ids = {step.step_id for step in ready}
+            remaining = [step for step in remaining if step.step_id not in ready_ids]
+
+        return tuple(waves)
+
 
 class AgentRun(BaseModel):
     """One agent runtime run."""
@@ -230,6 +264,8 @@ class MainAgentReviewResult(BaseModel):
     decision: str
     summary: str
     missing_artifacts: tuple[str, ...] = ()
+    invalid_artifacts: tuple[str, ...] = ()
+    audit_report_ref: str | None = None
     expert_to_retry: str | None = None
     skill_to_retry: str | None = None
     frontend_trace_summary: tuple[str, ...] = ()

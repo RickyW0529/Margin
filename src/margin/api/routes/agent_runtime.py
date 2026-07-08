@@ -17,6 +17,7 @@ from margin.agent_runtime.chat_repository import (
     new_chat_session,
     summarize_messages_for_prompt,
 )
+from margin.agent_runtime.context_store import make_context_artifact
 from margin.agent_runtime.expert_agents import DataAnalystAgent, GeneralQnaAgent
 from margin.agent_runtime.main_agent import MainAgentPlanningError, MainAgentRuntime
 from margin.agent_runtime.models import AgentExecutionStatus, AgentStep, ContextArtifact
@@ -24,6 +25,7 @@ from margin.agent_runtime.schedules import (
     AgentScheduleRepository,
     StockAnalysisSchedule,
 )
+from margin.agents.context.router import ContextRouter
 from margin.api.dependencies import (
     get_agent_chat_repository,
     get_agent_schedule_repository,
@@ -39,6 +41,16 @@ from margin.research.llm import LLMProvider
 from margin.strategy.service import StrategyService
 
 router = APIRouter(prefix="/api/v1", tags=["agent-runtime"])
+_SENSITIVE_PAYLOAD_KEYS = (
+    "api_key",
+    "authorization",
+    "password",
+    "provider_token",
+    "raw_text",
+    "secret",
+    "system_prompt",
+    "token",
+)
 
 RuntimeDep = Annotated[MainAgentRuntime, Depends(get_main_agent_runtime)]
 DashboardServices = Annotated[DashboardServiceBundle, Depends(get_dashboard_services)]
@@ -268,11 +280,30 @@ def run_user_qna_agent(
     )
 
     run_id = f"ar_qna_{uuid4().hex}"
+    context_pack = ContextRouter().build_context_pack(
+        run_id=run_id,
+        requester_agent="MainAgent",
+        target_agent="MainAgent",
+        purpose="user_qna_planning",
+        token_budget=4000,
+        included_chat_summary_ref=f"chat_summary:{session_id}",
+    )
+    runtime.add_context_artifact(
+        make_context_artifact(
+            artifact_id=context_pack.context_pack_id,
+            run_id=run_id,
+            artifact_type="context_pack",
+            producer_agent="MainAgent",
+            payload_json=context_pack.model_dump(mode="json"),
+            source_refs=(f"chat_summary:{session_id}",),
+        )
+    )
     try:
         plan_result = runtime.create_user_qna_plan(
             run_id=run_id,
             user_input=request.message,
             conversation_context=conversation_context,
+            context_pack=context_pack,
         )
     except MainAgentPlanningError as exc:
         raise HTTPException(
@@ -323,7 +354,7 @@ def run_user_qna_agent(
                     expert_agent_name=step.expert_agent_name,
                     skill_id=step.skill_id,
                     status=execution.step_statuses.get(
-                        step.expert_agent_name,
+                        step.step_id,
                         AgentExecutionStatus.PENDING,
                     ).value,
                 )
@@ -396,7 +427,7 @@ def _execute_user_qna_plan(
                     },
                 ) from exc
             answer = result.answer
-            step_statuses[step.expert_agent_name] = result.status
+            step_statuses[step.step_id] = result.status
             artifacts.extend(result.artifacts)
             references.extend(result.references)
             continue
@@ -428,12 +459,12 @@ def _execute_user_qna_plan(
                     },
                 ) from exc
             answer = result.answer
-            step_statuses[step.expert_agent_name] = result.status
+            step_statuses[step.step_id] = result.status
             artifacts.extend(result.artifacts)
             references.extend(result.references)
             continue
 
-        step_statuses[step.expert_agent_name] = AgentExecutionStatus.PARTIAL
+        step_statuses[step.step_id] = AgentExecutionStatus.PARTIAL
 
     if not answer:
         raise HTTPException(
@@ -475,7 +506,7 @@ def get_agent_artifact(
         run_id=artifact.run_id,
         artifact_type=artifact.artifact_type,
         producer_agent=artifact.producer_agent,
-        payload_json=artifact.payload_json,
+        payload_json=_safe_artifact_payload(artifact.payload_json),
         payload_hash=artifact.payload_hash,
         source_refs=list(artifact.source_refs),
         evidence_refs=list(artifact.evidence_refs),
@@ -623,3 +654,21 @@ def _chat_session_to_response(session) -> AgentChatSessionResponse:
         created_at=session.created_at,
         updated_at=session.updated_at,
     )
+
+
+def _safe_artifact_payload(payload: dict) -> dict:
+    """Return a frontend-safe artifact payload view."""
+    return {key: _redact_payload_value(key, value) for key, value in payload.items()}
+
+
+def _redact_payload_value(key: str, value):  # noqa: ANN001, ANN202
+    lowered = key.lower()
+    if any(marker in lowered for marker in _SENSITIVE_PAYLOAD_KEYS):
+        return "[redacted]"
+    if isinstance(value, dict):
+        return _safe_artifact_payload(value)
+    if isinstance(value, list):
+        return [_redact_payload_value(key, item) for item in value[:50]]
+    if isinstance(value, str) and len(value) > 2000:
+        return value[:2000] + "...[truncated]"
+    return value

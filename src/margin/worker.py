@@ -293,6 +293,7 @@ def main() -> None:
             from margin.agent_runtime.schedules import ScheduledStockAnalysisRunner
             from margin.api.dependencies import (
                 get_agent_schedule_repository,
+                get_config_resolver,
                 get_main_agent_runtime,
                 get_strategy_service,
                 get_valuation_discovery_service_for_api,
@@ -314,6 +315,7 @@ def main() -> None:
                 main_agent=get_main_agent_runtime(),
                 valuation_service=get_valuation_discovery_service_for_api(),
                 scope_resolver=resolve_scope,
+                config_resolver=get_config_resolver(),
             ).run_once(now=datetime.now(UTC))
             logger.info(
                 "scheduled_agent_sweep_completed",

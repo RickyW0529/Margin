@@ -111,6 +111,7 @@ def agent_runtime_prompt_templates() -> tuple[PromptTemplate, ...]:
                     content=(
                         "<user_request>{{user_request}}</user_request>"
                         "<conversation_context>{{conversation_context}}</conversation_context>"
+                        "<context_pack>{{context_pack}}</context_pack>"
                         "<run_context>{{run_context}}</run_context>"
                         "<agent_cards>{{expert_agent_cards}}</agent_cards>"
                         "<available_artifacts>{{artifact_summaries}}</available_artifacts>"

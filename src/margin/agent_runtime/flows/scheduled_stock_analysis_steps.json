@@ -1,11 +1,11 @@
 {
   "$schema": "./step_schema.json",
   "flow_id": "scheduled_stock_analysis",
-  "version": "v0.4.0",
+  "version": "v0.5.0",
   "run_type": "scheduled_stock_analysis",
   "fixed_flow": true,
   "permission_mode": "write_allowed",
-  "description": "Fixed scheduled stock analysis flow. MainAgent may execute, retry, or stop these expert steps, but cannot reorder them or replace them with lower-level tools.",
+  "description": "Fixed scheduled stock analysis DAG. MainAgent may execute, retry, or stop expert steps, but cannot replace them with lower-level tools.",
   "steps": [
     {
       "step_id": "data_inspection",
@@ -42,7 +42,7 @@
       "order": 2,
       "expert_agent": "QuantAgent",
       "skill_id": "run_ml_lifecycle_quant_analysis",
-      "description": "Run the fixed QuantAgent ML lifecycle strategy profile and publish quant result plus Analysis Mart artifacts.",
+      "description": "Run the fixed QuantAgent ML lifecycle strategy profile from PIT-safe structured data and publish quant plus Analysis Mart artifacts.",
       "required_artifacts": [
         "data_readiness"
       ],
@@ -69,16 +69,47 @@
       }
     },
     {
-      "step_id": "news_acquisition",
-      "order": 3,
-      "expert_agent": "NewsAcquisitionAgent",
-      "skill_id": "acquire_news_for_quant_targets",
-      "description": "Acquire filings, news, research-report-like public materials, snapshots, dedup records, and trigger indexing for quant-selected targets.",
+      "step_id": "performance_growth_scout",
+      "order": 2,
+      "expert_agent": "PerformanceGrowthScoutAgent",
+      "skill_id": "screen_growth_companies",
+      "description": "Use structured PIT financial data to screen companies with strong recent performance growth before any RAG or WebSearch work.",
       "required_artifacts": [
-        "quant_result"
+        "data_readiness"
       ],
       "produced_artifacts": [
-        "news_context_bundle",
+        "fundamental_target_pool",
+        "guardrail_decision",
+        "reflection_report"
+      ],
+      "guardrails": [
+        "plan",
+        "tool",
+        "output"
+      ],
+      "retry_policy": {
+        "max_attempts": 1,
+        "retryable_statuses": [
+          "partial"
+        ]
+      },
+      "frontend_projection": {
+        "label": "业绩筛选",
+        "visible": true
+      }
+    },
+    {
+      "step_id": "rag_coverage_gate",
+      "order": 3,
+      "expert_agent": "RagCoverageGateAgent",
+      "skill_id": "inspect_rag_coverage_and_refresh_if_needed",
+      "description": "Check whether growth targets already have current RAG coverage; only missing, stale, or partial targets trigger disclosure/WebSearch refresh and indexing.",
+      "required_artifacts": [
+        "fundamental_target_pool"
+      ],
+      "produced_artifacts": [
+        "rag_coverage_report",
+        "disclosure_refresh_result",
         "indexed_document_batch",
         "guardrail_decision",
         "reflection_report"
@@ -96,27 +127,88 @@
         ]
       },
       "frontend_projection": {
-        "label": "新闻获取",
+        "label": "RAG 覆盖",
         "visible": true
       }
     },
     {
-      "step_id": "stock_analysis",
+      "step_id": "fundamental_analysis",
       "order": 4,
-      "expert_agent": "StockAnalystAgent",
-      "skill_id": "analyze_quant_candidates",
-      "description": "Build evidence packages, run stock analysis, validate citations and claims, publish valuation assessments, and write dashboard projections.",
+      "expert_agent": "FundamentalAnalystAgent",
+      "skill_id": "analyze_fundamental_rag_evidence",
+      "description": "Read scoped RAG evidence for financial reports, prospectuses, announcements, and research materials to produce a frozen fundamental thesis.",
       "required_artifacts": [
-        "quant_result",
-        "analysis_mart_snapshot",
-        "news_context_bundle",
+        "fundamental_target_pool",
+        "rag_coverage_report",
         "indexed_document_batch"
       ],
       "produced_artifacts": [
-        "evidence_package",
-        "citation_validation_report",
-        "stock_analysis_result",
-        "valuation_assessment",
+        "fundamental_thesis_snapshot",
+        "fundamental_evidence_package",
+        "guardrail_decision",
+        "reflection_report"
+      ],
+      "guardrails": [
+        "plan",
+        "tool",
+        "output"
+      ],
+      "retry_policy": {
+        "max_attempts": 1,
+        "retryable_statuses": [
+          "partial"
+        ]
+      },
+      "frontend_projection": {
+        "label": "财报分析",
+        "visible": true
+      }
+    },
+    {
+      "step_id": "sentiment_monitor",
+      "order": 5,
+      "expert_agent": "SentimentMonitorAgent",
+      "skill_id": "monitor_thesis_sentiment_delta",
+      "description": "Use bounded WebSearch for recent sentiment deltas that support, weaken, contradict, or leave unchanged the frozen fundamental thesis.",
+      "required_artifacts": [
+        "fundamental_thesis_snapshot"
+      ],
+      "produced_artifacts": [
+        "sentiment_delta_report",
+        "guardrail_decision",
+        "reflection_report"
+      ],
+      "guardrails": [
+        "plan",
+        "tool",
+        "output"
+      ],
+      "retry_policy": {
+        "max_attempts": 1,
+        "retryable_statuses": [
+          "partial",
+          "blocked"
+        ]
+      },
+      "frontend_projection": {
+        "label": "舆情校验",
+        "visible": true
+      }
+    },
+    {
+      "step_id": "fusion_research",
+      "order": 6,
+      "expert_agent": "FusionResearchAgent",
+      "skill_id": "fuse_quant_fundamental_and_sentiment",
+      "description": "Read frozen quant, fundamental, and sentiment artifacts, then publish auditable research priorities and dashboard projection events.",
+      "required_artifacts": [
+        "quant_result",
+        "analysis_mart_snapshot",
+        "fundamental_thesis_snapshot",
+        "sentiment_delta_report"
+      ],
+      "produced_artifacts": [
+        "fusion_research_result",
         "dashboard_projection_event",
         "guardrail_decision",
         "reflection_report"
@@ -133,22 +225,23 @@
         ]
       },
       "frontend_projection": {
-        "label": "股票分析",
+        "label": "融合研究",
         "visible": true
       }
     },
     {
       "step_id": "main_agent_final_review",
-      "order": 5,
+      "order": 7,
       "expert_agent": "MainAgent",
       "skill_id": "final_review",
-      "description": "Review all expert artifacts, guardrail decisions, evidence package, citation validation, and dashboard projection. If incomplete, request a targeted expert retry or finish with a blocked state.",
+      "description": "Review quant, fundamental, sentiment, fusion, guardrail, and dashboard artifacts. If incomplete, request a targeted expert retry or finish with a blocked state.",
       "required_artifacts": [
         "data_readiness",
         "quant_result",
-        "news_context_bundle",
-        "evidence_package",
-        "citation_validation_report",
+        "analysis_mart_snapshot",
+        "fundamental_thesis_snapshot",
+        "sentiment_delta_report",
+        "fusion_research_result",
         "dashboard_projection_event"
       ],
       "produced_artifacts": [

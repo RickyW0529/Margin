@@ -7,6 +7,7 @@
 - 管理 Provider 配置和密钥版本。
 - 管理研究范围、公司池、指标视图和策略模板。
 - 管理 Prompt、自定义配置、版本生命周期和启用状态。
+- 管理运行时配置拉链表，例如 Agent flow 和量化 Agent profile。
 - 做配置校验、健康检查和 fail-closed 降级。
 
 ## 它怎么跑
@@ -16,14 +17,16 @@
   -> 写入配置版本
   -> Provider health 检查
   -> 激活可用配置
-  -> 今日研究读取 active 配置
+  -> 今日研究通过统一 resolver 读取 decision_at 可用配置
 ```
 
 密钥只写入，不在前端回显。依赖不可用 Provider 的任务应该明确失败，而不是假装成功。
+运行时配置不放在一张大表里：不同领域使用各自版本表，任务启动时只记录本次解析到的版本引用。
 
 ## 主要入口
 
 - `src/margin/strategy/`：策略模板、scope、provider runtime。
+- `src/margin/config_runtime/`：统一配置 resolver、分领域拉链表和解析快照。
 - `src/margin/core/secret_store.py`：密钥存储。
 - `src/margin/api/routes/strategy*.py`：配置 API。
 - `web/components/provider-settings-panel.tsx`：Provider 设置界面。

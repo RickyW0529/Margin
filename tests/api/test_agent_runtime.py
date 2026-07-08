@@ -17,9 +17,11 @@ from margin.agent_runtime.context_store import (
     make_context_artifact,
 )
 from margin.agent_runtime.main_agent import MainAgentRuntime
+from margin.agent_runtime.models import AgentExecutionStatus, AgentStep
 from margin.agent_runtime.schedules import MemoryAgentScheduleRepository
 from margin.agent_runtime.step_definitions import load_scheduled_stock_analysis_flow
 from margin.api.main import create_app
+from margin.api.routes.agent_runtime import UserQnaRunRequest, _execute_user_qna_plan
 from margin.dashboard.models import ResearchItem, ResearchRun
 from margin.dashboard.repository import MemoryDashboardRepository
 from margin.dashboard.service import DashboardServiceBundle
@@ -171,6 +173,26 @@ def test_user_qna_persists_chat_session_and_uses_context_for_followup() -> None:
     )
 
 
+def test_user_qna_persists_context_pack_artifact() -> None:
+    """Test that L1 planning receives a persisted ContextPack instead of raw context."""
+    context_store = MemoryAgentContextStore()
+    client = _client_with_agent_runtime(context_store=context_store)
+
+    response = client.post(
+        "/api/v1/agent-runs/user-qna",
+        headers=_idempotency_headers("qna-context-pack"),
+        json={"scope_version_id": "scope-1", "message": "你好"},
+    )
+
+    assert response.status_code == 200
+    run_id = response.json()["run_id"]
+    artifact = context_store.get_artifact(f"ctxpack_{run_id}_mainagent")
+    assert artifact is not None
+    assert artifact.artifact_type == "context_pack"
+    assert artifact.producer_agent == "MainAgent"
+    assert artifact.payload_json["token_budget"] == 4000
+
+
 def test_user_qna_rejects_unknown_chat_session() -> None:
     """Test that clients cannot append to a missing chat session."""
     client = _client_with_agent_runtime()
@@ -203,6 +225,8 @@ def test_agent_artifact_detail_returns_persisted_payload() -> None:
                 {"symbol": "000001.SZ", "score": 86},
                 {"symbol": "600000.SH", "score": 82},
             ],
+            "raw_text": "不应直接返回的原始大文本",
+            "nested": {"provider_token": "secret-provider-token"},
         },
         source_refs=("GET /api/v1/research",),
         evidence_refs=("ev_1",),
@@ -218,6 +242,8 @@ def test_agent_artifact_detail_returns_persisted_payload() -> None:
     assert body["artifact_type"] == "analysis_table"
     assert body["producer_agent"] == "DataAnalystAgent"
     assert body["payload_json"]["rows"][0]["symbol"] == "000001.SZ"
+    assert body["payload_json"]["raw_text"] == "[redacted]"
+    assert body["payload_json"]["nested"]["provider_token"] == "[redacted]"
     assert body["payload_hash"] == artifact.payload_hash
     assert body["source_refs"] == ["GET /api/v1/research"]
     assert body["evidence_refs"] == ["ev_1"]
@@ -231,6 +257,62 @@ def test_agent_artifact_detail_returns_404_for_missing_artifact() -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == "agent_artifact_not_found"
+
+
+def test_user_qna_execution_tracks_step_status_by_step_id() -> None:
+    """Test that repeated agent names cannot collapse execution status."""
+    llm_provider = _PlannerAndAnswerLLMProvider(
+        plan_response={"steps": []},
+        answer="你好，我是 Margin。",
+    )
+    runtime = MainAgentRuntime(
+        context_store=MemoryAgentContextStore(),
+        card_registry=default_agent_card_registry(),
+        scheduled_flow=load_scheduled_stock_analysis_flow(),
+        llm_provider_factory=lambda: llm_provider,
+    )
+    services = DashboardServiceBundle.in_memory(
+        dashboard_repository=MemoryDashboardRepository(),
+    )
+
+    execution = _execute_user_qna_plan(
+        request=UserQnaRunRequest(scope_version_id="scope-1", message="你好"),
+        run_id="ar_qna_steps",
+        plan_steps=(
+            AgentStep(
+                step_id="qna_1_general",
+                run_id="ar_qna_steps",
+                expert_agent_name="GeneralQnaAgent",
+                skill_id="answer_general_qna",
+                status=AgentExecutionStatus.PENDING,
+            ),
+            AgentStep(
+                step_id="qna_2_same_unknown",
+                run_id="ar_qna_steps",
+                expert_agent_name="RepeatedAgent",
+                skill_id="x",
+                status=AgentExecutionStatus.PENDING,
+            ),
+            AgentStep(
+                step_id="qna_3_same_unknown",
+                run_id="ar_qna_steps",
+                expert_agent_name="RepeatedAgent",
+                skill_id="y",
+                status=AgentExecutionStatus.PENDING,
+            ),
+        ),
+        runtime=runtime,
+        services=services,
+        strategy_service=_FakeStrategyService(),
+        llm_provider_factory=lambda: llm_provider,
+        conversation_context=[],
+    )
+
+    assert execution.step_statuses == {
+        "qna_1_general": AgentExecutionStatus.SUCCEEDED,
+        "qna_2_same_unknown": AgentExecutionStatus.PARTIAL,
+        "qna_3_same_unknown": AgentExecutionStatus.PARTIAL,
+    }
 
 
 def test_stock_analysis_schedule_can_be_saved_and_read() -> None:

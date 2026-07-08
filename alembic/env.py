@@ -16,6 +16,7 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
+from margin.config_runtime import db_models as config_runtime_db_models  # noqa: F401
 from margin.core import db_audit as core_db_audit  # noqa: F401
 from margin.core import db_orchestration as core_db_orchestration  # noqa: F401
 from margin.dashboard import db_models as dashboard_db_models  # noqa: F401

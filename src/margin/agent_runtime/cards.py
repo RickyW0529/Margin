@@ -34,9 +34,9 @@ class AgentCardRegistry:
 
 
 def default_agent_card_registry() -> AgentCardRegistry:
-    """Return default v0.4 ExpertAgent cards."""
+    """Return default v0.5 ExpertAgent cards."""
     common = {
-        "version": "v0.4.0",
+        "version": "v0.5.0",
         "capabilities": {
             "streaming": False,
             "pushNotifications": False,
@@ -74,7 +74,10 @@ def default_agent_card_registry() -> AgentCardRegistry:
             ),
             AgentCard(
                 name="QuantAgent",
-                description="Runs the fixed ML lifecycle quant strategy profile.",
+                description=(
+                    "Runs the fixed ML lifecycle quant strategy profile from "
+                    "structured PIT data."
+                ),
                 url="margin://agents/quant",
                 skills=(
                     AgentSkill(
@@ -82,7 +85,8 @@ def default_agent_card_registry() -> AgentCardRegistry:
                         name="Run ML Lifecycle Quant Analysis",
                         description=(
                             "Run the QuantAgent-owned ML lifecycle profile and "
-                            "publish quant plus Analysis Mart artifacts."
+                            "publish quant plus Analysis Mart artifacts from "
+                            "structured PIT-safe features."
                         ),
                         tags=("quant", "analysis", "deterministic"),
                         required_context_artifacts=("data_readiness",),
@@ -98,22 +102,145 @@ def default_agent_card_registry() -> AgentCardRegistry:
                 **common,
             ),
             AgentCard(
-                name="NewsAcquisitionAgent",
-                description="Acquires and indexes news for quant-selected targets.",
-                url="margin://agents/news-acquisition",
+                name="PerformanceGrowthScoutAgent",
+                description=(
+                    "Screens structured financial data for strong performance "
+                    "growth targets."
+                ),
+                url="margin://agents/performance-growth-scout",
                 skills=(
                     AgentSkill(
-                        skill_id="acquire_news_for_quant_targets",
-                        name="Acquire News For Quant Targets",
+                        skill_id="screen_growth_companies",
+                        name="Screen Growth Companies",
                         description=(
-                            "Acquire filings, news, public materials, snapshots, "
-                            "dedup records, and indexing events."
+                            "Read PIT-safe financial facts and produce the "
+                            "fundamental target pool before RAG work."
                         ),
-                        tags=("news", "filings", "indexing"),
-                        required_context_artifacts=("quant_result",),
+                        tags=("fundamental", "financials", "growth"),
+                        required_context_artifacts=("data_readiness",),
                         produced_context_artifacts=(
-                            "news_context_bundle",
+                            "fundamental_target_pool",
+                        ),
+                        write_policy=AgentPermissionMode.WRITE_ALLOWED,
+                        schedule_allowed=True,
+                        qa_allowed=False,
+                    ),
+                ),
+                **common,
+            ),
+            AgentCard(
+                name="RagCoverageGateAgent",
+                description=(
+                    "Checks RAG coverage and only refreshes disclosures when "
+                    "coverage is missing, stale, or partial."
+                ),
+                url="margin://agents/rag-coverage-gate",
+                skills=(
+                    AgentSkill(
+                        skill_id="inspect_rag_coverage_and_refresh_if_needed",
+                        name="Inspect RAG Coverage And Refresh If Needed",
+                        description=(
+                            "Check report/prospectus/announcement coverage for "
+                            "fundamental targets and conditionally trigger "
+                            "disclosure or WebSearch refresh plus indexing."
+                        ),
+                        tags=("rag", "coverage", "filings", "websearch"),
+                        required_context_artifacts=("fundamental_target_pool",),
+                        produced_context_artifacts=(
+                            "rag_coverage_report",
+                            "disclosure_refresh_result",
                             "indexed_document_batch",
+                        ),
+                        write_policy=AgentPermissionMode.WRITE_ALLOWED,
+                        schedule_allowed=True,
+                        qa_allowed=False,
+                    ),
+                ),
+                **common,
+            ),
+            AgentCard(
+                name="FundamentalAnalystAgent",
+                description=(
+                    "Builds evidence-bound financial-report theses from scoped RAG."
+                ),
+                url="margin://agents/fundamental-analyst",
+                skills=(
+                    AgentSkill(
+                        skill_id="analyze_fundamental_rag_evidence",
+                        name="Analyze Fundamental RAG Evidence",
+                        description=(
+                            "Read financial-report, prospectus, announcement, and "
+                            "research evidence to produce a frozen thesis snapshot."
+                        ),
+                        tags=("fundamental", "rag", "evidence"),
+                        required_context_artifacts=(
+                            "fundamental_target_pool",
+                            "rag_coverage_report",
+                            "indexed_document_batch",
+                        ),
+                        produced_context_artifacts=(
+                            "fundamental_thesis_snapshot",
+                            "fundamental_evidence_package",
+                        ),
+                        write_policy=AgentPermissionMode.WRITE_ALLOWED,
+                        schedule_allowed=True,
+                        qa_allowed=False,
+                    ),
+                ),
+                **common,
+            ),
+            AgentCard(
+                name="SentimentMonitorAgent",
+                description=(
+                    "Checks whether recent public information supports or weakens "
+                    "the frozen financial-report thesis."
+                ),
+                url="margin://agents/sentiment-monitor",
+                skills=(
+                    AgentSkill(
+                        skill_id="monitor_thesis_sentiment_delta",
+                        name="Monitor Thesis Sentiment Delta",
+                        description=(
+                            "Use bounded recent-source checks to classify whether "
+                            "new information supports, weakens, contradicts, or "
+                            "does not change the frozen thesis."
+                        ),
+                        tags=("sentiment", "websearch", "delta"),
+                        required_context_artifacts=("fundamental_thesis_snapshot",),
+                        produced_context_artifacts=("sentiment_delta_report",),
+                        write_policy=AgentPermissionMode.WRITE_ALLOWED,
+                        schedule_allowed=True,
+                        qa_allowed=False,
+                    ),
+                ),
+                **common,
+            ),
+            AgentCard(
+                name="FusionResearchAgent",
+                description=(
+                    "Combines frozen quant, fundamental, and sentiment artifacts "
+                    "into auditable dashboard research output."
+                ),
+                url="margin://agents/fusion-research",
+                skills=(
+                    AgentSkill(
+                        skill_id="fuse_quant_fundamental_and_sentiment",
+                        name="Fuse Quant Fundamental And Sentiment",
+                        description=(
+                            "Read frozen branch outputs, apply research guardrails, "
+                            "and publish final priorities plus dashboard projection "
+                            "events without mutating upstream artifacts."
+                        ),
+                        tags=("fusion", "research", "dashboard"),
+                        required_context_artifacts=(
+                            "quant_result",
+                            "analysis_mart_snapshot",
+                            "fundamental_thesis_snapshot",
+                            "sentiment_delta_report",
+                        ),
+                        produced_context_artifacts=(
+                            "fusion_research_result",
+                            "dashboard_projection_event",
                         ),
                         write_policy=AgentPermissionMode.WRITE_ALLOWED,
                         schedule_allowed=True,

@@ -9,12 +9,23 @@ from margin.agent_runtime.cards import default_agent_card_registry
 from margin.agent_runtime.context_store import MemoryAgentContextStore
 from margin.agent_runtime.expert_agents import StockAnalystAgent
 from margin.agent_runtime.main_agent import MainAgentRuntime
+from margin.agent_runtime.quant_agent import CURRENT_QUANT_AGENT_ML_PROFILE
 from margin.agent_runtime.schedules import (
     ScheduledStockAnalysisRunner,
     StockAnalysisSchedule,
     compute_next_run_at,
 )
 from margin.agent_runtime.step_definitions import load_scheduled_stock_analysis_flow
+from margin.config_runtime.bootstrap import SCHEDULED_QUANT_PROFILE_KEY
+from margin.config_runtime.models import (
+    AgentFlowConfigVersion,
+    QuantAgentProfileConfigVersion,
+)
+from margin.config_runtime.repository import (
+    ConfigAdminService,
+    ConfigResolver,
+    MemoryConfigRepository,
+)
 from margin.dashboard.models import DashboardFilters, DashboardSort
 from margin.dashboard.repository import MemoryDashboardRepository
 from margin.research.delta_repository import (
@@ -98,6 +109,19 @@ def test_scheduled_runner_triggers_main_agent_and_refresh() -> None:
         "ml_lgbm_lifecycle"
     )
     assert metadata["quant_strategy"]["strategy_family"] == "ml_lgbm_lifecycle"
+    assert metadata["agent_flow"]["dependency_waves"][:2] == [
+        ["data_inspection"],
+        ["quant_analysis", "performance_growth_scout"],
+    ]
+    assert metadata["agent_flow"]["branches"]["quant"] == ["quant_analysis"]
+    assert metadata["agent_flow"]["branches"]["fundamental"] == [
+        "performance_growth_scout",
+        "rag_coverage_gate",
+        "fundamental_analysis",
+        "sentiment_monitor",
+    ]
+    assert metadata["agent_flow"]["branches"]["fusion"] == ["fusion_research"]
+    assert metadata["agent_flow"]["quant_branch_uses_websearch"] is False
     artifacts = context_store.list_artifacts("ar_sched_20260707_0830")
     assert [artifact.artifact_type for artifact in artifacts] == ["valuation_refresh"]
     assert artifacts[0].producer_agent == "QuantAgent"
@@ -107,6 +131,74 @@ def test_scheduled_runner_triggers_main_agent_and_refresh() -> None:
         "profile_id"
     ] == "liquid-large-mid-lgbm-recent-trend80-ddstop-v1"
     assert repository.saved.last_triggered_at == datetime(2026, 7, 7, 0, 31, tzinfo=UTC)
+
+
+def test_scheduled_runner_records_runtime_config_resolution_snapshot() -> None:
+    """Scheduled runs persist the resolved Agent flow and Quant profile versions."""
+    decision_at = datetime(2026, 7, 7, 0, 31, tzinfo=UTC)
+    config_repository = MemoryConfigRepository()
+    config_admin = ConfigAdminService(config_repository)
+    db_flow = load_scheduled_stock_analysis_flow().model_copy(
+        update={"version": "v0.db-config"}
+    )
+    config_admin.publish_agent_flow(
+        AgentFlowConfigVersion.from_flow(
+            version_id="agent-flow-test",
+            flow=db_flow,
+            valid_from=datetime(2026, 1, 1, tzinfo=UTC),
+            available_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    )
+    config_admin.publish_quant_agent_profile(
+        QuantAgentProfileConfigVersion.from_profile(
+            version_id="quant-profile-test",
+            profile_key=SCHEDULED_QUANT_PROFILE_KEY,
+            profile=CURRENT_QUANT_AGENT_ML_PROFILE,
+            valid_from=datetime(2026, 1, 1, tzinfo=UTC),
+            available_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    )
+    config_resolver = ConfigResolver(config_repository)
+    context_store = MemoryAgentContextStore()
+    main_agent = MainAgentRuntime(
+        context_store=context_store,
+        card_registry=default_agent_card_registry(),
+        scheduled_flow=load_scheduled_stock_analysis_flow(),
+    )
+    valuation_service = _FakeValuationService()
+    repository = _DueScheduleRepository(
+        StockAnalysisSchedule(
+            enabled=True,
+            hour=8,
+            minute=30,
+            timezone="Asia/Shanghai",
+            scope_version_id="scope-current",
+            universe="ALL_A",
+            next_run_at=datetime(2026, 7, 7, 0, 30, tzinfo=UTC),
+        )
+    )
+
+    ScheduledStockAnalysisRunner(
+        repository=repository,
+        main_agent=main_agent,
+        valuation_service=valuation_service,
+        scope_resolver=lambda scope: scope,
+        config_resolver=config_resolver,
+    ).run_once(now=decision_at)
+
+    metadata = valuation_service.calls[0][3]
+    assert metadata["agent_flow"]["version"] == "v0.db-config"
+    snapshot_id = metadata["config_resolution_snapshot_id"]
+    snapshot = config_repository.get_resolution_snapshot(snapshot_id)
+
+    assert [entry.domain for entry in snapshot.entries] == [
+        "agent_flow",
+        "quant_agent_profile",
+    ]
+    assert [entry.version_id for entry in snapshot.entries] == [
+        "agent-flow-test",
+        "quant-profile-test",
+    ]
 
 
 def test_scheduled_runner_can_drive_full_adjusted_dashboard_projection() -> None:

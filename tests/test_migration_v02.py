@@ -27,7 +27,7 @@ def test_migration_sequence_from_clean_database(database_url: str) -> None:
     )
 
     assert result.current_head == result.expected_head
-    assert result.current_head == "20260708_0051_agent_chat"
+    assert result.current_head == "20260708_0052_runtime_config"
     assert result.failed_revision is None
     assert {
         "orchestration_runs",
@@ -85,6 +85,12 @@ def test_migration_sequence_from_clean_database(database_url: str) -> None:
         "agent_runtime_artifacts",
         "agent_runtime_guardrail_decisions",
         "agent_runtime_schedules",
+        "agent_chat_sessions",
+        "agent_chat_messages",
+        "agent_flow_versions",
+        "quant_agent_profile_versions",
+        "config_resolution_snapshots",
+        "config_resolution_snapshot_entries",
         "dashboard_runs",
         "dashboard_items",
         "source_tushare.ts_moneyflow",

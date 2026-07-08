@@ -14,8 +14,11 @@ from sqlalchemy.orm import Session
 from margin.agent_runtime.context_store import make_context_artifact
 from margin.agent_runtime.db_models import AgentRuntimeScheduleRow
 from margin.agent_runtime.main_agent import MainAgentRuntime
-from margin.agent_runtime.models import ContextArtifact
+from margin.agent_runtime.models import AgentFlowDefinition, ContextArtifact
 from margin.agent_runtime.quant_agent import current_quant_agent_strategy_profile
+from margin.config_runtime.bootstrap import SCHEDULED_QUANT_PROFILE_KEY
+from margin.config_runtime.models import ConfigReference
+from margin.config_runtime.repository import ConfigResolver
 from margin.valuation_discovery.service import ValuationDiscoveryService
 
 STOCK_ANALYSIS_SCHEDULE_ID = "stock_analysis_daily"
@@ -201,12 +204,14 @@ class ScheduledStockAnalysisRunner:
         main_agent: MainAgentRuntime,
         valuation_service: ValuationDiscoveryService,
         scope_resolver: Callable[[str], str],
+        config_resolver: ConfigResolver | None = None,
         write_context_artifact: Callable[[ContextArtifact], None] | None = None,
     ) -> None:
         self._repository = repository
         self._main_agent = main_agent
         self._valuation_service = valuation_service
         self._scope_resolver = scope_resolver
+        self._config_resolver = config_resolver
         self._write_context_artifact = (
             write_context_artifact or main_agent.add_context_artifact
         )
@@ -228,15 +233,30 @@ class ScheduledStockAnalysisRunner:
             f"ar_sched_{local_date.replace('-', '')}_"
             f"{schedule.hour:02d}{schedule.minute:02d}"
         )
+        scheduled_flow, flow_ref = self._resolve_agent_flow(now)
         plan_result = self._main_agent.create_scheduled_stock_analysis_plan(
             run_id=run_id,
             user_intent_summary=(
                 f"daily stock analysis for {schedule.universe} at "
                 f"{schedule.hour:02d}:{schedule.minute:02d} {schedule.timezone}"
             ),
+            scheduled_flow=scheduled_flow,
         )
-        quant_profile = current_quant_agent_strategy_profile()
+        quant_profile, quant_profile_ref = self._resolve_quant_profile(now)
         quant_profile_metadata = quant_profile.to_metadata()
+        config_references = []
+        if flow_ref is not None:
+            config_references.append(flow_ref)
+        if quant_profile_ref is not None:
+            config_references.append(quant_profile_ref)
+        config_snapshot_id = None
+        if self._config_resolver is not None and config_references:
+            config_snapshot = self._config_resolver.create_resolution_snapshot(
+                run_id=run_id,
+                decision_at=now,
+                references=tuple(config_references),
+            )
+            config_snapshot_id = config_snapshot.snapshot_id
         resolved_scope = self._scope_resolver(schedule.scope_version_id)
         refresh_response = self._valuation_service.start_refresh(
             scope_version_id=resolved_scope,
@@ -246,6 +266,10 @@ class ScheduledStockAnalysisRunner:
                 "agent_run_id": run_id,
                 "schedule_id": schedule.schedule_id,
                 "universe": schedule.universe,
+                "agent_flow": self._main_agent.scheduled_flow_summary(
+                    scheduled_flow=scheduled_flow,
+                ),
+                "config_resolution_snapshot_id": config_snapshot_id,
                 "quant_agent_strategy_profile": quant_profile_metadata,
                 "quant_strategy": quant_profile.to_quant_strategy_metadata(),
             },
@@ -261,6 +285,7 @@ class ScheduledStockAnalysisRunner:
                     "schedule_id": schedule.schedule_id,
                     "agent_run_id": run_id,
                     "plan_id": plan_result.plan.plan_id,
+                    "config_resolution_snapshot_id": config_snapshot_id,
                     "planned_steps": [
                         {
                             "step_id": step.step_id,
@@ -291,6 +316,38 @@ class ScheduledStockAnalysisRunner:
                 }
             )
         )
+
+    def _resolve_quant_profile(self, decision_at: datetime):
+        """Resolve the scheduled QuantAgent profile from DB with a fallback."""
+        if self._config_resolver is None:
+            return current_quant_agent_strategy_profile(), None
+        try:
+            version = self._config_resolver.resolve_quant_agent_profile(
+                profile_key=SCHEDULED_QUANT_PROFILE_KEY,
+                decision_at=decision_at,
+            )
+            return (
+                version.to_profile(),
+                ConfigReference.from_version("quant_agent_profile", version),
+            )
+        except LookupError:
+            return current_quant_agent_strategy_profile(), None
+
+    def _resolve_agent_flow(
+        self,
+        decision_at: datetime,
+    ) -> tuple[AgentFlowDefinition, ConfigReference | None]:
+        """Resolve the scheduled Agent flow from DB with a fallback."""
+        if self._config_resolver is None:
+            return self._main_agent.scheduled_flow, None
+        try:
+            version = self._config_resolver.resolve_agent_flow(
+                flow_id="scheduled_stock_analysis",
+                decision_at=decision_at,
+            )
+            return version.to_flow(), ConfigReference.from_version("agent_flow", version)
+        except LookupError:
+            return self._main_agent.scheduled_flow, None
 
 
 def compute_next_run_at(
