@@ -33,6 +33,13 @@ jobs:
         run: pip install -e ".[dev,data]"
       - name: Lint
         run: ruff check src tests
+      - name: API import and route smoke
+        run: >
+          python -c "from margin.api.main import create_app;
+          paths = create_app().openapi()['paths'];
+          assert '/health' in paths;
+          assert '/api/v1/agent-runs/user-qna' in paths;
+          print(f'api route smoke ok: {len(paths)} paths')"
       - name: Run migrations
         env:
           MARGIN_DATABASE_URL: postgresql+psycopg://margin:margin@localhost:5432/margin

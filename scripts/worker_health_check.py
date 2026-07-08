@@ -28,7 +28,7 @@ def main() -> int:
     settings = get_settings()
     config = Config("alembic.ini")
     expected_head = ScriptDirectory.from_config(config).get_current_head()
-    engine = create_database_engine(DatabaseSettings(url=str(settings.database_url)))
+    engine = create_database_engine(DatabaseSettings.from_settings(settings))
     try:
         with engine.connect() as connection:
             current_head = connection.execute(

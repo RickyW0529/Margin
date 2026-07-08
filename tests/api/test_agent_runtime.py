@@ -40,6 +40,7 @@ def test_user_qna_agent_run_returns_main_agent_trace() -> None:
 
     response = client.post(
         "/api/v1/agent-runs/user-qna",
+        headers=_idempotency_headers("qna-recommendation"),
         json={"scope_version_id": "scope-1", "message": "今日推荐股票是什么？"},
     )
 
@@ -74,6 +75,7 @@ def test_user_qna_greeting_runs_general_llm_agent() -> None:
 
     response = client.post(
         "/api/v1/agent-runs/user-qna",
+        headers=_idempotency_headers("qna-greeting"),
         json={"scope_version_id": "scope-1", "message": "你好"},
     )
 
@@ -99,6 +101,7 @@ def test_stock_analysis_schedule_can_be_saved_and_read() -> None:
 
     put_response = client.put(
         "/api/v1/agent-schedules/stock-analysis",
+        headers=_idempotency_headers("schedule-save"),
         json={
             "enabled": True,
             "hour": 8,
@@ -120,12 +123,39 @@ def test_stock_analysis_schedule_can_be_saved_and_read() -> None:
     assert body["next_run_at"] is not None
 
 
+def test_agent_runtime_mutations_require_idempotency_key() -> None:
+    """Test that mutating agent runtime endpoints require an idempotency key."""
+    client = _client_with_agent_runtime()
+
+    qna_response = client.post(
+        "/api/v1/agent-runs/user-qna",
+        json={"scope_version_id": "scope-1", "message": "你好"},
+    )
+    schedule_response = client.put(
+        "/api/v1/agent-schedules/stock-analysis",
+        json={
+            "enabled": True,
+            "hour": 8,
+            "minute": 30,
+            "timezone": "Asia/Shanghai",
+            "scope_version_id": "scope-current",
+            "universe": "ALL_A",
+        },
+    )
+
+    assert qna_response.status_code == 400
+    assert schedule_response.status_code == 400
+    assert qna_response.json()["detail"] == "Idempotency-Key header is required"
+    assert schedule_response.json()["detail"] == "Idempotency-Key header is required"
+
+
 def test_user_qna_guardrail_blocks_guaranteed_return_claims() -> None:
     """Test that financial guarantee requests are blocked before expert routing."""
     client = _client_with_agent_runtime()
 
     response = client.post(
         "/api/v1/agent-runs/user-qna",
+        headers=_idempotency_headers("qna-guardrail"),
         json={"scope_version_id": "scope-1", "message": "能保证这只股票收益吗？"},
     )
 
@@ -197,6 +227,11 @@ def _client_with_agent_runtime(
             llm_provider_factory=llm_provider_factory,
         )
     )
+
+
+def _idempotency_headers(key: str) -> dict[str, str]:
+    """Return headers required by mutating API endpoints."""
+    return {"Idempotency-Key": key}
 
 
 class _FakeStrategyService:

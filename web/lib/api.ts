@@ -463,8 +463,9 @@ export function askMainAgentQna(requestBody: {
   universe?: string;
   language?: "zh" | "en";
 }): Promise<MainAgentQnaResponse> {
-  return post<MainAgentQnaResponse>(
+  return authenticatedMutation<MainAgentQnaResponse>(
     "/api/v1/agent-runs/user-qna",
+    "POST",
     requestBody,
   );
 }
@@ -481,18 +482,14 @@ export function fetchStockAnalysisSchedule(): Promise<StockAnalysisSchedule> {
 export function updateStockAnalysisSchedule(
   update: StockAnalysisScheduleUpdate,
 ): Promise<StockAnalysisSchedule> {
-  return request<StockAnalysisSchedule>(
+  return authenticatedMutation<StockAnalysisSchedule>(
     "/api/v1/agent-schedules/stock-analysis",
+    "PUT",
     {
-      method: "PUT",
-      cache: "no-store",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...update,
-        scope_version_id: "scope-current",
-        timezone: "Asia/Shanghai",
-        universe: "ALL_A",
-      }),
+      ...update,
+      scope_version_id: "scope-current",
+      timezone: "Asia/Shanghai",
+      universe: "ALL_A",
     },
   );
 }

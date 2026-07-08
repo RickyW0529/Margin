@@ -24,6 +24,7 @@ from margin.api.dependencies import (
     get_llm_provider_factory,
     get_main_agent_runtime,
     get_strategy_service,
+    require_idempotency_key,
     require_local_admin,
 )
 from margin.dashboard.service import DashboardServiceBundle
@@ -43,6 +44,7 @@ ScheduleRepo = Annotated[
     AgentScheduleRepository,
     Depends(get_agent_schedule_repository),
 ]
+IdempotencyKey = Annotated[str, Depends(require_idempotency_key)]
 
 
 class UserQnaRunRequest(BaseModel):
@@ -144,6 +146,7 @@ def run_user_qna_agent(
     services: DashboardServices,
     strategy_service: StrategyServices,
     llm_provider_factory: LLMProviderFactory,
+    _idempotency_key: IdempotencyKey,
 ) -> UserQnaRunResponse:
     """Run a read-only user Q&A request through MainAgent-planned ExpertAgents."""
     run_id = f"ar_qna_{uuid4().hex}"
@@ -328,6 +331,7 @@ def get_stock_analysis_schedule(repository: ScheduleRepo) -> StockAnalysisSchedu
 def update_stock_analysis_schedule(
     request: StockAnalysisScheduleUpdate,
     repository: ScheduleRepo,
+    _idempotency_key: IdempotencyKey,
     _actor_id: Annotated[str, Depends(require_local_admin)],
 ) -> StockAnalysisScheduleResponse:
     """Update the persisted daily stock-analysis schedule."""

@@ -200,13 +200,7 @@ def build_database_engine(settings: MarginSettings):
     Returns:
         A SQLAlchemy engine configured from the provided settings.
     """
-    return create_database_engine(
-        DatabaseSettings(
-            url=str(settings.database_url),
-            echo=settings.database_echo,
-            pool_pre_ping=settings.database_pool_pre_ping,
-        )
-    )
+    return create_database_engine(DatabaseSettings.from_settings(settings))
 
 
 def build_data_warehouse_stack(settings: MarginSettings) -> DataWarehouseIngestionStack:

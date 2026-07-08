@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlalchemy import Engine, create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from margin.settings import DEFAULT_DATABASE_URL as SETTINGS_DEFAULT_DATABASE_URL
@@ -29,11 +30,15 @@ class DatabaseSettings:
         url: Fully-qualified SQLAlchemy database URL.
         echo: Whether SQLAlchemy logs every emitted SQL statement.
         pool_pre_ping: Whether to verify connections before checking them out from the pool.
+        pool_size: Maximum number of persistent SQLAlchemy pool connections.
+        statement_timeout_ms: PostgreSQL statement timeout in milliseconds.
     """
 
     url: str = DEFAULT_DATABASE_URL
     echo: bool = False
     pool_pre_ping: bool = True
+    pool_size: int = 10
+    statement_timeout_ms: int = 30_000
 
     @classmethod
     def from_settings(cls, settings: MarginSettings) -> DatabaseSettings:
@@ -49,6 +54,8 @@ class DatabaseSettings:
             url=str(settings.database_url),
             echo=settings.database_echo,
             pool_pre_ping=settings.database_pool_pre_ping,
+            pool_size=settings.database_pool_size,
+            statement_timeout_ms=settings.database_statement_timeout_ms,
         )
 
     @classmethod
@@ -63,6 +70,8 @@ class DatabaseSettings:
         * ``MARGIN_DATABASE_URL``
         * ``MARGIN_DATABASE_ECHO``
         * ``MARGIN_DATABASE_POOL_PRE_PING``
+        * ``MARGIN_DATABASE_POOL_SIZE``
+        * ``MARGIN_DATABASE_STATEMENT_TIMEOUT_MS``
 
         Returns:
             DatabaseSettings: Settings populated from centralized app settings.
@@ -81,11 +90,16 @@ def create_database_engine(settings: DatabaseSettings | None = None) -> Engine:
         Engine: Configured SQLAlchemy engine bound to the resolved settings.
     """
     resolved = settings or DatabaseSettings.from_env()
-    return create_engine(
-        resolved.url,
-        echo=resolved.echo,
-        pool_pre_ping=resolved.pool_pre_ping,
-    )
+    engine_options: dict[str, object] = {
+        "echo": resolved.echo,
+        "pool_pre_ping": resolved.pool_pre_ping,
+    }
+    if _is_postgresql_url(resolved.url):
+        engine_options["pool_size"] = resolved.pool_size
+        engine_options["connect_args"] = {
+            "options": f"-c statement_timeout={resolved.statement_timeout_ms}",
+        }
+    return create_engine(resolved.url, **engine_options)
 
 
 def create_session_factory(engine: Engine) -> SessionFactory:
@@ -98,3 +112,8 @@ def create_session_factory(engine: Engine) -> SessionFactory:
         SessionFactory: A ``sessionmaker`` factory configured with ``expire_on_commit=False``.
     """
     return sessionmaker(bind=engine, expire_on_commit=False)
+
+
+def _is_postgresql_url(url: str) -> bool:
+    """Return whether a SQLAlchemy URL targets PostgreSQL."""
+    return make_url(url).get_backend_name() == "postgresql"

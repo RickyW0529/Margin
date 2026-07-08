@@ -111,13 +111,7 @@ def build_document_indexing_runner() -> DocumentIndexingRunner:
             Provider and persistent vector repository.
     """
     settings = get_settings()
-    engine = create_database_engine(
-        DatabaseSettings(
-            url=str(settings.database_url),
-            echo=settings.database_echo,
-            pool_pre_ping=settings.database_pool_pre_ping,
-        )
-    )
+    engine = create_database_engine(DatabaseSettings.from_settings(settings))
     session_factory = create_session_factory(engine)
     embedding_provider = build_worker_provider_runtime_factory(
         settings
@@ -147,13 +141,7 @@ def build_data_ingestion_stack(
         A configured ``DataWarehouseIngestionStack`` ready for ingestion.
     """
     resolved = settings or get_settings()
-    engine = create_database_engine(
-        DatabaseSettings(
-            url=str(resolved.database_url),
-            echo=resolved.database_echo,
-            pool_pre_ping=resolved.database_pool_pre_ping,
-        )
-    )
+    engine = create_database_engine(DatabaseSettings.from_settings(resolved))
     return DataWarehouseIngestionStack(
         session_factory=create_session_factory(engine),
         snapshot_root=resolved.data_snapshot_root,
@@ -175,13 +163,7 @@ def build_worker_provider_runtime_factory(
     The encrypted secret store uses a stable local default key unless
     ``MARGIN_SECRET_MASTER_KEY`` overrides it.
     """
-    engine = create_database_engine(
-        DatabaseSettings(
-            url=str(settings.database_url),
-            echo=settings.database_echo,
-            pool_pre_ping=settings.database_pool_pre_ping,
-        )
-    )
+    engine = create_database_engine(DatabaseSettings.from_settings(settings))
     session_factory = create_session_factory(engine)
     return ProviderRuntimeFactory(
         ProviderRuntimeResolver(

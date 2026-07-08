@@ -69,13 +69,7 @@ def main() -> int:
     if settings.secret_master_key is None:
         raise RuntimeError("MARGIN_SECRET_MASTER_KEY is required for bootstrap")
 
-    engine = create_database_engine(
-        DatabaseSettings(
-            url=str(settings.database_url),
-            echo=settings.database_echo,
-            pool_pre_ping=settings.database_pool_pre_ping,
-        )
-    )
+    engine = create_database_engine(DatabaseSettings.from_settings(settings))
     session_factory = create_session_factory(engine)
     repository = SQLAlchemyStrategyRepository(session_factory)
     service = StrategyService(repository=repository)

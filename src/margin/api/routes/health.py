@@ -50,9 +50,7 @@ def _database_health() -> tuple[bool, str | None]:
     settings = get_settings()
     engine: Engine | None = None
     try:
-        engine = create_database_engine(
-            DatabaseSettings(url=str(settings.database_url))
-        )
+        engine = create_database_engine(DatabaseSettings.from_settings(settings))
         with engine.connect() as conn:
             conn.exec_driver_sql("SELECT 1")
         return True, None
@@ -83,9 +81,7 @@ def _ready_checks() -> dict[str, dict[str, object]]:
     }
     engine: Engine | None = None
     try:
-        engine = create_database_engine(
-            DatabaseSettings(url=str(settings.database_url))
-        )
+        engine = create_database_engine(DatabaseSettings.from_settings(settings))
         head = _alembic_head()
         with engine.connect() as conn:
             conn.exec_driver_sql("SELECT 1")
@@ -137,9 +133,7 @@ def _queue_counts() -> dict[str, int]:
         "outbox_pending_count": 0,
     }
     try:
-        engine = create_database_engine(
-            DatabaseSettings(url=str(settings.database_url))
-        )
+        engine = create_database_engine(DatabaseSettings.from_settings(settings))
         probes = queue_counts()
         with engine.connect() as conn:
             counts["waiting_budget_count"] = int(

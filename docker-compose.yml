@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: margin
       POSTGRES_PASSWORD: margin
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - margin-postgres:/var/lib/postgresql/data
     healthcheck:
@@ -55,7 +55,7 @@ services:
     environment:
       <<: *backend-environment
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       bootstrap:
         condition: service_completed_successfully
@@ -100,7 +100,7 @@ services:
     environment:
       MARGIN_API_BASE_URL: http://api:8000
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       api:
         condition: service_healthy
@@ -112,7 +112,7 @@ services:
     volumes:
       - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     depends_on:
       api:
         condition: service_healthy
@@ -128,7 +128,7 @@ services:
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
       - margin-grafana:/var/lib/grafana
     ports:
-      - "${GRAFANA_PORT:-3002}:3000"
+      - "127.0.0.1:${GRAFANA_PORT:-3002}:3000"
     depends_on:
       prometheus:
         condition: service_started
