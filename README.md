@@ -89,6 +89,17 @@ The dev helper starts Postgres, runs migrations and config bootstrap, then start
 API, worker, and web processes. Logs are written under `.margin/dev/logs/`. Use
 `python scripts/dev.py stop` to stop the local processes.
 
+Docker mode:
+
+```bash
+cp .env.example .env
+python scripts/docker_dev.py up
+```
+
+The Docker helper starts Compose with `--build`, detects occupied localhost
+ports, and prints the actual Web/API/Grafana URLs. Use
+`python scripts/docker_dev.py down` to stop the Docker stack.
+
 Release checks:
 
 ```bash

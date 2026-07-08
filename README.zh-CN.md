@@ -83,6 +83,19 @@ http://localhost:3000
 python scripts/dev.py stop
 ```
 
+Docker 模式：
+
+```bash
+cp .env.example .env
+python scripts/docker_dev.py up
+```
+
+Docker 助手会以 `--build` 启动 Compose，自动避开已被占用的本机端口，并打印实际的 Web/API/Grafana 地址。停止 Docker 栈：
+
+```bash
+python scripts/docker_dev.py down
+```
+
 发布检查：
 
 ```bash
