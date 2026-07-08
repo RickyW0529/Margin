@@ -66,6 +66,7 @@ const baseRun = {
 
 afterEach(() => {
   cleanup();
+  window.sessionStorage.clear();
   routerMocks.refresh.mockClear();
   vi.restoreAllMocks();
 });
@@ -195,6 +196,72 @@ describe("DashboardRefreshControl", () => {
     fireEvent.click(screen.getByRole("button", { name: "打开 Agent 进度" }));
     expect(screen.getByRole("dialog", { name: "Agent 协作进度" }))
       .toBeInTheDocument();
+  });
+
+  it("keeps a user-dismissed active run collapsed after remount", async () => {
+    const latestRun = {
+      run_id: "run-active",
+      state: "running",
+    };
+    const runDetail = {
+      ...baseRun,
+      run_id: "run-active",
+      steps: [{ status: "running", step: "DATA_SYNC" }],
+    };
+    const fetchLatestRun = vi.fn().mockResolvedValue(latestRun);
+    const fetchRunDetail = vi.fn().mockResolvedValue(runDetail);
+
+    const firstRender = renderControl(
+      <DashboardRefreshControl
+        fetchLatestRun={fetchLatestRun}
+        fetchRunDetail={fetchRunDetail}
+      />,
+    );
+
+    expect(await screen.findByText("run-active")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "收起 Agent 进度" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Agent 协作进度" }))
+        .not.toBeInTheDocument(),
+    );
+
+    firstRender.unmount();
+    renderControl(
+      <DashboardRefreshControl
+        fetchLatestRun={fetchLatestRun}
+        fetchRunDetail={fetchRunDetail}
+      />,
+    );
+
+    await screen.findByRole("button", { name: "打开 Agent 进度" });
+    expect(screen.queryByRole("dialog", { name: "Agent 协作进度" }))
+      .not.toBeInTheDocument();
+  });
+
+  it("closes the graph when users click the backdrop", async () => {
+    renderControl(
+      <DashboardRefreshControl
+        fetchLatestRun={vi.fn().mockResolvedValue({
+          run_id: "run-latest",
+          state: "running",
+        })}
+        fetchRunDetail={vi.fn().mockResolvedValue({
+          ...baseRun,
+          run_id: "run-latest",
+          steps: [{ status: "succeeded", step: "DATA_FRESHNESS_CHECK" }],
+        })}
+      />,
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Agent 协作进度",
+    });
+    fireEvent.click(dialog);
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Agent 协作进度" }))
+        .not.toBeInTheDocument(),
+    );
   });
 
   it("disables starting another refresh while the latest run is still active", async () => {

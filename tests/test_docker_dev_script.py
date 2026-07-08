@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TextIO
 
 from scripts import docker_dev
 
@@ -41,3 +42,119 @@ def test_parse_published_port_supports_compose_output() -> None:
     assert docker_dev.parse_published_port("127.0.0.1:8000") == 8000
     assert docker_dev.parse_published_port("0.0.0.0:3000") == 3000
     assert docker_dev.parse_published_port("") is None
+
+
+def test_run_compose_up_uses_detached_mode_for_managed_progress() -> None:
+    """The helper should not attach to noisy Compose logs during normal startup."""
+    captured: dict[str, object] = {}
+
+    class FakeProcess:
+        stdout: TextIO | None = None
+        returncode = 0
+
+        def poll(self) -> int:
+            return 0
+
+    def fake_popen(command, **kwargs):  # noqa: ANN001
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return FakeProcess()
+
+    exit_code = docker_dev.run_compose_up(
+        root=Path("/repo"),
+        env={},
+        build=True,
+        popen=fake_popen,
+    )
+
+    assert exit_code == 0
+    assert captured["command"] == ["docker", "compose", "up", "-d", "--build"]
+
+
+def test_progress_line_reports_pending_health_status() -> None:
+    """Startup progress should show completed milestones and pending services."""
+    statuses = docker_dev.parse_compose_ps_json(
+        "\n".join(
+            [
+                '{"Service":"postgres","State":"running","Health":"healthy","ExitCode":0,'
+                '"Status":"Up (healthy)"}',
+                '{"Service":"migrate","State":"exited","Health":"","ExitCode":0,'
+                '"Status":"Exited (0)"}',
+                '{"Service":"bootstrap","State":"exited","Health":"","ExitCode":0,'
+                '"Status":"Exited (0)"}',
+                '{"Service":"api","State":"running","Health":"starting","ExitCode":0,'
+                '"Status":"Up (health: starting)"}',
+            ]
+        )
+    )
+
+    line = docker_dev.format_progress_line(statuses, elapsed_seconds=12)
+
+    assert "[##########--------------] 4/9" in line
+    assert "elapsed=12s" in line
+    assert "API=starting" in line
+    assert "Worker=pending" in line
+
+
+def test_startup_complete_requires_one_shot_exit_zero_and_healthy_services() -> None:
+    """Readiness should distinguish completed one-shot jobs and healthchecks."""
+    statuses = {
+        "postgres": docker_dev.ComposeServiceStatus(
+            service="postgres",
+            state="running",
+            health="healthy",
+            exit_code=0,
+            status="Up (healthy)",
+        ),
+        "migrate": docker_dev.ComposeServiceStatus(
+            service="migrate",
+            state="exited",
+            health="",
+            exit_code=0,
+            status="Exited (0)",
+        ),
+        "bootstrap": docker_dev.ComposeServiceStatus(
+            service="bootstrap",
+            state="exited",
+            health="",
+            exit_code=0,
+            status="Exited (0)",
+        ),
+        "api": docker_dev.ComposeServiceStatus(
+            service="api",
+            state="running",
+            health="healthy",
+            exit_code=0,
+            status="Up (healthy)",
+        ),
+        "worker": docker_dev.ComposeServiceStatus(
+            service="worker",
+            state="running",
+            health="healthy",
+            exit_code=0,
+            status="Up (healthy)",
+        ),
+        "web": docker_dev.ComposeServiceStatus(
+            service="web",
+            state="running",
+            health="",
+            exit_code=0,
+            status="Up",
+        ),
+        "prometheus": docker_dev.ComposeServiceStatus(
+            service="prometheus",
+            state="running",
+            health="",
+            exit_code=0,
+            status="Up",
+        ),
+        "grafana": docker_dev.ComposeServiceStatus(
+            service="grafana",
+            state="running",
+            health="",
+            exit_code=0,
+            status="Up",
+        ),
+    }
+
+    assert docker_dev.startup_complete(statuses) is True

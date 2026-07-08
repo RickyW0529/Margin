@@ -16,6 +16,7 @@ import {
 } from "@/lib/refresh-run-graph";
 
 const POLL_INTERVAL_MS = 3000;
+const DISMISSED_RUN_STORAGE_KEY = "margin.dashboard.dismissedRefreshRunId";
 
 type LatestRunSummary = {
   run_id: string;
@@ -55,7 +56,8 @@ export function useDashboardRefreshRun({
   const [error, setError] = useState<string | null>(null);
   const [latestRun, setLatestRun] = useState<ResearchRunDetailV2 | null>(null);
   const [latestRunId, setLatestRunId] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(false);
+  const dismissedRunId = useRef<string | null>(null);
   const settledRunId = useRef<string | null>(null);
   const startLocked = useRef(false);
 
@@ -72,16 +74,21 @@ export function useDashboardRefreshRun({
     let cancelled = false;
     (async () => {
       try {
+        dismissedRunId.current = readDismissedRunId();
         const latest = await fetchLatestRun();
         if (cancelled || !latest?.run_id) {
           return;
         }
         setLatestRunId(latest.run_id);
-        setOpen(isRefreshRunPollingState(latest.state));
+        setOpenState(shouldAutoOpenRun(latest.run_id, latest.state, dismissedRunId.current));
         const detail = await fetchRunDetail(latest.run_id);
         if (!cancelled) {
           setLatestRun(detail);
-          setOpen((current) => current || isRefreshRunPollingState(detail.status));
+          setOpenState(
+            (current) =>
+              current ||
+              shouldAutoOpenRun(detail.run_id, detail.status, dismissedRunId.current),
+          );
         }
       } catch {
         if (!cancelled) {
@@ -118,6 +125,25 @@ export function useDashboardRefreshRun({
     onRunSettled?.(latestRun);
   }, [latestRun, onRunSettled]);
 
+  const setOpen = useCallback(
+    (nextOpen: boolean) => {
+      setOpenState(nextOpen);
+      if (!latestRunId) {
+        return;
+      }
+      if (nextOpen) {
+        if (dismissedRunId.current === latestRunId) {
+          dismissedRunId.current = null;
+          clearDismissedRunId();
+        }
+        return;
+      }
+      dismissedRunId.current = latestRunId;
+      writeDismissedRunId(latestRunId);
+    },
+    [latestRunId],
+  );
+
   const refreshInProgress =
     busy ||
     Boolean(
@@ -139,7 +165,9 @@ export function useDashboardRefreshRun({
       });
       setLatestRun(null);
       setLatestRunId(result.run_id);
-      setOpen(true);
+      dismissedRunId.current = null;
+      clearDismissedRunId();
+      setOpenState(true);
       await loadRun(result.run_id);
     } catch (caught) {
       setError(refreshErrorMessage(caught));
@@ -165,6 +193,35 @@ function defaultFetchLatestRun(): Promise<LatestRunSummary | null> {
   return fetchValuationDiscoveryRuns({ limit: 1 }).then(
     (response) => response.items[0] ?? null,
   );
+}
+
+function shouldAutoOpenRun(
+  runId: string,
+  status: string | undefined,
+  dismissedRunId: string | null,
+): boolean {
+  return isRefreshRunPollingState(status) && dismissedRunId !== runId;
+}
+
+function readDismissedRunId(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return window.sessionStorage.getItem(DISMISSED_RUN_STORAGE_KEY);
+}
+
+function writeDismissedRunId(runId: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.sessionStorage.setItem(DISMISSED_RUN_STORAGE_KEY, runId);
+}
+
+function clearDismissedRunId(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.sessionStorage.removeItem(DISMISSED_RUN_STORAGE_KEY);
 }
 
 function refreshErrorMessage(caught: unknown): string {

@@ -90,7 +90,13 @@ cp .env.example .env
 python scripts/docker_dev.py up
 ```
 
-Docker 助手会以 `--build` 启动 Compose，自动避开已被占用的本机端口，并打印实际的 Web/API/Grafana 地址。停止 Docker 栈：
+Docker 助手会以 `--build` 启动 Compose，自动避开已被占用的本机端口，在服务健康检查阶段显示启动进度，并打印实际的 Web/API/Grafana 地址。查看实时日志：
+
+```bash
+docker compose logs -f
+```
+
+停止 Docker 栈：
 
 ```bash
 python scripts/docker_dev.py down

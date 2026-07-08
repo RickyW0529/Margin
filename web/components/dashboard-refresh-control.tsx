@@ -76,6 +76,11 @@ export function DashboardRefreshControl({
           aria-label={t("refreshGraphTitle")}
           aria-modal="true"
           className="fixed inset-0 z-50 grid place-items-center bg-background/70 px-4 py-6 backdrop-blur-sm"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              state.setOpen(false);
+            }
+          }}
           role="dialog"
         >
           <div className="w-[min(96vw,1080px)] animate-in fade-in zoom-in-95 duration-200 rounded-lg border border-border bg-card shadow-lg">

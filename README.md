@@ -97,7 +97,8 @@ python scripts/docker_dev.py up
 ```
 
 The Docker helper starts Compose with `--build`, detects occupied localhost
-ports, and prints the actual Web/API/Grafana URLs. Use
+ports, shows startup progress while services become healthy, and prints the
+actual Web/API/Grafana URLs. Use `docker compose logs -f` to follow logs and
 `python scripts/docker_dev.py down` to stop the Docker stack.
 
 Release checks:
