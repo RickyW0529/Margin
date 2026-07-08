@@ -92,10 +92,15 @@ const TERMINAL_RUN_STATES = new Set([
   "skipped",
   "succeeded",
 ]);
+const NON_POLLING_WAIT_STATES = new Set(["waiting_budget"]);
 
 /** Returns true when a run is still expected to advance. */
 export function isRefreshRunPollingState(status: string | null | undefined): boolean {
-  return !TERMINAL_RUN_STATES.has(status ?? "");
+  const normalized = status ?? "";
+  return (
+    !TERMINAL_RUN_STATES.has(normalized) &&
+    !NON_POLLING_WAIT_STATES.has(normalized)
+  );
 }
 
 /** Returns true when a run has reached a terminal state. */

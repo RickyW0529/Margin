@@ -702,6 +702,7 @@ function mapValuationDiscoveryRunStatus(
       step: step.step_id,
     })),
     supported_wait_states: [
+      "waiting_budget",
       "waiting_provider",
       "waiting_rate_limit",
       "waiting_retry",
@@ -721,7 +722,7 @@ function mapWaitState(state: string): string {
     return "waiting_rate_limit";
   }
   if (state === "waiting_budget") {
-    return "waiting_provider";
+    return "waiting_budget";
   }
   return state;
 }

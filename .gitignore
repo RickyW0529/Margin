@@ -2,6 +2,7 @@
 .Codex-goal.md
 .Codex-goal.archive.md
 docs/superpowers/
+docs/design/
 .idea/
 .pytest_cache/
 .ruff_cache/

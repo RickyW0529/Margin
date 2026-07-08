@@ -4,7 +4,10 @@
 
 import { describe, expect, it } from "vitest";
 
-import { buildRefreshRunNodes } from "./refresh-run-graph";
+import {
+  buildRefreshRunNodes,
+  isRefreshRunPollingState,
+} from "./refresh-run-graph";
 
 describe("buildRefreshRunNodes", () => {
   it("marks upstream-failed steps as failed instead of completed", () => {
@@ -128,5 +131,16 @@ describe("buildRefreshRunNodes", () => {
       owner: "QuantAgent",
       state: "active",
     });
+  });
+});
+
+describe("isRefreshRunPollingState", () => {
+  it("does not poll indefinitely when a provider budget blocks the run", () => {
+    expect(isRefreshRunPollingState("waiting_budget")).toBe(false);
+  });
+
+  it("continues polling retryable wait states", () => {
+    expect(isRefreshRunPollingState("waiting_rate_limit")).toBe(true);
+    expect(isRefreshRunPollingState("waiting_retry")).toBe(true);
   });
 });

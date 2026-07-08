@@ -1,64 +1,40 @@
 # Margin
 
-Margin is a local stock-research assistant for A-share investing. It helps you find candidates, understand why they were selected, check the evidence, and review risks before making your own decision.
+Margin is a local A-share research assistant. It connects data ingestion, quant screening, news/filing evidence, AI review, and a recommendation dashboard into one traceable workflow.
 
-It does not place trades, manage a brokerage account, promise returns, or provide financial advice.
+It does not place trades, manage brokerage accounts, promise returns, or provide financial advice.
 
 ## 1. What Is This Project?
 
-Margin turns a daily research workflow into one place:
+Margin turns “which stocks should I research today?” into a stored, explainable research result.
 
 ```text
-market data + financial reports + announcements + news
-  -> stock screening
-  -> evidence collection
-  -> AI review
-  -> recommendation dashboard
+data sources -> quality checks -> quant screening -> evidence/RAG -> agent review -> dashboard
 ```
 
-The goal is simple: when the system recommends a stock, you should be able to see:
+For each recommendation, you should be able to see:
 
-- why it was selected;
-- what data and evidence support it;
-- what risks may invalidate it;
-- whether the AI changed, reduced, or removed a quant candidate;
-- when the result was generated.
-
-The product is built for personal research. It is meant to help you review ideas faster and more consistently, not to replace your judgment.
+- why the stock was selected;
+- which market, financial, news, or filing data was used;
+- whether AI reduced weight, removed the candidate, or kept it;
+- the decision time and evidence trail behind the result.
 
 ## 2. Why Should I Use It?
 
-Margin is useful when you want more than a stock list.
+Margin is useful when you want a research trail, not just a ticker list.
 
-| What You Want | What Margin Gives You |
+| Need | What Margin Provides |
 | --- | --- |
-| A daily watchlist | Screens stocks and publishes the latest candidates to the dashboard. |
-| Clear reasons | Shows scores, explanations, risks, and evidence references. |
-| Less AI hallucination | AI analysis is tied to stored data and evidence instead of free-form guessing. |
-| Risk control | A specialist agent can reduce weights or remove candidates after reviewing risks. |
-| A research history | Results are saved so you can review what the system believed at that time. |
-| Local control | Runs locally with your own database and provider keys. |
-
-The biggest benefit is not that Margin always picks the best stock. The benefit is that every recommendation has a visible trail: data, evidence, scoring, AI review, and dashboard output.
+| Daily candidates | Refreshes the candidate pool and publishes it to the dashboard. |
+| Clear reasons | Shows quant scores, risks, evidence, and AI review results. |
+| Less hallucination | Agents read stored, traceable data and evidence. |
+| Risk control | AI review can reduce weights or remove quant candidates. |
+| Historical review | Results, evidence, timestamps, and agent artifacts are stored. |
+| Local control | Database, provider keys, and tasks run in your local environment. |
 
 ## 3. How Good Is It Right Now?
 
-Margin has two kinds of verification: product reliability and investment-strategy research.
-
-### Product Reliability
-
-The current backend pipeline has automated tests for the main research flow, including data requirements, quant scoring, agent artifacts, dashboard projections, and API wiring. Recent focused verification passed:
-
-```text
-49 focused backend tests passed
-147 related backend tests passed in the wider integration slice
-```
-
-The system has also been exercised with real Tushare-backed data. One documented full-A-share quant run processed 5,304 companies and published screened candidates into the research pipeline.
-
-### Strategy Research
-
-The chart below shows the current best offline validation result on the all-industry A-share candidate universe.
+The current best offline strategy result uses the all-industry A-share universe:
 
 ```mermaid
 xychart-beta
@@ -68,19 +44,15 @@ xychart-beta
     line [1.42, 1.42, 1.82, 2.63, 2.55, 2.57, 2.63, 2.89, 4.09, 6.38]
 ```
 
-| Best Offline Result | Value |
+| Metric | Current Best Offline Result |
 | --- | ---: |
-| Candidate universe | All-industry A-share universe |
+| Universe | All-industry A-share |
 | Annualized return | 21.34% |
 | Monthly max drawdown | -9.45% |
 | Daily proxy max drawdown | -12.20% |
 | Final NAV | 6.38 |
 
-Current conclusion:
-
-- The app workflow is usable for research and review.
-- The current best offline strategy has attractive historical return and drawdown characteristics.
-- The strategy result is used to prioritize candidates for evidence review and AI risk review.
+This shows the project is useful for research. Strategy results should still be treated as research output; live use requires forward paper validation, execution-constraint testing, and human review.
 
 ## 4. How Do I Use It?
 
@@ -97,15 +69,15 @@ Open:
 http://localhost:3000
 ```
 
-Then use the app in this order:
+Suggested flow:
 
-1. Open Settings and configure your data/model providers.
-2. Go to Dashboard and refresh today’s research.
-3. Review the recommended stocks, reasons, risk flags, and evidence.
-4. Ask questions on the home page, such as “Why was this stock selected?” or “What are the main risks?”
-5. Use the output as a research checklist before making your own decision.
+1. Configure data and model providers in Settings.
+2. Start today’s research from Dashboard.
+3. Review recommended stocks, scores, risks, and evidence.
+4. Ask follow-up questions on the home page.
+5. Treat the output as a research checklist, then make your own decision.
 
-For local verification:
+Developer checks:
 
 ```bash
 pip install -e ".[dev,data]"

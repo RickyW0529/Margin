@@ -1,69 +1,28 @@
-# Margin Current Code Documentation Index (English)
+# How The Code Modules Run
 
-This directory contains function-level documentation for the current Margin implementation. It covers backend Python modules, FastAPI endpoints, Next.js pages, React components, and deployment/observability configuration.
+A “today’s research” run roughly follows this order. This page only explains how modules work together; detailed APIs and fields live in each numbered module document.
 
-## Directory Structure
+| Order | Module | Runtime Role |
+| --- | --- | --- |
+| 0 | `00-shared` | Provides database, settings, audit, logging, workers, and shared provider abstractions. |
+| 1 | `07-strategy_config` | Reads provider, scope, strategy, and prompt settings for the run. |
+| 2 | `01-data_provider` | Fetches and standardizes market, financial, and index-member data, then publishes quality-checked data. |
+| 3 | `11-valuation_discovery` | Builds company pools and quant features, runs ML/quant screening, and publishes Analysis Mart output. |
+| 4 | `03-filing_websearch` | Adds filings, news, and WebSearch material for selected candidates, including raw snapshots. |
+| 5 | `04-text_indexing` | Parses, chunks, and embeds text so retrieval can find relevant evidence. |
+| 6 | `05-rag_evidence` | Turns retrieved material into evidence packages with locators and traceable evidence links. |
+| 7 | `06-multi_agent_research` | MainAgent coordinates expert agents to combine quant results, evidence, and risk review. |
+| 8 | `08-research_candidate_dashboard` | Shows recommended stocks, reasons, risks, evidence, detail pages, and Agent progress. |
+| 9 | `10-deployment_audit` | Handles deployment, migrations, health checks, metrics, degradation, and runtime audit. |
 
+## Data Direction
+
+```text
+Data Provider
+  -> Quant / Analysis Mart
+  -> Evidence / RAG
+  -> MainAgent Review
+  -> Dashboard
 ```
-docs/code/en/
-├── README.md                         This file
-├── 00-shared.md                      Shared and core cross-cutting components
-├── 01-data_provider.md               Data Provider module
-├── 03-filing_websearch.md            Filing & WebSearch module
-├── 04-text_indexing.md               Text Indexing module
-├── 05-rag_evidence.md                RAG Evidence module
-├── 06-multi_agent_research.md        Multi-Agent Research module
-├── 07-strategy_config.md             Strategy Configuration module
-├── 08-research_candidate_dashboard.md Research Candidate Dashboard module
-├── 10-deployment_audit.md            Deployment & Audit module
-└── 11-valuation_discovery.md         Universe & Valuation Discovery module
-```
 
-## Module Index
-
-| ID | Module (slug) | Chinese name | Documentation | Source paths |
-|----|---------------|--------------|---------------|--------------|
-| 00 | shared | Shared / core cross-cutting | [00-shared.md](./00-shared.md) | `src/margin/settings.py`, `src/margin/worker.py`, `src/margin/storage/`, `src/margin/api/`, `src/margin/core/provider.py`, `src/margin/core/registry.py`, `src/margin/core/resilience.py`, `src/margin/core/secret.py`, `src/margin/documents/` |
-| 01 | data_provider | Data Provider | [01-data_provider.md](./01-data_provider.md) | `src/margin/data/`, `src/margin/core/provider.py`, `src/margin/core/registry.py` |
-| 03 | filing_websearch | Filing & WebSearch | [03-filing_websearch.md](./03-filing_websearch.md) | `src/margin/news/` |
-| 04 | text_indexing | Text Indexing | [04-text_indexing.md](./04-text_indexing.md) | `src/margin/vector/` |
-| 05 | rag_evidence | RAG Evidence | [05-rag_evidence.md](./05-rag_evidence.md) | `src/margin/evidence/`, `src/margin/research/evidence_tools.py` |
-| 06 | multi_agent_research | Multi-Agent Research | [06-multi_agent_research.md](./06-multi_agent_research.md) | `src/margin/research/`, `src/margin/agent_runtime/`, `src/margin/prompts/` |
-| 07 | strategy_config | Strategy Configuration | [07-strategy_config.md](./07-strategy_config.md) | `src/margin/strategy/`, `src/margin/strategy/bootstrap.py`, `src/margin/core/secret_store.py`, `src/margin/api/routes/strategy.py`, `src/margin/api/routes/strategy_config.py`, `web/components/provider-settings-panel.tsx` |
-| 08 | research_candidate_dashboard | Research Candidate Dashboard | [08-research_candidate_dashboard.md](./08-research_candidate_dashboard.md) | `src/margin/dashboard/`, `src/margin/api/routes/dashboard.py`, `src/margin/api/routes/valuation_discovery.py`, `web/app/layout.tsx`, `web/app/page.tsx`, `web/app/dashboard/`, `web/app/settings/`, `web/components/company-pool-selector.tsx`, `web/components/dashboard-refresh-control.tsx`, `web/components/dashboard-refresh-node-graph.tsx`, `web/components/recommendation-chat-panel.tsx`, `web/components/current-vs-effective-panel.tsx`, `web/components/evidence-locator-list.tsx`, `web/components/metric-trend-chart.tsx`, `web/components/provider-settings-panel.tsx` |
-| 10 | deployment_audit | Deployment & Audit | [10-deployment_audit.md](./10-deployment_audit.md) | `src/margin/core/` (audit, snapshot, degradation, logging, metrics, run_states, orchestration, capacity, outbox), `src/margin/api/middleware.py`, `src/margin/api/metrics.py`, `src/margin/api/routes/health.py`, `Dockerfile`, `web/Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml`, `scripts/` (dev supervisor / migration / worker / smoke), `docker/prometheus.yml`, `docker/grafana/` |
-| 11 | valuation_discovery | Universe & Valuation Discovery | [11-valuation_discovery.md](./11-valuation_discovery.md) | `src/margin/valuation_discovery/`, `src/margin/api/routes/valuation_discovery.py`, `scripts/smoke_valuation_discovery_p0.py`, `scripts/smoke_valuation_discovery_p1.py` |
-
-## Documentation Conventions
-
-- Each module document contains: overview, file-level summary, public class/function reference, FastAPI endpoint tables, frontend component reference, and cross-module dependency notes.
-- Class methods and functions are presented in Markdown tables with signatures, parameters, and return values; type annotations are preserved from the source.
-- Docstrings are used where present; otherwise descriptions are inferred from the code.
-- Only public interfaces and key implementation details are described; internal boilerplate is omitted.
-
-## How to Use
-
-- **Find by module**: open the corresponding numbered markdown file.
-- **Trace cross-module dependencies**: see the "Cross-Module Usage Notes" section at the end of each document.
-- **Map to design**: code docs describe the current implementation; use `docs/design/<version>/` for product goals and module boundaries.
-
-## Current Implementation Summary
-
-- `01-data_provider` now includes the independent Tushare source system, quant endpoint admission catalog, rolling acquisition policy, source-quality screen, warehouse publisher, and real two-year market/financial/benchmark backfill path.
-- `07-strategy_config` / `08-research_candidate_dashboard` now let users switch the default company pool from settings: CSI500, ALL_A, and CSI300. CSI300/CSI500 are built from real ingested Tushare index members, and switching a pool rolls the active Research Scope.
-- `08-research_candidate_dashboard` detail pages now merge quant profiles, research contexts, AI delta reviews, news documents, effective assessments, and warehouse PIT trends to show Chinese names, deferred-AI reasons, news evidence, missing valuation state, and key metric trend charts.
-- `11-valuation_discovery` now consumes data-layer company-pool snapshots and publishes the fourth-layer Quant Feature Mart + Analysis Mart. Third-layer ETL transactionally publishes `quant_feature_snapshots/rows` for quant-only reads, the Feature Mart derives `net_profit_y1/y2` from raw annual `n_income_attr_p`, the financial freshness canary is `roe_ttm`, and suspension hard filters prefer `is_suspended` from `suspend_d` while only applying the missing-bar fallback on sufficiently covered market dates; quant output is then transactionally published as `analysis_snapshots`, metrics, findings, and lineage. The latest full-A real quant run `qr_ee2c66c6199f4a76` used 5304 non-ST/non-delisting/non-future-listed companies and produced 3 pass and 55 near-threshold names; the 2026-07-02 CSI300 end-to-end refresh `vdr_abcdbd61a870a9e1e8024343` used 300 real inputs and produced one near-threshold name.
-- `06-multi_agent_research` registers `analysis_snapshot_get`, `analysis_metrics_list`, `analysis_findings_list`, `quant_feature_snapshot_get`, and `quant_feature_rows_list` scoped read tools. It also exposes `rag_evidence_retrieve`/`evidence_retrieve` for agent-facing RAG evidence retrieval, returning locatable `evidence_blocks` and optionally freezing them into EvidencePackage records.
-- `06-multi_agent_research` now includes the v0.4 agent runtime foundation: centralized Prompt Repository, fixed step JSON, Shared Context Store, rule-based guardrails, A2A-style ExpertAgent cards, MainAgent scheduled planning/LLM-backed user-Q&A planning/final review, and cached `get_main_agent_runtime()` dependency. MainAgent does not call tools or write business tables; user-Q&A planning and `GeneralQnaAgent`/`DataAnalystAgent` answers require the real LLM and fail explicitly instead of using template fallbacks.
-- `/settings/data` and `/api/v1/data-policies` expose the rolling data acquisition policy to frontend users.
-
-## Update Policy
-
-- `docs/code/` is intentionally unversioned and always tracks the current repository implementation.
-- Update the relevant module documents in the same change whenever a feature is completed.
-- Product design history is provided by versioned `design` documents; implementation history is provided by Git.
-- Module IDs 02 and 09 remain reserved for history; their implementations were removed in v0.2, so they have no current code documents.
-
----
-
-*This index describes the current source tree. Module IDs 02 and 09 are historical reservations whose implementations were removed in v0.2.*
+Module IDs 02 and 09 are historical reservations; their implementations have been removed.

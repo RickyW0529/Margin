@@ -202,7 +202,7 @@ describe("api mutation helpers", () => {
           finished_at: null,
           output_ref: null,
           started_at: "2026-06-23T08:32:00Z",
-          state: "waiting_provider",
+          state: "waiting_budget",
           step_id: "NEWS_REFRESH",
         },
       ],
@@ -224,7 +224,7 @@ describe("api mutation helpers", () => {
       status: "running",
       target_count: 2,
       trace_id: "vdr-1",
-      wait_state: "waiting_provider",
+      wait_state: "waiting_budget",
     });
     expect(detail.steps[0]).toMatchObject({
       error_code: null,
