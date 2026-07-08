@@ -103,6 +103,20 @@ class ContextArtifactSummaryResponse(BaseModel):
     payload_hash: str
 
 
+class ContextArtifactDetailResponse(BaseModel):
+    """Full persisted Context Store artifact detail."""
+
+    artifact_id: str
+    run_id: str
+    artifact_type: str
+    producer_agent: str
+    payload_json: dict
+    payload_hash: str
+    source_refs: list[str]
+    evidence_refs: list[str]
+    created_at: datetime
+
+
 class UserQnaRunResponse(BaseModel):
     """Response returned by the MainAgent-backed Q&A endpoint."""
 
@@ -435,6 +449,37 @@ def _execute_user_qna_plan(
         step_statuses=step_statuses,
         artifacts=tuple(artifacts),
         references=tuple(references),
+    )
+
+
+@router.get(
+    "/agent-artifacts/{artifact_id}",
+    response_model=ContextArtifactDetailResponse,
+)
+def get_agent_artifact(
+    artifact_id: str,
+    runtime: RuntimeDep,
+) -> ContextArtifactDetailResponse:
+    """Return one persisted Context Store artifact for chat-side expansion."""
+    artifact = runtime.get_context_artifact(artifact_id)
+    if artifact is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "agent_artifact_not_found",
+                "message": "agent artifact not found",
+            },
+        )
+    return ContextArtifactDetailResponse(
+        artifact_id=artifact.artifact_id,
+        run_id=artifact.run_id,
+        artifact_type=artifact.artifact_type,
+        producer_agent=artifact.producer_agent,
+        payload_json=artifact.payload_json,
+        payload_hash=artifact.payload_hash,
+        source_refs=list(artifact.source_refs),
+        evidence_refs=list(artifact.evidence_refs),
+        created_at=artifact.created_at,
     )
 
 

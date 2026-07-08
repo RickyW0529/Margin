@@ -236,6 +236,10 @@ class MainAgentRuntime:
         """List Context Store artifacts for a run."""
         return self._context_store.list_artifacts(run_id)
 
+    def get_context_artifact(self, artifact_id: str) -> ContextArtifact | None:
+        """Return one Context Store artifact by ID."""
+        return self._context_store.get_artifact(artifact_id)
+
     @staticmethod
     def _step_from_definition(
         definition: AgentStepDefinition,

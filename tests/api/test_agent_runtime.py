@@ -12,7 +12,10 @@ from margin.agent_runtime.chat_repository import (
     AgentChatRepository,
     MemoryAgentChatRepository,
 )
-from margin.agent_runtime.context_store import MemoryAgentContextStore
+from margin.agent_runtime.context_store import (
+    MemoryAgentContextStore,
+    make_context_artifact,
+)
 from margin.agent_runtime.main_agent import MainAgentRuntime
 from margin.agent_runtime.schedules import MemoryAgentScheduleRepository
 from margin.agent_runtime.step_definitions import load_scheduled_stock_analysis_flow
@@ -186,6 +189,50 @@ def test_user_qna_rejects_unknown_chat_session() -> None:
     assert response.json()["detail"]["code"] == "chat_session_not_found"
 
 
+def test_agent_artifact_detail_returns_persisted_payload() -> None:
+    """Test that chat artifact refs can be expanded through a scoped read API."""
+    context_store = MemoryAgentContextStore()
+    artifact = make_context_artifact(
+        artifact_id="ctx_test_table",
+        run_id="ar_qna_1",
+        artifact_type="analysis_table",
+        producer_agent="DataAnalystAgent",
+        payload_json={
+            "columns": ["symbol", "score"],
+            "rows": [
+                {"symbol": "000001.SZ", "score": 86},
+                {"symbol": "600000.SH", "score": 82},
+            ],
+        },
+        source_refs=("GET /api/v1/research",),
+        evidence_refs=("ev_1",),
+    )
+    context_store.add_artifact(artifact)
+    client = _client_with_agent_runtime(context_store=context_store)
+
+    response = client.get("/api/v1/agent-artifacts/ctx_test_table")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["artifact_id"] == "ctx_test_table"
+    assert body["artifact_type"] == "analysis_table"
+    assert body["producer_agent"] == "DataAnalystAgent"
+    assert body["payload_json"]["rows"][0]["symbol"] == "000001.SZ"
+    assert body["payload_hash"] == artifact.payload_hash
+    assert body["source_refs"] == ["GET /api/v1/research"]
+    assert body["evidence_refs"] == ["ev_1"]
+
+
+def test_agent_artifact_detail_returns_404_for_missing_artifact() -> None:
+    """Test that missing artifact IDs are explicit 404s."""
+    client = _client_with_agent_runtime()
+
+    response = client.get("/api/v1/agent-artifacts/ctx_missing")
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "agent_artifact_not_found"
+
+
 def test_stock_analysis_schedule_can_be_saved_and_read() -> None:
     """Test that the automatic stock-analysis schedule is persisted by the API."""
     client = _client_with_agent_runtime()
@@ -259,6 +306,7 @@ def test_user_qna_guardrail_blocks_guaranteed_return_claims() -> None:
 def _client_with_agent_runtime(
     llm_provider: DeterministicLLMProvider | None = None,
     chat_repository: AgentChatRepository | None = None,
+    context_store: MemoryAgentContextStore | None = None,
 ) -> TestClient:
     """Build a test client with in-memory agent runtime dependencies."""
     dashboard_repository = MemoryDashboardRepository()
@@ -309,7 +357,7 @@ def _client_with_agent_runtime(
         create_app(
             dashboard_services=bundle,
             main_agent_runtime=MainAgentRuntime(
-                context_store=MemoryAgentContextStore(),
+                context_store=context_store or MemoryAgentContextStore(),
                 card_registry=default_agent_card_registry(),
                 scheduled_flow=load_scheduled_stock_analysis_flow(),
                 llm_provider_factory=llm_provider_factory,

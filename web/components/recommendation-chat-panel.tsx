@@ -8,11 +8,14 @@ import { ArrowUp, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
+import { AgentArtifactPanel } from "@/components/agent-artifact-panel";
 import { Textarea } from "@/components/ui/textarea";
 import { notifyAgentChatSessionsChanged } from "@/lib/agent-chat-history";
 import {
   askMainAgentQna,
+  fetchAgentArtifact,
   fetchAgentChatSession,
+  type AgentArtifactDetail,
   type AgentChatMessage,
   type AgentChatSession,
   type AgentChatSessionDetail,
@@ -28,6 +31,7 @@ type RecommendationChatPanelProps = {
     universe?: string;
     language?: UiLanguage;
   }) => Promise<MainAgentQnaResponse>;
+  fetchArtifact?: (artifactId: string) => Promise<AgentArtifactDetail>;
   fetchSession?: (sessionId: string) => Promise<AgentChatSessionDetail>;
   initialChatSessionId?: string | null;
   scopeVersionId?: string;
@@ -58,6 +62,7 @@ function formatReferenceLabel(
 /** Renders the first-screen Q&A entry backed by read-only recommendation data. */
 export function RecommendationChatPanel({
   ask = askMainAgentQna,
+  fetchArtifact = fetchAgentArtifact,
   fetchSession = fetchAgentChatSession,
   initialChatSessionId = null,
   scopeVersionId = "scope-current",
@@ -258,6 +263,7 @@ export function RecommendationChatPanel({
             {chatMessages.map((chatMessage) => (
               <ChatMessageBubble
                 key={chatMessage.id}
+                fetchArtifact={fetchArtifact}
                 language={language}
                 message={chatMessage}
                 t={t}
@@ -317,10 +323,12 @@ function UserMessageBubble({ message }: { message: string }) {
 }
 
 function ChatMessageBubble({
+  fetchArtifact,
   language,
   message,
   t,
 }: {
+  fetchArtifact: (artifactId: string) => Promise<AgentArtifactDetail>;
   language: UiLanguage;
   message: ChatDisplayMessage;
   t: ReturnType<typeof useLanguage>["t"];
@@ -368,6 +376,11 @@ function ChatMessageBubble({
               })}
             </div>
           ) : null}
+          <AgentArtifactPanel
+            artifacts={message.response.artifacts}
+            fetchArtifact={fetchArtifact}
+            language={language}
+          />
         </div>
       ) : null}
     </AssistantBlock>

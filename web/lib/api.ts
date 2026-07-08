@@ -125,6 +125,27 @@ export type ValuationDiscoveryRunStatus = {
 };
 
 /** MainAgent-backed read-only Q&A response. */
+export type AgentArtifactSummary = {
+  artifact_id: string;
+  artifact_type: string;
+  producer_agent: string;
+  payload_hash: string;
+};
+
+/** Full Context Store artifact detail for chat-side expansion. */
+export type AgentArtifactDetail = {
+  artifact_id: string;
+  run_id: string;
+  artifact_type: string;
+  producer_agent: string;
+  payload_json: Record<string, unknown>;
+  payload_hash: string;
+  source_refs: string[];
+  evidence_refs: string[];
+  created_at: string;
+};
+
+/** MainAgent-backed read-only Q&A response. */
 export type MainAgentQnaResponse = {
   session_id: string;
   user_message_id: string;
@@ -145,12 +166,7 @@ export type MainAgentQnaResponse = {
       status: string;
     }>;
   };
-  artifacts: Array<{
-    artifact_id: string;
-    artifact_type: string;
-    producer_agent: string;
-    payload_hash: string;
-  }>;
+  artifacts: AgentArtifactSummary[];
   references: Array<Record<string, string>>;
 };
 
@@ -504,6 +520,16 @@ export function fetchAgentChatSession(
 ): Promise<AgentChatSessionDetail> {
   return request<AgentChatSessionDetail>(
     `/api/v1/agent-chat/sessions/${encodeURIComponent(sessionId)}`,
+    { cache: "no-store" },
+  );
+}
+
+/** Fetches one persisted Context Store artifact for chat-side expansion. */
+export function fetchAgentArtifact(
+  artifactId: string,
+): Promise<AgentArtifactDetail> {
+  return request<AgentArtifactDetail>(
+    `/api/v1/agent-artifacts/${encodeURIComponent(artifactId)}`,
     { cache: "no-store" },
   );
 }

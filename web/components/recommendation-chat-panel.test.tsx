@@ -12,6 +12,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
+  AgentArtifactDetail,
   AgentChatSessionDetail,
   MainAgentQnaResponse,
 } from "@/lib/api";
@@ -44,10 +45,11 @@ describe("RecommendationChatPanel", () => {
         sessionId: "acs_1",
       }),
     );
+    const fetchArtifact = makeArtifactFetcher();
 
     render(
       <LanguageProvider>
-        <RecommendationChatPanel ask={ask} />
+        <RecommendationChatPanel ask={ask} fetchArtifact={fetchArtifact} />
       </LanguageProvider>,
     );
 
@@ -67,7 +69,7 @@ describe("RecommendationChatPanel", () => {
     );
     expect(screen.getByText("今日推荐关注 000001、600000。")).toBeInTheDocument();
     expect(screen.getByText("研究智能体 → 数据分析师")).toBeInTheDocument();
-    expect(screen.getByText("分析表")).toBeInTheDocument();
+    expect(screen.getAllByText("分析表").length).toBeGreaterThan(0);
     expect(screen.getByText("推荐列表")).toBeInTheDocument();
     expect(screen.queryByText("GET /api/v1/research")).not.toBeInTheDocument();
 
@@ -89,11 +91,13 @@ describe("RecommendationChatPanel", () => {
         userMessage: "之前问过的问题",
       }),
     );
+    const fetchArtifact = makeArtifactFetcher();
 
     render(
       <LanguageProvider>
         <RecommendationChatPanel
           ask={vi.fn()}
+          fetchArtifact={fetchArtifact}
           fetchSession={fetchSession}
           initialChatSessionId="acs_saved"
         />
@@ -121,6 +125,7 @@ describe("RecommendationChatPanel", () => {
         userMessage: "之前问过的问题",
       }),
     );
+    const fetchArtifact = makeArtifactFetcher();
     const ask = vi.fn().mockResolvedValue(
       makeQnaResponse({
         answer: "这是追问回答。",
@@ -135,6 +140,7 @@ describe("RecommendationChatPanel", () => {
       <LanguageProvider>
         <RecommendationChatPanel
           ask={ask}
+          fetchArtifact={fetchArtifact}
           fetchSession={fetchSession}
           initialChatSessionId="acs_saved"
         />
@@ -158,6 +164,48 @@ describe("RecommendationChatPanel", () => {
     );
     expect(screen.getByText("继续解释一下")).toBeInTheDocument();
     expect(screen.getByText("这是追问回答。")).toBeInTheDocument();
+  });
+
+  it("expands analysis-table artifacts below assistant messages", async () => {
+    const ask = vi.fn().mockResolvedValue(
+      makeQnaResponse({
+        answer: "我整理了一张候选表。",
+        sessionId: "acs_table",
+      }),
+    );
+    const fetchArtifact = vi.fn().mockResolvedValue(
+      makeArtifactDetail({
+        artifactId: "ctx_1",
+        artifactType: "analysis_table",
+        payload: {
+          rows: [
+            { symbol: "000001.SZ", name: "平安银行", final_score: 86 },
+            { symbol: "600000.SH", name: "浦发银行", final_score: 82 },
+          ],
+        },
+      }),
+    );
+
+    render(
+      <LanguageProvider>
+        <RecommendationChatPanel ask={ask} fetchArtifact={fetchArtifact} />
+      </LanguageProvider>,
+    );
+
+    fireEvent.change(screen.getByLabelText("投资研究问题"), {
+      target: { value: "给我一张候选表" },
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "发送" })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+
+    await screen.findByText("我整理了一张候选表。");
+    await waitFor(() => expect(fetchArtifact).toHaveBeenCalledWith("ctx_1"));
+    expect(screen.getByText("000001.SZ")).toBeInTheDocument();
+    expect(screen.getByText("平安银行")).toBeInTheDocument();
+    expect(screen.getByText("86")).toBeInTheDocument();
+    expect(screen.getByText("sha256:test")).toBeInTheDocument();
   });
 });
 
@@ -207,6 +255,40 @@ function makeQnaResponse({
     references: [
       { api: "GET /api/v1/research", scope_version_id: "scope-current" },
     ],
+  };
+}
+
+function makeArtifactFetcher() {
+  return vi.fn().mockResolvedValue(
+    makeArtifactDetail({
+      artifactId: "ctx_1",
+      artifactType: "analysis_table",
+      payload: {
+        rows: [{ symbol: "000001.SZ", name: "平安银行", final_score: 86 }],
+      },
+    }),
+  );
+}
+
+function makeArtifactDetail({
+  artifactId,
+  artifactType,
+  payload,
+}: {
+  artifactId: string;
+  artifactType: string;
+  payload: Record<string, unknown>;
+}): AgentArtifactDetail {
+  return {
+    artifact_id: artifactId,
+    artifact_type: artifactType,
+    created_at: "2026-07-08T10:01:00Z",
+    evidence_refs: [],
+    payload_hash: "sha256:test",
+    payload_json: payload,
+    producer_agent: "DataAnalystAgent",
+    run_id: "ar_qna_1",
+    source_refs: ["GET /api/v1/research"],
   };
 }
 

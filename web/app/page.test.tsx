@@ -12,6 +12,7 @@ import HomePage from "./page";
 
 vi.mock("@/lib/api", () => ({
   askMainAgentQna: vi.fn(),
+  fetchAgentArtifact: vi.fn(),
   fetchAgentChatSession: vi.fn(),
   saveProviderSecret: vi.fn(),
   testProviderConfig: vi.fn(),
