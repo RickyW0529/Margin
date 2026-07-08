@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import UTC, datetime
 
@@ -42,6 +43,9 @@ def main(argv: list[str] | None = None) -> int:
     import tushare as ts
 
     client = ts.pro_api(token=token)
+    http_url = os.environ.get("MARGIN_TUSHARE_HTTP_URL", "").strip()
+    if http_url:
+        client._DataApi__http_url = http_url
     engine = create_database_engine()
     session_factory = create_session_factory(engine)
     repository = SQLAlchemyTushareSourceRepository(session_factory)
@@ -106,6 +110,9 @@ def main(argv: list[str] | None = None) -> int:
 
 def _resolve_tushare_token() -> str | None:
     """Resolve the Tushare token for this manual backfill script."""
+    env_token = os.environ.get("MARGIN_TUSHARE_TOKEN", "").strip()
+    if env_token:
+        return env_token
     try:
         token = SecretManager().resolve("tushare_token").strip()
     except SecretNotFoundError:

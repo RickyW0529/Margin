@@ -83,9 +83,12 @@ class TushareQualityScreen:
         "adj_factor",
         "suspend_d",
         "daily_basic",
+        "moneyflow",
+        "margin_detail",
         "pledge_stat",
         "index_daily",
         "index_weight",
+        "limit_list_d",
     }
     _SYMBOL_ENDPOINTS = {
         "stock_basic",
@@ -94,14 +97,19 @@ class TushareQualityScreen:
         "adj_factor",
         "suspend_d",
         "daily_basic",
+        "moneyflow",
+        "margin_detail",
         "income",
         "balancesheet",
         "cashflow",
         "fina_indicator",
         "fina_audit",
+        "forecast",
+        "express",
         "index_member",
         "pledge_stat",
         "index_weight",
+        "limit_list_d",
     }
 
     def evaluate(

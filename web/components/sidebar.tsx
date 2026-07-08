@@ -9,23 +9,27 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
+import { LanguageToggle } from "@/components/language-toggle";
+import { useLanguage, type TranslationKey } from "@/lib/i18n";
+import { useRecentQuestions } from "@/lib/recent-questions";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
   href: string;
-  label: string;
+  labelKey: TranslationKey;
   icon: React.ElementType;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "问答", icon: MessageCircle },
-  { href: "/dashboard", label: "今日推荐", icon: MonitorUp },
-  { href: "/settings", label: "设置", icon: Settings },
+  { href: "/", labelKey: "navAsk", icon: MessageCircle },
+  { href: "/dashboard", labelKey: "navDashboard", icon: MonitorUp },
+  { href: "/settings", labelKey: "navSettings", icon: Settings },
 ];
 
 /** Mobile header navigation for narrow screens. */
 export function MobileNavigation() {
   const pathname = usePathname() ?? "/";
+  const { t } = useLanguage();
 
   return (
     <div className="grid min-w-0 flex-1 gap-3 md:hidden">
@@ -41,18 +45,13 @@ export function MobileNavigation() {
             <span className="block truncate text-base font-semibold text-foreground">
               Margin
             </span>
-            <span className="block truncate text-xs text-muted-foreground">
-              安全边际
-            </span>
           </span>
         </Link>
-        <span className="max-w-28 shrink-0 truncate rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-          个人研究模式
-        </span>
+        <LanguageToggle />
       </div>
       <nav
         className="grid grid-cols-3 gap-1 rounded-md border border-border bg-muted/40 p-1"
-        aria-label="移动主导航"
+        aria-label={t("navSettings")}
       >
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
@@ -72,7 +71,7 @@ export function MobileNavigation() {
               )}
             >
               <Icon className="size-3.5 shrink-0" />
-              <span className="truncate">{item.label}</span>
+              <span className="truncate">{t(item.labelKey)}</span>
             </Link>
           );
         })}
@@ -84,9 +83,11 @@ export function MobileNavigation() {
 /** Minimal application sidebar for the user-facing workspace. */
 export function Sidebar() {
   const pathname = usePathname() ?? "/";
+  const { t } = useLanguage();
+  const recentQuestions = useRecentQuestions();
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-6 self-start overflow-y-auto border-r border-sidebar-border bg-sidebar p-4 text-sidebar-foreground md:flex">
+    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col self-start overflow-y-auto border-r border-sidebar-border bg-sidebar p-3 text-sidebar-foreground md:flex">
       <Link href="/" className="inline-flex items-center gap-2.5 no-underline">
         <span className="grid size-8 place-items-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
           <ShieldCheck className="size-4" />
@@ -95,13 +96,10 @@ export function Sidebar() {
           <span className="block text-base font-semibold text-sidebar-accent-foreground">
             Margin
           </span>
-          <span className="block text-xs text-sidebar-foreground/70">
-            安全边际
-          </span>
         </span>
       </Link>
 
-      <nav className="grid flex-1 content-start gap-1" aria-label="主导航分组">
+      <nav className="mt-8 grid content-start gap-1" aria-label="main navigation">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const active =
@@ -125,16 +123,34 @@ export function Sidebar() {
                   active ? "text-accent" : "text-sidebar-foreground/60",
                 )}
               />
-              {item.label}
+              {t(item.labelKey)}
             </Link>
           );
         })}
       </nav>
 
-      <div className="border-t border-sidebar-border px-3 py-4">
-        <p className="text-xs leading-relaxed text-sidebar-foreground/60">
-          证据驱动 · 只读优先
-        </p>
+      <div className="mt-8 grid gap-2">
+        <h2 className="px-3 text-xs font-medium text-sidebar-accent-foreground">
+          {t("navRecent")}
+        </h2>
+        {recentQuestions.length > 0 ? (
+          <div className="grid gap-0.5">
+            {recentQuestions.map((question) => (
+              <Link
+                key={question.id}
+                className="truncate rounded-md px-3 py-2 text-sm text-sidebar-foreground/86 no-underline transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+                href="/"
+                title={question.text}
+              >
+                {question.text}
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="px-3 py-2 text-sm text-sidebar-foreground/45">
+            {t("navRecentEmpty")}
+          </p>
+        )}
       </div>
     </aside>
   );

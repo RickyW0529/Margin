@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "margin.agent_runtime.step_schema.v0.4",
+  "title": "Margin Agent Runtime Step Definition",
+  "type": "object",
+  "required": [
+    "flow_id",
+    "version",
+    "run_type",
+    "fixed_flow",
+    "permission_mode",
+    "steps"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "flow_id": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "run_type": {
+      "type": "string",
+      "enum": [
+        "scheduled_stock_analysis",
+        "manual_refresh",
+        "user_qna"
+      ]
+    },
+    "fixed_flow": {
+      "type": "boolean"
+    },
+    "permission_mode": {
+      "type": "string",
+      "enum": [
+        "read_only",
+        "write_allowed"
+      ]
+    },
+    "description": {
+      "type": "string"
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "step_id",
+          "order",
+          "expert_agent",
+          "skill_id",
+          "required_artifacts",
+          "produced_artifacts",
+          "guardrails",
+          "retry_policy",
+          "frontend_projection"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "step_id": {
+            "type": "string"
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "expert_agent": {
+            "type": "string"
+          },
+          "skill_id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "required_artifacts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "produced_artifacts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "guardrails": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "input",
+                "plan",
+                "tool",
+                "output",
+                "final"
+              ]
+            }
+          },
+          "retry_policy": {
+            "type": "object",
+            "required": [
+              "max_attempts",
+              "retryable_statuses"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "max_attempts": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "retryable_statuses": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "partial",
+                    "blocked",
+                    "failed"
+                  ]
+                }
+              }
+            }
+          },
+          "frontend_projection": {
+            "type": "object",
+            "required": [
+              "label",
+              "visible"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "visible": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

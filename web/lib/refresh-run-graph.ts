@@ -11,6 +11,7 @@ export type RefreshRunNodeState =
 export type RefreshRunNode = {
   id: string;
   label: string;
+  owner: string;
   state: RefreshRunNodeState;
   status: string;
   errorCode: string | null;
@@ -18,20 +19,57 @@ export type RefreshRunNode = {
   finishedAt: string | null;
 };
 
+type RefreshRunStepDefinition = {
+  id: string;
+  label: string;
+  owner: string;
+  aliases: string[];
+};
+
 export const REFRESH_RUN_STEPS = [
-  ["DATA_FRESHNESS_CHECK", "数据新鲜度"],
-  ["DATA_SYNC", "数据同步"],
-  ["SCOPE_RESOLVE", "范围解析"],
-  ["QUANT_INPUT_BUILD", "量化输入"],
-  ["QUANT_RUN", "量化筛选"],
-  ["NEWS_TARGET_SELECTION", "新闻目标"],
-  ["NEWS_REFRESH", "新闻获取"],
-  ["NEWS_INDEXING", "文本入库"],
-  ["RESEARCH_CONTEXT_BUILD", "证据上下文"],
-  ["AI_DELTA_REVIEW", "AI 复核"],
-  ["VALUATION_PUBLISH", "结果发布"],
-  ["DASHBOARD_REFRESH", "看板刷新"],
-] as const;
+  {
+    aliases: ["DATA_FRESHNESS_CHECK", "DATA_SYNC", "SCOPE_RESOLVE"],
+    id: "data_inspection",
+    label: "数据检查",
+    owner: "DataInspectionAgent",
+  },
+  {
+    aliases: ["QUANT_INPUT_BUILD", "QUANT_RUN"],
+    id: "quant_analysis",
+    label: "量化分析",
+    owner: "QuantAgent",
+  },
+  {
+    aliases: ["NEWS_TARGET_SELECTION", "NEWS_REFRESH", "NEWS_INDEXING"],
+    id: "news_acquisition",
+    label: "新闻/研报",
+    owner: "NewsAcquisitionAgent",
+  },
+  {
+    aliases: ["RESEARCH_CONTEXT_BUILD"],
+    id: "evidence_context",
+    label: "证据构建",
+    owner: "StockAnalystAgent",
+  },
+  {
+    aliases: ["AI_DELTA_REVIEW", "VALUATION_PUBLISH"],
+    id: "stock_analysis",
+    label: "综合分析",
+    owner: "StockAnalystAgent",
+  },
+  {
+    aliases: ["FINAL_REVIEW"],
+    id: "main_agent_final_review",
+    label: "主 Agent 复核",
+    owner: "MainAgent",
+  },
+  {
+    aliases: ["DASHBOARD_REFRESH"],
+    id: "dashboard_publish",
+    label: "Dashboard 发布",
+    owner: "Dashboard",
+  },
+] as const satisfies readonly RefreshRunStepDefinition[];
 
 const COMPLETED_STATES = new Set([
   "completed",
@@ -72,21 +110,11 @@ export function buildRefreshRunNodes(
   run: ResearchRunDetailV2 | null,
 ): RefreshRunNode[] {
   const stepsById = new Map(
-    (run?.steps ?? []).map((step) => [text(step.step), step]),
+    (run?.steps ?? []).map((step) => [extractStepId(step), step]),
   );
-  const nodes = REFRESH_RUN_STEPS.map(([id, label]) => {
-    const step = stepsById.get(id);
-    const status = text(step?.status) || "pending";
-    return {
-      errorCode: nullableText(step?.error_code),
-      finishedAt: nullableText(step?.finished_at),
-      id,
-      label,
-      startedAt: nullableText(step?.started_at),
-      state: classifyStep(status, step),
-      status,
-    };
-  });
+  const nodes = REFRESH_RUN_STEPS.map((definition) =>
+    buildRefreshRunNode(definition, stepsById, run),
+  );
 
   if (
     run &&
@@ -105,6 +133,107 @@ export function buildRefreshRunNodes(
     }
   }
   return nodes;
+}
+
+function buildRefreshRunNode(
+  definition: RefreshRunStepDefinition,
+  stepsById: Map<string, Record<string, unknown>>,
+  run: ResearchRunDetailV2 | null,
+): RefreshRunNode {
+  const stepKeys = stepsById.has(definition.id)
+    ? [definition.id]
+    : definition.aliases;
+  const steps = stepKeys
+    .map((id) => stepsById.get(id))
+    .filter((step): step is Record<string, unknown> => Boolean(step));
+
+  if (steps.length === 0) {
+    if (
+      definition.id === "dashboard_publish" &&
+      run &&
+      COMPLETED_STATES.has(run.status)
+    ) {
+      return {
+        errorCode: null,
+        finishedAt: null,
+        id: definition.id,
+        label: definition.label,
+        owner: definition.owner,
+        startedAt: null,
+        state: "completed",
+        status: "published",
+      };
+    }
+    return {
+      errorCode: null,
+      finishedAt: null,
+      id: definition.id,
+      label: definition.label,
+      owner: definition.owner,
+      startedAt: null,
+      state: "pending",
+      status: "pending",
+    };
+  }
+
+  const classifiedSteps = steps.map((step) => {
+    const status = text(step.status) || "pending";
+    return {
+      errorCode: nullableText(step.error_code),
+      finishedAt: nullableText(step.finished_at),
+      startedAt: nullableText(step.started_at),
+      state: classifyStep(status, step),
+      status,
+    };
+  });
+  const state = summarizeState(classifiedSteps, steps.length, stepKeys.length);
+  const activeStep =
+    classifiedSteps.find((step) => step.state === state) ??
+    classifiedSteps[classifiedSteps.length - 1];
+
+  return {
+    errorCode:
+      classifiedSteps.find((step) => step.errorCode)?.errorCode ?? null,
+    finishedAt: latestText(classifiedSteps.map((step) => step.finishedAt)),
+    id: definition.id,
+    label: definition.label,
+    owner: definition.owner,
+    startedAt: earliestText(classifiedSteps.map((step) => step.startedAt)),
+    state,
+    status:
+      state === "completed"
+        ? `${classifiedSteps.length}/${stepKeys.length} completed`
+        : activeStep.status,
+  };
+}
+
+function summarizeState(
+  steps: Array<{ state: RefreshRunNodeState }>,
+  matchedCount: number,
+  expectedCount: number,
+): RefreshRunNodeState {
+  if (steps.some((step) => step.state === "failed")) {
+    return "failed";
+  }
+  if (steps.some((step) => step.state === "waiting")) {
+    return "waiting";
+  }
+  if (steps.some((step) => step.state === "active")) {
+    return "active";
+  }
+  if (steps.some((step) => step.state === "queued")) {
+    return "queued";
+  }
+  if (
+    matchedCount === expectedCount &&
+    steps.every((step) => step.state === "completed")
+  ) {
+    return "completed";
+  }
+  if (steps.some((step) => step.state === "completed")) {
+    return "active";
+  }
+  return "pending";
 }
 
 function classifyStep(
@@ -142,4 +271,17 @@ function text(value: unknown): string {
 function nullableText(value: unknown): string | null {
   const normalized = text(value);
   return normalized ? normalized : null;
+}
+
+function extractStepId(step: Record<string, unknown>): string {
+  return text(step.step_id) || text(step.step);
+}
+
+function earliestText(values: Array<string | null>): string | null {
+  return values.filter((value): value is string => Boolean(value)).sort()[0] ?? null;
+}
+
+function latestText(values: Array<string | null>): string | null {
+  const sorted = values.filter((value): value is string => Boolean(value)).sort();
+  return sorted[sorted.length - 1] ?? null;
 }

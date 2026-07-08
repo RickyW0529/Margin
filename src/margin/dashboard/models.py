@@ -95,6 +95,9 @@ class ResearchItem(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
     claim_ids: list[str] = Field(default_factory=list)
     risk_score: float | None = None
+    target_weight: float | None = None
+    adjusted_weight: float | None = None
+    agent_adjustment: dict[str, Any] = Field(default_factory=dict)
     counter_arguments: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utc_now)
 
@@ -235,6 +238,9 @@ class ResearchCandidateListItemV2(BaseModel):
     assessment_freshness: str | None = None
     stale_reason: str | None = None
     final_score: float | None = None
+    target_weight: float | None = None
+    adjusted_weight: float | None = None
+    agent_adjustment: dict[str, Any] = Field(default_factory=dict)
     discount_rate: float | None = None
     confidence: float | None = None
     last_checked_at: datetime
@@ -305,15 +311,6 @@ class ScopeSettingsView(BaseModel):
     model_config = {"frozen": True}
 
 
-class ReadOnlyCopilotResponse(BaseModel):
-    """Read-only dashboard Copilot response."""
-
-    answer: str
-    references: tuple[dict[str, str], ...] = Field(default_factory=tuple)
-
-    model_config = {"frozen": True}
-
-
 class JobRun(BaseModel):
     """Synchronous MVP job record for nightly run endpoints."""
 
@@ -337,4 +334,3 @@ class JobRun(BaseModel):
             A timezone-aware UTC datetime.
         """
         return ensure_utc(value)
-

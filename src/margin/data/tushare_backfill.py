@@ -26,14 +26,19 @@ _COMPANY_SYMBOL_ENDPOINTS = {
     "adj_factor",
     "suspend_d",
     "daily_basic",
+    "moneyflow",
+    "margin_detail",
     "income",
     "balancesheet",
     "cashflow",
     "fina_indicator",
     "fina_audit",
+    "forecast",
+    "express",
     "index_member",
     "pledge_stat",
     "index_weight",
+    "limit_list_d",
 }
 
 

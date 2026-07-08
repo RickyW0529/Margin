@@ -9,10 +9,11 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ResearchRunDetailV2 } from "@/lib/api";
+import { LanguageProvider } from "@/lib/i18n";
 
 import { DashboardRefreshControl } from "./dashboard-refresh-control";
 
@@ -90,7 +91,7 @@ describe("DashboardRefreshControl", () => {
       ],
     });
 
-    render(
+    renderControl(
       <DashboardRefreshControl
         fetchLatestRun={vi.fn().mockResolvedValue(null)}
         fetchRunDetail={fetchRunDetail}
@@ -98,28 +99,29 @@ describe("DashboardRefreshControl", () => {
         startRefresh={startRefresh}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "刷新今日研究" }));
+    fireEvent.click(screen.getByRole("button", { name: "启动今日研究" }));
 
     const dialog = await screen.findByRole("dialog", {
-      name: "最近一次刷新节点图",
+      name: "Agent 协作进度",
     });
     expect(dialog).toBeInTheDocument();
     expect(dialog).toHaveClass("fixed");
     expect(screen.getByText("run-1")).toBeInTheDocument();
-    expect(screen.getByTestId("refresh-node-DATA_FRESHNESS_CHECK")).toHaveAttribute(
-      "data-node-state",
-      "completed",
-    );
-    expect(screen.getByTestId("refresh-node-DATA_SYNC")).toHaveAttribute(
+    expect(screen.getByText("DataInspectionAgent")).toBeInTheDocument();
+    expect(screen.getByText("QuantAgent")).toBeInTheDocument();
+    expect(screen.getByTestId("refresh-node-data_inspection")).toHaveAttribute(
       "data-node-state",
       "queued",
     );
-    expect(screen.getByTestId("refresh-node-DATA_SYNC")).not.toHaveClass(
-      "animate-pulse",
-    );
-    expect(screen.getByTestId("refresh-node-QUANT_RUN")).toHaveAttribute(
+    expect(screen.getByTestId("refresh-node-quant_analysis")).toHaveAttribute(
       "data-node-state",
       "pending",
+    );
+    expect(screen.getByTestId("refresh-node-data_inspection")).not.toHaveClass(
+      "animate-pulse",
+    );
+    expect(screen.getByTestId("refresh-node-quant_analysis")).not.toHaveClass(
+      "animate-pulse",
     );
     expect(screen.queryByRole("link", { name: "查看详情" })).toBeNull();
     expect(startRefresh).toHaveBeenCalledWith({
@@ -152,7 +154,7 @@ describe("DashboardRefreshControl", () => {
       }),
     );
 
-    render(
+    renderControl(
       <DashboardRefreshControl
         fetchLatestRun={vi.fn().mockResolvedValue(null)}
         fetchRunDetail={fetchRunDetail}
@@ -160,16 +162,16 @@ describe("DashboardRefreshControl", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "刷新今日研究" }));
+    fireEvent.click(screen.getByRole("button", { name: "启动今日研究" }));
     expect(await screen.findByText("run-old")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "刷新今日研究" }));
+    fireEvent.click(screen.getByRole("button", { name: "启动今日研究" }));
     expect(await screen.findByText("run-new")).toBeInTheDocument();
     expect(screen.queryByText("run-old")).not.toBeInTheDocument();
   });
 
   it("allows users to collapse and reopen the latest run graph", async () => {
-    render(
+    renderControl(
       <DashboardRefreshControl
         fetchLatestRun={vi.fn().mockResolvedValue({
           run_id: "run-latest",
@@ -184,14 +186,14 @@ describe("DashboardRefreshControl", () => {
     );
 
     expect(await screen.findByText("run-latest")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "收起节点图" }));
+    fireEvent.click(screen.getByRole("button", { name: "收起 Agent 进度" }));
     await waitFor(() =>
-      expect(screen.queryByRole("dialog", { name: "最近一次刷新节点图" }))
+      expect(screen.queryByRole("dialog", { name: "Agent 协作进度" }))
         .not.toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "打开节点图" }));
-    expect(screen.getByRole("dialog", { name: "最近一次刷新节点图" }))
+    fireEvent.click(screen.getByRole("button", { name: "打开 Agent 进度" }));
+    expect(screen.getByRole("dialog", { name: "Agent 协作进度" }))
       .toBeInTheDocument();
   });
 
@@ -202,7 +204,7 @@ describe("DashboardRefreshControl", () => {
       status: "accepted",
     });
 
-    render(
+    renderControl(
       <DashboardRefreshControl
         fetchLatestRun={vi.fn().mockResolvedValue({
           run_id: "run-active",
@@ -218,7 +220,7 @@ describe("DashboardRefreshControl", () => {
     );
 
     const button = await screen.findByRole("button", {
-      name: "刷新进行中",
+      name: "Agent 研究中",
     });
     expect(button).toBeDisabled();
 
@@ -234,7 +236,7 @@ describe("DashboardRefreshControl", () => {
       status: "accepted",
     });
 
-    render(
+    renderControl(
       <DashboardRefreshControl
         fetchLatestRun={vi.fn().mockResolvedValue(null)}
         fetchRunDetail={vi.fn().mockResolvedValue({
@@ -249,8 +251,12 @@ describe("DashboardRefreshControl", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "刷新今日研究" }));
+    fireEvent.click(screen.getByRole("button", { name: "启动今日研究" }));
 
     await waitFor(() => expect(routerMocks.refresh).toHaveBeenCalledTimes(1));
   });
 });
+
+function renderControl(node: ReactElement) {
+  return render(<LanguageProvider>{node}</LanguageProvider>);
+}

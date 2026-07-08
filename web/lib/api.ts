@@ -124,10 +124,53 @@ export type ValuationDiscoveryRunStatus = {
   }>;
 };
 
-/** Read-only dashboard Copilot response. */
-export type ReadOnlyCopilotResponse = {
+/** MainAgent-backed read-only Q&A response. */
+export type MainAgentQnaResponse = {
+  run_id: string;
   answer: string;
+  guardrail: {
+    allowed: boolean;
+    decision: string;
+    summary: string;
+    triggered_policies: string[];
+  };
+  agent_trace: {
+    steps: Array<{
+      step_id: string;
+      expert_agent_name: string;
+      skill_id: string;
+      status: string;
+    }>;
+  };
+  artifacts: Array<{
+    artifact_id: string;
+    artifact_type: string;
+    producer_agent: string;
+    payload_hash: string;
+  }>;
   references: Array<Record<string, string>>;
+};
+
+/** Persisted automatic stock-analysis schedule. */
+export type StockAnalysisSchedule = {
+  schedule_id: string;
+  run_type: string;
+  enabled: boolean;
+  hour: number;
+  minute: number;
+  timezone: string;
+  scope_version_id: string;
+  universe: string;
+  last_triggered_at: string | null;
+  next_run_at: string | null;
+  updated_at: string;
+};
+
+/** User-facing schedule update; scope/universe are kept on defaults in the UI. */
+export type StockAnalysisScheduleUpdate = {
+  enabled: boolean;
+  hour: number;
+  minute: number;
 };
 
 /** Evidence locator row rendered in the v0.2 detail page. */
@@ -413,15 +456,44 @@ export function fetchResearchRunDetailV2(
   ).then(mapValuationDiscoveryRunStatus);
 }
 
-/** Calls the read-only dashboard Copilot endpoint. */
-export function askReadOnlyCopilot(requestBody: {
+/** Calls the MainAgent-backed read-only Q&A endpoint. */
+export function askMainAgentQna(requestBody: {
   scope_version_id: string;
   message: string;
   universe?: string;
-}): Promise<ReadOnlyCopilotResponse> {
-  return post<ReadOnlyCopilotResponse>(
-    "/api/v1/research/copilot",
+  language?: "zh" | "en";
+}): Promise<MainAgentQnaResponse> {
+  return post<MainAgentQnaResponse>(
+    "/api/v1/agent-runs/user-qna",
     requestBody,
+  );
+}
+
+/** Fetches the persisted automatic stock-analysis schedule. */
+export function fetchStockAnalysisSchedule(): Promise<StockAnalysisSchedule> {
+  return request<StockAnalysisSchedule>(
+    "/api/v1/agent-schedules/stock-analysis",
+    { cache: "no-store" },
+  );
+}
+
+/** Updates the automatic stock-analysis schedule. */
+export function updateStockAnalysisSchedule(
+  update: StockAnalysisScheduleUpdate,
+): Promise<StockAnalysisSchedule> {
+  return request<StockAnalysisSchedule>(
+    "/api/v1/agent-schedules/stock-analysis",
+    {
+      method: "PUT",
+      cache: "no-store",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...update,
+        scope_version_id: "scope-current",
+        timezone: "Asia/Shanghai",
+        universe: "ALL_A",
+      }),
+    },
   );
 }
 

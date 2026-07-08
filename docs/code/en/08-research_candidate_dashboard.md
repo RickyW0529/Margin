@@ -11,12 +11,13 @@ Current responsibilities:
 - server-side paginated visible recommendation queries;
 - dedicated `/dashboard/items/[itemId]` company details separating current review, effective assessment, quant visuals, and RAG evidence;
 - quant score, risk flag, evidence locator, and version display;
-- home recommendation Q&A that answers from candidate data and rejects refresh, sync, settings, or trading intent;
+- the Q&A home entrypoint; actual user questions go through the module 06 MainAgent API and are routed to expert agents;
 - a recommendation dashboard for stocks, reasons, confidence, quant score, valuation discount, and risk hints;
 - one-click "刷新今日研究" on the recommendation dashboard, using default `scope-current` and current time to start valuation discovery, best-effort wake a worker after API acceptance, and show the latest refresh as a live React Flow node graph; while the latest run is non-terminal, starting another refresh is disabled to avoid duplicate queueing;
 - dashboard projection is published as soon as the latest quant run finishes, before expensive AI review; when runs share the same decision time, selection is stable by `created_at`, `item_count`, and `run_id` so a newer full-market projection is not hidden by an older one-stock run;
+- dashboard items now carry ML portfolio projection fields: `target_weight`, `adjusted_weight`, and `agent_adjustment`. The ML quant default sets `adjusted_weight` equal to `target_weight` and marks `agent_adjustment.source=quant_default`; later StockAnalystAgent overlays can delete candidates or reduce weights through adjustment artifacts;
 - Provider key configuration with write-only secret handling.
-- personal-research information architecture: user-facing pages are limited to Q&A, recommendations, settings, and settings subpages; backend defaults and settings absorb Provider, scope, run, and candidate concepts.
+- simplified information architecture: user-facing pages are limited to Q&A, recommendations, settings, and settings subpages; backend defaults and settings absorb Provider, scope, run, and candidate concepts.
 
 Removed responsibilities:
 
@@ -29,28 +30,30 @@ Removed responsibilities:
 
 | Path | Current role |
 | --- | --- |
-| `src/margin/dashboard/models.py` | Dashboard DTOs: compatibility run/item aggregates, candidate list/detail DTOs, feedback, provider status, settings views, read-only Copilot response, and job run. |
+| `src/margin/dashboard/models.py` | Dashboard DTOs: compatibility run/item aggregates, candidate list/detail DTOs, feedback, provider status, settings views, and job run. |
 | `src/margin/dashboard/db_models.py` | SQLAlchemy rows for `dashboard_runs`, `dashboard_items`, and `dashboard_feedback`. |
 | `src/margin/dashboard/repository.py` | Memory/PostgreSQL repository with candidate pagination, filtering, sorting, facets, and feedback storage. |
 | `src/margin/dashboard/service.py` | `DashboardQueryService`, `FeedbackService`, `ProviderStatusService`, `JobService`, and `DashboardServiceBundle`. |
 | `src/margin/dashboard/detail_context.py` | Detail-page context loader. It uses centralized SQL query factories to read research contexts, AI delta reviews, effective assessments, and news documents, and reads PIT-safe trends from the warehouse. |
-| `src/margin/api/routes/dashboard.py` | `/api/v1/research`, `/api/v1/research/items/{item_id}`, `/api/v1/research/copilot`, feedback, provider status, and job endpoints. |
+| `src/margin/api/routes/dashboard.py` | `/api/v1/research`, `/api/v1/research/items/{item_id}`, feedback, provider status, and job endpoints. |
 | `src/margin/api/routes/valuation_discovery.py` | Refresh entrypoints: `POST /api/v1/valuation-discovery/refreshes` and `GET /api/v1/valuation-discovery/runs/{run_id}`; the start route wakes a valuation worker once in the background so new work does not sit queued until the next polling tick. |
-| `web/app/layout.tsx` | Global application shell; sidebar exposes only Q&A, today's recommendations, and settings, while the top bar shows personal research mode. |
-| `web/app/page.tsx` | Question-first home page; reads visible recommendation previews and uses the default question "今日推荐股票是什么？" through read-only Copilot. |
-| `web/app/dashboard/page.tsx` | Today's recommendation dashboard with latest visible candidates, key reason labels, confidence, quant score, valuation discount, and one-click refresh. |
+| `web/app/layout.tsx` | Global application shell; sidebar exposes only Q&A, today's recommendations, and settings, while the top bar provides language switching. |
+| `web/app/page.tsx` | Question-first home page; the first screen is a natural-language input that submits to the MainAgent Q&A API. |
+| `web/app/dashboard/page.tsx` / `web/components/recommendation-dashboard-view.tsx` | Today's recommendation dashboard; the server reads the latest dashboard projection, and the client renders recommendations, reasons, confidence, quant score, valuation discount, and one-click refresh using the active UI language. |
 | `web/app/dashboard/items/[itemId]/page.tsx` | Dedicated recommendation detail route with current/effective review, quant visuals, risk review, and RAG evidence. |
-| `web/app/settings/page.tsx` | Settings hub splitting key, data, scope, and strategy configuration into subpages. |
+| `web/app/settings/page.tsx` | Settings hub splitting key, data, scope, automation, and strategy configuration into subpages. |
 | `web/app/settings/` | Provider, scope, strategy, and data settings subpages; the scope page uses a company-pool selector for CSI500, ALL_A, and CSI300, while advanced version lists still use `ConfigVersionList`. |
 | `web/lib/api.ts` | Frontend API client for v0.2 dashboard, valuation discovery, and provider settings. |
-| `web/components/current-vs-effective-panel.tsx` | Current review vs effective assessment panel. |
-| `web/components/evidence-locator-list.tsx` | Evidence locator rendering; external text is rendered as text. |
+| `web/lib/i18n.tsx` / `web/components/language-toggle.tsx` | Shared Chinese/English UI copy and language toggle. |
+| `web/components/current-vs-effective-panel.tsx` | Current review vs effective assessment panel with localized user-facing labels. |
+| `web/components/evidence-locator-list.tsx` | Evidence summary rendering; locator/snapshot/PIT details are hidden by default in a technical details section, and external text is rendered as text. |
 | `web/components/metric-trend-chart.tsx` | Compact fixed-size SVG trend chart for price, valuation, ROE, profit, and other detail metrics. |
 | `web/hooks/use-dashboard-refresh-run.ts` | Latest dashboard refresh-run state owner: start, load newest run, poll run detail, toggle open/collapsed state, and block duplicate starts while the latest run is non-terminal. |
 | `web/lib/refresh-run-graph.ts` | Normalizes sparse valuation discovery step payloads into fixed React Flow node states: completed, active, queued, pending, waiting, and failed. |
 | `web/components/dashboard-refresh-control.tsx` | One-click dashboard refresh controller that hides scope/decision inputs, starts valuation discovery with defaults, shows the latest refresh graph in a modal overlay, and disables the action while a non-terminal run exists. |
 | `web/components/dashboard-refresh-node-graph.tsx` | React Flow graph for the 12 valuation discovery phases; active nodes pulse, completed nodes are green, queued/waiting nodes are yellow, pending nodes are gray, and failed/upstream-blocked nodes are red. |
-| `web/components/recommendation-chat-panel.tsx` | Home Q&A component with default question, loading/error/disabled states, and business-facing reference labels. |
+| `web/components/recommendation-chat-panel.tsx` | Home Q&A component that submits to the MainAgent Q&A API and renders loading/error/disabled/success states, collapsed trace, and business-facing reference labels. |
+| `web/components/stock-analysis-schedule-panel.tsx` | Automation settings panel; users configure only enabled state and daily time while scope/universe stay on backend defaults. |
 | `web/components/company-pool-selector.tsx` | User-facing company-pool selector showing real member counts and current state for CSI500, ALL_A, and CSI300; unavailable pools are disabled and custom pools are shown as a future entry. |
 | `web/components/provider-settings-panel.tsx` | Write-only Provider secret configuration. |
 
@@ -63,7 +66,7 @@ Removed responsibilities:
 | Model | Key fields |
 | --- | --- |
 | `ResearchRun` | `run_id`, `decision_at`, `strategy_id`, `version_id`, `universe`, `status`, counts, `created_at`. |
-| `ResearchItem` | `item_id`, `run_id`, `symbol`, `signal_type`, `confidence`, `statement`, `workflow_run_id`, `snapshot_id`, `status`, `abstain_reason`, `rejection_reasons`, `evidence_ids`, `claim_ids`, `risk_score`, `counter_arguments`, `created_at`. |
+| `ResearchItem` | `item_id`, `run_id`, `symbol`, `signal_type`, `confidence`, `statement`, `workflow_run_id`, `snapshot_id`, `status`, `abstain_reason`, `rejection_reasons`, `evidence_ids`, `claim_ids`, `risk_score`, `target_weight`, `adjusted_weight`, `agent_adjustment`, `counter_arguments`, `created_at`. |
 
 ### 3.2 Public DTOs
 
@@ -72,12 +75,11 @@ Removed responsibilities:
 | `DashboardFilters` | Candidate filters: screening status, data status, review-required flag, freshness, and query. |
 | `DashboardSort` | Safe sort descriptor: `final_score`, `confidence`, `last_checked_at`, or `symbol`; `asc` or `desc`. |
 | `DashboardPageInfo` | Cursor pagination metadata. |
-| `ResearchCandidateListItemV2` | One candidate row with security, scope, status, risk, review, score, confidence, and timestamp fields. |
+| `ResearchCandidateListItemV2` | One candidate row with security, scope, status, risk, review, score, target weight, adjusted weight, expert adjustment summary, confidence, and timestamp fields. |
 | `ResearchCandidateListResponse` | Candidate page with items, page info, facets, as-of timestamp, and scope version. |
 | `ResearchItemDetailV2` | Company detail aggregate: `item`, `current_review`, `effective_assessment`, `factors`, `thesis`, `evidence`, and `versions`. |
 | `FeedbackRecord` | Append-only user feedback. |
 | `ProviderStatus` | Provider health status. |
-| `ReadOnlyCopilotResponse` | Read-only Copilot answer and references. |
 | `JobRun` | Lightweight job lookup record. |
 
 ## 4. Backend Services
@@ -120,7 +122,6 @@ All endpoints are under `/api/v1`.
 | --- | --- | --- |
 | `GET` | `/research` | Candidate list query with scope, universe, filters, cursor, and sort params. |
 | `GET` | `/research/items/{item_id}` | Company detail aggregate. |
-| `POST` | `/research/copilot` | Read-only Copilot; mutating intent returns `403 copilot_read_only`. |
 | `POST` | `/research-items/{item_id}/feedback` | Append user feedback. |
 | `GET` | `/provider-status` | Provider health status. |
 | `GET` | `/jobs/{job_run_id}` | Job record lookup. |
@@ -140,18 +141,20 @@ Removed public endpoints:
 - `/research-items/{item_id}/report`
 - `/research-items/{item_id}/export`
 - `/jobs/nightly-runs`
+- `/research/copilot`
 
 ## 7. Frontend Pages
 
 | Page | Data source | Role |
 | --- | --- | --- |
-| `/` | `fetchResearchCandidates`, `askReadOnlyCopilot` | Question-first home page. The first screen is a natural-language input, the default question is "今日推荐股票是什么？", and the page shows up to three recommendation previews. |
+| `/` | `askMainAgentQna` | Question-first home page. The first screen is a natural-language input; requests go through MainAgent to expert agents and remain read-only by default. |
 | `/dashboard` | `fetchResearchCandidates`, `startValuationDiscoveryRefresh`, `fetchValuationDiscoveryRuns`, `fetchResearchRunDetailV2` | Today's recommendation dashboard with latest visible candidates, reason labels, confidence, quant score, and valuation discount; the top "刷新今日研究" action starts valuation discovery with defaults and opens/updates the latest refresh React Flow graph in a modal overlay; clicking a card navigates to the detail subpage. |
 | `/dashboard/items/[itemId]` | `fetchResearchItemDetailV2` | Dedicated recommendation detail page with thesis, quant visuals, current/effective review, risk review, and RAG evidence locators. |
-| `/settings` | Static subpage index | Settings hub for key, data, scope, and strategy configuration; the main workflow does not expose low-level configuration. |
+| `/settings` | Static subpage index | Settings hub for key, data, scope, automation, and strategy configuration; the main workflow does not expose low-level configuration. |
 | `/settings/providers` | Provider config API | Tushare, Tavily, LLM, Embedding, and Rerank key config. |
 | `/settings/scope` | Scope config API | User-visible universe and indicator scope. The company-pool section directly shows CSI500, ALL_A, and CSI300 with current selection state; switching a ready pool rolls a new active Research Scope. |
 | `/settings/strategy` | Strategy config API | Strategy template, custom prompt, and versions. |
+| `/settings/schedule` | Agent schedule API | Daily automation time; persisted in `agent_runtime_schedules` and triggered by the worker into the fixed MainAgent flow. |
 
 ## 8. Frontend Components
 
@@ -160,9 +163,9 @@ Removed public endpoints:
 | `DashboardRefreshControl` | One-click refresh entry on today's recommendation page. It calls the refresh API with `scope-current` and current time, opens the latest refresh graph in a modal overlay on success without pushing page content, shows "刷新进行中" and disables the button while the latest run is non-terminal, and shows business-facing setup errors on failure. |
 | `DashboardRefreshNodeGraph` | React Flow run graph: active nodes pulse, completed nodes are green, queued/waiting nodes are yellow, pending nodes are gray, and failed or `upstream_failed` nodes are red. |
 | `CompanyPoolSelector` | Scope-settings selector for company pools; only persisted pools with real members can be switched, and the current pool is disabled with a "当前使用" state. |
-| `RecommendationChatPanel` | User-facing home Q&A with default question, read-only Copilot call, and loading/disabled/error/success states. |
+| `RecommendationChatPanel` | User-facing home Q&A with MainAgent-backed request handling, loading/disabled/error/success states, collapsed trace, and business-facing reference labels. |
 | `CurrentVsEffectivePanel` | Separates current review from effective assessment. |
-| `EvidenceLocatorList` | Renders evidence ids, source levels, locators, snapshot ids, news snippets, and whether the document is linked to the current security. |
+| `EvidenceLocatorList` | Renders evidence summaries, source levels, news snippets, and whether the document is linked to the current security; locator, snapshot, and PIT fields are collapsed under technical details. |
 | `MetricTrendChart` | Renders detail-page metric trends with a stable empty state when fewer than two points are available. |
 | `ProviderSettingsPanel` | Write-only Provider secret form. |
 | `ProviderStatusPanel` | Provider health list with healthy/blocker counts in the header. |
@@ -174,14 +177,14 @@ Backend coverage:
 - candidate pagination, filters, and facets;
 - item detail current/effective separation;
 - detail-context merging for Chinese names, deferred AI status, news evidence, missing valuation state, and trend data;
-- read-only Copilot mutation rejection;
+- MainAgent Q&A guardrails for non-compliant requests such as guaranteed-return claims;
 - feedback append-only behavior;
 - memory and PostgreSQL repository conversion;
 - provider-status degradation.
 
 Frontend coverage:
 
-- question-first home page and recommendation preview;
+- question-first home page, MainAgent Q&A endpoint, and collapsed trace display;
 - recommendation dashboard list, detail route, quant visuals, RAG evidence, metrics, and empty state;
 - recommendation dashboard one-click refresh defaults, backend worker wake-up, duplicate-start prevention for non-terminal runs, latest-run-only React Flow graph, queued/running states, live polling, collapse/expand, and error handling;
 - settings hub subpage entrypoints;

@@ -54,7 +54,7 @@ Provider URLs are routed by `provider_router` within each category. LLM detectio
 
 `IndicatorViewVersion` and `QuantFeatureSetVersion` are intentionally orthogonal: hiding `pb` in the UI does not remove `pb` from required quant inputs or the full underlying data layer. The default quant feature set now requires `n_income_attr_p`, `roe_ttm`, and `pe_ttm`: raw `n_income_attr_p` feeds Feature Mart annual-profit derivation, while `roe_ttm` is the financial freshness canary.
 
-The current default bootstrap creates and activates the v0.3 versioned defaults: `quant-feature-default-v0.3.0`, `quant-strategy-default-v0.3.0`, and `scope-default-v0.3.0`. Historical v0.2 config rows are preserved. When a v0.2 row is already active, repository activation transactions flush/deprecate the old active row before activating the new one so PostgreSQL partial unique indexes continue to enforce one active version per config family.
+The current default bootstrap creates and activates the v0.4.1 ML quant defaults: `quant-feature-default-v0.4.1`, `quant-strategy-ml-lifecycle-v0.4.1`, and `scope-default-v0.4.1`. Historical v0.2/v0.3/v0.4.0 config rows are preserved. When an older row is already active, repository activation transactions flush/deprecate the old active row before activating the new one so PostgreSQL partial unique indexes continue to enforce one active version per config family. v0.4.1 moves the old multi-factor raw field `n_income_attr_p` from required to optional; ML serving consumes fourth-layer derived `net_profit_y1` / `net_profit_y2` instead.
 
 ### Secret Store and authorization boundary
 

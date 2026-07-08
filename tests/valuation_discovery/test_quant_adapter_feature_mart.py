@@ -89,6 +89,53 @@ def test_quant_adapter_persists_feature_bound_input_snapshot() -> None:
     assert analysis_repository.get_feature_snapshot(snapshot.feature_snapshot_id)
 
 
+def test_quant_adapter_rebinds_strategy_metadata_for_reloaded_snapshot() -> None:
+    """Reloaded input snapshots should still route to the scoped ML strategy."""
+    valuation_repository = MemoryValuationDiscoveryRepository()
+    analysis_repository = MemoryAnalysisMartRepository()
+    snapshot_builder = QuantInputSnapshotBuilder(
+        valuation_repository,
+        _FactWarehouse(),
+    )
+    feature_pipeline = QuantFeatureMartETLPipeline(
+        repository=analysis_repository,
+        source_loader=_feature_frame,
+        snapshot_persister=snapshot_builder.persist,
+    )
+    quant_repository = MemoryQuantRepository()
+    adapter = QuantAdapter(
+        quant_service=QuantService(quant_repository),
+        snapshot_builder=snapshot_builder,
+        scope_provider=_ScopeProvider(_scope(ml_strategy=True)),
+        quant_repository=quant_repository,
+        feature_mart_pipeline=feature_pipeline,
+    )
+    snapshot = adapter.build_input(
+        scope_version_id="scope-v1",
+        decision_at=DECISION_AT,
+    )
+    reloaded_like_snapshot = snapshot.model_copy(
+        update={"quant_feature_set": None, "user_indicator_view": None}
+    )
+    quant_repository.set_cross_section(
+        snapshot.snapshot_id,
+        _feature_frame(snapshot).set_index("security_id", drop=False),
+    )
+
+    result = adapter.run(
+        scope_version_id="scope-v1",
+        decision_at=DECISION_AT,
+        input_snapshot=reloaded_like_snapshot,
+    )
+
+    quant_run = quant_repository.get_run(result.quant_run_id)
+    rows = quant_repository.list_results(result.quant_run_id)
+    assert quant_run is not None
+    assert quant_run.strategy_version_id == "ml-test-v1"
+    assert rows
+    assert rows[0].factor_details["strategy_family"] == "ml_lgbm_lifecycle"
+
+
 def test_sqlalchemy_quant_feature_mart_etl_persists_atomically(
     database_url: str,
 ) -> None:
@@ -196,7 +243,7 @@ class _FactWarehouse:
         )
 
 
-def _scope() -> ScopeBinding:
+def _scope(*, ml_strategy: bool = False) -> ScopeBinding:
     """Build a deterministic scope binding with an ALL_A universe and feature set."""
     universe = UniverseSnapshot(
         universe_code=UniverseCode.ALL_A,
@@ -212,6 +259,22 @@ def _scope() -> ScopeBinding:
             version_id="qfs-v1",
             required_indicators=("pe_ttm",),
             optional_indicators=("roe_ttm",),
+            metadata=(
+                {
+                    "quant_strategy": {
+                        "quant_strategy_version_id": "ml-test-v1",
+                        "strategy_family": "ml_lgbm_lifecycle",
+                        "thresholds": {
+                            "max_stock_exposure": 0.8,
+                            "min_cash": 0.2,
+                            "top_n": 2,
+                            "score_temperature": 0.2,
+                        },
+                    }
+                }
+                if ml_strategy
+                else {}
+            ),
         ),
         user_indicator_view=UserIndicatorView(
             version_id="view-v1",
@@ -231,18 +294,42 @@ def _feature_frame(_snapshot) -> pd.DataFrame:
                 "symbol": "000001.SZ",
                 "name": "平安银行",
                 "industry_id": "bank",
+                "decision_at": DECISION_AT,
+                "listing_date": datetime(2020, 1, 1, tzinfo=UTC),
                 "pe_ttm": 8.2,
                 "roe_ttm": 0.15,
+                "revenue_yoy": 0.12,
+                "profit_yoy": 0.11,
+                "return_20d": 0.03,
+                "return_6m_ex_1m": 0.08,
+                "avg_amount_20d": 200_000_000.0,
+                "volatility_120d": 0.22,
+                "max_drawdown_250d": -0.12,
+                "net_profit_y1": 100.0,
+                "net_profit_y2": 90.0,
                 "is_st": False,
+                "is_suspended": False,
             },
             {
                 "security_id": "000002.SZ",
                 "symbol": "000002.SZ",
                 "name": "万科A",
                 "industry_id": "real_estate",
+                "decision_at": DECISION_AT,
+                "listing_date": datetime(2020, 1, 1, tzinfo=UTC),
                 "pe_ttm": 12.5,
                 "roe_ttm": 0.09,
+                "revenue_yoy": 0.05,
+                "profit_yoy": 0.04,
+                "return_20d": 0.01,
+                "return_6m_ex_1m": 0.03,
+                "avg_amount_20d": 180_000_000.0,
+                "volatility_120d": 0.25,
+                "max_drawdown_250d": -0.16,
+                "net_profit_y1": 80.0,
+                "net_profit_y2": 76.0,
                 "is_st": False,
+                "is_suspended": False,
             },
         ]
     )

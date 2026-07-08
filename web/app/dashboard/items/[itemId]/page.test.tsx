@@ -6,6 +6,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchResearchItemDetailV2 } from "@/lib/api";
+import { LanguageProvider } from "@/lib/i18n";
 
 import RecommendationDetailPage from "./page";
 
@@ -90,9 +91,11 @@ describe("RecommendationDetailPage", () => {
 
   it("renders detail visuals and evidence on a dedicated route", async () => {
     render(
-      await RecommendationDetailPage({
-        params: Promise.resolve({ itemId: "item-1" }),
-      }),
+      <LanguageProvider>
+        {await RecommendationDetailPage({
+          params: Promise.resolve({ itemId: "item-1" }),
+        })}
+      </LanguageProvider>,
     );
 
     expect(fetchResearchItemDetailV2).toHaveBeenCalledWith("item-1");
@@ -105,11 +108,11 @@ describe("RecommendationDetailPage", () => {
     expect(screen.getAllByText("证据包为空，AI 未形成可引用结论。").length).toBeGreaterThan(
       0,
     );
-    expect(screen.getByText("AI 估值未形成")).toBeInTheDocument();
+    expect(screen.getByText("暂未形成估值结论")).toBeInTheDocument();
     expect(screen.getByText("复权收盘价")).toBeInTheDocument();
-    expect(screen.getByText("量化可视化")).toBeInTheDocument();
+    expect(screen.getByText("量化视图")).toBeInTheDocument();
     expect(screen.getByText("风险与复核")).toBeInTheDocument();
-    expect(screen.getByText("年报 第 2 页")).toBeInTheDocument();
+    expect(screen.getByText("年报")).toBeInTheDocument();
     expect(screen.getByText("已关联本股票")).toBeInTheDocument();
   });
 });

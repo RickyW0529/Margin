@@ -99,6 +99,24 @@ def test_pipeline_recovers_all_artifacts_after_worker_restart() -> None:
     assert dependencies.repository.get_run(run.run_id).state == "succeeded"
 
 
+def test_quant_run_receives_reloaded_input_after_worker_restart() -> None:
+    """Verify QUANT_RUN consumes the persisted input artifact after restart."""
+    dependencies = _dependencies()
+    orchestrator = ValuationDiscoveryOrchestrator(dependencies)
+    orchestrator.start(scope_version_id="scope-1", decision_at=_decision_at())
+
+    for step_no in range(5):
+        assert ValuationDiscoveryStepWorker(
+            dependencies,
+            worker_id=f"worker-{step_no}",
+        ).run_once(now=_decision_at())
+
+    assert dependencies.quant_service.call_count == 1
+    assert dependencies.quant_service.last_run_kwargs["input_snapshot"] == "snapshot-1"
+    assert dependencies.quant_service.last_run_kwargs["scope_version_id"] == "scope-1"
+    assert dependencies.quant_service.last_run_kwargs["decision_at"] == _decision_at()
+
+
 def test_missing_stage_dependency_fails_instead_of_fake_success() -> None:
     """Verify a missing production stage cannot be reported as succeeded.
 
@@ -186,6 +204,26 @@ def test_service_start_refresh_returns_accepted_response() -> None:
     assert response.run_id.startswith("vdr_")
 
 
+def test_dashboard_refresh_receives_agent_run_metadata() -> None:
+    """Verify scheduled MainAgent run metadata reaches dashboard publishing."""
+    dependencies = _dependencies()
+    service = ValuationDiscoveryService(ValuationDiscoveryOrchestrator(dependencies))
+    response = service.start_refresh(
+        scope_version_id="scope-1",
+        decision_at=_decision_at(),
+        idempotency_key="k1",
+        metadata={"agent_run_id": "ar_sched_1"},
+    )
+
+    while service.create_step_worker(worker_id="worker-1").run_once(now=_decision_at()):
+        pass
+
+    assert response.run_id.startswith("vdr_")
+    assert dependencies.valuation_publisher.dashboard_kwargs["agent_run_id"] == (
+        "ar_sched_1"
+    )
+
+
 def test_service_wake_refresh_worker_claims_first_pending_step() -> None:
     """Verify API wake-up claims work without waiting for the polling tick."""
     dependencies = _dependencies()
@@ -252,6 +290,7 @@ class _FakeQuantService:
         """Initialize the fake quant service with no error and zero calls."""
         self._error: str | None = None
         self.call_count = 0
+        self.last_run_kwargs: dict[str, object] = {}
         self._snapshot = "snapshot-1"
         self._run: _FakeQuantRun | None = None
 
@@ -259,9 +298,10 @@ class _FakeQuantService:
         """Configure the service to raise on the next run call."""
         self._error = error_code
 
-    def run(self, **_: object) -> _FakeQuantRun:
+    def run(self, **kwargs: object) -> _FakeQuantRun:
         """Run the fake quant pipeline and return a deterministic quant run."""
         self.call_count += 1
+        self.last_run_kwargs = dict(kwargs)
         if self._error is not None:
             raise RuntimeError(self._error)
         self._run = _FakeQuantRun(
@@ -430,10 +470,15 @@ class _FakeAIReviewService:
 class _FakePublisher:
     """Fake publisher returning deterministic assessment and dashboard IDs."""
 
+    def __init__(self) -> None:
+        """Initialize fake publisher call capture."""
+        self.dashboard_kwargs: dict[str, object] = {}
+
     def publish(self, **_: object) -> str:
         """Publish and return a deterministic effective assessment ID."""
         return "assessment-1"
 
-    def refresh_dashboard(self, **_: object) -> str:
+    def refresh_dashboard(self, **kwargs: object) -> str:
         """Refresh dashboard projection."""
+        self.dashboard_kwargs = dict(kwargs)
         return "dashboard-1"

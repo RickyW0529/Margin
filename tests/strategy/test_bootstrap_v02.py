@@ -86,7 +86,7 @@ def test_bootstrap_creates_one_executable_default_scope_idempotently(
         required_provider_names=("akshare",),
     )
 
-    assert first.scope_version_id == "scope-default-v0.3.0"
+    assert first.scope_version_id == "scope-default-v0.4.1"
     assert second.scope_version_id == first.scope_version_id
     assert len(repository.list_provider_configs("local-admin")) == 1
     assert len(repository.list_universe_definitions("local-admin")) == 1
@@ -189,16 +189,22 @@ def test_bootstrap_creates_v03_defaults_when_v02_history_exists(
     )
 
     active_scope = repository.get_active_research_scope("local-admin")
-    feature_set = repository.get_quant_feature_set("quant-feature-default-v0.3.0")
-    strategy = repository.get_quant_strategy("quant-strategy-default-v0.3.0")
-    assert result.scope_version_id == "scope-default-v0.3.0"
+    feature_set = repository.get_quant_feature_set("quant-feature-default-v0.4.1")
+    strategy = repository.get_quant_strategy("quant-strategy-ml-lifecycle-v0.4.1")
+    assert result.scope_version_id == "scope-default-v0.4.1"
     assert active_scope is not None
-    assert active_scope.quant_feature_set_version_id == "quant-feature-default-v0.3.0"
-    assert active_scope.quant_strategy_version_id == "quant-strategy-default-v0.3.0"
+    assert active_scope.quant_feature_set_version_id == "quant-feature-default-v0.4.1"
+    assert active_scope.quant_strategy_version_id == "quant-strategy-ml-lifecycle-v0.4.1"
     assert feature_set is not None
-    assert feature_set.required_indicators == ("n_income_attr_p", "roe_ttm", "pe_ttm")
+    assert feature_set.required_indicators == ("roe_ttm", "pe_ttm")
+    assert "n_income_attr_p" in feature_set.optional_indicators
+    assert "net_profit_y1" in feature_set.optional_indicators
+    assert "mf_lg_net_amount" in feature_set.optional_indicators
+    assert "limit_trade_blocked" in feature_set.optional_indicators
     assert strategy is not None
-    assert strategy.thresholds["presets"]["ALL_A"]["factor_weights"]
+    assert strategy.strategy_family == "ml_lgbm_lifecycle"
+    assert strategy.thresholds["top_n"] == 40
+    assert strategy.thresholds["max_stock_exposure"] == 0.8
     assert repository.get_research_scope("scope-default-v0.2.0") is not None
     engine.dispose()
 

@@ -107,9 +107,9 @@ function RefreshStatusNode({ data }: NodeProps<RefreshFlowNode>) {
 
   return (
     <div
-      aria-label={`${data.label}，${stateText(data.state)}`}
+      aria-label={`${data.label}，${data.owner}，${stateText(data.state)}`}
       className={cn(
-        "w-[172px] rounded-lg border bg-card px-3 py-2.5 shadow-sm transition",
+        "w-[188px] rounded-lg border bg-card px-3 py-2.5 shadow-sm transition",
         tone.container,
         pulse ? "animate-pulse ring-2" : "",
       )}
@@ -140,6 +140,9 @@ function RefreshStatusNode({ data }: NodeProps<RefreshFlowNode>) {
               {data.label}
             </strong>
           </div>
+          <p className="mt-0.5 truncate text-[11px] font-medium text-muted-foreground">
+            {data.owner}
+          </p>
           <p className={cn("mt-1 text-xs", tone.text)}>
             {stateText(data.state)}
           </p>
@@ -168,7 +171,7 @@ function toFlowNode(node: RefreshRunNode, index: number): RefreshFlowNode {
     data: { ...node, order: index },
     id: node.id,
     position: {
-      x: column * 240,
+      x: column * 252,
       y: row * 136,
     },
     sourcePosition: Position.Right,

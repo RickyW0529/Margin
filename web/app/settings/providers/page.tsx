@@ -15,7 +15,7 @@ export default async function ProviderSettingsPage() {
   try {
     providers = await fetchProviderConfigs();
   } catch {
-    error = "Provider 配置暂时不可用";
+    error = "密钥配置暂时不可用";
   }
 
   return (
@@ -23,10 +23,10 @@ export default async function ProviderSettingsPage() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-accent">
-            Settings
+            设置
           </p>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
-            Provider 密钥配置
+            密钥配置
           </h1>
           <p className="mt-1.5 text-sm text-muted-foreground">
             只写录入，永不回显明文；本地 Secret Store 加密保存。
@@ -34,10 +34,10 @@ export default async function ProviderSettingsPage() {
         </div>
         <div className="flex gap-2">
           <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-            write-only secret
+            密钥只写
           </span>
           <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-            {providers.length} configs
+            {providers.length} 项配置
           </span>
         </div>
       </header>

@@ -60,6 +60,9 @@ class DashboardItemRow(Base):
     evidence_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     claim_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     risk_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    adjusted_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    agent_adjustment: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     counter_arguments: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

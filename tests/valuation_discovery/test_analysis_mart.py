@@ -396,6 +396,87 @@ def test_analysis_mart_publisher_materializes_quant_result() -> None:
     assert {link.source_type for link in links} >= {"quant_result", "quant_input_snapshot"}
 
 
+def test_analysis_mart_publisher_materializes_ml_strategy_details() -> None:
+    """Verify ML lifecycle strategy output becomes Analysis Mart metrics and finding detail."""
+    repository = MemoryAnalysisMartRepository()
+    publisher = AnalysisMartPublisher(repository)
+    result = QuantResult(
+        result_id="quant-result-ml",
+        quant_run_id="quant-run-ml",
+        security_id="300308.SZ",
+        final_score=82.5,
+        quality_score=74.0,
+        value_score=55.0,
+        growth_score=88.0,
+        momentum_score=79.0,
+        risk_score=70.0,
+        rank_overall=1,
+        rank_in_industry=1,
+        screening_status=ScreeningStatus.PASS,
+        data_status=DataStatus.OK,
+        review_required=False,
+        research_guardrail=ResearchGuardrail.RESEARCH_ALLOWED,
+        reason_summary="ML lifecycle score selected this candidate with controlled risk.",
+        factor_details={
+            "name": "中际旭创",
+            "industry_id": "optical_module",
+            "strategy_family": "ml_lgbm_lifecycle",
+            "ml_strategy": {
+                "model_family": "lgbm_lifecycle",
+                "strategy_version": "ml-lifecycle-v1",
+                "feature_coverage": {
+                    "coverage_ratio": 0.92,
+                    "missing_features": ["moneyflow_strength"],
+                },
+                "score_components": {
+                    "ml_lifecycle_score": 82.5,
+                    "growth_signal": 91.0,
+                    "risk_health": 70.0,
+                },
+                "risk_controls": {
+                    "risk_gate": "normal",
+                    "cash_policy": "min_cash_20pct",
+                },
+                "target_weight": 0.32,
+                "cash_policy": {"max_stock_exposure": 0.8, "min_cash": 0.2},
+                "execution_boundary": "research_only_no_order",
+                "fallback_used": False,
+            },
+            "ai_quant_profile": {
+                "strategy_profile": "ml_lgbm_lifecycle",
+                "candidate": True,
+                "scores": {"ml_lifecycle_score": 82.5},
+                "raw_factors": {"return_6m_ex_1m": 0.18},
+                "research_hints": ["核对行业景气是否进入后期过热"],
+            },
+        },
+        created_at=DECISION_AT,
+    )
+
+    snapshot = publisher.publish_quant_result(
+        scope_version_id="scope-v1",
+        decision_at=DECISION_AT,
+        trading_date=date(2026, 6, 24),
+        quant_result=result,
+        input_snapshot_id="quant-input-ml",
+        strategy_version_id="ml-lifecycle-v1",
+        config_hash="sha256:config",
+        input_hash="sha256:input",
+    )
+
+    assert snapshot.summary["strategy_family"] == "ml_lgbm_lifecycle"
+    assert snapshot.summary["target_weight"] == 0.32
+    metrics = repository.list_metrics(snapshot.analysis_snapshot_id)
+    by_code = {metric.metric_code: metric for metric in metrics}
+    assert by_code["ml_lifecycle_score"].numeric_value == 82.5
+    assert by_code["ml_target_weight"].numeric_value == 0.32
+    assert by_code["ml_feature_coverage"].numeric_value == 0.92
+    [finding] = repository.list_findings(snapshot.analysis_snapshot_id)
+    assert finding.detail["strategy_family"] == "ml_lgbm_lifecycle"
+    assert finding.detail["ml_strategy"]["model_family"] == "lgbm_lifecycle"
+    assert finding.detail["ml_strategy"]["fallback_used"] is False
+
+
 def _bundle(
     *,
     snapshot_id: str = "asnap-1",

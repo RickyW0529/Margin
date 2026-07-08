@@ -12,6 +12,7 @@ import {
   fetchValuationDiscoveryRuns,
   startValuationDiscoveryRefresh,
 } from "@/lib/api";
+import { LanguageProvider } from "@/lib/i18n";
 
 import RecommendationDashboardPage from "./page";
 
@@ -135,7 +136,9 @@ describe("RecommendationDashboardPage", () => {
   });
 
   it("renders today's recommendations without exposing backend plumbing", async () => {
-    render(await RecommendationDashboardPage());
+    render(
+      <LanguageProvider>{await RecommendationDashboardPage()}</LanguageProvider>,
+    );
 
     expect(fetchResearchCandidates).toHaveBeenCalledWith(
       {
@@ -145,7 +148,7 @@ describe("RecommendationDashboardPage", () => {
       },
     );
     expect(screen.getByRole("heading", { name: "今日推荐" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "刷新今日研究" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "启动今日研究" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "平安银行" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "平安银行" })).toHaveAttribute(
       "href",
@@ -164,7 +167,9 @@ describe("RecommendationDashboardPage", () => {
   });
 
   it("loads the latest refresh run without filtering by the scope-current alias", async () => {
-    render(await RecommendationDashboardPage());
+    render(
+      <LanguageProvider>{await RecommendationDashboardPage()}</LanguageProvider>,
+    );
 
     await waitFor(() =>
       expect(fetchValuationDiscoveryRuns).toHaveBeenCalledWith({ limit: 1 }),
@@ -175,11 +180,13 @@ describe("RecommendationDashboardPage", () => {
   });
 
   it("keeps detail content out of the dashboard list page", async () => {
-    render(await RecommendationDashboardPage());
+    render(
+      <LanguageProvider>{await RecommendationDashboardPage()}</LanguageProvider>,
+    );
 
     expect(fetchResearchItemDetailV2).not.toHaveBeenCalled();
     expect(screen.queryByText("推荐详情")).not.toBeInTheDocument();
-    expect(screen.queryByText("量化可视化")).not.toBeInTheDocument();
+    expect(screen.queryByText("量化视图")).not.toBeInTheDocument();
     expect(screen.queryByText("年报 第 2 页")).not.toBeInTheDocument();
   });
 });

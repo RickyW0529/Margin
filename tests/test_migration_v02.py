@@ -1,7 +1,7 @@
-"""Migration verifier tests for v0.2 deployment audit.
+"""Migration verifier tests for deployment audit schema.
 
 Verifies that the full Alembic migration sequence runs cleanly from an empty
-database and produces the expected v0.2 schema head and table set.
+database and produces the expected current schema head and table set.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ def test_migration_sequence_from_clean_database(database_url: str) -> None:
     )
 
     assert result.current_head == result.expected_head
-    assert result.current_head == "20260702_0046_run_metadata"
+    assert result.current_head == "20260708_0050_ml_ts_land"
     assert result.failed_revision is None
     assert {
         "orchestration_runs",
@@ -80,6 +80,18 @@ def test_migration_sequence_from_clean_database(database_url: str) -> None:
         "news_search_plans",
         "news_article_findings",
         "news_security_briefs",
+        "agent_runtime_runs",
+        "agent_runtime_steps",
+        "agent_runtime_artifacts",
+        "agent_runtime_guardrail_decisions",
+        "agent_runtime_schedules",
+        "dashboard_runs",
+        "dashboard_items",
+        "source_tushare.ts_moneyflow",
+        "source_tushare.ts_margin_detail",
+        "source_tushare.ts_forecast",
+        "source_tushare.ts_express",
+        "source_tushare.ts_limit_list_d",
     } <= set(result.tables)
     assert {
         "portfolios",

@@ -24,10 +24,10 @@ export default async function ScopeSettingsPage() {
     <main className="mx-auto max-w-4xl space-y-6 px-10 py-9">
       <header>
         <p className="text-xs font-medium uppercase tracking-wider text-accent">
-          Settings
+          设置
         </p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
-          Scope 设置
+          研究范围设置
         </h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
           公司池、指标视图与冻结研究作用域均为 append-only 版本，激活后生成新研究作用域。
@@ -46,10 +46,10 @@ export default async function ScopeSettingsPage() {
         />
       </div>
       <ConfigVersionList
-        title="冻结 Research Scope"
+        title="冻结研究范围"
         kind="research-scopes"
         records={fulfilled(scopes)}
-        empty="暂无冻结 scope"
+        empty="暂无冻结研究范围"
       />
     </main>
   );

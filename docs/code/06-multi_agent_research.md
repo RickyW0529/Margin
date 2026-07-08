@@ -41,7 +41,39 @@
 | `src/margin/research/graph_audit_repository.py` | LLM/tool 调用审计 PostgreSQL repository。 |
 | `src/margin/research/production_graph.py` | 生产分析 handler、决策 handler 和引用校验器构造。 |
 | `src/margin/research/db_models.py` | graph run、node run、checkpoint、tool call、LLM call、delta review、outbox 表。 |
+| `src/margin/agent_runtime/models.py` | v0.4 agent runtime 的 run、step、plan、ContextArtifact、GuardrailDecision、AgentCard 等 Pydantic 模型。 |
+| `src/margin/agent_runtime/flows/scheduled_stock_analysis_steps.json` / `step_schema.json` | 定时股票分析固定流程 JSON 及其 schema：数据检查、量化分析、新闻获取、股票分析、MainAgent 最终复查。 |
+| `src/margin/agent_runtime/step_definitions.py` | 加载并校验固定 step JSON，运行时按 `order` 生成稳定步骤序列。 |
+| `src/margin/agent_runtime/context_store.py` | Shared Context Store 的内存与 SQLAlchemy repository，写入 run、step、artifact、guardrail decision，并校验 artifact payload hash。 |
+| `src/margin/agent_runtime/db_models.py` | v0.4 agent runtime Context Store ORM 表：run、step、artifact、guardrail decision。 |
+| `src/margin/agent_runtime/guardrails.py` | 规则型输入和计划防护栏，拦截保证收益、提示注入和固定流程篡改。 |
+| `src/margin/agent_runtime/cards.py` | A2A 风格 ExpertAgent Card 注册表，MainAgent 只发现专家 agent 与其技能，不暴露专家内部工具；定时写权限专家不允许进入用户问答计划。 |
+| `src/margin/agent_runtime/quant_agent.py` | QuantAgent 当前 ML 生命周期策略画像，固定 profile ID、策略族、80% 股票仓位/20% 现金、所需特征组和 metadata 输出；底层 scorer 仍在 `valuation_discovery.quant`，Agent 只负责选择与审计指纹。 |
+| `src/margin/agent_runtime/main_agent.py` | MainAgent foundation：创建定时固定计划、用户问答 LLM 动态计划，写入 Context Store，并按所需 artifact 执行最终复查。 |
+| `src/margin/agent_runtime/expert_agents.py` | ExpertAgent executor：`GeneralQnaAgent` 与 `DataAnalystAgent` 都通过真实 LLM 生成用户问答；`StockAnalystAgent` 在定时研究链路中生成可追溯 `portfolio_adjustment` 与 `dashboard_projection_event` artifact，允许删除风险候选或下调仓位，并可把调整后的 dashboard 投影写库，但仍不输出交易指令。 |
+| `src/margin/prompts/` | 集中 Prompt Repository、Renderer、agent runtime prompt 模板与 guardrail prompt 模板。 |
+| `src/margin/api/dependencies.py` | 暴露缓存的 `get_main_agent_runtime()` FastAPI dependency。 |
+| `alembic/versions/20260707_0047_agent_runtime.py` | 创建 agent runtime run、step、artifact、guardrail decision 持久化表。 |
 | `scripts/smoke_ai_delta_review.py` | AI delta review smoke，支持 carry/delta/full 和真实 LLM 要求模式。 |
+
+### v0.4 Agent Runtime Foundation
+
+当前实现新增 v0.4 agent runtime foundation，用于承载用户问答窗口和定时股票分析的上层编排基础：
+
+- Prompt 统一放在 `src/margin/prompts/`，通过 `PromptRegistry` 与 `PromptRenderer` 按版本加载、渲染和生成 hash，避免提示词散落在业务代码中。
+- 定时股票分析固定步骤由 `scheduled_stock_analysis_steps.json` 定义，MainAgent 创建计划时只能使用该 JSON 中的步骤顺序和专家技能。
+- Shared Context Store 支持内存和 SQLAlchemy 两种 repository，artifact 写入时使用稳定 JSON hash；Context Store 存储 run、step、artifact、guardrail decision，专家 agent 之间不直接通信。
+- 防护栏当前包含确定性规则层：输入层拦截保证收益/保本/稳赚/确定上涨等金融承诺请求，拦截提示注入；计划层校验定时任务不能重排或替换固定流程。
+- ExpertAgent Card 使用 A2A 风格字段暴露 `DataInspectionAgent`、`QuantAgent`、`NewsAcquisitionAgent`、`StockAnalystAgent`、`GeneralQnaAgent`、`DataAnalystAgent`、`CodeSandboxAgent` 的技能；`quant_screening_tool`、`data_sync_tool` 等底层工具不暴露给 MainAgent。
+- `QuantAgent` 的定时技能为 `run_ml_lifecycle_quant_analysis`，策略选择封装在 `agent_runtime.quant_agent`；schedule 启动 valuation refresh 时会把该 profile 写入 metadata 和 ContextArtifact，量化层据此走 `ml_lgbm_lifecycle` serving 路径。
+- `CodeSandboxAgent` 仅作为用户问答专家 card 暴露，`schedule_allowed=False`；当前 foundation 不执行 sandbox，只记录其发现边界。
+- `MainAgentRuntime` 只负责创建计划和最终复查，不调用确定性工具，不写业务表；用户问答计划必须通过真实 LLM planner 读取 A2A 风格 ExpertAgent Cards 后选择只读 Q&A 专家，规划失败、LLM 失败或输出没有合法只读专家时返回明确失败，不使用本地关键词兜底。
+- `GeneralQnaAgent` 负责问候、产品使用和不需要研究数据的普通问答；`DataAnalystAgent` 负责股票、推荐、量化结果、估值、证据、指标、新闻和 dashboard 数据类问答。两者均使用集中 Prompt Repository 渲染 prompt，并调用真实 LLM 生成最终回答，不使用模板字符串冒充 Agent 输出。
+- `DataAnalystAgent` 的确定性部分只读取 dashboard service 并生成 `analysis_table` artifact；最终 `explanation` 必须来自 LLM，并记录 prompt id/hash、输入 hash、模型和耗时。
+- `StockAnalystAgent.adjust_quant_candidates()` 消费量化/Analysis Mart 候选摘要，按 review/risk flags 生成 `keep`、`reduce_weight` 或 `delete` 调整，并写入 `portfolio_adjustment` artifact；payload 包含 `removed_security_ids`、目标仓位、调整后仓位、原因、最高股票仓位和最低现金比例。
+- 当注入 `DashboardRepository` 时，`StockAnalystAgent` 会基于默认量化投影发布新的 adjusted dashboard run：删除项不进入最新候选列表，保留/降权项写入 `adjusted_weight` 与 `agent_adjustment.source=StockAnalystAgent`；同时写入 `dashboard_projection_event` artifact，供 MainAgent 最终复查和 Q&A 读取。
+- 自动研究 schedule 启动 valuation refresh 时会把 `agent_run_id` 写入 orchestration metadata；worker 末端 dashboard refresh 会把该 ID 传给 `StockAnalystAgent`，确保专家 overlay artifact 归属到同一个 MainAgent run。
+- `get_main_agent_runtime()` 生产依赖已切到 `SQLAlchemyAgentContextStore`，worker 写入的 run/step/artifact/guardrail decision 可被 API/Q&A 进程读取；单元测试仍可显式注入 `MemoryAgentContextStore`。
 
 ## 3. 核心模型
 
@@ -224,5 +256,5 @@ python scripts/smoke_ai_delta_review.py --mode delta --require-real-llm
 | `03-filing_websearch` | 新闻/公告 refresh 先落库，再作为冻结上下文进入研究。 |
 | `04-text_indexing` / `05-rag_evidence` | 提供可定位、可校验的 EvidencePackage。 |
 | `07-strategy_config` | 提供策略、prompt、工具权限和 scope 版本。 |
-| `08-research_candidate_dashboard` | 展示 current review、effective assessment、证据 locator 与只读 Copilot。 |
+| `08-research_candidate_dashboard` | 展示 current review、effective assessment、证据摘要，并把首页问答请求提交给 MainAgent API。 |
 | `11-valuation_discovery` | 发布 Analysis Mart 第四层，触发量化通过公司池的新闻、RAG 和 AI delta review，并发布有效 assessment 指针。 |

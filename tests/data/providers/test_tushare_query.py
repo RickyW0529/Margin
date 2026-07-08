@@ -51,5 +51,18 @@ def test_financial_query_plans_use_symbol_batches_for_current_proxy() -> None:
         "fina_indicator",
         "fina_audit",
         "pledge_stat",
+        "forecast",
+        "express",
     ):
         assert catalog.get(api_name).query_mode == "symbol_batch"
+
+
+def test_ml_lifecycle_extra_query_plans_are_bounded() -> None:
+    """ML lifecycle extra endpoints must avoid unbounded provider pulls."""
+    catalog = TushareQueryCatalog.default()
+
+    assert catalog.get("moneyflow").query_mode == "date_slice"
+    assert catalog.get("margin_detail").query_mode == "date_slice"
+    assert catalog.get("limit_list_d").query_mode == "date_slice"
+    assert "mf_lg_net_amount" not in catalog.get("moneyflow").fields
+    assert "buy_lg_amount" in catalog.get("moneyflow").fields

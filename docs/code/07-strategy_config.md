@@ -49,7 +49,7 @@ Provider URL 会通过 `provider_router` 在分类内自动识别供应商标签
 
 用户指标视图与量化特征集是正交配置：`IndicatorViewVersion` 可以隐藏 `pb`，但 `QuantFeatureSetVersion.required_indicators` 仍可要求 `pb`，因此前端展示偏好不会改变底层全量数据同步和量化输入。默认量化特征集当前要求 `n_income_attr_p`、`roe_ttm`、`pe_ttm`：`n_income_attr_p` 用于第四层 ETL 派生最近两年净利，`roe_ttm` 作为财务 freshness canary。
 
-当前默认 bootstrap 会创建并激活 v0.3 版本化配置：`quant-feature-default-v0.3.0`、`quant-strategy-default-v0.3.0`、`scope-default-v0.3.0`。历史 v0.2 配置不会被覆盖；当库里已有 v0.2 active 版本时，repository 激活事务会先 flush/deprecate 旧 active 行，再激活新版本，以满足 PostgreSQL partial unique index 的“一类一个 active”约束。
+当前默认 bootstrap 会创建并激活 v0.4.1 ML 量化配置：`quant-feature-default-v0.4.1`、`quant-strategy-ml-lifecycle-v0.4.1`、`scope-default-v0.4.1`。历史 v0.2/v0.3/v0.4.0 配置不会被覆盖；当库里已有旧 active 版本时，repository 激活事务会先 flush/deprecate 旧 active 行，再激活新版本，以满足 PostgreSQL partial unique index 的“一类一个 active”约束。v0.4.1 将旧多因子底层字段 `n_income_attr_p` 从必需字段降为可选，量化 serving 使用第四层派生的 `net_profit_y1` / `net_profit_y2`。
 
 ### 1.2 Secret Store 与权限边界
 

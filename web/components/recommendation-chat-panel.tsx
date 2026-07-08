@@ -4,57 +4,65 @@
  * @fileoverview User-facing recommendation Q&A panel.
  */
 
-import { Send } from "lucide-react";
-import { useState } from "react";
+import { ArrowUp, Plus } from "lucide-react";
+import { useState, type ReactNode } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  askReadOnlyCopilot,
-  type ReadOnlyCopilotResponse,
+  askMainAgentQna,
+  type MainAgentQnaResponse,
 } from "@/lib/api";
+import { useLanguage, type UiLanguage } from "@/lib/i18n";
+import { addRecentQuestion } from "@/lib/recent-questions";
 
 type RecommendationChatPanelProps = {
   ask?: (request: {
     scope_version_id: string;
     message: string;
     universe?: string;
-  }) => Promise<ReadOnlyCopilotResponse>;
+    language?: UiLanguage;
+  }) => Promise<MainAgentQnaResponse>;
   scopeVersionId?: string;
   universe?: string;
 };
 
-const DEFAULT_QUESTION = "今日推荐股票是什么？";
-
-function formatReferenceLabel(reference: Record<string, string>) {
+function formatReferenceLabel(
+  reference: Record<string, string>,
+  language: UiLanguage,
+) {
   const api = reference.api ?? "";
   if (api.includes("/api/v1/research/items")) {
-    return "公司详情";
+    return language === "zh" ? "公司详情" : "Company detail";
   }
   if (api.includes("/api/v1/research")) {
-    return "推荐列表";
+    return language === "zh" ? "推荐列表" : "Recommendation list";
   }
-  return reference.title ?? "证据来源";
+  return reference.title ?? (language === "zh" ? "证据来源" : "Evidence source");
 }
 
 /** Renders the first-screen Q&A entry backed by read-only recommendation data. */
 export function RecommendationChatPanel({
-  ask = askReadOnlyCopilot,
+  ask = askMainAgentQna,
   scopeVersionId = "scope-current",
   universe = "ALL_A",
 }: RecommendationChatPanelProps) {
+  const { language, t } = useLanguage();
   const [message, setMessage] = useState("");
-  const [response, setResponse] = useState<ReadOnlyCopilotResponse | null>(null);
+  const [submittedMessage, setSubmittedMessage] = useState<string | null>(null);
+  const [response, setResponse] = useState<MainAgentQnaResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const hasConversation = Boolean(submittedMessage || response || busy || error);
 
   async function submit(nextMessage = message) {
     const trimmed = nextMessage.trim();
     if (!trimmed) {
       return;
     }
-    setMessage(trimmed);
+    setSubmittedMessage(trimmed);
+    setMessage("");
+    setResponse(null);
+    addRecentQuestion(trimmed);
     setBusy(true);
     setError(null);
     try {
@@ -63,89 +71,236 @@ export function RecommendationChatPanel({
           message: trimmed,
           scope_version_id: scopeVersionId,
           universe,
+          language,
         }),
       );
     } catch {
-      setError("暂时无法回答，请稍后再试。");
+      setError(t("chatError"));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Card aria-labelledby="recommendation-chat-title" className="overflow-hidden">
-      <CardContent className="grid gap-5 p-5 md:p-6">
-        <div className="grid gap-2">
-          <h2
-            id="recommendation-chat-title"
-            className="text-2xl font-semibold tracking-tight text-foreground"
-          >
-            问答
-          </h2>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => submit(DEFAULT_QUESTION)}
-            className="w-fit rounded-full border border-border bg-muted px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-card disabled:opacity-50"
-          >
-            {DEFAULT_QUESTION}
-          </button>
-        </div>
-
-        <div className="grid gap-3">
-          <Textarea
-            aria-label="投资研究问题"
-            className="min-h-[116px] resize-none text-base"
-            disabled={busy}
-            placeholder={DEFAULT_QUESTION}
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-          />
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <Button
-              type="button"
-              disabled={busy || !message.trim()}
-              loading={busy}
-              onClick={() => submit()}
-            >
-              <Send className="size-4" />
-              发送
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              只读回答，不触发交易
-            </span>
+    <section
+      aria-label={t("navAsk")}
+      className="relative grid h-[calc(100vh-3.5rem)] grid-rows-[minmax(0,1fr)_auto]"
+    >
+      {!hasConversation ? (
+        <div className="grid min-h-0 place-items-center px-5 pb-10 pt-20 md:px-10">
+          <div className="mx-auto grid w-full max-w-5xl gap-8 text-center">
+            <div className="grid justify-items-center gap-3">
+              <h1 className="max-w-3xl text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-5xl">
+                {t("homeTitle")}
+              </h1>
+            </div>
+            <ChatComposer
+              busy={busy}
+              message={message}
+              placeholder={t("chatPlaceholder")}
+              setMessage={setMessage}
+              submit={submit}
+              t={t}
+            />
           </div>
         </div>
+      ) : (
+        <div className="min-h-0 overflow-y-auto px-5 pb-40 pt-20 md:px-10 md:pb-44 md:pt-24">
+          <div className="mx-auto grid min-h-full w-full max-w-6xl content-start gap-8">
 
-        {error ? (
-          <p className="rounded-md border border-negative-soft bg-negative-soft px-3 py-2 text-sm text-negative" role="alert">
-            {error}
-          </p>
-        ) : null}
-
-        {response ? (
-          <div className="grid gap-3 rounded-md border border-border bg-muted/40 p-4">
-            <p className="text-sm leading-relaxed text-foreground">
-              {response.answer}
-            </p>
-            {response.references.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {response.references.map((reference, index) => {
-                  const label = formatReferenceLabel(reference);
-                  return (
-                    <span
-                      key={`${label}-${index}`}
-                      className="rounded-full border border-border bg-card px-2.5 py-1 text-xs text-muted-foreground"
-                    >
-                      {label}
-                    </span>
-                  );
-                })}
+            {submittedMessage ? (
+              <div className="flex justify-end">
+                <div className="max-w-[78%] rounded-[28px] bg-muted px-5 py-3 text-base leading-relaxed text-foreground shadow-sm md:max-w-[48rem]">
+                  {submittedMessage}
+                </div>
               </div>
             ) : null}
+
+            {busy ? (
+              <AssistantBlock>
+                <p className="text-base leading-8 text-foreground">
+                  {t("chatThinking")}
+                </p>
+                <p className="mt-7 text-base text-muted-foreground">
+                  {t("chatReadingData")}
+                </p>
+              </AssistantBlock>
+            ) : null}
+
+            {error ? (
+              <AssistantBlock>
+                <p className="text-base leading-8 text-negative" role="alert">
+                  {error}
+                </p>
+              </AssistantBlock>
+            ) : null}
+
+            {response ? (
+              <AssistantBlock>
+                <p className="text-base leading-8 text-foreground md:text-lg md:leading-9">
+                  {response.answer}
+                </p>
+                <div className="mt-6 grid gap-3 text-sm text-muted-foreground">
+                  <details>
+                    <summary className="cursor-pointer text-muted-foreground transition-colors hover:text-foreground">
+                      {t("chatTrace")}
+                    </summary>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+                        {formatAgentTrace(response.agent_trace.steps, language)}
+                      </span>
+                      {response.artifacts.map((artifact) => (
+                        <span
+                          key={artifact.artifact_id}
+                          className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground"
+                        >
+                          {formatArtifactType(artifact.artifact_type, language)}
+                        </span>
+                      ))}
+                    </div>
+                  </details>
+                  {response.references.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {response.references.map((reference, index) => {
+                        const label = formatReferenceLabel(reference, language);
+                        return (
+                          <span
+                            key={`${label}-${index}`}
+                            className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground"
+                          >
+                            {label}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              </AssistantBlock>
+            ) : null}
           </div>
-        ) : null}
-      </CardContent>
-    </Card>
+        </div>
+      )}
+
+      {hasConversation ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-background via-background to-transparent px-5 pb-5 pt-16 md:px-10">
+          <ChatComposer
+            busy={busy}
+            message={message}
+            placeholder={t("chatFollowupPlaceholder")}
+            setMessage={setMessage}
+            submit={submit}
+            t={t}
+          />
+        </div>
+      ) : null}
+    </section>
   );
+}
+
+function ChatComposer({
+  busy,
+  message,
+  placeholder,
+  setMessage,
+  submit,
+  t,
+}: {
+  busy: boolean;
+  message: string;
+  placeholder: string;
+  setMessage: (message: string) => void;
+  submit: () => Promise<void>;
+  t: ReturnType<typeof useLanguage>["t"];
+}) {
+  return (
+    <form
+      className="pointer-events-auto mx-auto grid w-full max-w-5xl gap-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
+    >
+      <div className="flex min-h-16 items-end gap-3 rounded-[32px] border border-border bg-card px-4 py-3 shadow-lg">
+        <button
+          aria-label={t("chatAttach")}
+          className="mb-1 grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+          disabled={busy}
+          type="button"
+        >
+          <Plus className="size-5" />
+        </button>
+        <Textarea
+          aria-label={t("chatLabel")}
+          className="max-h-40 min-h-10 flex-1 resize-none border-0 bg-transparent px-0 py-2 text-base leading-6 text-foreground shadow-none outline-none placeholder:text-muted-foreground focus-visible:ring-0"
+          disabled={busy}
+          placeholder={placeholder}
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              void submit();
+            }
+          }}
+        />
+        <button
+          aria-label={t("chatSend")}
+          className="mb-0.5 grid size-10 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-transform hover:scale-105 disabled:scale-100 disabled:bg-muted disabled:text-muted-foreground"
+          disabled={busy || !message.trim()}
+          type="submit"
+        >
+          {busy ? (
+            <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          ) : (
+            <ArrowUp className="size-5" />
+          )}
+        </button>
+      </div>
+      <p className="text-center text-xs text-muted-foreground">
+        {t("chatDisclaimer")}
+      </p>
+    </form>
+  );
+}
+
+function AssistantBlock({ children }: { children: ReactNode }) {
+  return (
+    <div className="max-w-[min(100%,56rem)] text-left">
+      {children}
+    </div>
+  );
+}
+
+function formatAgentTrace(
+  steps: MainAgentQnaResponse["agent_trace"]["steps"],
+  language: UiLanguage,
+): string {
+  const agents = steps.map((step) =>
+    formatAgentName(step.expert_agent_name, language),
+  );
+  return [formatAgentName("MainAgent", language), ...agents].join(" → ");
+}
+
+function formatAgentName(agentName: string, language: UiLanguage): string {
+  const labels: Record<string, Record<UiLanguage, string>> = {
+    CodeSandboxAgent: { en: "Code sandbox", zh: "代码沙箱" },
+    DataAnalystAgent: { en: "Data analyst", zh: "数据分析师" },
+    DataInspectionAgent: { en: "Data check", zh: "数据检查" },
+    MainAgent: { en: "Research agent", zh: "研究智能体" },
+    NewsAcquisitionAgent: { en: "News research", zh: "新闻获取" },
+    QuantAgent: { en: "Quant analysis", zh: "量化分析" },
+    StockAnalystAgent: { en: "Stock analyst", zh: "股票分析师" },
+  };
+  return labels[agentName]?.[language] ?? agentName;
+}
+
+function formatArtifactType(artifactType: string, language: UiLanguage): string {
+  const labels: Record<string, Record<UiLanguage, string>> = {
+    analysis_table: { en: "Analysis table", zh: "分析表" },
+    chart_spec: { en: "Chart spec", zh: "图表说明" },
+    computed_metric: { en: "Computed metric", zh: "计算指标" },
+    explanation: { en: "Explanation", zh: "解释文本" },
+    generated_file_ref: { en: "Generated file", zh: "生成文件" },
+  };
+  return labels[artifactType]?.[language] ?? artifactType;
 }

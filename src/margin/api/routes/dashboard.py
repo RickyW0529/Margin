@@ -1,8 +1,8 @@
 """Research candidate dashboard API routes for the Margin API.
 
 This module implements the REST surface for the v0.2 research candidate
-dashboard, including paginated candidates, item detail aggregates, read-only
-Copilot, feedback, provider status, and nightly run job records.
+dashboard, including paginated candidates, item detail aggregates, feedback,
+provider status, and nightly run job records.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from margin.api.dependencies import get_dashboard_services, get_strategy_service
 from margin.dashboard.models import (
@@ -21,7 +21,6 @@ from margin.dashboard.models import (
     FeedbackType,
     JobRun,
     ProviderStatus,
-    ReadOnlyCopilotResponse,
     ResearchCandidateListResponse,
     ResearchItemDetailV2,
 )
@@ -47,20 +46,6 @@ class FeedbackCreate(BaseModel):
 
     feedback_type: FeedbackType = FeedbackType.COMMENT
     comment: str = ""
-
-
-class CopilotRequest(BaseModel):
-    """Read-only dashboard Copilot request.
-
-    Attributes:
-        scope_version_id: Identifier of the frozen research scope.
-        message: User question text (1-2000 characters).
-        universe: Universe code filter. Defaults to ``ALL_A``.
-    """
-
-    scope_version_id: str = Field(min_length=1)
-    message: str = Field(min_length=1, max_length=2000)
-    universe: str = "ALL_A"
 
 
 @router.get("/research", response_model=ResearchCandidateListResponse)
@@ -139,70 +124,6 @@ def get_research_item_detail_v2(
         return _item_not_found(item_id)
 
 
-@router.post("/research/copilot", response_model=ReadOnlyCopilotResponse)
-def research_read_only_copilot(
-    request: CopilotRequest,
-    services: Services,
-    strategy_service: StrategyServices,
-) -> ReadOnlyCopilotResponse | JSONResponse:
-    """Answer dashboard questions using only read-only BFF data.
-
-    Mutating intents (refresh, rerun, save, trade) are rejected with a 403
-    response. Otherwise, the top PASS candidates are listed as the answer.
-
-    Args:
-        request: Validated Copilot request containing scope, message, and
-            universe.
-        services: Dashboard service bundle used to query candidates.
-
-    Returns:
-        ReadOnlyCopilotResponse with a read-only answer, or a 403 JSONResponse
-        when a mutating intent is detected.
-    """
-    if _has_mutating_intent(request.message):
-        message = (
-            "Copilot is read-only and cannot refresh, rerun, mutate settings, "
-            "or trade."
-        )
-        return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "code": "copilot_read_only",
-                "message": message,
-                "trace_id": request.scope_version_id,
-                "retryable": False,
-            },
-        )
-    resolved_scope_version_id = _resolve_scope_alias(
-        request.scope_version_id,
-        strategy_service=strategy_service,
-    )
-    candidates = services.query.list_research_candidates_v2(
-        scope_version_id=resolved_scope_version_id,
-        universe_code=request.universe,
-        filters=DashboardFilters(),
-        sort=DashboardSort(field="final_score", direction="desc"),
-        cursor=None,
-        limit=5,
-    )
-    symbols = [item.symbol for item in candidates.items]
-    answer = (
-        "当前可继续看的公司来自今日推荐只读数据："
-        + ("、".join(symbols) if symbols else "暂无可见推荐")
-        + "。该回答不触发同步、新闻刷新、AI 复核或交易动作。"
-    )
-    return ReadOnlyCopilotResponse(
-        answer=answer,
-        references=(
-            {
-                "api": "GET /api/v1/research",
-                "scope_version_id": resolved_scope_version_id,
-                "universe": request.universe,
-            },
-        ),
-    )
-
-
 def _resolve_scope_alias(
     scope_version_id: str,
     *,
@@ -241,36 +162,6 @@ def _item_not_found(item_id: str) -> JSONResponse:
 def _not_found(exc: KeyError) -> HTTPException:
     """Convert a ``KeyError`` into a simple HTTP 404 exception."""
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-
-
-def _has_mutating_intent(message: str) -> bool:
-    """Detect write/refresh/trading intents and fail closed."""
-    normalized = message.lower()
-    mutating_keywords = (
-        "重新跑",
-        "重跑",
-        "刷新",
-        "同步",
-        "搜索新闻",
-        "websearch",
-        "保存",
-        "修改",
-        "配置",
-        "激活",
-        "测试 provider",
-        "retry",
-        "rerun",
-        "refresh",
-        "sync",
-        "save",
-        "activate",
-        "buy",
-        "sell",
-        "下单",
-        "买入",
-        "卖出",
-    )
-    return any(keyword in normalized for keyword in mutating_keywords)
 
 
 @router.post(

@@ -96,7 +96,15 @@ class TushareQueryCatalog:
             params.update(ts_code=sample_symbol)
         elif api_name == "trade_cal":
             params.update(exchange="SSE", start_date=start, end_date=end)
-        elif api_name in {"daily", "adj_factor", "daily_basic", "index_daily"}:
+        elif api_name in {
+            "daily",
+            "adj_factor",
+            "daily_basic",
+            "index_daily",
+            "moneyflow",
+            "margin_detail",
+            "limit_list_d",
+        }:
             params.update(
                 ts_code="000300.SH" if api_name == "index_daily" else sample_symbol,
                 start_date=start,
@@ -111,6 +119,8 @@ class TushareQueryCatalog:
             "fina_indicator",
             "fina_audit",
             "pledge_stat",
+            "forecast",
+            "express",
         }:
             params.update(ts_code=sample_symbol)
         elif api_name == "index_classify":
@@ -130,7 +140,7 @@ class TushareQueryCatalog:
         """Build the v0.3 quant-only Tushare field and query catalog.
 
         Returns:
-            A catalog with 17 query specs covering all admitted Tushare
+            A catalog with 22 query specs covering all admitted Tushare
             endpoints.
         """
         return cls(
@@ -165,7 +175,19 @@ class TushareQueryCatalog:
                 _spec(
                     "daily_basic",
                     "date_slice",
-                    "ts_code,trade_date,turnover_rate,pe_ttm,pb,ps_ttm,dv_ttm,total_mv",
+                    "ts_code,trade_date,turnover_rate,volume_ratio,pe_ttm,pb,"
+                    "ps_ttm,dv_ttm,total_mv,circ_mv,float_share,free_share",
+                ),
+                _spec(
+                    "moneyflow",
+                    "date_slice",
+                    "ts_code,trade_date,buy_lg_amount,sell_lg_amount,"
+                    "buy_elg_amount,sell_elg_amount,net_mf_amount",
+                ),
+                _spec(
+                    "margin_detail",
+                    "date_slice",
+                    "trade_date,ts_code,rzye,rqye,rzmre,rqyl,rzche,rqmcl,rzrqye",
                 ),
                 _spec(
                     "income",
@@ -205,6 +227,21 @@ class TushareQueryCatalog:
                     "audit_agency,audit_sign",
                 ),
                 _spec(
+                    "forecast",
+                    "symbol_batch",
+                    "ts_code,ann_date,end_date,type,p_change_min,p_change_max,"
+                    "net_profit_min,net_profit_max,last_parent_net_profit,"
+                    "first_ann_date,summary,change_reason",
+                ),
+                _spec(
+                    "express",
+                    "symbol_batch",
+                    "ts_code,ann_date,end_date,revenue,operate_profit,total_profit,"
+                    "n_income,total_assets,total_hldr_eqy_exc_min_int,diluted_eps,"
+                    "diluted_roe,yoy_net_profit,bps,yoy_sales,yoy_op,yoy_tp,"
+                    "yoy_dedu_np,yoy_eps,yoy_roe",
+                ),
+                _spec(
                     "index_classify",
                     "snapshot",
                     "index_code,industry_name,level,industry_code,is_pub,parent_code,src",
@@ -230,6 +267,12 @@ class TushareQueryCatalog:
                     "index_weight",
                     "index_range",
                     "index_code,con_code,trade_date,weight",
+                ),
+                _spec(
+                    "limit_list_d",
+                    "date_slice",
+                    "trade_date,ts_code,name,close,pct_chg,amp,fc_ratio,fl_ratio,"
+                    "fd_amount,first_time,last_time,open_times,strth,limit",
                 ),
             )
         )

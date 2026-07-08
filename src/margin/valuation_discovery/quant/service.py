@@ -34,6 +34,22 @@ from margin.valuation_discovery.quant.manual_all_a import (
     build_ai_quant_profile,
     score_manual_all_a,
 )
+from margin.valuation_discovery.quant.ml_lifecycle import (
+    EXECUTION_BOUNDARY as ML_EXECUTION_BOUNDARY,
+)
+from margin.valuation_discovery.quant.ml_lifecycle import (
+    MODEL_FAMILY as ML_MODEL_FAMILY,
+)
+from margin.valuation_discovery.quant.ml_lifecycle import (
+    OFFLINE_PROFILE_ID as ML_OFFLINE_PROFILE_ID,
+)
+from margin.valuation_discovery.quant.ml_lifecycle import (
+    STRATEGY_FAMILY as ML_STRATEGY_FAMILY,
+)
+from margin.valuation_discovery.quant.ml_lifecycle import (
+    MLLifecycleConfig,
+    score_ml_lifecycle,
+)
 from margin.valuation_discovery.quant.models import SecurityFilterResult
 from margin.valuation_discovery.quant.repository import QuantRepository
 from margin.valuation_discovery.quant.scoring import (
@@ -97,17 +113,6 @@ class QuantService:
         )
         filter_result = self._filter_engine.apply(cross_section)
         strategy_metadata = _strategy_metadata(snapshot)
-        manual_config = _manual_config_from_strategy_metadata(
-            strategy_metadata,
-            fallback=self._manual_config,
-        )
-        manual_final_enabled = _manual_final_score_enabled(strategy_metadata)
-        scored_by_security = self._score_allowed(
-            cross_section,
-            filter_result,
-            manual_config=manual_config,
-            manual_final_enabled=manual_final_enabled,
-        )
         quant_run = QuantRun(
             input_snapshot_id=snapshot.snapshot_id,
             scope_version_id=snapshot.scope_version_id,
@@ -118,6 +123,30 @@ class QuantService:
             decision_at=decision_at,
             config_hash=self._config_hash(),
             status="completed",
+        )
+        if _strategy_family(strategy_metadata) == ML_STRATEGY_FAMILY:
+            results = self._run_ml_lifecycle(
+                quant_run=quant_run,
+                snapshot=snapshot,
+                cross_section=cross_section,
+                filter_result=filter_result,
+                strategy_metadata=strategy_metadata,
+            )
+            results = _assign_ranks(results, cross_section)
+            self._repository.add_run(quant_run)
+            self._repository.add_results(quant_run.quant_run_id, results)
+            return quant_run
+
+        manual_config = _manual_config_from_strategy_metadata(
+            strategy_metadata,
+            fallback=self._manual_config,
+        )
+        manual_final_enabled = _manual_final_score_enabled(strategy_metadata)
+        scored_by_security = self._score_allowed(
+            cross_section,
+            filter_result,
+            manual_config=manual_config,
+            manual_final_enabled=manual_final_enabled,
         )
         results = tuple(
             self._build_result(
@@ -132,6 +161,42 @@ class QuantService:
         self._repository.add_run(quant_run)
         self._repository.add_results(quant_run.quant_run_id, results)
         return quant_run
+
+    def _run_ml_lifecycle(
+        self,
+        *,
+        quant_run: QuantRun,
+        snapshot: QuantInputSnapshot,
+        cross_section: pd.DataFrame,
+        filter_result: Any,
+        strategy_metadata: dict[str, Any],
+    ) -> tuple[QuantResult, ...]:
+        """Run the provider-free ML lifecycle scoring route."""
+        allowed_ids = [
+            security_id
+            for security_id, result in filter_result.by_security.items()
+            if result.allowed_for_scoring
+        ]
+        scored_by_security: dict[str, pd.Series] = {}
+        if allowed_ids:
+            scored = score_ml_lifecycle(
+                cross_section.loc[allowed_ids].copy(),
+                metadata=strategy_metadata,
+            )
+            scored_by_security = {
+                str(row["security_id"]): row for _, row in scored.iterrows()
+            }
+        config = MLLifecycleConfig.from_metadata(strategy_metadata)
+        return tuple(
+            self._build_ml_result(
+                quant_run=quant_run,
+                security_id=security_id,
+                filter_result=filter_result.by_security[security_id],
+                scored_row=scored_by_security.get(security_id),
+                config=config,
+            )
+            for security_id in _ordered_security_ids(snapshot, cross_section)
+        )
 
     def _prepare_cross_section(
         self,
@@ -200,6 +265,89 @@ class QuantService:
             str(row["security_id"]): row
             for _, row in scored.iterrows()
         }
+
+    def _build_ml_result(
+        self,
+        *,
+        quant_run: QuantRun,
+        security_id: str,
+        filter_result: SecurityFilterResult,
+        scored_row: pd.Series | None,
+        config: MLLifecycleConfig,
+    ) -> QuantResult:
+        """Build an ML lifecycle ``QuantResult`` with serving metadata."""
+        if not filter_result.allowed_for_scoring or scored_row is None:
+            blocked = self._blocked_result(
+                quant_run=quant_run,
+                security_id=security_id,
+                filter_result=filter_result,
+            )
+            return blocked.model_copy(
+                update={
+                    "factor_details": {
+                        **blocked.factor_details,
+                        "strategy_family": ML_STRATEGY_FAMILY,
+                        "ml_strategy": _empty_ml_strategy(config),
+                    }
+                }
+            )
+
+        final_score = _float(scored_row.get("ml_lifecycle_score"))
+        quality_score = _float(scored_row.get("ml_quality_signal"))
+        value_score = _float(scored_row.get("ml_value_signal"))
+        growth_score = _float(scored_row.get("ml_growth_signal"))
+        momentum_score = _float(scored_row.get("ml_momentum_signal"))
+        risk_score = _float(scored_row.get("ml_risk_health"))
+        screening_status = _ml_screening_status(final_score, config)
+        risk_reasons = _tuple_strings(scored_row.get("ml_risk_reasons"))
+        review_reasons = _dedupe(
+            risk_reasons + _reason_codes(filter_result, severity="review")
+        )
+        research_guardrail = _ml_guardrail(
+            screening_status=screening_status,
+            risk_reasons=risk_reasons,
+        )
+        ml_strategy = _ml_strategy_details(scored_row, config)
+        ai_quant_profile = _ml_ai_quant_profile(
+            scored_row,
+            status=screening_status,
+            ml_strategy=ml_strategy,
+        )
+        return QuantResult(
+            quant_run_id=quant_run.quant_run_id,
+            security_id=security_id,
+            final_score=final_score,
+            quality_score=quality_score,
+            value_score=value_score,
+            growth_score=growth_score,
+            momentum_score=momentum_score,
+            risk_score=risk_score,
+            screening_status=screening_status,
+            data_status=filter_result.data_status,
+            risk_flags=tuple(risk_reasons),
+            review_required=bool(review_reasons),
+            review_reasons=review_reasons,
+            research_guardrail=research_guardrail,
+            reason_summary=_ml_reason_summary(final_score, screening_status, ml_strategy),
+            factor_details={
+                "name": scored_row.get("name"),
+                "symbol": scored_row.get("security_id"),
+                "industry_id": scored_row.get("industry_id"),
+                "strategy_family": ML_STRATEGY_FAMILY,
+                "filter_reasons": [asdict(reason) for reason in filter_result.reasons],
+                "scores": {
+                    "ml_lifecycle_score": final_score,
+                    "quality": quality_score,
+                    "value": value_score,
+                    "growth": growth_score,
+                    "momentum": momentum_score,
+                    "risk": risk_score,
+                    "final": final_score,
+                },
+                "ml_strategy": ml_strategy,
+                "ai_quant_profile": ai_quant_profile,
+            },
+        )
 
     def _build_result(
         self,
@@ -340,8 +488,187 @@ def _strategy_metadata(snapshot: QuantInputSnapshot) -> dict[str, Any]:
     if isinstance(metadata, dict):
         strategy = metadata.get("quant_strategy")
         if isinstance(strategy, dict):
-            return strategy
+                return strategy
     return {}
+
+
+def _strategy_family(metadata: dict[str, Any]) -> str:
+    """Return the normalized strategy family from metadata."""
+    return str(metadata.get("strategy_family") or "").strip().lower()
+
+
+def _ml_screening_status(
+    final_score: float,
+    config: MLLifecycleConfig,
+) -> ScreeningStatus:
+    """Map ML lifecycle score to screening status."""
+    if final_score >= config.pass_threshold:
+        return ScreeningStatus.PASS
+    if final_score >= config.near_threshold:
+        return ScreeningStatus.NEAR_THRESHOLD
+    if final_score >= config.watch_threshold:
+        return ScreeningStatus.WATCHLIST
+    return ScreeningStatus.REJECT
+
+
+def _ml_guardrail(
+    *,
+    screening_status: ScreeningStatus,
+    risk_reasons: tuple[str, ...],
+) -> ResearchGuardrail:
+    """Return research guardrail for an ML lifecycle result."""
+    if screening_status == ScreeningStatus.REJECT:
+        return ResearchGuardrail.RESEARCH_BLOCKED
+    if "short_term_overheat" in risk_reasons:
+        return ResearchGuardrail.OVERHEAT_CAUTION
+    if risk_reasons:
+        return ResearchGuardrail.THESIS_RECHECK_REQUIRED
+    if screening_status == ScreeningStatus.NEAR_THRESHOLD:
+        return ResearchGuardrail.LIMITED_RESEARCH
+    return ResearchGuardrail.RESEARCH_ALLOWED
+
+
+def _ml_strategy_details(
+    row: pd.Series,
+    config: MLLifecycleConfig,
+) -> dict[str, Any]:
+    """Build auditable ML serving details for one security."""
+    return {
+        "model_family": ML_MODEL_FAMILY,
+        "strategy_version": config.strategy_version,
+        "profile_id": ML_OFFLINE_PROFILE_ID,
+        "feature_coverage": _object_dict(row.get("ml_feature_coverage")),
+        "score_components": _object_dict(row.get("ml_score_components")),
+        "risk_controls": _object_dict(row.get("ml_risk_controls")),
+        "target_weight": _optional_score(row.get("ml_target_weight")) or 0.0,
+        "cash_policy": {
+            "max_stock_exposure": config.max_stock_exposure,
+            "min_cash": config.min_cash,
+        },
+        "portfolio_construction": {
+            "top_n": config.top_n,
+            "score_temperature": config.score_temperature,
+            "exposure_mode": config.exposure_mode,
+            "daily_stop_loss": config.daily_stop_loss,
+            "daily_drawdown_stop": config.daily_drawdown_stop,
+            "cash_annual": config.cash_annual,
+        },
+        "execution_boundary": ML_EXECUTION_BOUNDARY,
+        "fallback_used": _bool_value(row.get("ml_fallback_used")),
+    }
+
+
+def _empty_ml_strategy(config: MLLifecycleConfig) -> dict[str, Any]:
+    """Return ML metadata for hard-filtered securities."""
+    return {
+        "model_family": ML_MODEL_FAMILY,
+        "strategy_version": config.strategy_version,
+        "profile_id": ML_OFFLINE_PROFILE_ID,
+        "feature_coverage": {
+            "required_features": [],
+            "present_features": 0,
+            "missing_features": [],
+            "coverage_ratio": 0.0,
+        },
+        "score_components": {},
+        "risk_controls": {
+            "risk_gate": "blocked_before_ml_scoring",
+            "risk_reasons": [],
+            "cash_policy": "min_cash_20pct",
+        },
+        "target_weight": 0.0,
+        "cash_policy": {
+            "max_stock_exposure": config.max_stock_exposure,
+            "min_cash": config.min_cash,
+        },
+        "portfolio_construction": {
+            "top_n": config.top_n,
+            "score_temperature": config.score_temperature,
+            "exposure_mode": config.exposure_mode,
+            "daily_stop_loss": config.daily_stop_loss,
+            "daily_drawdown_stop": config.daily_drawdown_stop,
+            "cash_annual": config.cash_annual,
+        },
+        "execution_boundary": ML_EXECUTION_BOUNDARY,
+        "fallback_used": True,
+    }
+
+
+def _ml_ai_quant_profile(
+    row: pd.Series,
+    *,
+    status: ScreeningStatus,
+    ml_strategy: dict[str, Any],
+) -> dict[str, Any]:
+    """Build research-only profile exposed to AI/Dashboard consumers."""
+    raw_factors = {
+        key: _optional_score(row.get(key))
+        for key in (
+            "roe_ttm",
+            "roic_ttm",
+            "revenue_yoy",
+            "profit_yoy",
+            "pe_ttm",
+            "pb",
+            "ps",
+            "return_20d",
+            "return_6m_ex_1m",
+            "volatility_120d",
+            "max_drawdown_250d",
+            "industry_lifecycle_score",
+            "avg_amount_20d",
+        )
+        if _optional_score(row.get(key)) is not None
+    }
+    risk_reasons = tuple(ml_strategy.get("risk_controls", {}).get("risk_reasons", ()))
+    hints = ["核对 ML 生命周期信号对应的行业景气和基本面持续性"]
+    if risk_reasons:
+        hints.append("复核短期过热、波动或回撤风险是否削弱研究结论")
+    return {
+        "strategy_profile": ML_STRATEGY_FAMILY,
+        "candidate": status
+        in {
+            ScreeningStatus.PASS,
+            ScreeningStatus.NEAR_THRESHOLD,
+            ScreeningStatus.WATCHLIST,
+        },
+        "scores": ml_strategy["score_components"],
+        "raw_factors": raw_factors,
+        "research_hints": hints,
+        "execution_boundary": ML_EXECUTION_BOUNDARY,
+    }
+
+
+def _ml_reason_summary(
+    final_score: float,
+    status: ScreeningStatus,
+    ml_strategy: dict[str, Any],
+) -> str:
+    """Build a concise ML result explanation."""
+    target_weight = float(ml_strategy.get("target_weight") or 0.0)
+    risk_gate = ml_strategy.get("risk_controls", {}).get("risk_gate", "normal")
+    return (
+        f"ML lifecycle screen {status.value}: final_score={final_score:.2f}, "
+        f"target_weight={target_weight:.4f}, risk_gate={risk_gate}."
+    )
+
+
+def _object_dict(value: Any) -> dict[str, Any]:
+    """Return a plain dict for object-valued DataFrame cells."""
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _tuple_strings(value: Any) -> tuple[str, ...]:
+    """Normalize object-valued reason collections to string tuples."""
+    if value is None:
+        return ()
+    if isinstance(value, tuple):
+        return tuple(str(item) for item in value)
+    if isinstance(value, list):
+        return tuple(str(item) for item in value)
+    if bool(pd.isna(value)):
+        return ()
+    return (str(value),)
 
 
 def _manual_config_from_strategy_metadata(

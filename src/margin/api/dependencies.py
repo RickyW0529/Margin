@@ -14,6 +14,12 @@ from typing import Annotated, Any
 
 from fastapi import Depends, Header, HTTPException, status
 
+from margin.agent_runtime.cards import default_agent_card_registry
+from margin.agent_runtime.context_store import SQLAlchemyAgentContextStore
+from margin.agent_runtime.expert_agents import StockAnalystAgent
+from margin.agent_runtime.main_agent import MainAgentRuntime
+from margin.agent_runtime.schedules import SQLAlchemyAgentScheduleRepository
+from margin.agent_runtime.step_definitions import load_scheduled_stock_analysis_flow
 from margin.core.orchestration_repository import SQLAlchemyOrchestrationRepository
 from margin.core.provider import (
     HealthCheckResult,
@@ -396,6 +402,36 @@ def get_provider_runtime_factory() -> ProviderRuntimeFactory:
     )
 
 
+def get_llm_provider_factory(
+    runtime_factory: Annotated[
+        ProviderRuntimeFactory,
+        Depends(get_provider_runtime_factory),
+    ],
+) -> Callable[[], LLMProvider]:
+    """Return a lazy factory for the active LLM provider."""
+    return lambda: runtime_factory.build_llm().adapter
+
+
+@lru_cache
+def get_main_agent_runtime() -> MainAgentRuntime:
+    """Return the v0.4 MainAgent runtime foundation."""
+    runtime_factory = get_provider_runtime_factory()
+    engine = build_database_engine(get_settings())
+    return MainAgentRuntime(
+        context_store=SQLAlchemyAgentContextStore(create_session_factory(engine)),
+        card_registry=default_agent_card_registry(),
+        scheduled_flow=load_scheduled_stock_analysis_flow(),
+        llm_provider_factory=lambda: runtime_factory.build_llm().adapter,
+    )
+
+
+@lru_cache
+def get_agent_schedule_repository() -> SQLAlchemyAgentScheduleRepository:
+    """Return the persisted agent schedule repository."""
+    engine = build_database_engine(get_settings())
+    return SQLAlchemyAgentScheduleRepository(create_session_factory(engine))
+
+
 def get_provider_config_health_service(
     repository: Annotated[
         SQLAlchemyStrategyRepository,
@@ -687,11 +723,16 @@ def get_valuation_discovery_service() -> ValuationDiscoveryService:
     )
 
     assessment_service = EffectiveAssessmentService()
+    dashboard_repository = SQLAlchemyDashboardRepository(session_factory)
     valuation_publisher = ValuationPublisherAdapter(
         assessment_service=assessment_service,
         review_repository=SQLAlchemyResearchDeltaRepository(session_factory),
         valuation_repository=valuation_repository,
-        dashboard_repository=SQLAlchemyDashboardRepository(session_factory),
+        dashboard_repository=dashboard_repository,
+        stock_analyst_agent=StockAnalystAgent(
+            write_context_artifact=get_main_agent_runtime().add_context_artifact,
+            dashboard_repository=dashboard_repository,
+        ),
     )
 
     dependencies = ValuationDiscoveryDependencies(

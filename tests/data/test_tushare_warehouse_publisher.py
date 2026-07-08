@@ -118,3 +118,64 @@ def test_financial_publication_maps_quant_indicator_names() -> None:
     assert balance["receivable_risk"] == 0.1
     assert balance["inventory_risk"] == 0.2
     assert audit["audit_opinion"] == "标准无保留意见"
+
+
+def test_ml_lifecycle_extra_publication_maps_indicator_names() -> None:
+    """ML lifecycle extra endpoints publish canonical feature fields."""
+    stack = _Stack()
+    publisher = TushareWarehousePublisher(stack)
+    decision_at = datetime(2026, 6, 23, tzinfo=UTC)
+
+    publisher.publish(
+        "moneyflow",
+        [
+            {
+                "ts_code": "000001.SZ",
+                "trade_date": "20260622",
+                "buy_lg_amount": 120,
+                "sell_lg_amount": 70,
+                "buy_elg_amount": 90,
+                "sell_elg_amount": 20,
+                "net_mf_amount": 80,
+            }
+        ],
+        run_id="run-1",
+        decision_at=decision_at,
+    )
+    publisher.publish(
+        "forecast",
+        [
+            {
+                "ts_code": "000001.SZ",
+                "ann_date": "20260420",
+                "end_date": "20251231",
+                "p_change_min": 20,
+                "p_change_max": 40,
+            }
+        ],
+        run_id="run-1",
+        decision_at=decision_at,
+    )
+    publisher.publish(
+        "limit_list_d",
+        [
+            {
+                "ts_code": "000001.SZ",
+                "trade_date": "20260622",
+                "limit": "U",
+                "close": 11.0,
+                "pct_chg": 10.0,
+            }
+        ],
+        run_id="run-1",
+        decision_at=decision_at,
+    )
+
+    moneyflow = stack.calls[0][2][0]
+    forecast = stack.calls[1][2][0]
+    limit = stack.calls[2][2][0]
+    assert moneyflow["mf_lg_net_amount"] == 50
+    assert moneyflow["mf_elg_net_amount"] == 70
+    assert forecast["forecast_p_change_mid"] == 30
+    assert limit["limit_flag"] == "U"
+    assert limit["limit_trade_blocked"] == 1

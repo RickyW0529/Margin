@@ -236,6 +236,7 @@ class ValuationDiscoveryOrchestrator:
         scope_version_id: str,
         decision_at: datetime,
         idempotency_key: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> OrchestrationRun:
         """Create an idempotent run and enqueue its first step."""
         _validate_aware(decision_at)
@@ -245,6 +246,7 @@ class ValuationDiscoveryOrchestrator:
             decision_at=decision_at,
             started_at=lifecycle_started_at,
             idempotency_key=idempotency_key,
+            metadata=metadata,
         )
         try:
             self._dependencies.repository.create_run(run)
@@ -586,6 +588,7 @@ class ValuationDiscoveryStepWorker:
                 decision_at=decision_at,
                 quant_run_id=str(getattr(quant_run, "quant_run_id", "")),
                 quant_results=getattr(quant_run, "results", ()),
+                agent_run_id=_agent_run_id_from_run(run),
             ),
         )
 
@@ -845,6 +848,7 @@ def _new_run(
     decision_at: datetime,
     started_at: datetime,
     idempotency_key: str | None,
+    metadata: dict[str, Any] | None = None,
 ) -> OrchestrationRun:
     """Build a deterministic run when an idempotency key is supplied."""
     key_hash = _hash_optional(idempotency_key)
@@ -865,7 +869,10 @@ def _new_run(
         scope_version_id=scope_version_id,
         idempotency_key_hash=key_hash,
         trace_id=f"trace_{uuid4().hex[:24]}",
-        metadata_json={"decision_at": decision_at.isoformat()},
+        metadata_json={
+            **dict(metadata or {}),
+            "decision_at": decision_at.isoformat(),
+        },
         created_at=started_at,
         started_at=started_at,
     )
@@ -880,6 +887,14 @@ def _decision_at_from_run(run: OrchestrationRun) -> datetime:
         _validate_aware(decision_at)
         return decision_at
     return run.started_at or run.created_at
+
+
+def _agent_run_id_from_run(run: OrchestrationRun) -> str | None:
+    """Return the MainAgent run ID associated with a valuation run, if any."""
+    value = run.metadata_json.get("agent_run_id")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
 
 
 def _utc_now() -> datetime:

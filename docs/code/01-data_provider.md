@@ -29,8 +29,8 @@
 - **注册与调用治理**：`ProviderRegistry` 提供注册、发现、健康检查、限流、重试、降级、审计、成本统计等统一入口。
 - **PIT 数据仓库**：v0.2 新增 Raw Snapshot、Provider Fact、Canonical Value、bitemporal 行业、公司行动和 freshness 状态等表，保留全量底层数据。
 - **增量同步编排**：v0.2 新增 endpoint registry、sync run/work item、claim/retry/freshness 和 ingestion stack，支持 provider payload 到 canonical 值的端到端落库。
-- **v0.3 量化数据湖/仓库链路**：新增 Tushare 独立源系统 `source_tushare`、17 个量化准入 endpoint 专用 landing 表、AKShare 独立源系统 `source_akshare` 的 endpoint landing 表骨架、量化需求目录、质量决策表、滚动数据策略、Tushare 回填 CLI 和质量层到统一仓库 publisher。当前 Tushare 主链路为 `source_tushare.* -> source_quality_decisions -> standardized_indicator_facts/canonical_indicator_values -> company_pool_snapshots -> quant_input_snapshots`。
-- **量化准入约束**：`requirements.py` 显式列出每个 endpoint 的消费方；`top_list`、`top_inst`、`block_trade`、`margin`、`pledge_detail`、`stk_holdernumber`、`concept` 因无当前量化消费方被标记为 out-of-scope，不采集。
+- **v0.3/v0.4 量化数据湖/仓库链路**：新增 Tushare 独立源系统 `source_tushare`、22 个量化准入 endpoint 专用 landing 表、AKShare 独立源系统 `source_akshare` 的 endpoint landing 表骨架、量化需求目录、质量决策表、滚动数据策略、Tushare 回填 CLI 和质量层到统一仓库 publisher。当前 Tushare 主链路为 `source_tushare.* -> source_quality_decisions -> standardized_indicator_facts/canonical_indicator_values -> company_pool_snapshots -> quant_input_snapshots`。
+- **量化准入约束**：`requirements.py` 显式列出每个 endpoint 的消费方；当前已把 `MLLifecycleQuantStrategy` 的 market/fundamental/industry/flow/execution requirement 挂到 Tushare endpoint 上，覆盖 `moneyflow`、`margin_detail`、`forecast`、`express` 和 `limit_list_d` 等 ML 增强特征来源，确保 ML serving 特征可追踪；`top_list`、`top_inst`、`block_trade`、`margin`、`pledge_detail`、`stk_holdernumber`、`concept` 因无当前量化消费方被标记为 out-of-scope，不采集。
 
 该模块的产品与架构边界见对应大版本的 `docs/design/`；本文描述当前已实现的数据 Provider 能力。
 

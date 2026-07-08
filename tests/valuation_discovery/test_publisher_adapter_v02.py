@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from margin.agent_runtime.context_store import MemoryAgentContextStore
+from margin.agent_runtime.expert_agents import StockAnalystAgent
 from margin.dashboard.models import DashboardFilters, DashboardSort
 from margin.dashboard.repository import MemoryDashboardRepository
 from margin.research.delta_repository import (
@@ -237,6 +239,7 @@ def test_dashboard_refresh_publishes_latest_quant_projection_items() -> None:
                 "000001.SZ",
                 score=88,
                 screening_status=ScreeningStatus.PASS,
+                target_weight=0.32,
             ),
             _quant_result(
                 "000002.SZ",
@@ -265,8 +268,75 @@ def test_dashboard_refresh_publishes_latest_quant_projection_items() -> None:
     assert projection.visible_item_count == 2
     assert [item.security_id for item in response.items] == ["000001.SZ", "000002.SZ"]
     assert response.items[0].screening_status == "pass"
+    assert response.items[0].target_weight == 0.32
+    assert response.items[0].adjusted_weight == 0.32
+    assert response.items[0].agent_adjustment["source"] == "quant_default"
+    assert response.items[1].target_weight is None
+    assert response.items[1].adjusted_weight is None
     assert response.items[1].screening_status == "near_threshold"
     assert response.items[1].review_required is True
+
+
+def test_dashboard_refresh_can_publish_stock_analyst_adjusted_projection() -> None:
+    """Publisher can let StockAnalystAgent remove risky names and update dashboard."""
+    reviews = MemoryResearchDeltaRepository()
+    valuations = MemoryValuationDiscoveryRepository()
+    dashboard = MemoryDashboardRepository()
+    context_store = MemoryAgentContextStore()
+    publisher = ValuationPublisherAdapter(
+        assessment_service=EffectiveAssessmentService(),
+        review_repository=reviews,
+        valuation_repository=valuations,
+        dashboard_repository=dashboard,
+        stock_analyst_agent=StockAnalystAgent(
+            write_context_artifact=context_store.add_artifact,
+            dashboard_repository=dashboard,
+        ),
+    )
+
+    projection = publisher.refresh_dashboard(
+        scope_version_id="scope-1",
+        decision_at=DECISION_AT,
+        quant_run_id="quant-1",
+        quant_results=(
+            _quant_result(
+                "000001.SZ",
+                score=90,
+                screening_status=ScreeningStatus.PASS,
+                target_weight=0.50,
+            ),
+            _quant_result(
+                "000002.SZ",
+                score=88,
+                screening_status=ScreeningStatus.PASS,
+                target_weight=0.50,
+            ),
+            _quant_result(
+                "000003.SZ",
+                score=86,
+                screening_status=ScreeningStatus.PASS,
+                risk_flags=("short_term_overheat",),
+                target_weight=0.20,
+            ),
+        ),
+    )
+
+    response = dashboard.list_research_candidates_v2(
+        scope_version_id="scope-1",
+        universe_code="ALL_A",
+        filters=DashboardFilters(),
+        sort=DashboardSort(field="symbol", direction="asc"),
+        cursor=None,
+        limit=20,
+    )
+    assert projection.dashboard_run_id == "dr_agent_ar_dashboard_quant-1"
+    assert projection.visible_item_count == 2
+    assert [item.security_id for item in response.items] == ["000001.SZ", "000002.SZ"]
+    assert sum(item.adjusted_weight or 0.0 for item in response.items) == 0.80
+    assert response.items[0].agent_adjustment["source"] == "StockAnalystAgent"
+    artifact = context_store.get_artifact("ctx_ar_dashboard_quant-1_portfolio_adjustment")
+    assert artifact is not None
+    assert artifact.payload_json["removed_security_ids"] == ["000003.SZ"]
 
 
 def _review(
@@ -321,6 +391,8 @@ def _quant_result(
     screening_status: ScreeningStatus,
     review_required: bool = False,
     review_reasons: tuple[str, ...] = (),
+    risk_flags: tuple[str, ...] = (),
+    target_weight: float | None = None,
 ) -> QuantResult:
     """Build one deterministic quant result for dashboard projection tests."""
     return QuantResult(
@@ -336,7 +408,16 @@ def _quant_result(
         data_status=DataStatus.OK,
         review_required=review_required,
         review_reasons=review_reasons,
+        risk_flags=risk_flags,
         research_guardrail=ResearchGuardrail.RESEARCH_ALLOWED,
         reason_summary=f"{security_id} score {score}",
+        factor_details=(
+            {
+                "strategy_family": "ml_lgbm_lifecycle",
+                "ml_strategy": {"target_weight": target_weight},
+            }
+            if target_weight is not None
+            else {}
+        ),
         created_at=DECISION_AT,
     )

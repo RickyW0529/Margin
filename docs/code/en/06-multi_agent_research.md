@@ -41,7 +41,37 @@ Current boundaries:
 | `src/margin/research/graph_audit_repository.py` | PostgreSQL repositories for LLM/tool call audits. |
 | `src/margin/research/production_graph.py` | Production analysis handlers, decision handler, and citation validator. |
 | `src/margin/research/db_models.py` | Graph run, node run, checkpoint, tool call, LLM call, delta review, and outbox rows. |
+| `src/margin/agent_runtime/models.py` | v0.4 agent runtime Pydantic models for runs, steps, plans, ContextArtifact, GuardrailDecision, and AgentCard records. |
+| `src/margin/agent_runtime/flows/scheduled_stock_analysis_steps.json` / `step_schema.json` | Fixed scheduled stock-analysis flow JSON and schema: data inspection, quant analysis, news acquisition, stock analysis, and MainAgent final review. |
+| `src/margin/agent_runtime/step_definitions.py` | Loads and validates fixed step JSON and returns a stable order by explicit `order`. |
+| `src/margin/agent_runtime/context_store.py` | Shared Context Store memory and SQLAlchemy repositories for runs, steps, artifacts, and guardrail decisions, with artifact payload-hash validation. |
+| `src/margin/agent_runtime/db_models.py` | v0.4 agent runtime Context Store ORM tables for runs, steps, artifacts, and guardrail decisions. |
+| `src/margin/agent_runtime/guardrails.py` | Rule-based input and plan guardrails for guaranteed-return requests, prompt injection, and fixed-flow tampering. |
+| `src/margin/agent_runtime/cards.py` | A2A-style ExpertAgent card registry. MainAgent discovers expert agents and skills, not expert-internal tools; scheduled write agents are not eligible for user-Q&A plans. |
+| `src/margin/agent_runtime/quant_agent.py` | Current QuantAgent ML lifecycle strategy profile: profile ID, strategy family, 80% stock / 20% cash policy, required feature groups, and metadata emission. The scorer remains under `valuation_discovery.quant`; the Agent owns selection and audit fingerprinting. |
+| `src/margin/agent_runtime/main_agent.py` | MainAgent foundation for scheduled fixed-plan creation, LLM-backed dynamic user-Q&A planning, Context Store writes, and artifact-based final review. |
+| `src/margin/agent_runtime/expert_agents.py` | ExpertAgent executors: `GeneralQnaAgent` and `DataAnalystAgent` generate user-Q&A answers through the real LLM; `StockAnalystAgent` writes auditable `portfolio_adjustment` artifacts that can keep, reduce, or delete quant candidates without emitting trade orders. |
+| `src/margin/prompts/` | Centralized Prompt Repository, renderer, agent runtime prompt templates, and guardrail prompt templates. |
+| `src/margin/api/dependencies.py` | Exposes cached `get_main_agent_runtime()` FastAPI dependency. |
+| `alembic/versions/20260707_0047_agent_runtime.py` | Creates durable agent runtime run, step, artifact, and guardrail decision tables. |
 | `scripts/smoke_ai_delta_review.py` | Carry/delta/full AI delta-review smoke script. |
+
+### v0.4 Agent Runtime Foundation
+
+The current implementation adds a v0.4 agent runtime foundation for the user Q&A window and scheduled stock-analysis orchestration:
+
+- Prompts live under `src/margin/prompts/` and are loaded/rendered by version through `PromptRegistry` and `PromptRenderer`, with stable hashes for audit.
+- The scheduled stock-analysis flow is defined by `scheduled_stock_analysis_steps.json`; MainAgent plans must follow the JSON step order and expert skills.
+- The Shared Context Store has memory and SQLAlchemy repositories. It stores runs, steps, artifacts, and guardrail decisions; artifact writes use stable JSON payload hashes, and expert agents do not communicate directly with each other.
+- Guardrails currently include a deterministic rule layer: input checks block guaranteed-return / principal-protection / certain-upside requests and prompt injection, while plan checks prevent scheduled-flow reordering or replacement.
+- ExpertAgent cards expose `DataInspectionAgent`, `QuantAgent`, `NewsAcquisitionAgent`, `StockAnalystAgent`, `GeneralQnaAgent`, `DataAnalystAgent`, and `CodeSandboxAgent`; internal tools such as `quant_screening_tool` and `data_sync_tool` are not visible to MainAgent.
+- `QuantAgent` now exposes the scheduled `run_ml_lifecycle_quant_analysis` skill. Strategy selection is encapsulated in `agent_runtime.quant_agent`; scheduled valuation refreshes persist that profile into metadata and ContextArtifacts so the quant layer runs the `ml_lgbm_lifecycle` serving path.
+- `CodeSandboxAgent` is exposed only as a user-Q&A expert card with `schedule_allowed=False`; the foundation records the discovery boundary but does not execute sandbox code.
+- `MainAgentRuntime` creates plans and performs final review only. It does not call deterministic tools or write business tables. User-Q&A planning must call the real LLM planner over A2A-style ExpertAgent cards and may only select read-only Q&A skills; planner failure, LLM failure, or no valid read-only expert returns an explicit failure instead of a local keyword fallback.
+- `GeneralQnaAgent` handles greetings, product usage, and ordinary questions that do not need research data. `DataAnalystAgent` handles stock, recommendation, quant, valuation, evidence, metric, news, and dashboard-data questions. Both render prompts from the centralized Prompt Repository and call the real LLM for final user-facing answers; template strings are not used as Agent output.
+- `DataAnalystAgent` uses deterministic dashboard reads only to create an `analysis_table` artifact. The final `explanation` artifact must come from the LLM and records prompt id/hash, input hash, model, and latency.
+- `StockAnalystAgent.adjust_quant_candidates()` consumes quant/Analysis Mart candidate summaries, writes `keep`, `reduce_weight`, or `delete` decisions into a `portfolio_adjustment` artifact, and records removed securities, target weights, adjusted weights, reasons, maximum stock exposure, and minimum cash.
+- `get_main_agent_runtime()` production dependency now uses `SQLAlchemyAgentContextStore`, so worker-written runs, steps, artifacts, and guardrail decisions are visible to API/Q&A processes. Tests can still inject `MemoryAgentContextStore` explicitly.
 
 ## 3. Core Models
 
@@ -189,5 +219,5 @@ python scripts/smoke_ai_delta_review.py --mode delta --require-real-llm
 | `03-filing_websearch` | News/filing refresh persists snapshots before research sees them. |
 | `04-text_indexing` / `05-rag_evidence` | Provide citeable evidence packages and locators. |
 | `07-strategy_config` | Provides strategy, prompt, tool-policy, and scope versions. |
-| `08-research_candidate_dashboard` | Displays current review, effective assessment, locators, and read-only Copilot output. |
+| `08-research_candidate_dashboard` | Displays current review, effective assessment, evidence summaries, and submits home Q&A requests to the MainAgent API. |
 | `11-valuation_discovery` | Publishes the fourth-layer Analysis Mart, orchestrates quant-passed companies through news, RAG, and AI delta review, then publishes effective assessment pointers. |

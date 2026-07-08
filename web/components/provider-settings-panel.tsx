@@ -297,14 +297,14 @@ export function ProviderSettingsPanel({
       <CardHeader>
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-accent">
-            Provider Settings
+            密钥配置
           </p>
           <CardTitle id="provider-settings-title" className="mt-1">
-            Provider 设置
+            数据源与模型密钥
           </CardTitle>
         </div>
         <span className="text-xs text-muted-foreground">
-          {configs.length} configs
+          {configs.length} 项配置
         </span>
       </CardHeader>
       <CardContent className="grid gap-4">

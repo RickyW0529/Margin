@@ -11,12 +11,13 @@
 - 服务端分页查询今日推荐可见候选列表；
 - 在 `/dashboard/items/[itemId]` 子页展示单个公司的 current review、effective assessment、量化可视化和 RAG 证据；
 - 展示量化分数、风险标记、证据 locator 与版本信息；
-- 提供首页推荐问答，只能基于候选列表回答，拒绝同步、刷新、配置、交易等写意图；
+- 提供问答首页入口；实际问答请求经 `06-multi_agent_research` 的 MainAgent API 路由到数据分析师专家 agent；
 - 提供今日推荐大屏，展示推荐股票、推荐理由、置信度、量化评分、估值折价和风险提示；
 - 在今日推荐大屏提供“一键刷新今日研究”，使用默认 `scope-current` 与当前时间启动 valuation discovery，API 接受后会 best-effort 唤醒一次 worker，并用 React Flow 弹出最近一次刷新节点图，实时展示已完成/运行中/排队中/未开始/失败状态；最近一次 run 非终态时禁用再次刷新，避免重复入队；
 - 最新量化 run 完成后先发布 dashboard projection，今日推荐页无需等待耗时 AI 复核；同一决策时间下按 `created_at`、`item_count`、`run_id` 稳定选择更新且更完整的投影，避免旧单票 run 遮挡新全市场结果。
+- dashboard item 已支持 ML 仓位投影字段：`target_weight`、`adjusted_weight`、`agent_adjustment`。量化 ML 默认把 `target_weight` 同步为 `adjusted_weight` 并标记 `agent_adjustment.source=quant_default`；`ValuationPublisherAdapter` 注入 `StockAnalystAgent` 后会在默认量化投影之后发布 adjusted run，删除风险候选或下调仓位，并把最新列表切到专家调整后的投影。
 - 提供 Provider 密钥配置页面，密钥只写不读，保存/测试后清空输入。
-- 提供面向个人研究的前端信息架构：用户侧页面只保留问答、今日推荐、设置及设置子页；底层 Provider、scope、run、candidate 等概念由后端默认值和设置页承接。
+- 提供简化前端信息架构：用户侧页面只保留问答、今日推荐、设置及设置子页；底层 Provider、scope、run、candidate 等概念由后端默认值和设置页承接。
 
 不再承担：
 
@@ -29,18 +30,18 @@
 
 | 路径 | 当前职责 |
 | --- | --- |
-| `src/margin/dashboard/models.py` | Dashboard DTO：run/item 兼容聚合模型、候选列表/详情 DTO、feedback、provider status、scope/provider settings view、只读 Copilot response、job run。 |
+| `src/margin/dashboard/models.py` | Dashboard DTO：run/item 兼容聚合模型、候选列表/详情 DTO、feedback、provider status、scope/provider settings view、job run。 |
 | `src/margin/dashboard/db_models.py` | `dashboard_runs`、`dashboard_items`、`dashboard_feedback` SQLAlchemy 行模型。 |
 | `src/margin/dashboard/repository.py` | 内存/PostgreSQL repository；提供候选列表分页、过滤、排序、facets 与反馈存取。 |
 | `src/margin/dashboard/service.py` | `DashboardQueryService`、`FeedbackService`、`ProviderStatusService`、`JobService` 与 `DashboardServiceBundle`。 |
 | `src/margin/dashboard/detail_context.py` | 详情页上下文 loader；通过统一 SQL query factory 读取 research context、AI delta review、effective assessment、news documents，并从 warehouse 读取 PIT 趋势。 |
-| `src/margin/api/routes/dashboard.py` | `/api/v1/research`、`/api/v1/research/items/{item_id}`、`/api/v1/research/copilot`、feedback、provider status、job 端点。 |
+| `src/margin/api/routes/dashboard.py` | `/api/v1/research`、`/api/v1/research/items/{item_id}`、feedback、provider status、job 端点。 |
 | `src/margin/api/routes/valuation_discovery.py` | Dashboard 刷新入口：`POST /api/v1/valuation-discovery/refreshes` 与 `GET /api/v1/valuation-discovery/runs/{run_id}`；创建 refresh 后后台唤醒一次 valuation worker，避免新任务长时间停在排队态。 |
-| `web/app/layout.tsx` | 全局应用框架；Tailwind v4 + Vercel Geist 设计系统，深色侧栏只暴露问答、今日推荐、设置，顶栏显示个人研究模式。 |
-| `web/app/page.tsx` | 问答优先首页；读取今日可见推荐预览，默认问题“今日推荐股票是什么？”调用只读 Copilot。 |
-| `web/app/dashboard/page.tsx` | 今日推荐大屏；读取最新 dashboard 投影的可见候选，只展示推荐列表、关键理由、置信度、量化评分和估值折价；顶部提供一键刷新研究。 |
+| `web/app/layout.tsx` | 全局应用框架；Tailwind v4 + Vercel Geist 设计系统，侧栏只暴露问答、今日推荐、设置，顶栏提供语言切换。 |
+| `web/app/page.tsx` | 问答优先首页；第一屏只保留自然语言输入，提交后调用 MainAgent 问答 API。 |
+| `web/app/dashboard/page.tsx` / `web/components/recommendation-dashboard-view.tsx` | 今日推荐大屏；服务端读取最新 dashboard 投影，客户端按语言展示推荐列表、关键理由、置信度、量化评分和估值折价；顶部提供一键刷新研究。 |
 | `web/app/dashboard/items/[itemId]/page.tsx` | 今日推荐详情子页；展示公司 current review、effective assessment、量化可视化、风险复核和 RAG 证据。 |
-| `web/app/settings/page.tsx` | 设置中心入口；把密钥、数据、研究范围、策略配置分成四个子页。 |
+| `web/app/settings/page.tsx` | 设置中心入口；把密钥、数据、研究范围、自动研究计划、策略配置分成子页。 |
 | `web/app/settings/` | Provider、scope、strategy、data 配置子页；scope 页用公司池选择器切换中证500、全 A、沪深300，scope/strategy 的高级版本列表使用 `ConfigVersionList` 触发 append-only 激活。 |
 | `web/lib/api.ts` | 前端 API client；v0.2 dashboard、valuation discovery、provider settings、strategy，补齐 `createVersionedConfig`/`activateVersionedConfig`、`createProviderConfig`/`activateProviderConfig`、`fetchNewsRun`、`fetchJobRun`。 |
 | `web/lib/utils.ts` | `cn` 类名合并 + 日期/分数/百分比/带符号百分比格式化。 |
@@ -51,13 +52,15 @@
 | `web/components/metric-trend-chart.tsx` | 详情页紧凑 SVG 趋势图，用固定尺寸展示价格、估值、ROE、利润等关键序列。 |
 | `web/components/config-version-list.tsx` | 通用版本化配置列表 + append-only 激活按钮（universe/indicator/quant/style/scope）。 |
 | `web/components/company-pool-selector.tsx` | 用户侧公司池选择器；反显中证500、全 A、沪深300的真实成员数和当前使用状态，缺少真实成员时禁用切换，自定义公司池入口暂为后续开放。 |
-| `web/components/current-vs-effective-panel.tsx` | 当前复核 vs 生效结论展示。 |
-| `web/components/evidence-locator-list.tsx` | 证据 locator 展示，所有外部文本均按文本渲染。 |
+| `web/lib/i18n.tsx` / `web/components/language-toggle.tsx` | 中文/英文界面切换与共享文案字典。 |
+| `web/components/current-vs-effective-panel.tsx` | 当前复核 vs 生效结论展示，用户可见标签走语言字典。 |
+| `web/components/evidence-locator-list.tsx` | 证据摘要展示；默认隐藏 locator/snapshot/PIT 技术定位，所有外部文本均按文本渲染。 |
 | `web/hooks/use-dashboard-refresh-run.ts` | 今日推荐页最近一次 refresh run 状态管理；负责启动、加载最近 run、轮询 run detail、打开/收起状态，并在最近 run 非终态时阻止重复启动。 |
 | `web/lib/refresh-run-graph.ts` | 将 valuation discovery sparse step payload 标准化为固定 React Flow 节点状态，区分 completed、active、queued、pending、waiting、failed。 |
 | `web/components/dashboard-refresh-control.tsx` | 今日推荐页刷新控制器；隐藏 scope/decision 参数，默认启动 valuation discovery，以浮层弹窗展示最近一次刷新节点图，并在已有非终态 run 时禁用“刷新今日研究”。 |
 | `web/components/dashboard-refresh-node-graph.tsx` | React Flow 节点图；固定展示 valuation discovery 12 个阶段，运行中节点脉冲闪烁，完成为绿色，排队/等待为黄色，未开始为灰色，失败/上游阻断为红色。 |
-| `web/components/recommendation-chat-panel.tsx` | 首页问答组件；固定默认问题、loading/error/disabled 状态和业务化引用标签。 |
+| `web/components/recommendation-chat-panel.tsx` | 首页问答组件；输入框提交到 MainAgent 问答 API，展示 loading/error/disabled/success、折叠调用记录和业务化引用标签。 |
+| `web/components/stock-analysis-schedule-panel.tsx` | 自动研究计划设置；用户只配置启用状态和每日时间，scope/universe 由后端默认值承接。 |
 | `web/components/provider-settings-panel.tsx` | Provider 密钥配置。 |
 
 ## 3. 后端模型
@@ -69,7 +72,7 @@
 | 模型 | 关键字段 |
 | --- | --- |
 | `ResearchRun` | `run_id`、`decision_at`、`strategy_id`、`version_id`、`universe`、`status`、`item_count`、`published_count`、`abstained_count`、`aborted_count`、`created_at`。 |
-| `ResearchItem` | `item_id`、`run_id`、`symbol`、`signal_type`、`confidence`、`statement`、`workflow_run_id`、`snapshot_id`、`status`、`abstain_reason`、`rejection_reasons`、`evidence_ids`、`claim_ids`、`risk_score`、`counter_arguments`、`created_at`。 |
+| `ResearchItem` | `item_id`、`run_id`、`symbol`、`signal_type`、`confidence`、`statement`、`workflow_run_id`、`snapshot_id`、`status`、`abstain_reason`、`rejection_reasons`、`evidence_ids`、`claim_ids`、`risk_score`、`target_weight`、`adjusted_weight`、`agent_adjustment`、`counter_arguments`、`created_at`。 |
 
 ### 3.2 当前公开 DTO
 
@@ -78,12 +81,11 @@
 | `DashboardFilters` | `screening_status`、`data_status`、`review_required`、`assessment_freshness`、`query`。 |
 | `DashboardSort` | 允许 `final_score`、`confidence`、`last_checked_at`、`symbol`；方向为 `asc` 或 `desc`。 |
 | `DashboardPageInfo` | cursor 分页元信息。 |
-| `ResearchCandidateListItemV2` | 候选行：security、scope、筛选状态、数据状态、风险标记、当前复核、有效 assessment、分数、置信度、检查时间。 |
+| `ResearchCandidateListItemV2` | 候选行：security、scope、筛选状态、数据状态、风险标记、当前复核、有效 assessment、分数、目标仓位、调整后仓位、专家调整摘要、置信度、检查时间。 |
 | `ResearchCandidateListResponse` | 候选页：`items`、`page_info`、`facets`、`as_of`、`scope_version_id`。 |
 | `ResearchItemDetailV2` | 公司详情聚合：`item`、`current_review`、`effective_assessment`、`factors`、`thesis`、`evidence`、`versions`。 |
 | `FeedbackRecord` | append-only 用户反馈。 |
 | `ProviderStatus` | Provider 健康状态。 |
-| `ReadOnlyCopilotResponse` | 只读 Copilot 回答与引用。 |
 | `JobRun` | 后台 job 查询兼容记录。 |
 
 ## 4. 后端服务
@@ -130,7 +132,6 @@
 | --- | --- | --- |
 | `GET` | `/research` | 查询候选列表。参数：`scope_version_id`、`universe`、`limit`、`cursor`、`screening_status`、`data_status`、`review_required`、`assessment_freshness`、`query`、`sort_field`、`sort_direction`。 |
 | `GET` | `/research/items/{item_id}` | 查询公司详情聚合。 |
-| `POST` | `/research/copilot` | 只读 Copilot；写意图返回 `403 copilot_read_only`。 |
 | `POST` | `/research-items/{item_id}/feedback` | 追加用户反馈。 |
 | `GET` | `/provider-status` | 查询 Provider 状态。 |
 | `GET` | `/jobs/{job_run_id}` | 查询后台 job record。 |
@@ -150,18 +151,20 @@
 - `/research-items/{item_id}/report`
 - `/research-items/{item_id}/export`
 - `/jobs/nightly-runs`
+- `/research/copilot`
 
 ## 7. 前端页面
 
 | 页面 | 数据来源 | 说明 |
 | --- | --- | --- |
-| `/` | `fetchResearchCandidates`、`askReadOnlyCopilot` | 问答首页；第一屏是自然语言输入，默认问题“今日推荐股票是什么？”调用只读推荐工具，并展示最多 3 个今日推荐预览。 |
+| `/` | `askMainAgentQna` | 问答首页；第一屏是自然语言输入，提交后经 MainAgent 路由到专家 agent，默认只读，不触发交易。 |
 | `/dashboard` | `fetchResearchCandidates`、`startValuationDiscoveryRefresh`、`fetchValuationDiscoveryRuns`、`fetchResearchRunDetailV2` | 今日推荐大屏；展示最新可见候选列表、理由标签、置信度、量化评分和估值折价；顶部“刷新今日研究”用默认参数启动 valuation discovery，并用浮层弹窗展示/更新最近一次刷新 React Flow 节点图；点击推荐卡进入详情子页。 |
 | `/dashboard/items/[itemId]` | `fetchResearchItemDetailV2` | 今日推荐详情子页；展示研究结论、量化可视化、current/effective review、风险复核和 RAG 证据 locator。 |
-| `/settings` | 静态子页索引 | 设置中心；把密钥配置、数据配置、研究范围、策略配置分成子页，主流程不直接暴露底层配置。 |
+| `/settings` | 静态子页索引 | 设置中心；把密钥配置、数据配置、研究范围、自动研究计划、策略配置分成子页，主流程不直接暴露底层配置。 |
 | `/settings/providers` | provider config API | 配置 Tushare、Tavily、LLM、Embedding、Rerank 等密钥。 |
 | `/settings/scope` | scope config API | 配置用户可见公司池与指标视图；公司池区直接展示中证500、全 A、沪深300三种默认池和当前使用状态，切换后滚动新的 active Research Scope。 |
 | `/settings/strategy` | strategy config API | 配置策略模板、自定义 prompt 与版本。 |
+| `/settings/schedule` | agent schedule API | 配置每日自动研究时间；保存到 `agent_runtime_schedules`，worker 到点触发 MainAgent 固定流程。 |
 
 ## 8. 前端组件
 
@@ -170,9 +173,9 @@
 | `DashboardRefreshControl` | 今日推荐页的一键刷新入口；点击后用 `scope-current` 与当前时间调用 refresh API，成功后用浮层弹窗展示最近一次刷新节点图，不挤压列表内容；最近一次 run 非终态时按钮显示“刷新进行中”并禁用，失败时显示业务化配置提示；不再跳转内部 run 详情页。 |
 | `DashboardRefreshNodeGraph` | React Flow 运行节点图；运行中节点脉冲闪烁，完成节点绿色，排队/等待节点黄色，未开始节点灰色，失败或 `upstream_failed` 节点红色。 |
 | `CompanyPoolSelector` | 研究范围页的用户侧公司池配置；只允许切换已落库且有真实成员的默认池，当前池禁用并显示“当前使用”。 |
-| `RecommendationChatPanel` | 用户首页问答，默认问题“今日推荐股票是什么？”，调用只读 Copilot，展示 loading/disabled/error/success 和业务化引用标签。 |
+| `RecommendationChatPanel` | 用户首页问答，调用 MainAgent 问答 API，展示 loading/disabled/error/success、折叠调用记录和业务化引用标签。 |
 | `CurrentVsEffectivePanel` | 区分本轮 current review 与当前生效结论。 |
-| `EvidenceLocatorList` | 展示 evidence id、source level、locator、snapshot id、新闻摘要和是否关联本股票；外部文本不解释为 HTML。 |
+| `EvidenceLocatorList` | 默认展示证据摘要、来源等级、新闻摘要和是否关联本股票；locator、snapshot、PIT 放入折叠的技术定位；外部文本不解释为 HTML。 |
 | `MetricTrendChart` | 展示详情页关键指标趋势；不足两点时显示稳定空态。 |
 | `ProviderSettingsPanel` | Provider 密钥写入；前端永不回显完整密钥。 |
 | `ProviderStatusPanel` | Provider 健康状态列表，标题区展示 healthy/blocker 数量。 |
@@ -201,14 +204,14 @@
 - candidate list 分页/过滤/facets；
 - item detail current/effective 分离；
 - detail context 合并中文名、AI 延期状态、新闻证据、估值缺失状态和趋势图数据；
-- read-only Copilot 写意图拒绝；
+- MainAgent 问答 guardrail 拒绝收益保证等不合规输入；
 - feedback append-only；
 - repository 内存与 PostgreSQL 行模型转换；
 - provider status 错误降级。
 
 前端覆盖：
 
-- 问答首页和今日推荐预览；
+- 问答首页、MainAgent 问答接口和折叠调用记录；
 - 今日推荐大屏的推荐列表、详情子页、量化可视化、RAG 证据、指标和空状态；
 - 今日推荐大屏一键刷新的默认参数、后端 worker 唤醒、非终态 run 禁重复触发、最近一次 React Flow 节点图、排队/运行状态、实时轮询、打开/收起和错误提示；
 - 设置中心子页入口；

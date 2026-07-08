@@ -130,3 +130,16 @@ def test_runtime_factory_dependency_uses_active_versioned_config(
 
     assert runtime.config_version_id == "provider-llm-dependency-v1"
     engine.dispose()
+
+
+def test_get_main_agent_runtime_returns_cached_runtime() -> None:
+    """Test that the v0.4 MainAgent runtime dependency is cached."""
+    from margin.agent_runtime.context_store import SQLAlchemyAgentContextStore
+    from margin.api.dependencies import get_main_agent_runtime
+
+    get_main_agent_runtime.cache_clear()
+    first = get_main_agent_runtime()
+    second = get_main_agent_runtime()
+
+    assert first is second
+    assert isinstance(first._context_store, SQLAlchemyAgentContextStore)

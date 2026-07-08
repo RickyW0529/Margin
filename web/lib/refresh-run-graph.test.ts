@@ -26,7 +26,7 @@ describe("buildRefreshRunNodes", () => {
     });
 
     expect(
-      nodes.find((node) => node.id === "QUANT_INPUT_BUILD"),
+      nodes.find((node) => node.id === "quant_analysis"),
     ).toMatchObject({
       state: "failed",
       status: "upstream_failed",
@@ -56,7 +56,7 @@ describe("buildRefreshRunNodes", () => {
     });
 
     expect(
-      nodes.find((node) => node.id === "QUANT_INPUT_BUILD"),
+      nodes.find((node) => node.id === "quant_analysis"),
     ).toMatchObject({
       errorCode: "upstream_failed",
       state: "failed",
@@ -64,7 +64,7 @@ describe("buildRefreshRunNodes", () => {
     });
   });
 
-  it("marks scheduled pending steps as queued instead of active", () => {
+  it("keeps queued Agent nodes distinct from partial active Agent nodes", () => {
     const nodes = buildRefreshRunNodes({
       completed_count: 1,
       failed_count: 0,
@@ -87,11 +87,46 @@ describe("buildRefreshRunNodes", () => {
     });
 
     expect(
-      nodes.find((node) => node.id === "QUANT_INPUT_BUILD"),
+      nodes.find((node) => node.id === "quant_analysis"),
     ).toMatchObject({
       state: "queued",
       status: "pending",
     });
-    expect(nodes.some((node) => node.state === "active")).toBe(false);
+    expect(nodes.find((node) => node.id === "data_inspection")).toMatchObject({
+      state: "active",
+    });
+  });
+
+  it("uses agent-runtime step ids as already aggregated Agent nodes", () => {
+    const nodes = buildRefreshRunNodes({
+      completed_count: 1,
+      failed_count: 0,
+      pending_count: 4,
+      retry_after_seconds: null,
+      run_id: "agent-run-1",
+      status: "running",
+      steps: [
+        {
+          finished_at: "2026-07-01T10:51:24Z",
+          started_at: "2026-07-01T10:49:24Z",
+          status: "succeeded",
+          step_id: "data_inspection",
+        },
+      ],
+      supported_wait_states: [],
+      target_count: 5,
+      trace_id: "agent-run-1",
+      wait_state: null,
+    });
+
+    expect(nodes.find((node) => node.id === "data_inspection")).toMatchObject({
+      owner: "DataInspectionAgent",
+      state: "completed",
+      status: "1/1 completed",
+    });
+    expect(nodes.find((node) => node.id === "quant_analysis")).toMatchObject({
+      owner: "QuantAgent",
+      state: "active",
+    });
   });
 });

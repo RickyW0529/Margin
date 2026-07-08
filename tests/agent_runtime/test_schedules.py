@@ -1,0 +1,439 @@
+"""Tests for persisted agent schedules and scheduled runner behavior."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import UTC, datetime
+
+from margin.agent_runtime.cards import default_agent_card_registry
+from margin.agent_runtime.context_store import MemoryAgentContextStore
+from margin.agent_runtime.expert_agents import StockAnalystAgent
+from margin.agent_runtime.main_agent import MainAgentRuntime
+from margin.agent_runtime.schedules import (
+    ScheduledStockAnalysisRunner,
+    StockAnalysisSchedule,
+    compute_next_run_at,
+)
+from margin.agent_runtime.step_definitions import load_scheduled_stock_analysis_flow
+from margin.dashboard.models import DashboardFilters, DashboardSort
+from margin.dashboard.repository import MemoryDashboardRepository
+from margin.research.delta_repository import (
+    MemoryResearchDeltaRepository,
+    ResearchDeltaReview,
+)
+from margin.research.graph.state import ReviewMode, ReviewOutcome
+from margin.valuation_discovery.adapters import ValuationPublisherAdapter
+from margin.valuation_discovery.assessments import EffectiveAssessmentService
+from margin.valuation_discovery.models import (
+    DataStatus,
+    QuantResult,
+    ResearchGuardrail,
+    ScreeningStatus,
+)
+from margin.valuation_discovery.orchestrator import (
+    ValuationDiscoveryDependencies,
+    ValuationDiscoveryOrchestrationRepository,
+    ValuationDiscoveryOrchestrator,
+)
+from margin.valuation_discovery.repository import MemoryValuationDiscoveryRepository
+from margin.valuation_discovery.service import ValuationDiscoveryService
+
+
+def test_compute_next_run_at_rolls_to_next_local_day() -> None:
+    """Test daily schedule next-run calculation in local time."""
+    now = datetime(2026, 7, 7, 2, 0, tzinfo=UTC)
+
+    next_run = compute_next_run_at(
+        hour=8,
+        minute=30,
+        timezone="Asia/Shanghai",
+        now=now,
+    )
+
+    assert next_run == datetime(2026, 7, 8, 0, 30, tzinfo=UTC)
+
+
+def test_scheduled_runner_triggers_main_agent_and_refresh() -> None:
+    """Test that due schedules trigger MainAgent planning and valuation refresh."""
+    context_store = MemoryAgentContextStore()
+    main_agent = MainAgentRuntime(
+        context_store=context_store,
+        card_registry=default_agent_card_registry(),
+        scheduled_flow=load_scheduled_stock_analysis_flow(),
+    )
+    valuation_service = _FakeValuationService()
+    repository = _DueScheduleRepository(
+        StockAnalysisSchedule(
+            enabled=True,
+            hour=8,
+            minute=30,
+            timezone="Asia/Shanghai",
+            scope_version_id="scope-current",
+            universe="ALL_A",
+            next_run_at=datetime(2026, 7, 7, 0, 30, tzinfo=UTC),
+        )
+    )
+
+    processed = ScheduledStockAnalysisRunner(
+        repository=repository,
+        main_agent=main_agent,
+        valuation_service=valuation_service,
+        scope_resolver=lambda scope: "scope-1" if scope == "scope-current" else scope,
+    ).run_once(now=datetime(2026, 7, 7, 0, 31, tzinfo=UTC))
+
+    assert processed == 1
+    assert context_store.list_steps("ar_sched_20260707_0830")[0].expert_agent_name == (
+        "DataInspectionAgent"
+    )
+    assert len(valuation_service.calls) == 1
+    scope_version_id, decision_at, idempotency_key, metadata = valuation_service.calls[0]
+    assert scope_version_id == "scope-1"
+    assert decision_at == datetime(2026, 7, 7, 0, 31, tzinfo=UTC)
+    assert idempotency_key == "stock_analysis_daily:2026-07-07"
+    assert metadata is not None
+    assert metadata["agent_run_id"] == "ar_sched_20260707_0830"
+    assert metadata["schedule_id"] == "stock_analysis_daily"
+    assert metadata["universe"] == "ALL_A"
+    assert metadata["quant_agent_strategy_profile"]["strategy_family"] == (
+        "ml_lgbm_lifecycle"
+    )
+    assert metadata["quant_strategy"]["strategy_family"] == "ml_lgbm_lifecycle"
+    artifacts = context_store.list_artifacts("ar_sched_20260707_0830")
+    assert [artifact.artifact_type for artifact in artifacts] == ["valuation_refresh"]
+    assert artifacts[0].producer_agent == "QuantAgent"
+    assert artifacts[0].payload_json["valuation_refresh_run_id"] == "refresh-1"
+    assert artifacts[0].payload_json["dashboard_projection"] == "expected_after_refresh"
+    assert artifacts[0].payload_json["quant_agent_strategy_profile"][
+        "profile_id"
+    ] == "liquid-large-mid-lgbm-recent-trend80-ddstop-v1"
+    assert repository.saved.last_triggered_at == datetime(2026, 7, 7, 0, 31, tzinfo=UTC)
+
+
+def test_scheduled_runner_can_drive_full_adjusted_dashboard_projection() -> None:
+    """Scheduled MainAgent flow reaches StockAnalyst-adjusted dashboard output."""
+    decision_at = datetime(2026, 7, 7, 0, 31, tzinfo=UTC)
+    context_store = MemoryAgentContextStore()
+    main_agent = MainAgentRuntime(
+        context_store=context_store,
+        card_registry=default_agent_card_registry(),
+        scheduled_flow=load_scheduled_stock_analysis_flow(),
+    )
+    dashboard = MemoryDashboardRepository()
+    review_repository = MemoryResearchDeltaRepository()
+    valuation_repository = MemoryValuationDiscoveryRepository()
+    quant_service = _QuantServiceForFullSchedule()
+    dependencies = ValuationDiscoveryDependencies(
+        repository=ValuationDiscoveryOrchestrationRepository.memory(),
+        data_readiness_service=_ReadyDataService(),
+        scope_service=_ScopeService(),
+        quant_service=quant_service,
+        news_target_selector=_TargetSelector(),
+        news_service=_NewsService(),
+        indexing_runner=_IndexingRunner(),
+        research_context_builder=_ContextBuilder(),
+        ai_review_service=_ReviewService(review_repository),
+        valuation_publisher=ValuationPublisherAdapter(
+            assessment_service=EffectiveAssessmentService(),
+            review_repository=review_repository,
+            valuation_repository=valuation_repository,
+            dashboard_repository=dashboard,
+            stock_analyst_agent=StockAnalystAgent(
+                write_context_artifact=context_store.add_artifact,
+                dashboard_repository=dashboard,
+            ),
+        ),
+    )
+    valuation_service = ValuationDiscoveryService(
+        ValuationDiscoveryOrchestrator(dependencies)
+    )
+    repository = _DueScheduleRepository(
+        StockAnalysisSchedule(
+            enabled=True,
+            hour=8,
+            minute=30,
+            timezone="Asia/Shanghai",
+            scope_version_id="scope-current",
+            universe="ALL_A",
+            next_run_at=datetime(2026, 7, 7, 0, 30, tzinfo=UTC),
+        )
+    )
+
+    processed = ScheduledStockAnalysisRunner(
+        repository=repository,
+        main_agent=main_agent,
+        valuation_service=valuation_service,
+        scope_resolver=lambda scope: "scope-1" if scope == "scope-current" else scope,
+    ).run_once(now=decision_at)
+    while valuation_service.create_step_worker(
+        worker_id="schedule-full-flow-test"
+    ).run_once(now=decision_at):
+        pass
+
+    response = dashboard.list_research_candidates_v2(
+        scope_version_id="scope-1",
+        universe_code="ALL_A",
+        filters=DashboardFilters(),
+        sort=DashboardSort(field="symbol", direction="asc"),
+        cursor=None,
+        limit=20,
+    )
+
+    assert processed == 1
+    assert dependencies.repository.inner.list_runs(
+        run_type="valuation_discovery",
+        scope_version_id="scope-1",
+    )[0].state == "succeeded"
+    assert [item.security_id for item in response.items] == ["000001.SZ", "000002.SZ"]
+    assert [item.adjusted_weight for item in response.items] == [0.4, 0.4]
+    assert {item.agent_adjustment["source"] for item in response.items} == {
+        "StockAnalystAgent"
+    }
+    portfolio_artifact = context_store.get_artifact(
+        "ctx_ar_sched_20260707_0830_portfolio_adjustment"
+    )
+    assert portfolio_artifact is not None
+    assert portfolio_artifact.payload_json["removed_security_ids"] == ["000003.SZ"]
+    assert context_store.get_artifact(
+        "ctx_ar_sched_20260707_0830_dashboard_projection_event"
+    )
+    assert valuation_repository.list_effective_assessment_pointers()
+
+
+class _DueScheduleRepository:
+    """Fake repository returning one due schedule."""
+
+    def __init__(self, schedule: StockAnalysisSchedule) -> None:
+        self._schedule = schedule
+        self.saved = schedule
+
+    def get_stock_analysis_schedule(self) -> StockAnalysisSchedule:
+        return self._schedule
+
+    def save_stock_analysis_schedule(
+        self,
+        schedule: StockAnalysisSchedule,
+    ) -> StockAnalysisSchedule:
+        self.saved = schedule
+        return schedule
+
+    def list_due_stock_analysis_schedules(
+        self,
+        *,
+        now: datetime,
+    ) -> list[StockAnalysisSchedule]:
+        return [self._schedule]
+
+
+class _FakeValuationService:
+    """Fake valuation service recording refresh calls."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, datetime, str | None, dict[str, object] | None]] = []
+
+    def start_refresh(
+        self,
+        *,
+        scope_version_id: str,
+        decision_at: datetime,
+        idempotency_key: str | None = None,
+        metadata: dict[str, object] | None = None,
+    ) -> object:
+        self.calls.append((scope_version_id, decision_at, idempotency_key, metadata))
+        return _FakeRefreshStartResponse(run_id="refresh-1")
+
+
+class _FakeRefreshStartResponse:
+    """Fake refresh response with the attribute used by the schedule runner."""
+
+    def __init__(self, *, run_id: str) -> None:
+        self.run_id = run_id
+
+
+@dataclass(frozen=True)
+class _Ref:
+    """Small object with common reference attributes for orchestrator tests."""
+
+    run_id: str | None = None
+    version_id: str | None = None
+    snapshot_id: str | None = None
+
+
+class _ReadyDataService:
+    """Fake data readiness service that requires no external sync."""
+
+    def check(self, **_: object) -> _Ref:
+        return _Ref(snapshot_id="freshness-ok")
+
+    def ensure_sync(self, **_: object) -> _Ref:
+        return _Ref(run_id="data-sync-ok")
+
+
+class _ScopeService:
+    """Fake scope service returning the frozen scope reference."""
+
+    def resolve(self, *, scope_version_id: str, **_: object) -> _Ref:
+        return _Ref(version_id=scope_version_id)
+
+
+class _QuantServiceForFullSchedule:
+    """Fake provider-free quant service returning ML-style weighted results."""
+
+    def __init__(self) -> None:
+        self._snapshot = _Ref(snapshot_id="qis-schedule")
+        self._run = _QuantRunResult(
+            quant_run_id="quant-schedule",
+            results=(
+                _quant_result("000001.SZ", score=90, target_weight=0.5),
+                _quant_result("000002.SZ", score=88, target_weight=0.5),
+                _quant_result(
+                    "000003.SZ",
+                    score=86,
+                    target_weight=0.2,
+                    risk_flags=("short_term_overheat",),
+                ),
+            ),
+        )
+
+    def build_input(self, **_: object) -> _Ref:
+        return self._snapshot
+
+    def load_input(self, snapshot_id: str) -> _Ref:
+        assert snapshot_id == self._snapshot.snapshot_id
+        return self._snapshot
+
+    def run(self, **_: object) -> _QuantRunResult:
+        return self._run
+
+    def load_run(self, quant_run_id: str) -> _QuantRunResult:
+        assert quant_run_id == self._run.quant_run_id
+        return self._run
+
+
+@dataclass(frozen=True)
+class _QuantRunResult:
+    """Minimal quant result bundle returned by the fake quant service."""
+
+    quant_run_id: str
+    results: tuple[QuantResult, ...]
+
+
+class _TargetSelector:
+    """Fake news target selector returning all quant result securities."""
+
+    def select(self, *, results: tuple[QuantResult, ...], **_: object) -> tuple[_Ref, ...]:
+        return tuple(_Ref(snapshot_id=result.security_id) for result in results)
+
+
+class _NewsService:
+    """Fake news service representing completed upstream news acquisition."""
+
+    def refresh(self, **_: object) -> _Ref:
+        return _Ref(run_id="news-schedule")
+
+
+class _IndexingRunner:
+    """Fake indexing runner with no backlog."""
+
+    def run_once(self, *, limit: int = 50) -> int:
+        del limit
+        return 0
+
+
+class _ContextBuilder:
+    """Fake context builder with durable context recovery support."""
+
+    def __init__(self) -> None:
+        self._ids = ("ctx-schedule-1", "ctx-schedule-2", "ctx-schedule-3")
+
+    def build(self, **_: object) -> tuple[str, ...]:
+        return self._ids
+
+    def list_context_snapshot_ids(self, **_: object) -> tuple[str, ...]:
+        return self._ids
+
+
+class _ReviewService:
+    """Fake AI review service that persists one real review for publishing."""
+
+    def __init__(self, repository: MemoryResearchDeltaRepository) -> None:
+        self._repository = repository
+        self._summary = _ReviewSummary(review_ids=("review-schedule",))
+
+    def review(
+        self,
+        *,
+        context_snapshot_ids: tuple[str, ...],
+        **_: object,
+    ) -> _ReviewSummary:
+        assert context_snapshot_ids == (
+            "ctx-schedule-1",
+            "ctx-schedule-2",
+            "ctx-schedule-3",
+        )
+        self._repository.persist_final_review(
+            ResearchDeltaReview(
+                review_id="review-schedule",
+                graph_run_id="graph-schedule",
+                context_snapshot_id=context_snapshot_ids[0],
+                security_id="000001.SZ",
+                decision_at=datetime(2026, 7, 7, 0, 31, tzinfo=UTC),
+                review_mode=ReviewMode.DELTA_REVIEW,
+                outcome=ReviewOutcome.UPDATE_ASSESSMENT,
+                previous_effective_assessment_id=None,
+                effective_assessment_id="assessment-schedule",
+                assessment_freshness="current",
+                stale_reason=None,
+                confidence=0.72,
+                conclusion="AI review confirmed the quant candidate remains researchable.",
+                valuation_view="neutral",
+                evidence_ids=("evidence-schedule",),
+                result_hash="sha256:schedule-review",
+                created_at=datetime(2026, 7, 7, 0, 31, tzinfo=UTC),
+            )
+        )
+        return self._summary
+
+    def load_summary(self, **_: object) -> _ReviewSummary:
+        return self._summary
+
+
+@dataclass(frozen=True)
+class _ReviewSummary:
+    """Minimal review summary consumed by the publisher."""
+
+    review_ids: tuple[str, ...]
+
+
+def _quant_result(
+    security_id: str,
+    *,
+    score: float,
+    target_weight: float,
+    risk_flags: tuple[str, ...] = (),
+) -> QuantResult:
+    """Build a deterministic ML-style quant result."""
+    return QuantResult(
+        quant_run_id="quant-schedule",
+        security_id=security_id,
+        final_score=score,
+        quality_score=score,
+        value_score=score,
+        growth_score=score,
+        momentum_score=score,
+        risk_score=score,
+        screening_status=ScreeningStatus.PASS,
+        data_status=DataStatus.OK,
+        review_required=False,
+        review_reasons=(),
+        risk_flags=risk_flags,
+        research_guardrail=ResearchGuardrail.RESEARCH_ALLOWED,
+        reason_summary=f"{security_id} ML score {score}",
+        factor_details={
+            "strategy_family": "ml_lgbm_lifecycle",
+            "ml_strategy": {
+                "target_weight": target_weight,
+                "risk_controls": {"risk_reasons": list(risk_flags)},
+            },
+        },
+        created_at=datetime(2026, 7, 7, 0, 31, tzinfo=UTC),
+    )

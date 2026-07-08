@@ -8,6 +8,8 @@ In v0.3, `ALL_A` / `ALL_A_NON_ST` scopes prefer the latest data-layer `company_p
 
 The quant service now supports versioned manual-pool strategy metadata. When `QuantInputSnapshot.quant_feature_set.metadata.quant_strategy.thresholds.presets` provides factor weights, `QuantService` uses `manual_all_a_score` as the real `QuantResult.final_score` input for ranks and screening status. `theme_hotness` is a confirmed theme/industry-hotness bonus sourced from PIT-safe cross-section fields `theme_hot_score`, `theme_member_confidence`, and `theme_signal_confirmed`; unconfirmed signals and non-members receive no bonus. The compatibility path without versioned strategy metadata still uses the legacy five-group `FactorScorer.combine()` score.
 
+The quant service also supports `strategy_family=ml_lgbm_lifecycle`. This serving path lives in `quant/ml_lifecycle.py`; it does not retrain inside API/worker processes, call Tushare/AKShare, or read `quant_ml_backtest` files. It consumes only the PIT-safe cross-section returned by `QuantRepository.load_cross_section()`. Output is stored in `QuantResult.factor_details.ml_strategy`, including model family, strategy version, feature coverage, score components, risk controls, target weight, cash policy, `execution_boundary=research_only_no_order`, and fallback state. The default portfolio cap is 80% stock exposure with at least 20% cash; individual stock weights are not hard-capped by the scorer, while ST/suspended/hard-filtered rows are rejected before ML scoring with zero target weight. When `QuantAdapter.run()` receives a Feature-Mart materialized or persisted/reloaded `QuantInputSnapshot`, it rebinds `quant_feature_set.metadata.quant_strategy` from the frozen `scope_version_id`, preventing metadata loss from falling back to the legacy `quant-v0.2` compatibility route.
+
 v0.3 adds fourth-layer marts. Third-layer canonical data is first materialized by the ETL pipeline into `quant_feature_snapshots` / `quant_feature_rows`, and quant reads only those fourth-layer feature snapshots. Quant results are then published through ETL into `analysis_snapshots`, `analysis_metrics`, `analysis_findings`, and `analysis_evidence_links`. This layer serves Quant, dashboards, and LangGraph scoped read tools with structured metrics, findings, quality flags, input/result hashes, and lineage so the AI flow does not recompute the same indicators from lower layers. The Feature Mart cross-section loader also reads PIT-safe annual `n_income_attr_p` history and derives `net_profit_y1` / `net_profit_y2` during ETL for the consecutive-loss filter. Suspension hard filters prefer explicit `is_suspended` / `suspend_type` facts published from `suspend_d`; the missing-bar fallback only uses latest market dates with at least 80% coverage, preventing partial smoke/backfill bars from marking the whole market suspended. Refresh orchestration now runs `DASHBOARD_REFRESH` immediately after `RESEARCH_CONTEXT_BUILD`, publishing quant pass/near_threshold/watchlist candidates to today's recommendations before the slower AI review and valuation publish steps continue. `NewsRefreshAdapter` only releases downstream work after the news refresh is terminal or in an explicit provider-wait state; `pending` / `running` runs become a `news_refresh_incomplete` retryable step so target retries do not create partial research contexts and premature AI-deferred conclusions.
 
 ## Data Model and Migrations
@@ -26,7 +28,7 @@ v0.3 adds fourth-layer marts. Third-layer canonical data is first materialized b
 | `valuation_assessments` / `effective_assessment_pointers` | Valuation conclusions and current effective assessment pointers. |
 | `research_context_snapshots` | Frozen research-context snapshots consumed by AI review. |
 
-Migrations: `20260622_0021` through `20260622_0024`, v0.3 source/company-pool/quant-history-index migrations `20260623_0036` through `20260624_0041`, Analysis Mart migration `20260624_0042_analysis_mart.py`, Quant Feature Mart migration `20260625_0043_quant_feature_mart.py`, and dead-table cleanup migration `20260625_0044_remove_dead_tables.py`.
+Migrations: `20260622_0021` through `20260622_0024`, v0.3 source/company-pool/quant-history-index migrations `20260623_0036` through `20260624_0041`, Analysis Mart migration `20260624_0042_analysis_mart.py`, Quant Feature Mart migration `20260625_0043_quant_feature_mart.py`, dead-table cleanup migration `20260625_0044_remove_dead_tables.py`, and the ML dashboard-weight / Tushare landing migrations `20260708_0049_dashboard_ml_weights.py` / `20260708_0050_ml_tushare_endpoint_landing.py`.
 
 ## Key Code
 
@@ -35,9 +37,10 @@ Migrations: `20260622_0021` through `20260622_0024`, v0.3 source/company-pool/qu
 | `models.py` | `UniverseMembership`, `QuantInputSnapshot`, `QuantRun`, `QuantResult`, `NewsTarget`, `EffectiveAssessmentPointer` | Immutable domain records. |
 | `universe.py` | `UniverseResolver` | Resolves `CSI300`, `CSI500`, and `ALL_A` by business and system time. |
 | `scope.py` / `quant_input.py` | `ScopeBinding`, `QuantInputSnapshotBuilder` | Freezes user-visible and quant-required indicators into PIT input snapshots. |
-| `quant_adapter.py` | `SQLAlchemyScopeBindingProvider`, `WarehouseFactAdapter`, `build_cross_section_loader`, `QuantAdapter` | Connects strategy scopes, data-layer company pools, warehouse canonical/history reads, fourth-layer feature ETL, and quant service execution. Historical market reads cap at the latest 260 PIT points per security/indicator, annual `n_income_attr_p` history is read separately to derive `net_profit_y1` / `net_profit_y2`, and suspension status always reads explicit hard-filter indicators before applying a coverage-gated missing-bar fallback. |
+| `quant_adapter.py` | `SQLAlchemyScopeBindingProvider`, `WarehouseFactAdapter`, `build_cross_section_loader`, `QuantAdapter` | Connects strategy scopes, data-layer company pools, warehouse canonical/history reads, fourth-layer feature ETL, and quant service execution. Historical market reads cap at the latest 260 PIT points per security/indicator, annual `n_income_attr_p` history is read separately to derive `net_profit_y1` / `net_profit_y2`, suspension status always reads explicit hard-filter indicators before applying a coverage-gated missing-bar fallback, and run-time execution rebinds persisted/reloaded snapshots to the current frozen scope strategy metadata. |
 | `quant/filters.py` | `HardFilterEngine` | Structured hard filters for ST, suspension, listing age, liquidity, missing financials, losses, debt, goodwill, cashflow, and audit opinion. The default missing-financial canary is `roe_ttm`; consecutive-loss filtering consumes ETL-derived `net_profit_y1` / `net_profit_y2`. |
 | `quant/scoring.py` / `quant/service.py` | `FactorScorer`, `QuantService` | Industry normalization, weighted factor scoring, versioned manual-pool final score, status/guardrails, ranks, and persistence. |
+| `quant/ml_lifecycle.py` | `score_ml_lifecycle`, `MLLifecycleConfig` | Provider-free ML lifecycle serving scorer that emits ML score, risk gates, feature coverage, 80% portfolio weight allocation, and research-only profiles from PIT-safe cross-sections. |
 | `quant/manual_all_a.py` / `quant/theme_tilt.py` | `score_manual_all_a`, `score_theme_components`, `confirmation_states` | Manual three-pool quant scoring, confirmed theme/industry-hotness bonus, and theme entry/exit confirmation. |
 | `etl.py` | `SQLAlchemyQuantFeatureMartETLPipeline`, `QuantFeatureMartETLPipeline`, `AnalysisResultMartETLPipeline`, `build_feature_mart_cross_section_loader` | The v0.3 ETL management layer; it coordinates third-layer-to-feature-mart publishing, quant reads from fourth-layer features, and quant-result publishing back to Analysis Mart. |
 | `analysis_mart.py` | `AnalysisMartPublisher`, `SQLAlchemyAnalysisMartRepository`, `MemoryAnalysisMartRepository`, `QuantFeatureSnapshot`, `AnalysisSnapshot`, `AnalysisMetric`, `AnalysisFinding` | Fourth-layer feature and analysis-result publishing/reads; same-input replay is idempotent and conflicting replay is rejected. |
@@ -75,6 +78,7 @@ Transaction boundaries:
 
 - snapshot summary: `screening_status`, `data_status`, `research_guardrail`, `review_required`, ranks, major reasons, risks, and missing fields;
 - metrics: `final_score`, `quality_score`, `value_score`, `growth_score`, `momentum_score`, `risk_score`, ranks, and review/data-quality indicators;
+- ML metrics: when `factor_details.ml_strategy` exists, `ml_lifecycle_score`, `ml_target_weight`, `ml_feature_coverage`, and ML score components are published directly for Agent/Dashboard consumers;
 - findings: one `quant_screening` finding with screening state, data state, risk flags, positive/negative factors, and confidence;
 - evidence links: lineage to `quant_screen_results`, `quant_screen_runs`, and `quant_input_snapshots`.
 
@@ -130,20 +134,24 @@ Local end-to-end refresh verified on 2026-07-02:
 Latest verified Tushare-backed quant run:
 
 - Company-pool snapshot: `cps_29518c0fec90836c57609b6f1f24`
-- Quant run: `qr_ee2c66c6199f4a76`
-- Decision time: `2026-07-02T08:05:00Z`
-- Input companies: 5304
-- Quant input: `qis_5740145402264f6c`, `missing_required=[]`, `data_status=ok`
-- Result distribution: 3 `pass`, 55 `near_threshold`, 350 `watchlist`, and 4896 `reject`; 4 rows have `data_status=insufficient`.
-- Suspension hard filters use explicit `suspend_d` state. This run has 577 suspension blockers and is no longer affected by the single-security partial market bar on 2026-06-23.
+- Tushare incremental backfill run: `tsr_ca63bc9d4f91`, covering the ML-enhanced `moneyflow`, `margin_detail`, `forecast`, `express`, and `limit_list_d` landing/quality/warehouse publications.
+- Current default active scope: `scope-default-v0.4.1`, bound to `quant-strategy-ml-lifecycle-v0.4.1` and `quant-feature-default-v0.4.1`.
+- Latest ML serving validation run: `qr_a7b782b514cc43bd`
+- Decision time: `2026-06-30T08:05:00Z`
+- Quant input: `qis_4f1a7cbddef048d7`
+- Input companies: 5317
+- Result distribution: 62 `pass`, 249 `near_threshold`, 424 `watchlist`, and 4582 `reject`.
+- Output fields: ML scoring rows write `factor_details.ml_strategy.profile_id=liquid-large-mid-lgbm-recent-trend80-ddstop-v1`, `target_weight`, risk gates, feature coverage, and cash policy.
 
 Top pass:
 
-| rank | code | name | final | quality | value | growth | momentum | risk | status |
-|---:|---|---|---:|---:|---:|---:|---:|---:|---|
-| 1 | 002416.SZ | 爱施德 | 92.50 | 100.00 | 70.00 | 100.00 | 100.00 | 100.00 | pass |
-| 2 | 600740.SH | 山西焦化 | 82.25 | 90.00 | 70.00 | 75.00 | 100.00 | 70.00 | pass |
-| 3 | 000036.SZ | 华联控股 | 81.63 | 95.00 | 54.38 | 100.00 | 95.63 | 54.38 | pass |
+| rank | code | final | target_weight | status |
+|---:|---|---:|---:|---|
+| 1 | 000792.SZ | 79.84 | 16.10% | pass |
+| 2 | 300308.SZ | 79.82 | 15.91% | pass |
+| 3 | 688525.SH | 78.80 | 8.59% | pass |
+| 4 | 301308.SZ | 78.07 | 5.52% | pass |
+| 5 | 001309.SZ | 77.94 | 5.10% | pass |
 
 ## Cross-Module Notes
 

@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from margin.agent_runtime.quant_agent import current_quant_agent_strategy_profile
 from margin.strategy.models import (
     ConfigLifecycle,
     IndicatorSelectionMode,
@@ -21,15 +22,11 @@ from margin.strategy.models import (
 from margin.strategy.provider_config import ProviderConfigHealthService
 from margin.strategy.service import StrategyService
 from margin.strategy.validator import ActivationError
-from margin.valuation_discovery.quant.pool_defaults import (
-    default_factor_weights,
-    default_quant_strategy_thresholds,
-)
 
 OWNER_ID = "local-admin"
-DEFAULT_QUANT_FEATURE_SET_VERSION_ID = "quant-feature-default-v0.3.0"
-DEFAULT_QUANT_STRATEGY_VERSION_ID = "quant-strategy-default-v0.3.0"
-DEFAULT_SCOPE_VERSION_ID = "scope-default-v0.3.0"
+DEFAULT_QUANT_FEATURE_SET_VERSION_ID = "quant-feature-default-v0.4.1"
+DEFAULT_QUANT_STRATEGY_VERSION_ID = "quant-strategy-ml-lifecycle-v0.4.1"
+DEFAULT_SCOPE_VERSION_ID = "scope-default-v0.4.1"
 
 DEFAULT_INDEX_UNIVERSES = {
     "CSI300": {
@@ -143,13 +140,13 @@ class StrategyBootstrapService:
                     lifecycle=ConfigLifecycle.REVIEW,
                 ),
                 actor_id=OWNER_ID,
-                idempotency_key="bootstrap-scope-create-v0.3.0",
+                idempotency_key="bootstrap-scope-create-v0.4.1",
             )
         if scope.lifecycle is not ConfigLifecycle.ACTIVE:
             self._service.activate_research_scope(
                 scope.version_id,
                 actor_id=OWNER_ID,
-                idempotency_key="bootstrap-scope-activate-v0.3.0",
+                idempotency_key="bootstrap-scope-activate-v0.4.1",
             )
         return BootstrapResult(
             scope_version_id=scope_id,
@@ -247,8 +244,11 @@ class StrategyBootstrapService:
                 QuantFeatureSetVersion(
                     version_id=version_id,
                     owner_id=OWNER_ID,
-                    required_indicators=("n_income_attr_p", "roe_ttm", "pe_ttm"),
+                    required_indicators=("roe_ttm", "pe_ttm"),
                     optional_indicators=(
+                        "n_income_attr_p",
+                        "net_profit_y1",
+                        "net_profit_y2",
                         "roic_ttm",
                         "gross_margin_ttm",
                         "net_margin_ttm",
@@ -275,6 +275,20 @@ class StrategyBootstrapService:
                         "volatility_120d",
                         "max_drawdown_250d",
                         "avg_amount_20d",
+                        "volume_ratio",
+                        "circ_mv",
+                        "float_share",
+                        "free_share",
+                        "mf_lg_net_amount",
+                        "mf_elg_net_amount",
+                        "net_mf_amount",
+                        "margin_rzye",
+                        "margin_rzmre",
+                        "margin_rqye",
+                        "forecast_p_change_mid",
+                        "express_yoy_net_profit",
+                        "limit_flag",
+                        "limit_trade_blocked",
                         "goodwill_to_equity",
                         "receivable_risk",
                         "inventory_risk",
@@ -285,38 +299,47 @@ class StrategyBootstrapService:
                     lifecycle=ConfigLifecycle.REVIEW,
                 ),
                 actor_id=OWNER_ID,
-                idempotency_key="bootstrap-quant-feature-create-v0.3.0",
+                idempotency_key="bootstrap-quant-feature-create-v0.4.1",
             )
         if version.lifecycle is not ConfigLifecycle.ACTIVE:
             self._service.activate_quant_feature_set(
                 version_id,
                 actor_id=OWNER_ID,
-                idempotency_key="bootstrap-quant-feature-activate-v0.3.0",
+                idempotency_key="bootstrap-quant-feature-activate-v0.4.1",
             )
 
     def _ensure_quant_strategy(self) -> None:
-        """Ensure the approved deterministic v0.3 manual All-A policy."""
+        """Ensure the approved QuantAgent ML lifecycle policy."""
         version_id = DEFAULT_QUANT_STRATEGY_VERSION_ID
         version = self._repository.get_quant_strategy(version_id)
         if version is None:
+            profile = current_quant_agent_strategy_profile()
+            thresholds = dict(profile.to_quant_strategy_metadata()["thresholds"])
+            thresholds.update(
+                {
+                    "pass_threshold": 70.0,
+                    "near_threshold": 60.0,
+                    "watch_threshold": 50.0,
+                }
+            )
             version = self._service.create_quant_strategy(
                 QuantStrategyVersion(
                     version_id=version_id,
                     owner_id=OWNER_ID,
-                    strategy_family="default",
-                    factor_weights=default_factor_weights("ALL_A"),
-                    thresholds=default_quant_strategy_thresholds(),
-                    calibration_report_id="three-pool-manual-backtest-20260624",
+                    strategy_family=profile.strategy_family,
+                    factor_weights={},
+                    thresholds=thresholds,
+                    calibration_report_id=profile.profile_id,
                     lifecycle=ConfigLifecycle.REVIEW,
                 ),
                 actor_id=OWNER_ID,
-                idempotency_key="bootstrap-quant-strategy-create-v0.3.0",
+                idempotency_key="bootstrap-quant-strategy-create-v0.4.1",
             )
         if version.lifecycle is not ConfigLifecycle.ACTIVE:
             self._service.activate_quant_strategy(
                 version_id,
                 actor_id=OWNER_ID,
-                idempotency_key="bootstrap-quant-strategy-activate-v0.3.0",
+                idempotency_key="bootstrap-quant-strategy-activate-v0.4.1",
             )
 
     def _ensure_style_prompt(self) -> None:

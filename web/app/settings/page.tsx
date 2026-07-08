@@ -1,50 +1,67 @@
+"use client";
+
 /**
  * @fileoverview Settings hub page.
  */
 
 import Link from "next/link";
 import {
+  Clock3,
   Database,
   KeyRound,
   Layers,
   SlidersHorizontal,
 } from "lucide-react";
 
+import { useLanguage, type TranslationKey } from "@/lib/i18n";
+
 const SETTINGS = [
   {
     href: "/settings/providers",
-    title: "密钥配置",
-    description: "模型、搜索、数据源密钥",
+    titleKey: "settingsProviders",
+    descriptionKey: "settingsProvidersDesc",
     icon: KeyRound,
   },
   {
     href: "/settings/data",
-    title: "数据配置",
-    description: "采集窗口与滚动策略",
+    titleKey: "settingsData",
+    descriptionKey: "settingsDataDesc",
     icon: Database,
   },
   {
     href: "/settings/scope",
-    title: "研究范围",
-    description: "股票池、指数池与指标视图",
+    titleKey: "settingsScope",
+    descriptionKey: "settingsScopeDesc",
     icon: Layers,
   },
   {
+    href: "/settings/schedule",
+    titleKey: "settingsSchedule",
+    descriptionKey: "settingsScheduleDesc",
+    icon: Clock3,
+  },
+  {
     href: "/settings/strategy",
-    title: "策略配置",
-    description: "评分规则、阈值与提示词",
+    titleKey: "settingsStrategy",
+    descriptionKey: "settingsStrategyDesc",
     icon: SlidersHorizontal,
   },
-];
+] satisfies Array<{
+  href: string;
+  titleKey: TranslationKey;
+  descriptionKey: TranslationKey;
+  icon: React.ElementType;
+}>;
 
 /** Renders a compact settings hub for advanced configuration. */
 export default function SettingsPage() {
+  const { t } = useLanguage();
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-6 py-8 md:px-10">
       <header>
-        <p className="text-sm text-muted-foreground">Settings</p>
+        <p className="text-sm text-muted-foreground">{t("settingsEyebrow")}</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
-          设置
+          {t("settingsTitle")}
         </h1>
       </header>
       <section className="grid gap-4 md:grid-cols-2">
@@ -60,9 +77,11 @@ export default function SettingsPage() {
                 <Icon className="size-5" />
               </span>
               <span className="grid gap-1">
-                <strong className="text-base text-foreground">{item.title}</strong>
+                <strong className="text-base text-foreground">
+                  {t(item.titleKey)}
+                </strong>
                 <span className="text-sm text-muted-foreground">
-                  {item.description}
+                  {t(item.descriptionKey)}
                 </span>
               </span>
             </Link>

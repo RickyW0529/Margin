@@ -19,7 +19,7 @@ describe("RootLayout", () => {
       </RootLayout>,
     );
 
-    const nav = screen.getByRole("navigation", { name: "主导航分组" });
+    const nav = screen.getByRole("navigation", { name: "main navigation" });
 
     expect(within(nav).getByRole("link", { name: "问答" })).toHaveAttribute(
       "href",
@@ -38,5 +38,6 @@ describe("RootLayout", () => {
     expect(within(nav).queryByRole("link", { name: "数据策略" })).toBeNull();
     expect(within(nav).queryByRole("link", { name: "策略模板" })).toBeNull();
     expect(screen.queryByRole("button", { name: "未解锁" })).toBeNull();
+    expect(screen.queryByText("个人研究模式")).toBeNull();
   });
 });

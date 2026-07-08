@@ -185,7 +185,7 @@ class QuantDataRequirementCatalog:
         """Build the v0.3 default quant requirement closure.
 
         Returns:
-            A catalog with 15 quant requirements and 16 enabled Tushare
+            A catalog with 20 quant requirements and 22 enabled Tushare
             endpoints plus 7 out-of-scope cataloged endpoints.
         """
         requirements = (
@@ -315,25 +315,107 @@ class QuantDataRequirementCatalog:
                 "Calculate index-relative momentum and materialize benchmark universes.",
                 history=760,
             ),
+            _requirement(
+                "ml_lifecycle_market_features",
+                "MLLifecycleQuantStrategy.market",
+                (
+                    "return_20d",
+                    "return_6m_ex_1m",
+                    "return_12m_ex_1m",
+                    "avg_amount_20d",
+                    "turnover_rate",
+                    "volume_ratio",
+                    "volatility_120d",
+                    "max_drawdown_250d",
+                    "index_relative_momentum",
+                    "industry_relative_momentum",
+                    "ma_trend",
+                    "market_cap",
+                ),
+                "Serve provider-free ML lifecycle market, liquidity, and risk features.",
+                history=760,
+            ),
+            _requirement(
+                "ml_lifecycle_fundamental_features",
+                "MLLifecycleQuantStrategy.fundamental",
+                (
+                    "roe_ttm",
+                    "roic_ttm",
+                    "gross_margin_ttm",
+                    "net_margin_ttm",
+                    "ocf_to_net_profit",
+                    "revenue_yoy",
+                    "profit_yoy",
+                    "n_income_attr_p",
+                ),
+                "Serve provider-free ML lifecycle quality and growth features.",
+                history=1095,
+            ),
+            _requirement(
+                "ml_lifecycle_industry_stage",
+                "MLLifecycleQuantStrategy.industry",
+                (
+                    "industry_code",
+                    "industry_name",
+                    "industry_level",
+                    "industry_lifecycle_score",
+                ),
+                "Serve ML lifecycle industry-stage context without hard-coded sector caps.",
+                history=760,
+            ),
+            _requirement(
+                "ml_lifecycle_flow_features",
+                "MLLifecycleQuantStrategy.flow",
+                (
+                    "mf_lg_net_amount",
+                    "mf_elg_net_amount",
+                    "net_mf_amount",
+                    "margin_rzye",
+                    "margin_rzmre",
+                    "margin_rqye",
+                    "margin_rzye_to_mv",
+                    "forecast_p_change_mid",
+                    "express_yoy_net_profit",
+                ),
+                (
+                    "Serve current ML lifecycle moneyflow, margin, forecast, "
+                    "and express confirmation features."
+                ),
+                history=760,
+            ),
+            _requirement(
+                "ml_lifecycle_execution_risk",
+                "MLLifecycleQuantStrategy.execution",
+                ("is_suspended", "suspend_type", "limit_flag", "limit_trade_blocked"),
+                "Block non-tradeable or limit-locked securities before ML lifecycle scoring.",
+            ),
         )
         links: dict[str, tuple[str, ...]] = {
             "stock_basic": ("security_master",),
             "namechange": ("st_status",),
             "trade_cal": ("trading_calendar",),
-            "daily": ("market_history",),
-            "adj_factor": ("adjustment_history",),
-            "suspend_d": ("suspension_status",),
-            "daily_basic": ("valuation_snapshot",),
-            "income": ("income_fundamentals",),
-            "balancesheet": ("balance_sheet_fundamentals",),
-            "cashflow": ("cashflow_fundamentals",),
-            "fina_indicator": ("financial_ratios",),
+            "daily": ("market_history", "ml_lifecycle_market_features"),
+            "adj_factor": ("adjustment_history", "ml_lifecycle_market_features"),
+            "suspend_d": ("suspension_status", "ml_lifecycle_execution_risk"),
+            "daily_basic": ("valuation_snapshot", "ml_lifecycle_market_features"),
+            "income": ("income_fundamentals", "ml_lifecycle_fundamental_features"),
+            "balancesheet": (
+                "balance_sheet_fundamentals",
+                "ml_lifecycle_fundamental_features",
+            ),
+            "cashflow": ("cashflow_fundamentals", "ml_lifecycle_fundamental_features"),
+            "fina_indicator": ("financial_ratios", "ml_lifecycle_fundamental_features"),
             "fina_audit": ("audit_opinion",),
-            "index_classify": ("industry_classification",),
-            "index_member": ("industry_classification",),
+            "index_classify": ("industry_classification", "ml_lifecycle_industry_stage"),
+            "index_member": ("industry_classification", "ml_lifecycle_industry_stage"),
             "pledge_stat": ("pledge_risk",),
-            "index_daily": ("benchmark_history",),
-            "index_weight": ("benchmark_history",),
+            "index_daily": ("benchmark_history", "ml_lifecycle_market_features"),
+            "index_weight": ("benchmark_history", "ml_lifecycle_market_features"),
+            "moneyflow": ("ml_lifecycle_flow_features",),
+            "margin_detail": ("ml_lifecycle_flow_features",),
+            "forecast": ("ml_lifecycle_flow_features",),
+            "express": ("ml_lifecycle_flow_features",),
+            "limit_list_d": ("ml_lifecycle_execution_risk",),
         }
         endpoints = [
             ProviderEndpointRequirement(
@@ -395,7 +477,15 @@ def _domain_for(api_name: str) -> str:
     """Return the warehouse domain for a Tushare API."""
     if api_name in {"stock_basic", "namechange"}:
         return "security"
-    if api_name in {"trade_cal", "daily", "adj_factor", "suspend_d"}:
+    if api_name in {
+        "trade_cal",
+        "daily",
+        "adj_factor",
+        "suspend_d",
+        "moneyflow",
+        "margin_detail",
+        "limit_list_d",
+    }:
         return "market"
     if api_name == "daily_basic":
         return "valuation"
@@ -405,6 +495,8 @@ def _domain_for(api_name: str) -> str:
         "cashflow",
         "fina_indicator",
         "fina_audit",
+        "forecast",
+        "express",
     }:
         return "financial"
     if api_name in {"index_classify", "index_member"}:
@@ -416,7 +508,15 @@ def _domain_for(api_name: str) -> str:
 
 def _partition_for(api_name: str) -> str:
     """Return the bounded partition strategy for an endpoint."""
-    if api_name in {"daily", "adj_factor", "daily_basic", "index_daily"}:
+    if api_name in {
+        "daily",
+        "adj_factor",
+        "daily_basic",
+        "index_daily",
+        "moneyflow",
+        "margin_detail",
+        "limit_list_d",
+    }:
         return "trade_date"
     if api_name in {
         "income",
@@ -424,6 +524,8 @@ def _partition_for(api_name: str) -> str:
         "cashflow",
         "fina_indicator",
         "fina_audit",
+        "forecast",
+        "express",
     }:
         return "announcement_month"
     if api_name == "index_member":
@@ -439,7 +541,15 @@ def _natural_key_for(api_name: str) -> tuple[str, ...]:
     """Return stable source natural-key fields."""
     if api_name == "trade_cal":
         return ("exchange", "cal_date")
-    if api_name in {"daily", "adj_factor", "daily_basic", "index_daily"}:
+    if api_name in {
+        "daily",
+        "adj_factor",
+        "daily_basic",
+        "index_daily",
+        "moneyflow",
+        "margin_detail",
+        "limit_list_d",
+    }:
         return ("ts_code", "trade_date")
     if api_name == "suspend_d":
         return ("ts_code", "trade_date", "suspend_type")
@@ -449,6 +559,8 @@ def _natural_key_for(api_name: str) -> tuple[str, ...]:
         return ("ts_code", "end_date", "ann_date")
     if api_name == "fina_audit":
         return ("ts_code", "end_date", "ann_date")
+    if api_name in {"forecast", "express"}:
+        return ("ts_code", "ann_date", "end_date")
     if api_name == "index_classify":
         return ("index_code", "level", "src")
     if api_name == "index_member":
@@ -464,7 +576,16 @@ def _natural_key_for(api_name: str) -> tuple[str, ...]:
 
 def _pit_fields_for(api_name: str) -> tuple[str, ...]:
     """Return provider fields used to derive PIT timestamps."""
-    if api_name in {"daily", "adj_factor", "daily_basic", "index_daily", "index_weight"}:
+    if api_name in {
+        "daily",
+        "adj_factor",
+        "daily_basic",
+        "index_daily",
+        "index_weight",
+        "moneyflow",
+        "margin_detail",
+        "limit_list_d",
+    }:
         return ("trade_date",)
     if api_name in {
         "income",
@@ -472,6 +593,8 @@ def _pit_fields_for(api_name: str) -> tuple[str, ...]:
         "cashflow",
         "fina_indicator",
         "fina_audit",
+        "forecast",
+        "express",
     }:
         return ("ann_date", "f_ann_date", "end_date")
     if api_name == "index_member":

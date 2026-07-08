@@ -65,12 +65,14 @@ class ValuationDiscoveryService:
         scope_version_id: str,
         decision_at: datetime,
         idempotency_key: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> RefreshStartResponse:
         """Start a refresh and return an accepted response DTO."""
         run = self._orchestrator.start(
             scope_version_id=scope_version_id,
             decision_at=decision_at,
             idempotency_key=idempotency_key,
+            metadata=metadata,
         )
         return _response_from_run(run)
 

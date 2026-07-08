@@ -867,6 +867,7 @@ class ValuationPublisherAdapter:
         review_repository: ResearchDeltaRepository,
         valuation_repository: ValuationDiscoveryRepository,
         dashboard_repository: DashboardRepository | None = None,
+        stock_analyst_agent: Any | None = None,
     ) -> None:
         """Initialize the publisher with assessment and repository dependencies.
 
@@ -876,11 +877,15 @@ class ValuationPublisherAdapter:
             valuation_repository: Repository for publishing assessment results.
             dashboard_repository: Optional repository for the user-facing
                 recommendation read projection.
+            stock_analyst_agent: Optional write-capable ExpertAgent that can
+                publish a post-quant portfolio overlay into the same dashboard
+                projection repository.
         """
         self._assessment_service = assessment_service
         self._review_repository = review_repository
         self._valuation_repository = valuation_repository
         self._dashboard_repository = dashboard_repository
+        self._stock_analyst_agent = stock_analyst_agent
 
     def publish(
         self,
@@ -992,6 +997,7 @@ class ValuationPublisherAdapter:
         decision_at: datetime,
         quant_run_id: str | None = None,
         quant_results: Any = (),
+        agent_run_id: str | None = None,
     ) -> DashboardProjectionResult:
         """Persist and read the dashboard projection for the latest refresh.
 
@@ -1000,6 +1006,8 @@ class ValuationPublisherAdapter:
             decision_at: Timezone-aware decision timestamp.
             quant_run_id: Optional quant run identifier to bind the projection.
             quant_results: Optional quant result set from the current run.
+            agent_run_id: Optional MainAgent run ID used for ExpertAgent
+                dashboard-overlay artifacts.
 
         Returns:
             A projection summary backed by immutable pointer rows.
@@ -1031,6 +1039,22 @@ class ValuationPublisherAdapter:
             self._dashboard_repository.add_run(dashboard_run)
             self._dashboard_repository.add_items(dashboard_items)
             visible_item_count = len(dashboard_items)
+            if self._stock_analyst_agent is not None and visible_results:
+                adjustment = self._stock_analyst_agent.adjust_quant_candidates(
+                    run_id=agent_run_id or f"ar_dashboard_{quant_run_id}",
+                    candidates=_dashboard_adjustment_candidates(
+                        items=tuple(dashboard_items),
+                        results=visible_results,
+                    ),
+                    max_stock_exposure=0.80,
+                )
+                if getattr(adjustment, "dashboard_run_id", None):
+                    dashboard_run_id = str(adjustment.dashboard_run_id)
+                    visible_item_count = sum(
+                        1
+                        for item in getattr(adjustment, "adjustments", ())
+                        if item.get("action") != "delete"
+                    )
         return DashboardProjectionResult(
             scope_version_id=scope_version_id,
             effective_assessment_count=(
@@ -1137,9 +1161,38 @@ def _dashboard_item_from_quant_result(
             dict.fromkeys((*result.risk_flags, *result.review_reasons))
         ),
         risk_score=result.risk_score,
+        target_weight=_dashboard_target_weight(result),
+        adjusted_weight=_dashboard_target_weight(result),
+        agent_adjustment=_dashboard_agent_adjustment(result),
         counter_arguments=list(result.review_reasons),
         created_at=decision_at,
     )
+
+
+def _dashboard_adjustment_candidates(
+    *,
+    items: tuple[ResearchItem, ...],
+    results: tuple[QuantResult, ...],
+) -> tuple[dict[str, Any], ...]:
+    """Build StockAnalystAgent candidate payloads from persisted dashboard items."""
+    result_by_security_id = {result.security_id: result for result in results}
+    candidates: list[dict[str, Any]] = []
+    for item in items:
+        result = result_by_security_id.get(item.symbol)
+        if result is None:
+            continue
+        candidates.append(
+            {
+                "item_id": item.item_id,
+                "run_id": item.run_id,
+                "security_id": item.symbol,
+                "target_weight": item.target_weight,
+                "screening_status": result.screening_status.value,
+                "review_required": result.review_required,
+                "risk_flags": list(result.risk_flags),
+            }
+        )
+    return tuple(candidates)
 
 
 def _dashboard_item_status(result: QuantResult) -> ItemStatus:
@@ -1150,6 +1203,33 @@ def _dashboard_item_status(result: QuantResult) -> ItemStatus:
     ):
         return ItemStatus.PUBLISHED
     return ItemStatus.ABSTAINED
+
+
+def _dashboard_target_weight(result: QuantResult) -> float | None:
+    """Return ML target weight carried by a quant result, if present."""
+    ml_strategy = result.factor_details.get("ml_strategy")
+    if not isinstance(ml_strategy, dict):
+        return None
+    value = ml_strategy.get("target_weight")
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _dashboard_agent_adjustment(result: QuantResult) -> dict[str, Any]:
+    """Return default agent-adjustment metadata for dashboard projection."""
+    target_weight = _dashboard_target_weight(result)
+    if target_weight is None:
+        return {}
+    return {
+        "source": "quant_default",
+        "action": "keep",
+        "target_weight": target_weight,
+        "adjusted_weight": target_weight,
+    }
 
 
 def _score_to_confidence(score: float) -> float:

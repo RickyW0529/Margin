@@ -130,6 +130,48 @@ class TushareWarehousePublisher:
                 )
                 for row in records
             ]
+        if api_name == "moneyflow":
+            return [
+                {
+                    "symbol": row.get("ts_code"),
+                    "trade_date": row.get("trade_date"),
+                    "mf_buy_lg_amount": _number(row.get("buy_lg_amount")),
+                    "mf_sell_lg_amount": _number(row.get("sell_lg_amount")),
+                    "mf_lg_net_amount": _subtract(
+                        row.get("buy_lg_amount"),
+                        row.get("sell_lg_amount"),
+                    ),
+                    "mf_buy_elg_amount": _number(row.get("buy_elg_amount")),
+                    "mf_sell_elg_amount": _number(row.get("sell_elg_amount")),
+                    "mf_elg_net_amount": _subtract(
+                        row.get("buy_elg_amount"),
+                        row.get("sell_elg_amount"),
+                    ),
+                    "net_mf_amount": _number(row.get("net_mf_amount")),
+                    "fetched_at": fetched_at,
+                    "available_at": row.get("trade_date"),
+                    "source": "tushare",
+                }
+                for row in records
+            ]
+        if api_name == "margin_detail":
+            return [
+                {
+                    "symbol": row.get("ts_code"),
+                    "trade_date": row.get("trade_date"),
+                    "margin_rzye": _number(row.get("rzye")),
+                    "margin_rqye": _number(row.get("rqye")),
+                    "margin_rzmre": _number(row.get("rzmre")),
+                    "margin_rqyl": _number(row.get("rqyl")),
+                    "margin_rzche": _number(row.get("rzche")),
+                    "margin_rqmcl": _number(row.get("rqmcl")),
+                    "margin_rzrqye": _number(row.get("rzrqye")),
+                    "fetched_at": fetched_at,
+                    "available_at": row.get("trade_date"),
+                    "source": "tushare",
+                }
+                for row in records
+            ]
         if api_name == "fina_indicator":
             return [
                 {
@@ -175,6 +217,34 @@ class TushareWarehousePublisher:
                 {
                     **_financial_base(row, fetched_at),
                     "audit_opinion": str(row.get("audit_result") or "").strip(),
+                }
+                for row in records
+            ]
+        if api_name == "forecast":
+            return [
+                {
+                    **_financial_base(row, fetched_at),
+                    "forecast_p_change_min": _number(row.get("p_change_min")),
+                    "forecast_p_change_max": _number(row.get("p_change_max")),
+                    "forecast_p_change_mid": _midpoint(
+                        row.get("p_change_min"),
+                        row.get("p_change_max"),
+                    ),
+                    "forecast_net_profit_min": _number(row.get("net_profit_min")),
+                    "forecast_net_profit_max": _number(row.get("net_profit_max")),
+                }
+                for row in records
+            ]
+        if api_name == "express":
+            return [
+                {
+                    **_financial_base(row, fetched_at),
+                    "express_revenue": _number(row.get("revenue")),
+                    "express_total_profit": _number(row.get("total_profit")),
+                    "express_n_income": _number(row.get("n_income")),
+                    "express_yoy_net_profit": _percent_ratio(row.get("yoy_net_profit")),
+                    "express_yoy_sales": _percent_ratio(row.get("yoy_sales")),
+                    "express_yoy_roe": _percent_ratio(row.get("yoy_roe")),
                 }
                 for row in records
             ]
@@ -239,6 +309,21 @@ class TushareWarehousePublisher:
                 }
                 for row in records
             ]
+        if api_name == "limit_list_d":
+            return [
+                {
+                    "symbol": row.get("ts_code"),
+                    "trade_date": row.get("trade_date"),
+                    "limit_flag": str(row.get("limit") or "").strip().upper(),
+                    "limit_trade_blocked": 1,
+                    "limit_close": _number(row.get("close")),
+                    "limit_pct_chg": _percent_ratio(row.get("pct_chg")),
+                    "fetched_at": fetched_at,
+                    "available_at": row.get("trade_date"),
+                    "source": "tushare",
+                }
+                for row in records
+            ]
         return []
 
 
@@ -277,6 +362,24 @@ def _divide(numerator: float | None, denominator: float | None) -> float | None:
     if numerator is None or denominator in (None, 0):
         return None
     return numerator / denominator
+
+
+def _subtract(left: Any, right: Any) -> float | None:
+    """Subtract two provider numbers, returning ``None`` if either is missing."""
+    left_number = _number(left)
+    right_number = _number(right)
+    if left_number is None or right_number is None:
+        return None
+    return left_number - right_number
+
+
+def _midpoint(left: Any, right: Any) -> float | None:
+    """Return the midpoint of two provider numbers when both exist."""
+    left_number = _number(left)
+    right_number = _number(right)
+    if left_number is None or right_number is None:
+        return None
+    return (left_number + right_number) / 2.0
 
 
 def _number(value: Any) -> float | None:

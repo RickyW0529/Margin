@@ -20,8 +20,8 @@ export function MetricTrendChart({ trend }: MetricTrendChartProps) {
     (point): point is { date: string; value: number } =>
       typeof point.value === "number" && Number.isFinite(point.value),
   );
-  const first = points[0];
-  const last = points.at(-1);
+  const first = points[0] ?? null;
+  const last = points.at(-1) ?? null;
 
   return (
     <div className="grid gap-2 rounded-md border border-border bg-muted/30 p-3">
@@ -33,7 +33,7 @@ export function MetricTrendChart({ trend }: MetricTrendChartProps) {
           {last ? formatTrendValue(last.value, trend.unit) : "--"}
         </span>
       </div>
-      {points.length >= 2 ? (
+      {points.length >= 2 && first !== null && last !== null ? (
         <>
           <svg
             aria-label={`${trend.label}趋势`}

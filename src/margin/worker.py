@@ -37,6 +37,7 @@ def build_scheduler(
     indexing_job: Callable[[], None] | None = None,
     data_sync_job: Callable[[], None] | None = None,
     orchestration_job: Callable[[], None] | None = None,
+    scheduled_agent_job: Callable[[], None] | None = None,
 ) -> BlockingScheduler:
     """Build the worker scheduler without starting it.
 
@@ -45,6 +46,7 @@ def build_scheduler(
         indexing_job: Optional callable executed on each indexing tick.
         data_sync_job: Optional callable executed on each data-sync tick.
         orchestration_job: Optional callable that wakes durable orchestration steps.
+        scheduled_agent_job: Optional callable that triggers due agent schedules.
 
     Returns:
         BlockingScheduler: Configured APScheduler instance with the requested jobs.
@@ -80,6 +82,18 @@ def build_scheduler(
             trigger="interval",
             seconds=interval_seconds,
             id="orchestration-steps",
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
+            misfire_grace_time=max(30, interval_seconds),
+            next_run_time=datetime.now(ZoneInfo("Asia/Shanghai")),
+        )
+    if scheduled_agent_job is not None:
+        scheduler.add_job(
+            scheduled_agent_job,
+            trigger="interval",
+            seconds=interval_seconds,
+            id="scheduled-agent-runs",
             replace_existing=True,
             coalesce=True,
             max_instances=1,
@@ -280,11 +294,47 @@ def main() -> None:
         except Exception:  # noqa: BLE001
             logger.exception("valuation_discovery_sweep_failed")
 
+    def scheduled_agent_job() -> None:
+        """Trigger due user-configured MainAgent schedules."""
+        try:
+            from margin.agent_runtime.schedules import ScheduledStockAnalysisRunner
+            from margin.api.dependencies import (
+                get_agent_schedule_repository,
+                get_main_agent_runtime,
+                get_strategy_service,
+                get_valuation_discovery_service_for_api,
+            )
+
+            strategy_service = get_strategy_service()
+
+            def resolve_scope(scope_version_id: str) -> str:
+                if scope_version_id != "scope-current":
+                    return scope_version_id
+                return str(
+                    strategy_service.ensure_current_research_scope(
+                        "local-admin",
+                    ).version_id
+                )
+
+            processed_count = ScheduledStockAnalysisRunner(
+                repository=get_agent_schedule_repository(),
+                main_agent=get_main_agent_runtime(),
+                valuation_service=get_valuation_discovery_service_for_api(),
+                scope_resolver=resolve_scope,
+            ).run_once(now=datetime.now(UTC))
+            logger.info(
+                "scheduled_agent_sweep_completed",
+                extra={"processed_count": processed_count},
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("scheduled_agent_sweep_failed")
+
     scheduler = build_scheduler(
         interval_seconds=settings.monitoring_interval_seconds,
         indexing_job=indexing_job,
         data_sync_job=data_sync_job,
         orchestration_job=orchestration_job,
+        scheduled_agent_job=scheduled_agent_job,
     )
     logger.info(
         "margin_worker_started",

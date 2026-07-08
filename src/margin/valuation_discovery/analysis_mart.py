@@ -586,12 +586,16 @@ class AnalysisMartPublisher:
     ) -> AnalysisSnapshot:
         """Publish one quant result as a fourth-layer analysis snapshot."""
         ai_profile = dict(quant_result.factor_details.get("ai_quant_profile", {}))
+        ml_strategy = _dict(quant_result.factor_details.get("ml_strategy"))
         scores = _dict(ai_profile.get("scores"))
         raw_factors = _dict(ai_profile.get("raw_factors"))
         summary = {
             "security_id": quant_result.security_id,
             "name": quant_result.factor_details.get("name"),
             "industry_id": quant_result.factor_details.get("industry_id"),
+            "strategy_family": quant_result.factor_details.get("strategy_family"),
+            "target_weight": ml_strategy.get("target_weight"),
+            "ml_fallback_used": ml_strategy.get("fallback_used"),
             "screening_status": quant_result.screening_status.value,
             "data_status": quant_result.data_status.value,
             "final_score": quant_result.final_score,
@@ -705,6 +709,9 @@ def _metric_specs(
     raw_factors: dict[str, Any],
 ) -> tuple[tuple[str, str, str, float | None, dict[str, Any]], ...]:
     """Build metric specification tuples from quant scores and raw factors."""
+    ml_strategy = _dict(quant_result.factor_details.get("ml_strategy"))
+    ml_components = _dict(ml_strategy.get("score_components"))
+    ml_coverage = _dict(ml_strategy.get("feature_coverage"))
     specs: list[tuple[str, str, str, float | None, dict[str, Any]]] = [
         ("final_score", "Final Score", "quant_score", quant_result.final_score, {}),
         ("quality_score", "Quality Score", "factor_group", quant_result.quality_score, {}),
@@ -713,6 +720,39 @@ def _metric_specs(
         ("momentum_score", "Momentum Score", "factor_group", quant_result.momentum_score, {}),
         ("risk_score", "Risk Score", "factor_group", quant_result.risk_score, {}),
     ]
+    for key, value in sorted(ml_components.items()):
+        specs.append(
+            (
+                str(key),
+                f"ML {str(key).replace('_', ' ').title()}",
+                "ml_strategy",
+                _optional_float(value),
+                {"profile_section": "ml_strategy.score_components"},
+            )
+        )
+    if ml_strategy:
+        specs.append(
+            (
+                "ml_target_weight",
+                "ML Target Weight",
+                "ml_strategy",
+                _optional_float(ml_strategy.get("target_weight")),
+                {"profile_section": "ml_strategy"},
+            )
+        )
+    if ml_coverage:
+        specs.append(
+            (
+                "ml_feature_coverage",
+                "ML Feature Coverage",
+                "ml_strategy",
+                _optional_float(ml_coverage.get("coverage_ratio")),
+                {
+                    "profile_section": "ml_strategy.feature_coverage",
+                    "missing_features": list(ml_coverage.get("missing_features", ())),
+                },
+            )
+        )
     for key, value in sorted(scores.items()):
         specs.append(
             (
@@ -799,6 +839,7 @@ def _quant_finding(
         f"Quant screening status is {quant_result.screening_status.value} "
         f"with final score {quant_result.final_score:.2f}."
     )
+    ml_strategy = _dict(quant_result.factor_details.get("ml_strategy"))
     return AnalysisFinding(
         finding_id=finding_id,
         analysis_snapshot_id=snapshot.analysis_snapshot_id,
@@ -818,6 +859,8 @@ def _quant_finding(
             "review_reasons": list(quant_result.review_reasons),
             "risk_flags": list(quant_result.risk_flags),
             "research_guardrail": quant_result.research_guardrail.value,
+            "strategy_family": quant_result.factor_details.get("strategy_family"),
+            "ml_strategy": ml_strategy,
         },
         created_at=snapshot.created_at,
     )

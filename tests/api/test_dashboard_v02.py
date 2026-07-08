@@ -79,34 +79,6 @@ def test_research_item_detail_returns_current_and_effective_context() -> None:
     assert "prompt" not in str(body).lower()
 
 
-def test_copilot_rejects_mutating_intent() -> None:
-    """Test that the read-only Copilot rejects refresh or rerun requests."""
-    client, _, _ = _client_with_seeded_v2_data()
-
-    response = client.post(
-        "/api/v1/research/copilot",
-        json={"scope_version_id": "scope-1", "message": "帮我重新跑一次今天的估值"},
-    )
-
-    assert response.status_code == 403
-    assert response.json()["code"] == "copilot_read_only"
-
-
-def test_copilot_answer_contains_business_api_references() -> None:
-    """Test that the read-only Copilot answers with business API references."""
-    client, _, _ = _client_with_seeded_v2_data()
-
-    response = client.post(
-        "/api/v1/research/copilot",
-        json={"scope_version_id": "scope-1", "message": "今天哪些公司值得继续看"},
-    )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["references"]
-    assert "GET /api/v1/research" in body["references"][0]["api"]
-
-
 def _client_with_seeded_v2_data(
     *,
     active_scope_id: str = "scope-1",

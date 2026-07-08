@@ -1,9 +1,12 @@
+"use client";
+
 /**
  * @fileoverview Current review vs effective assessment panel for v0.2 detail.
  */
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useLanguage, type UiLanguage } from "@/lib/i18n";
 
 type CurrentReview = {
   outcome?: unknown;
@@ -28,9 +31,10 @@ export function CurrentVsEffectivePanel({
   currentReview,
   effectiveAssessment,
 }: CurrentVsEffectivePanelProps) {
+  const { language, t } = useLanguage();
   const outcome = text(currentReview?.outcome) || "unknown";
   const reason = text(currentReview?.reason);
-  const assessmentId = text(effectiveAssessment?.assessment_id) || "暂无";
+  const assessmentId = text(effectiveAssessment?.assessment_id) || t("currentNoAssessment");
   const freshness = text(effectiveAssessment?.freshness) || "unknown";
   const staleReason = text(effectiveAssessment?.stale_reason);
 
@@ -39,33 +43,37 @@ export function CurrentVsEffectivePanel({
       <CardHeader>
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-accent">
-            Decision state
+            {t("currentStateEyebrow")}
           </p>
           <CardTitle id="current-effective-title" className="mt-1">
-            本轮复核 vs 当前有效结论
+            {t("currentStateTitle")}
           </CardTitle>
         </div>
-        <Badge tone={freshnessTone(freshness)}>{freshness}</Badge>
+        <Badge tone={freshnessTone(freshness)}>
+          {freshnessLabel(freshness, language)}
+        </Badge>
       </CardHeader>
       <CardContent className="grid gap-3 md:grid-cols-2">
         <article className="grid gap-1.5 rounded-md border border-border bg-muted/40 p-4">
           <strong className="text-sm font-semibold text-foreground">
-            本轮复核：{outcomeLabel(outcome)}
+            {t("currentReview")}：{outcomeLabel(outcome, language)}
           </strong>
           <span className="text-xs text-muted-foreground">
-            {reason || "本轮未记录延期或拒绝原因"}
+            {reason || t("currentNoReason")}
           </span>
           {text(currentReview?.workflow_run_id) ? (
             <span className="text-xs text-muted-foreground">
-              workflow {text(currentReview?.workflow_run_id)}
+              {t("currentWorkflow")} {text(currentReview?.workflow_run_id)}
             </span>
           ) : null}
         </article>
         <article className="grid gap-1.5 rounded-md border border-border bg-muted/40 p-4">
           <strong className="text-sm font-semibold text-foreground">
-            当前有效结论：{assessmentId}
+            {t("effectiveAssessment")}：{assessmentId}
           </strong>
-          <span className="text-xs text-muted-foreground">{freshness}</span>
+          <span className="text-xs text-muted-foreground">
+            {freshnessLabel(freshness, language)}
+          </span>
           {staleReason ? (
             <span className="text-xs text-muted-foreground">{staleReason}</span>
           ) : null}
@@ -85,23 +93,25 @@ function freshnessTone(freshness: string): "positive" | "caution" | "muted" {
   return "muted";
 }
 
-function outcomeLabel(outcome: string): string {
-  if (outcome === "review_deferred") {
-    return "延期";
-  }
-  if (outcome === "update_assessment") {
-    return "更新";
-  }
-  if (outcome === "carry_forward_verified") {
-    return "沿用已验证";
-  }
-  if (outcome === "invalidate_thesis") {
-    return "失效候选";
-  }
-  if (outcome === "abstain") {
-    return "拒绝结论";
-  }
-  return outcome;
+function outcomeLabel(outcome: string, language: UiLanguage): string {
+  const labels: Record<string, Record<UiLanguage, string>> = {
+    abstain: { en: "Abstained", zh: "拒绝结论" },
+    carry_forward_verified: { en: "Carry forward", zh: "沿用已验证" },
+    invalidate_thesis: { en: "Invalidated", zh: "失效候选" },
+    review_deferred: { en: "Deferred", zh: "延期" },
+    update_assessment: { en: "Updated", zh: "更新" },
+  };
+  return labels[outcome]?.[language] ?? outcome;
+}
+
+function freshnessLabel(freshness: string, language: UiLanguage): string {
+  const labels: Record<string, Record<UiLanguage, string>> = {
+    deferred: { en: "Deferred", zh: "延期" },
+    fresh: { en: "Fresh", zh: "有效" },
+    stale: { en: "Stale", zh: "已过期" },
+    unknown: { en: "Unknown", zh: "未知" },
+  };
+  return labels[freshness]?.[language] ?? freshness;
 }
 
 function text(value: unknown): string {

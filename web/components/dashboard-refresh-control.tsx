@@ -15,6 +15,7 @@ import {
   type DashboardRefreshRunState,
 } from "@/hooks/use-dashboard-refresh-run";
 import type { ResearchRunDetailV2 } from "@/lib/api";
+import { useLanguage } from "@/lib/i18n";
 
 type DashboardRefreshControlProps = Parameters<
   typeof useDashboardRefreshRun
@@ -28,6 +29,7 @@ export function DashboardRefreshControl({
   ...props
 }: DashboardRefreshControlProps) {
   const router = useRouter();
+  const { t } = useLanguage();
   const handleRunSettled = useCallback(
     (run: ResearchRunDetailV2) => {
       onRunSettled?.(run);
@@ -51,9 +53,15 @@ export function DashboardRefreshControl({
           type="button"
         >
           <RefreshCw className="size-4" />
-          {state.refreshInProgress ? "刷新进行中" : "刷新今日研究"}
+          {state.refreshInProgress ? t("refreshRunning") : t("refreshStart")}
         </Button>
-        {state.latestRunId && !state.open ? <GraphToggle state={state} /> : null}
+        {state.latestRunId && !state.open ? (
+          <GraphToggle
+            closeLabel={t("refreshCloseGraph")}
+            openLabel={t("refreshOpenGraph")}
+            state={state}
+          />
+        ) : null}
       </div>
       {state.error ? (
         <p
@@ -65,7 +73,7 @@ export function DashboardRefreshControl({
       ) : null}
       {state.latestRunId && state.open ? (
         <section
-          aria-label="最近一次刷新节点图"
+          aria-label={t("refreshGraphTitle")}
           aria-modal="true"
           className="fixed inset-0 z-50 grid place-items-center bg-background/70 px-4 py-6 backdrop-blur-sm"
           role="dialog"
@@ -74,10 +82,10 @@ export function DashboardRefreshControl({
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
               <div>
                 <p className="text-xs font-medium uppercase tracking-wider text-accent">
-                  Latest refresh
+                  {t("refreshLatest")}
                 </p>
                 <h2 className="mt-1 text-sm font-semibold text-foreground">
-                  最近一次刷新节点图
+                  {t("refreshGraphTitle")}
                 </h2>
                 <p className="mt-1 max-w-xl truncate text-xs text-muted-foreground">
                   {state.latestRun?.run_id ?? state.latestRunId}
@@ -85,7 +93,7 @@ export function DashboardRefreshControl({
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">
-                  {state.latestRun?.status ?? "loading"}
+                  {state.latestRun?.status ?? t("refreshLoading")}
                 </span>
                 <Button
                   onClick={() => state.setOpen(false)}
@@ -93,7 +101,7 @@ export function DashboardRefreshControl({
                   type="button"
                   variant="secondary"
                 >
-                  收起节点图
+                  {t("refreshCloseGraph")}
                 </Button>
               </div>
             </div>
@@ -107,7 +115,15 @@ export function DashboardRefreshControl({
   );
 }
 
-function GraphToggle({ state }: { state: DashboardRefreshRunState }) {
+function GraphToggle({
+  closeLabel,
+  openLabel,
+  state,
+}: {
+  closeLabel: string;
+  openLabel: string;
+  state: DashboardRefreshRunState;
+}) {
   const Icon = state.open ? ChevronUp : ChevronDown;
   return (
     <Button
@@ -117,7 +133,7 @@ function GraphToggle({ state }: { state: DashboardRefreshRunState }) {
       variant="secondary"
     >
       <Icon className="size-4" />
-      {state.open ? "收起节点图" : "打开节点图"}
+      {state.open ? closeLabel : openLabel}
     </Button>
   );
 }

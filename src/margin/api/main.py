@@ -7,14 +7,20 @@ simple health check endpoint.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from margin.agent_runtime.main_agent import MainAgentRuntime
+from margin.agent_runtime.schedules import AgentScheduleRepository
 from margin.api.dependencies import (
+    get_agent_schedule_repository,
     get_company_profile_service,
     get_dashboard_services,
+    get_llm_provider_factory,
+    get_main_agent_runtime,
     get_news_service,
     get_optional_secret_store,
     get_secret_store,
@@ -25,6 +31,7 @@ from margin.api.dependencies import (
 )
 from margin.api.metrics import router as metrics_router
 from margin.api.middleware import MetricsMiddleware, TraceIdMiddleware
+from margin.api.routes.agent_runtime import router as agent_runtime_router
 from margin.api.routes.dashboard import router as dashboard_router
 from margin.api.routes.data_sync import router as data_sync_router
 from margin.api.routes.health import router as health_router
@@ -36,6 +43,7 @@ from margin.core.logging_config import configure_logging
 from margin.core.secret_store import SecretStore
 from margin.dashboard.service import DashboardServiceBundle
 from margin.news.service import NewsService
+from margin.research.llm import LLMProvider
 from margin.settings import get_settings
 from margin.strategy.service import StrategyService
 from margin.valuation_discovery.service import (
@@ -90,6 +98,9 @@ def create_app(
     strategy_repository: object | None = None,
     secret_store: SecretStore | None = None,
     dashboard_services: DashboardServiceBundle | None = None,
+    main_agent_runtime: MainAgentRuntime | None = None,
+    llm_provider_factory: Callable[[], LLMProvider] | None = None,
+    agent_schedule_repository: AgentScheduleRepository | None = None,
     valuation_discovery_service: ValuationDiscoveryService | None = None,
     news_service: NewsService | None = None,
     company_profile_service: CompanyProfileService | None = None,
@@ -108,6 +119,7 @@ def create_app(
         secret_store: Optional encrypted provider Secret Store.
         dashboard_services: Optional dashboard service bundle to inject in
             place of the default PostgreSQL-backed services.
+        llm_provider_factory: Optional active LLM provider factory for tests.
         valuation_discovery_service: Optional valuation discovery service to
             inject in place of the default fail-closed dependency.
         news_service: Optional news service to inject in place of the default
@@ -143,6 +155,7 @@ def create_app(
     application.include_router(health_router)
     application.include_router(strategy_router)
     application.include_router(strategy_config_router)
+    application.include_router(agent_runtime_router)
     application.include_router(dashboard_router)
     application.include_router(valuation_discovery_router)
     application.include_router(news_router)
@@ -165,6 +178,18 @@ def create_app(
     if dashboard_services is not None:
         application.dependency_overrides[get_dashboard_services] = (
             lambda: dashboard_services
+        )
+    if main_agent_runtime is not None:
+        application.dependency_overrides[get_main_agent_runtime] = (
+            lambda: main_agent_runtime
+        )
+    if llm_provider_factory is not None:
+        application.dependency_overrides[get_llm_provider_factory] = (
+            lambda: llm_provider_factory
+        )
+    if agent_schedule_repository is not None:
+        application.dependency_overrides[get_agent_schedule_repository] = (
+            lambda: agent_schedule_repository
         )
     if valuation_discovery_service is not None:
         application.dependency_overrides[get_valuation_discovery_service] = (

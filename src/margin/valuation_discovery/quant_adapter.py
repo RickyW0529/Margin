@@ -682,6 +682,10 @@ class QuantAdapter:
             scope_version_id=scope_version_id,
             decision_at=decision_at,
         )
+        snapshot = self._bind_scope_metadata(
+            snapshot,
+            scope_version_id=scope_version_id,
+        )
         quant_run: QuantRun = self._quant_service.run(
             snapshot, decision_at=decision_at
         )
@@ -689,6 +693,23 @@ class QuantAdapter:
         return QuantAdapterResult(
             quant_run_id=quant_run.quant_run_id,
             results=results,
+        )
+
+    def _bind_scope_metadata(
+        self,
+        snapshot: QuantInputSnapshot,
+        *,
+        scope_version_id: str,
+    ) -> QuantInputSnapshot:
+        """Attach scope strategy metadata to snapshots reloaded from persistence."""
+        scope = self._scope_provider.get_scope_binding(scope_version_id)
+        if snapshot.scope_version_id != scope.scope_version_id:
+            raise ValueError("quant input snapshot scope mismatch")
+        return snapshot.model_copy(
+            update={
+                "quant_feature_set": scope.quant_feature_set,
+                "user_indicator_view": scope.user_indicator_view,
+            }
         )
 
     def load_input(self, snapshot_id: str) -> QuantInputSnapshot:

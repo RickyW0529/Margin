@@ -1,0 +1,171 @@
+{
+  "$schema": "./step_schema.json",
+  "flow_id": "scheduled_stock_analysis",
+  "version": "v0.4.0",
+  "run_type": "scheduled_stock_analysis",
+  "fixed_flow": true,
+  "permission_mode": "write_allowed",
+  "description": "Fixed scheduled stock analysis flow. MainAgent may execute, retry, or stop these expert steps, but cannot reorder them or replace them with lower-level tools.",
+  "steps": [
+    {
+      "step_id": "data_inspection",
+      "order": 1,
+      "expert_agent": "DataInspectionAgent",
+      "skill_id": "inspect_data_readiness",
+      "description": "Check data freshness, completeness, PIT validity, provider state, and run required deterministic sync when allowed.",
+      "required_artifacts": [],
+      "produced_artifacts": [
+        "data_readiness",
+        "sync_result",
+        "guardrail_decision",
+        "reflection_report"
+      ],
+      "guardrails": [
+        "plan",
+        "tool",
+        "output"
+      ],
+      "retry_policy": {
+        "max_attempts": 2,
+        "retryable_statuses": [
+          "partial",
+          "blocked"
+        ]
+      },
+      "frontend_projection": {
+        "label": "数据检查",
+        "visible": true
+      }
+    },
+    {
+      "step_id": "quant_analysis",
+      "order": 2,
+      "expert_agent": "QuantAgent",
+      "skill_id": "run_ml_lifecycle_quant_analysis",
+      "description": "Run the fixed QuantAgent ML lifecycle strategy profile and publish quant result plus Analysis Mart artifacts.",
+      "required_artifacts": [
+        "data_readiness"
+      ],
+      "produced_artifacts": [
+        "quant_result",
+        "analysis_mart_snapshot",
+        "guardrail_decision",
+        "reflection_report"
+      ],
+      "guardrails": [
+        "plan",
+        "tool",
+        "output"
+      ],
+      "retry_policy": {
+        "max_attempts": 1,
+        "retryable_statuses": [
+          "partial"
+        ]
+      },
+      "frontend_projection": {
+        "label": "量化分析",
+        "visible": true
+      }
+    },
+    {
+      "step_id": "news_acquisition",
+      "order": 3,
+      "expert_agent": "NewsAcquisitionAgent",
+      "skill_id": "acquire_news_for_quant_targets",
+      "description": "Acquire filings, news, research-report-like public materials, snapshots, dedup records, and trigger indexing for quant-selected targets.",
+      "required_artifacts": [
+        "quant_result"
+      ],
+      "produced_artifacts": [
+        "news_context_bundle",
+        "indexed_document_batch",
+        "guardrail_decision",
+        "reflection_report"
+      ],
+      "guardrails": [
+        "plan",
+        "tool",
+        "output"
+      ],
+      "retry_policy": {
+        "max_attempts": 2,
+        "retryable_statuses": [
+          "partial",
+          "blocked"
+        ]
+      },
+      "frontend_projection": {
+        "label": "新闻获取",
+        "visible": true
+      }
+    },
+    {
+      "step_id": "stock_analysis",
+      "order": 4,
+      "expert_agent": "StockAnalystAgent",
+      "skill_id": "analyze_quant_candidates",
+      "description": "Build evidence packages, run stock analysis, validate citations and claims, publish valuation assessments, and write dashboard projections.",
+      "required_artifacts": [
+        "quant_result",
+        "analysis_mart_snapshot",
+        "news_context_bundle",
+        "indexed_document_batch"
+      ],
+      "produced_artifacts": [
+        "evidence_package",
+        "citation_validation_report",
+        "stock_analysis_result",
+        "valuation_assessment",
+        "dashboard_projection_event",
+        "guardrail_decision",
+        "reflection_report"
+      ],
+      "guardrails": [
+        "plan",
+        "tool",
+        "output"
+      ],
+      "retry_policy": {
+        "max_attempts": 1,
+        "retryable_statuses": [
+          "partial"
+        ]
+      },
+      "frontend_projection": {
+        "label": "股票分析",
+        "visible": true
+      }
+    },
+    {
+      "step_id": "main_agent_final_review",
+      "order": 5,
+      "expert_agent": "MainAgent",
+      "skill_id": "final_review",
+      "description": "Review all expert artifacts, guardrail decisions, evidence package, citation validation, and dashboard projection. If incomplete, request a targeted expert retry or finish with a blocked state.",
+      "required_artifacts": [
+        "data_readiness",
+        "quant_result",
+        "news_context_bundle",
+        "evidence_package",
+        "citation_validation_report",
+        "dashboard_projection_event"
+      ],
+      "produced_artifacts": [
+        "reflection_report",
+        "guardrail_decision"
+      ],
+      "guardrails": [
+        "final"
+      ],
+      "retry_policy": {
+        "max_attempts": 1,
+        "retryable_statuses": []
+      },
+      "frontend_projection": {
+        "label": "最终复查",
+        "visible": true
+      }
+    }
+  ]
+}

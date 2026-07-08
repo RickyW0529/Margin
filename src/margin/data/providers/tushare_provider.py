@@ -221,6 +221,7 @@ def _map_valuation_row(
     """Map one Tushare ``daily_basic`` row."""
     trade_date = datetime.strptime(str(row["trade_date"]), "%Y%m%d")
     total_mv = _optional_float(row.get("total_mv"))
+    circ_mv = _optional_float(row.get("circ_mv"))
     return {
         "symbol": ts_code,
         "trade_date": trade_date,
@@ -229,7 +230,11 @@ def _map_valuation_row(
         "ps": _optional_float(row.get("ps_ttm")),
         "dividend_yield": _ratio(row.get("dv_ttm")),
         "turnover_rate": _ratio(row.get("turnover_rate")),
+        "volume_ratio": _optional_float(row.get("volume_ratio")),
         "market_cap": total_mv * 1000.0 if total_mv is not None else None,
+        "circ_mv": circ_mv * 1000.0 if circ_mv is not None else None,
+        "float_share": _optional_float(row.get("float_share")),
+        "free_share": _optional_float(row.get("free_share")),
         "fetched_at": fetched_at,
         "available_at": _market_bar_available_at(trade_date),
         "source": "tushare",
