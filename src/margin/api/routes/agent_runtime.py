@@ -11,6 +11,12 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
+from margin.agent_runtime.chat_repository import (
+    AgentChatRepository,
+    new_chat_message,
+    new_chat_session,
+    summarize_messages_for_prompt,
+)
 from margin.agent_runtime.expert_agents import DataAnalystAgent, GeneralQnaAgent
 from margin.agent_runtime.main_agent import MainAgentPlanningError, MainAgentRuntime
 from margin.agent_runtime.models import AgentExecutionStatus, AgentStep, ContextArtifact
@@ -19,6 +25,7 @@ from margin.agent_runtime.schedules import (
     StockAnalysisSchedule,
 )
 from margin.api.dependencies import (
+    get_agent_chat_repository,
     get_agent_schedule_repository,
     get_dashboard_services,
     get_llm_provider_factory,
@@ -44,6 +51,10 @@ ScheduleRepo = Annotated[
     AgentScheduleRepository,
     Depends(get_agent_schedule_repository),
 ]
+ChatRepo = Annotated[
+    AgentChatRepository,
+    Depends(get_agent_chat_repository),
+]
 IdempotencyKey = Annotated[str, Depends(require_idempotency_key)]
 
 
@@ -54,6 +65,7 @@ class UserQnaRunRequest(BaseModel):
 
     scope_version_id: str = Field(min_length=1, max_length=64)
     message: str = Field(min_length=1, max_length=2000)
+    session_id: str | None = Field(default=None, min_length=1, max_length=96)
     universe: str = Field(default="ALL_A", min_length=1, max_length=32)
     language: str = Field(default="zh", pattern="^(zh|en)$")
 
@@ -94,12 +106,52 @@ class ContextArtifactSummaryResponse(BaseModel):
 class UserQnaRunResponse(BaseModel):
     """Response returned by the MainAgent-backed Q&A endpoint."""
 
+    session_id: str
+    user_message_id: str
+    assistant_message_id: str
     run_id: str
     answer: str
     guardrail: GuardrailSummaryResponse
     agent_trace: AgentTraceResponse
     artifacts: list[ContextArtifactSummaryResponse]
     references: list[dict[str, str]]
+
+
+class AgentChatSessionResponse(BaseModel):
+    """One persisted chat session for the sidebar."""
+
+    session_id: str
+    title: str
+    scope_version_id: str
+    universe: str
+    language: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class AgentChatMessageResponse(BaseModel):
+    """One persisted chat message for restoring a conversation."""
+
+    message_id: str
+    session_id: str
+    role: str
+    content: str
+    run_id: str | None
+    payload: dict
+    created_at: datetime
+
+
+class AgentChatSessionListResponse(BaseModel):
+    """Recent chat session list."""
+
+    items: list[AgentChatSessionResponse]
+
+
+class AgentChatSessionDetailResponse(BaseModel):
+    """One chat session plus messages."""
+
+    session: AgentChatSessionResponse
+    messages: list[AgentChatMessageResponse]
 
 
 class StockAnalysisScheduleUpdate(BaseModel):
@@ -143,17 +195,70 @@ class _UserQnaExecution:
 def run_user_qna_agent(
     request: UserQnaRunRequest,
     runtime: RuntimeDep,
+    chat_repository: ChatRepo,
     services: DashboardServices,
     strategy_service: StrategyServices,
     llm_provider_factory: LLMProviderFactory,
     _idempotency_key: IdempotencyKey,
 ) -> UserQnaRunResponse:
     """Run a read-only user Q&A request through MainAgent-planned ExpertAgents."""
+    session_id = request.session_id or f"acs_{uuid4().hex}"
+    session = chat_repository.get_session(session_id)
+    now = datetime.now(UTC)
+    if session is None:
+        if request.session_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "chat_session_not_found",
+                    "message": "chat session not found",
+                },
+            )
+        session = new_chat_session(
+            session_id=session_id,
+            title=_chat_title(request.message),
+            scope_version_id=request.scope_version_id,
+            universe=request.universe,
+            language=request.language,
+            now=now,
+        )
+        chat_repository.upsert_session(session)
+    else:
+        chat_repository.upsert_session(
+            session.model_copy(
+                update={
+                    "scope_version_id": request.scope_version_id,
+                    "universe": request.universe,
+                    "language": request.language,
+                    "updated_at": now,
+                }
+            )
+        )
+
+    previous_messages = chat_repository.list_messages(session_id, limit=8)
+    conversation_context = summarize_messages_for_prompt(previous_messages)
+    user_message_id = f"acm_{uuid4().hex}"
+    chat_repository.add_message(
+        new_chat_message(
+            message_id=user_message_id,
+            session_id=session_id,
+            role="user",
+            content=request.message,
+            payload={
+                "scope_version_id": request.scope_version_id,
+                "universe": request.universe,
+                "language": request.language,
+            },
+            now=now,
+        )
+    )
+
     run_id = f"ar_qna_{uuid4().hex}"
     try:
         plan_result = runtime.create_user_qna_plan(
             run_id=run_id,
             user_input=request.message,
+            conversation_context=conversation_context,
         )
     except MainAgentPlanningError as exc:
         raise HTTPException(
@@ -182,9 +287,13 @@ def run_user_qna_agent(
         services=services,
         strategy_service=strategy_service,
         llm_provider_factory=llm_provider_factory,
+        conversation_context=conversation_context,
     )
 
-    return UserQnaRunResponse(
+    response = UserQnaRunResponse(
+        session_id=session_id,
+        user_message_id=user_message_id,
+        assistant_message_id=f"acm_{uuid4().hex}",
         run_id=run_id,
         answer=execution.answer,
         guardrail=GuardrailSummaryResponse(
@@ -221,6 +330,17 @@ def run_user_qna_agent(
             for reference in execution.references
         ],
     )
+    chat_repository.add_message(
+        new_chat_message(
+            message_id=response.assistant_message_id,
+            session_id=session_id,
+            role="assistant",
+            content=execution.answer,
+            run_id=run_id,
+            payload=response.model_dump(mode="json"),
+        )
+    )
+    return response
 
 
 def _execute_user_qna_plan(
@@ -232,6 +352,7 @@ def _execute_user_qna_plan(
     services: DashboardServiceBundle,
     strategy_service: StrategyService,
     llm_provider_factory: Callable[[], LLMProvider],
+    conversation_context: list[dict[str, str]],
 ) -> _UserQnaExecution:
     """Execute ExpertAgents selected by MainAgent for a user Q&A run."""
     answer = ""
@@ -249,6 +370,7 @@ def _execute_user_qna_plan(
                     run_id=run_id,
                     message=request.message,
                     language=request.language,
+                    conversation_context=conversation_context,
                     available_artifacts=tuple(artifacts),
                 )
             except RuntimeError as exc:
@@ -280,6 +402,7 @@ def _execute_user_qna_plan(
                     scope_version_id=scope_version_id,
                     universe=request.universe,
                     language=request.language,
+                    conversation_context=conversation_context,
                     services=services,
                 )
             except RuntimeError as exc:
@@ -312,6 +435,55 @@ def _execute_user_qna_plan(
         step_statuses=step_statuses,
         artifacts=tuple(artifacts),
         references=tuple(references),
+    )
+
+
+@router.get(
+    "/agent-chat/sessions",
+    response_model=AgentChatSessionListResponse,
+)
+def list_agent_chat_sessions(repository: ChatRepo) -> AgentChatSessionListResponse:
+    """Return recent persisted user chat sessions."""
+    return AgentChatSessionListResponse(
+        items=[
+            _chat_session_to_response(session)
+            for session in repository.list_sessions(limit=20)
+        ]
+    )
+
+
+@router.get(
+    "/agent-chat/sessions/{session_id}",
+    response_model=AgentChatSessionDetailResponse,
+)
+def get_agent_chat_session(
+    session_id: str,
+    repository: ChatRepo,
+) -> AgentChatSessionDetailResponse:
+    """Return one persisted user chat session and its messages."""
+    detail = repository.get_session_detail(session_id)
+    if detail is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "chat_session_not_found",
+                "message": "chat session not found",
+            },
+        )
+    return AgentChatSessionDetailResponse(
+        session=_chat_session_to_response(detail.session),
+        messages=[
+            AgentChatMessageResponse(
+                message_id=message.message_id,
+                session_id=message.session_id,
+                role=message.role,
+                content=message.content,
+                run_id=message.run_id,
+                payload=message.payload,
+                created_at=message.created_at,
+            )
+            for message in detail.messages
+        ],
     )
 
 
@@ -387,3 +559,22 @@ def _resolve_scope_alias(
             },
         ) from exc
     return str(scope.version_id)
+
+
+def _chat_title(message: str) -> str:
+    """Return a compact session title from the first user message."""
+    title = " ".join(message.strip().split())
+    return title[:80] or "Untitled research chat"
+
+
+def _chat_session_to_response(session) -> AgentChatSessionResponse:
+    """Convert a chat session model to an API response."""
+    return AgentChatSessionResponse(
+        session_id=session.session_id,
+        title=session.title,
+        scope_version_id=session.scope_version_id,
+        universe=session.universe,
+        language=session.language,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
+    )

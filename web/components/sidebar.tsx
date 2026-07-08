@@ -10,8 +10,8 @@ import {
 } from "lucide-react";
 
 import { LanguageToggle } from "@/components/language-toggle";
+import { useAgentChatSessions } from "@/lib/agent-chat-history";
 import { useLanguage, type TranslationKey } from "@/lib/i18n";
-import { useRecentQuestions } from "@/lib/recent-questions";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -84,7 +84,11 @@ export function MobileNavigation() {
 export function Sidebar() {
   const pathname = usePathname() ?? "/";
   const { t } = useLanguage();
-  const recentQuestions = useRecentQuestions();
+  const {
+    error: recentError,
+    loading: recentLoading,
+    sessions: recentSessions,
+  } = useAgentChatSessions();
 
   return (
     <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col self-start overflow-y-auto border-r border-sidebar-border bg-sidebar p-3 text-sidebar-foreground md:flex">
@@ -133,16 +137,24 @@ export function Sidebar() {
         <h2 className="px-3 text-xs font-medium text-sidebar-accent-foreground">
           {t("navRecent")}
         </h2>
-        {recentQuestions.length > 0 ? (
+        {recentLoading ? (
+          <p className="px-3 py-2 text-sm text-sidebar-foreground/45">
+            {t("chatReadingData")}
+          </p>
+        ) : recentError ? (
+          <p className="px-3 py-2 text-sm text-sidebar-foreground/45">
+            {t("chatError")}
+          </p>
+        ) : recentSessions.length > 0 ? (
           <div className="grid gap-0.5">
-            {recentQuestions.map((question) => (
+            {recentSessions.map((session) => (
               <Link
-                key={question.id}
+                key={session.session_id}
                 className="truncate rounded-md px-3 py-2 text-sm text-sidebar-foreground/86 no-underline transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-                href={`/?chat=${encodeURIComponent(question.id)}`}
-                title={question.text}
+                href={`/?chat=${encodeURIComponent(session.session_id)}`}
+                title={session.title}
               >
-                {question.text}
+                {session.title}
               </Link>
             ))}
           </div>

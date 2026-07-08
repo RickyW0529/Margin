@@ -110,6 +110,7 @@ def agent_runtime_prompt_templates() -> tuple[PromptTemplate, ...]:
                     title="CONTEXT",
                     content=(
                         "<user_request>{{user_request}}</user_request>"
+                        "<conversation_context>{{conversation_context}}</conversation_context>"
                         "<run_context>{{run_context}}</run_context>"
                         "<agent_cards>{{expert_agent_cards}}</agent_cards>"
                         "<available_artifacts>{{artifact_summaries}}</available_artifacts>"
@@ -182,6 +183,7 @@ def agent_runtime_prompt_templates() -> tuple[PromptTemplate, ...]:
                     content=(
                         "<language>{{language}}</language>"
                         "<user_request>{{user_request}}</user_request>"
+                        "<conversation_context>{{conversation_context}}</conversation_context>"
                         "<run_context>{{run_context}}</run_context>"
                         "<available_artifacts>{{artifact_summaries}}</available_artifacts>"
                     ),
@@ -228,6 +230,7 @@ def agent_runtime_prompt_templates() -> tuple[PromptTemplate, ...]:
                     content=(
                         "<language>{{language}}</language>"
                         "<user_request>{{user_request}}</user_request>"
+                        "<conversation_context>{{conversation_context}}</conversation_context>"
                         "<scope_version_id>{{scope_version_id}}</scope_version_id>"
                         "<universe>{{universe}}</universe>"
                         "<analysis_rows>{{analysis_rows}}</analysis_rows>"

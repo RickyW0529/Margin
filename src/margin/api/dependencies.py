@@ -15,6 +15,7 @@ from typing import Annotated, Any
 from fastapi import Depends, Header, HTTPException, status
 
 from margin.agent_runtime.cards import default_agent_card_registry
+from margin.agent_runtime.chat_repository import SQLAlchemyAgentChatRepository
 from margin.agent_runtime.context_store import SQLAlchemyAgentContextStore
 from margin.agent_runtime.expert_agents import StockAnalystAgent
 from margin.agent_runtime.main_agent import MainAgentRuntime
@@ -407,6 +408,12 @@ def get_main_agent_runtime() -> MainAgentRuntime:
 def get_agent_schedule_repository() -> SQLAlchemyAgentScheduleRepository:
     """Return the persisted agent schedule repository."""
     return SQLAlchemyAgentScheduleRepository(get_app_container().session_factory)
+
+
+@lru_cache
+def get_agent_chat_repository() -> SQLAlchemyAgentChatRepository:
+    """Return the persisted Agent chat repository."""
+    return SQLAlchemyAgentChatRepository(get_app_container().session_factory)
 
 
 def get_provider_config_health_service(

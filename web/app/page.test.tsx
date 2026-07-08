@@ -12,6 +12,7 @@ import HomePage from "./page";
 
 vi.mock("@/lib/api", () => ({
   askMainAgentQna: vi.fn(),
+  fetchAgentChatSession: vi.fn(),
   saveProviderSecret: vi.fn(),
   testProviderConfig: vi.fn(),
 }));
@@ -29,7 +30,10 @@ vi.mock("next/navigation", () => ({
 describe("HomePage", () => {
   beforeEach(() => {
     vi.mocked(askMainAgentQna).mockResolvedValue({
+      assistant_message_id: "acm_assistant_1",
       run_id: "ar_qna_1",
+      session_id: "acs_1",
+      user_message_id: "acm_user_1",
       answer: "今日推荐关注 000001。",
       guardrail: {
         allowed: true,

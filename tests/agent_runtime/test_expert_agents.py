@@ -61,6 +61,7 @@ def test_data_analyst_agent_writes_analysis_and_answer_artifacts() -> None:
         scope_version_id="scope-1",
         universe="ALL_A",
         language="zh",
+        conversation_context=[],
         services=services,
     )
 
@@ -91,6 +92,7 @@ def test_general_qna_agent_calls_llm_and_writes_explanation_artifact() -> None:
         run_id="ar_qna_greeting",
         message="你好",
         language="zh",
+        conversation_context=[],
         available_artifacts=(),
     )
 

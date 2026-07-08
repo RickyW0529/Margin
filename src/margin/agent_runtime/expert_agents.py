@@ -77,6 +77,7 @@ class GeneralQnaAgent:
         run_id: str,
         message: str,
         language: str,
+        conversation_context: list[dict[str, str]],
         available_artifacts: tuple[ContextArtifact, ...],
     ) -> GeneralQnaResult:
         """Answer a MainAgent-authorized general Q&A request with an LLM call."""
@@ -86,6 +87,7 @@ class GeneralQnaAgent:
             variables={
                 "language": language,
                 "user_request": message,
+                "conversation_context": conversation_context,
                 "run_context": {
                     "run_id": run_id,
                     "run_type": "user_qna",
@@ -163,6 +165,7 @@ class DataAnalystAgent:
         scope_version_id: str,
         universe: str,
         language: str,
+        conversation_context: list[dict[str, str]],
         services: DashboardServiceBundle,
     ) -> DataAnalystQnaResult:
         """Answer one recommendation question from read-only dashboard data."""
@@ -211,6 +214,7 @@ class DataAnalystAgent:
             scope_version_id=scope_version_id,
             universe=universe,
             language=language,
+            conversation_context=conversation_context,
         )
         answer_artifact = make_context_artifact(
             artifact_id=f"ctx_{run_id}_explanation",
@@ -250,6 +254,7 @@ class DataAnalystAgent:
         scope_version_id: str,
         universe: str,
         language: str,
+        conversation_context: list[dict[str, str]],
     ) -> tuple[str, RenderedPrompt, LLMResult]:
         template = self._prompt_registry.get("data_analyst_qna_agent_v0.4")
         rendered = self._prompt_renderer.render(
@@ -257,6 +262,7 @@ class DataAnalystAgent:
             variables={
                 "language": language,
                 "user_request": message,
+                "conversation_context": conversation_context,
                 "scope_version_id": scope_version_id,
                 "universe": universe,
                 "analysis_rows": rows,

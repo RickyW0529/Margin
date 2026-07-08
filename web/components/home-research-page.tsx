@@ -21,7 +21,7 @@ export function HomeResearchPage() {
         {t("homeBrandLink")}
       </Link>
       <RecommendationChatPanel
-        initialRecentQuestionId={selectedChatId}
+        initialChatSessionId={selectedChatId}
         key={selectedChatId ?? "new-chat"}
       />
     </main>

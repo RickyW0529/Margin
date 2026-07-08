@@ -27,7 +27,7 @@ def test_migration_sequence_from_clean_database(database_url: str) -> None:
     )
 
     assert result.current_head == result.expected_head
-    assert result.current_head == "20260708_0050_ml_ts_land"
+    assert result.current_head == "20260708_0051_agent_chat"
     assert result.failed_revision is None
     assert {
         "orchestration_runs",

@@ -14,9 +14,11 @@ from urllib.parse import urlsplit
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from margin.agent_runtime.chat_repository import AgentChatRepository
 from margin.agent_runtime.main_agent import MainAgentRuntime
 from margin.agent_runtime.schedules import AgentScheduleRepository
 from margin.api.dependencies import (
+    get_agent_chat_repository,
     get_agent_schedule_repository,
     get_app_container,
     get_company_profile_service,
@@ -103,6 +105,7 @@ def create_app(
     main_agent_runtime: MainAgentRuntime | None = None,
     llm_provider_factory: Callable[[], LLMProvider] | None = None,
     agent_schedule_repository: AgentScheduleRepository | None = None,
+    agent_chat_repository: AgentChatRepository | None = None,
     valuation_discovery_service: ValuationDiscoveryService | None = None,
     news_service: NewsService | None = None,
     company_profile_service: CompanyProfileService | None = None,
@@ -196,6 +199,10 @@ def create_app(
     if agent_schedule_repository is not None:
         application.dependency_overrides[get_agent_schedule_repository] = (
             lambda: agent_schedule_repository
+        )
+    if agent_chat_repository is not None:
+        application.dependency_overrides[get_agent_chat_repository] = (
+            lambda: agent_chat_repository
         )
     if valuation_discovery_service is not None:
         application.dependency_overrides[get_valuation_discovery_service] = (

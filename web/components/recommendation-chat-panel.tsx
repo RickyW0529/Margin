@@ -6,30 +6,39 @@
 
 import { ArrowUp, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { Textarea } from "@/components/ui/textarea";
+import { notifyAgentChatSessionsChanged } from "@/lib/agent-chat-history";
 import {
   askMainAgentQna,
+  fetchAgentChatSession,
+  type AgentChatMessage,
+  type AgentChatSession,
+  type AgentChatSessionDetail,
   type MainAgentQnaResponse,
 } from "@/lib/api";
 import { useLanguage, type UiLanguage } from "@/lib/i18n";
-import {
-  addRecentQuestion,
-  updateRecentQuestion,
-  useRecentQuestion,
-} from "@/lib/recent-questions";
 
 type RecommendationChatPanelProps = {
   ask?: (request: {
     scope_version_id: string;
     message: string;
+    session_id?: string | null;
     universe?: string;
     language?: UiLanguage;
   }) => Promise<MainAgentQnaResponse>;
-  initialRecentQuestionId?: string | null;
+  fetchSession?: (sessionId: string) => Promise<AgentChatSessionDetail>;
+  initialChatSessionId?: string | null;
   scopeVersionId?: string;
   universe?: string;
+};
+
+type ChatDisplayMessage = {
+  content: string;
+  id: string;
+  response?: MainAgentQnaResponse | null;
+  role: "assistant" | "user";
 };
 
 function formatReferenceLabel(
@@ -49,81 +58,156 @@ function formatReferenceLabel(
 /** Renders the first-screen Q&A entry backed by read-only recommendation data. */
 export function RecommendationChatPanel({
   ask = askMainAgentQna,
-  initialRecentQuestionId = null,
+  fetchSession = fetchAgentChatSession,
+  initialChatSessionId = null,
   scopeVersionId = "scope-current",
   universe = "ALL_A",
 }: RecommendationChatPanelProps) {
   const router = useRouter();
-  const savedQuestion = useRecentQuestion(initialRecentQuestionId);
   const { language, t } = useLanguage();
   const [message, setMessage] = useState("");
-  const [draftConversation, setDraftConversation] = useState<{
-    error: string | null;
-    response: MainAgentQnaResponse | null;
-    submittedMessage: string;
-  } | null>(null);
+  const [activeSession, setActiveSession] = useState<AgentChatSession | null>(
+    null,
+  );
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(
+    initialChatSessionId,
+  );
+  const [chatMessages, setChatMessages] = useState<ChatDisplayMessage[]>([]);
+  const [loadError, setLoadError] = useState(false);
+  const [loadingSession, setLoadingSession] = useState(false);
+  const [pendingUserMessage, setPendingUserMessage] = useState<string | null>(
+    null,
+  );
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const submittedMessage =
-    draftConversation?.submittedMessage ?? savedQuestion?.text ?? null;
-  const response =
-    draftConversation !== null
-      ? draftConversation.response
-      : savedQuestion?.response ?? null;
-  const error =
-    draftConversation !== null
-      ? draftConversation.error
-      : savedQuestion?.error ?? null;
-  const hasConversation = Boolean(submittedMessage || response || busy || error);
+  const requestScopeVersionId = activeSession?.scope_version_id ?? scopeVersionId;
+  const requestUniverse = activeSession?.universe ?? universe;
+  const requestLanguage =
+    activeSession?.language === "en" || activeSession?.language === "zh"
+      ? activeSession.language
+      : language;
+  const hasConversation = Boolean(
+    loadingSession ||
+      loadError ||
+      chatMessages.length > 0 ||
+      pendingUserMessage ||
+      busy ||
+      submitError,
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return () => undefined;
+    }
+    let cancelled = false;
+    const timeoutId = window.setTimeout(() => {
+      setActiveSessionId(initialChatSessionId);
+      setPendingUserMessage(null);
+      setSubmitError(null);
+      setLoadError(false);
+      if (!initialChatSessionId) {
+        setActiveSession(null);
+        setChatMessages([]);
+        setLoadingSession(false);
+        return;
+      }
+      setLoadingSession(true);
+      fetchSession(initialChatSessionId)
+        .then((detail) => {
+          if (cancelled) {
+            return;
+          }
+          setActiveSession(detail.session);
+          setActiveSessionId(detail.session.session_id);
+          setChatMessages(detail.messages.map(mapPersistedChatMessage));
+        })
+        .catch(() => {
+          if (cancelled) {
+            return;
+          }
+          setActiveSession(null);
+          setChatMessages([]);
+          setLoadError(true);
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setLoadingSession(false);
+          }
+        });
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [fetchSession, initialChatSessionId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return () => undefined;
+    }
+    if (initialChatSessionId) {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      if (!busy) {
+        setLoadingSession(false);
+      }
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [busy, initialChatSessionId]);
 
   async function submit(nextMessage = message) {
     const trimmed = nextMessage.trim();
     if (!trimmed) {
       return;
     }
-    setDraftConversation({
-      error: null,
-      response: null,
-      submittedMessage: trimmed,
-    });
+    setPendingUserMessage(trimmed);
+    setSubmitError(null);
     setMessage("");
-    const record = addRecentQuestion({
-      language,
-      scopeVersionId,
-      text: trimmed,
-      universe,
-    });
     setBusy(true);
     try {
       const answer = await ask({
         message: trimmed,
-        scope_version_id: scopeVersionId,
-        universe,
-        language,
+        scope_version_id: requestScopeVersionId,
+        session_id: activeSessionId,
+        universe: requestUniverse,
+        language: requestLanguage,
       });
-      setDraftConversation({
-        error: null,
-        response: answer,
-        submittedMessage: trimmed,
-      });
-      if (record) {
-        updateRecentQuestion(record.id, { error: null, response: answer });
-        router.replace(`/?chat=${encodeURIComponent(record.id)}`, {
+      setActiveSessionId(answer.session_id);
+      setActiveSession((current) =>
+        current ??
+        newSessionFromAnswer({
+          answer,
+          language: requestLanguage,
+          scopeVersionId: requestScopeVersionId,
+          title: trimmed,
+          universe: requestUniverse,
+        }),
+      );
+      setChatMessages((current) => [
+        ...current,
+        {
+          content: trimmed,
+          id: answer.user_message_id,
+          role: "user",
+        },
+        {
+          content: answer.answer,
+          id: answer.assistant_message_id,
+          response: answer,
+          role: "assistant",
+        },
+      ]);
+      setPendingUserMessage(null);
+      notifyAgentChatSessionsChanged();
+      if (answer.session_id !== initialChatSessionId) {
+        router.replace(`/?chat=${encodeURIComponent(answer.session_id)}`, {
           scroll: false,
         });
       }
     } catch {
       const errorMessage = t("chatError");
-      setDraftConversation({
-        error: errorMessage,
-        response: null,
-        submittedMessage: trimmed,
-      });
-      if (record) {
-        updateRecentQuestion(record.id, { error: errorMessage, response: null });
-        router.replace(`/?chat=${encodeURIComponent(record.id)}`, {
-          scroll: false,
-        });
-      }
+      setSubmitError(errorMessage);
     } finally {
       setBusy(false);
     }
@@ -155,13 +239,33 @@ export function RecommendationChatPanel({
       ) : (
         <div className="min-h-0 overflow-y-auto px-5 pb-40 pt-20 md:px-10 md:pb-44 md:pt-24">
           <div className="mx-auto grid min-h-full w-full max-w-6xl content-start gap-8">
+            {loadingSession ? (
+              <AssistantBlock>
+                <p className="text-base leading-8 text-foreground">
+                  {t("chatReadingData")}
+                </p>
+              </AssistantBlock>
+            ) : null}
 
-            {submittedMessage ? (
-              <div className="flex justify-end">
-                <div className="max-w-[78%] rounded-[28px] bg-muted px-5 py-3 text-base leading-relaxed text-foreground shadow-sm md:max-w-[48rem]">
-                  {submittedMessage}
-                </div>
-              </div>
+            {loadError ? (
+              <AssistantBlock>
+                <p className="text-base leading-8 text-negative" role="alert">
+                  {t("chatError")}
+                </p>
+              </AssistantBlock>
+            ) : null}
+
+            {chatMessages.map((chatMessage) => (
+              <ChatMessageBubble
+                key={chatMessage.id}
+                language={language}
+                message={chatMessage}
+                t={t}
+              />
+            ))}
+
+            {pendingUserMessage ? (
+              <UserMessageBubble message={pendingUserMessage} />
             ) : null}
 
             {busy ? (
@@ -175,54 +279,11 @@ export function RecommendationChatPanel({
               </AssistantBlock>
             ) : null}
 
-            {error ? (
+            {submitError ? (
               <AssistantBlock>
                 <p className="text-base leading-8 text-negative" role="alert">
-                  {error}
+                  {submitError}
                 </p>
-              </AssistantBlock>
-            ) : null}
-
-            {response ? (
-              <AssistantBlock>
-                <p className="text-base leading-8 text-foreground md:text-lg md:leading-9">
-                  {response.answer}
-                </p>
-                <div className="mt-6 grid gap-3 text-sm text-muted-foreground">
-                  <details>
-                    <summary className="cursor-pointer text-muted-foreground transition-colors hover:text-foreground">
-                      {t("chatTrace")}
-                    </summary>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">
-                        {formatAgentTrace(response.agent_trace.steps, language)}
-                      </span>
-                      {response.artifacts.map((artifact) => (
-                        <span
-                          key={artifact.artifact_id}
-                          className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground"
-                        >
-                          {formatArtifactType(artifact.artifact_type, language)}
-                        </span>
-                      ))}
-                    </div>
-                  </details>
-                  {response.references.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {response.references.map((reference, index) => {
-                        const label = formatReferenceLabel(reference, language);
-                        return (
-                          <span
-                            key={`${label}-${index}`}
-                            className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground"
-                          >
-                            {label}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
               </AssistantBlock>
             ) : null}
           </div>
@@ -242,6 +303,74 @@ export function RecommendationChatPanel({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function UserMessageBubble({ message }: { message: string }) {
+  return (
+    <div className="flex justify-end">
+      <div className="max-w-[78%] rounded-[28px] bg-muted px-5 py-3 text-base leading-relaxed text-foreground shadow-sm md:max-w-[48rem]">
+        {message}
+      </div>
+    </div>
+  );
+}
+
+function ChatMessageBubble({
+  language,
+  message,
+  t,
+}: {
+  language: UiLanguage;
+  message: ChatDisplayMessage;
+  t: ReturnType<typeof useLanguage>["t"];
+}) {
+  if (message.role === "user") {
+    return <UserMessageBubble message={message.content} />;
+  }
+  return (
+    <AssistantBlock>
+      <p className="text-base leading-8 text-foreground md:text-lg md:leading-9">
+        {message.content}
+      </p>
+      {message.response ? (
+        <div className="mt-6 grid gap-3 text-sm text-muted-foreground">
+          <details>
+            <summary className="cursor-pointer text-muted-foreground transition-colors hover:text-foreground">
+              {t("chatTrace")}
+            </summary>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+                {formatAgentTrace(message.response.agent_trace.steps, language)}
+              </span>
+              {message.response.artifacts.map((artifact) => (
+                <span
+                  key={artifact.artifact_id}
+                  className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground"
+                >
+                  {formatArtifactType(artifact.artifact_type, language)}
+                </span>
+              ))}
+            </div>
+          </details>
+          {message.response.references.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {message.response.references.map((reference, index) => {
+                const label = formatReferenceLabel(reference, language);
+                return (
+                  <span
+                    key={`${label}-${index}`}
+                    className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground"
+                  >
+                    {label}
+                  </span>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </AssistantBlock>
   );
 }
 
@@ -351,4 +480,58 @@ function formatArtifactType(artifactType: string, language: UiLanguage): string 
     generated_file_ref: { en: "Generated file", zh: "生成文件" },
   };
   return labels[artifactType]?.[language] ?? artifactType;
+}
+
+function mapPersistedChatMessage(message: AgentChatMessage): ChatDisplayMessage {
+  const response =
+    message.role === "assistant" && isMainAgentQnaResponse(message.payload)
+      ? message.payload
+      : null;
+  return {
+    content: message.content,
+    id: message.message_id,
+    response,
+    role: message.role,
+  };
+}
+
+function isMainAgentQnaResponse(
+  value: Record<string, unknown>,
+): value is MainAgentQnaResponse {
+  return (
+    typeof value.answer === "string" &&
+    typeof value.run_id === "string" &&
+    typeof value.session_id === "string" &&
+    typeof value.user_message_id === "string" &&
+    typeof value.assistant_message_id === "string" &&
+    Array.isArray(value.artifacts) &&
+    Array.isArray(value.references) &&
+    typeof value.agent_trace === "object" &&
+    value.agent_trace !== null
+  );
+}
+
+function newSessionFromAnswer({
+  answer,
+  language,
+  scopeVersionId,
+  title,
+  universe,
+}: {
+  answer: MainAgentQnaResponse;
+  language: UiLanguage;
+  scopeVersionId: string;
+  title: string;
+  universe: string;
+}): AgentChatSession {
+  const now = new Date().toISOString();
+  return {
+    session_id: answer.session_id,
+    title: title.trim().slice(0, 80) || "Untitled research chat",
+    scope_version_id: scopeVersionId,
+    universe,
+    language,
+    created_at: now,
+    updated_at: now,
+  };
 }

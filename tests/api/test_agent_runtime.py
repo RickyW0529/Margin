@@ -8,6 +8,10 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from margin.agent_runtime.cards import default_agent_card_registry
+from margin.agent_runtime.chat_repository import (
+    AgentChatRepository,
+    MemoryAgentChatRepository,
+)
 from margin.agent_runtime.context_store import MemoryAgentContextStore
 from margin.agent_runtime.main_agent import MainAgentRuntime
 from margin.agent_runtime.schedules import MemoryAgentScheduleRepository
@@ -46,6 +50,9 @@ def test_user_qna_agent_run_returns_main_agent_trace() -> None:
 
     assert response.status_code == 200
     body = response.json()
+    assert body["session_id"].startswith("acs_")
+    assert body["user_message_id"].startswith("acm_")
+    assert body["assistant_message_id"].startswith("acm_")
     assert body["run_id"].startswith("ar_qna_")
     assert "000001.SZ" in body["answer"]
     assert body["answer"] == "LLM 基于当前推荐数据回答：000001.SZ。"
@@ -93,6 +100,90 @@ def test_user_qna_greeting_runs_general_llm_agent() -> None:
     assert body["artifacts"][0]["artifact_type"] == "explanation"
     assert body["artifacts"][0]["producer_agent"] == "GeneralQnaAgent"
     assert llm_provider.calls == ["planner", "answer"]
+
+
+def test_user_qna_persists_chat_session_and_uses_context_for_followup() -> None:
+    """Test that follow-up questions restore DB-backed chat context."""
+    llm_provider = _PlannerAndAnswerLLMProvider(
+        plan_response={
+            "plan_id": "plan_ar_qna_context",
+            "fixed_flow": False,
+            "steps": [
+                {
+                    "expert_agent_name": "DataAnalystAgent",
+                    "skill_id": "answer_with_analysis_artifacts",
+                }
+            ],
+        },
+        answer="LLM 基于当前推荐数据回答：000001.SZ。",
+    )
+    chat_repository = MemoryAgentChatRepository()
+    client = _client_with_agent_runtime(
+        llm_provider=llm_provider,
+        chat_repository=chat_repository,
+    )
+
+    first_response = client.post(
+        "/api/v1/agent-runs/user-qna",
+        headers=_idempotency_headers("qna-context-1"),
+        json={"scope_version_id": "scope-1", "message": "今日推荐股票是什么？"},
+    )
+    assert first_response.status_code == 200
+    session_id = first_response.json()["session_id"]
+
+    second_response = client.post(
+        "/api/v1/agent-runs/user-qna",
+        headers=_idempotency_headers("qna-context-2"),
+        json={
+            "scope_version_id": "scope-1",
+            "session_id": session_id,
+            "message": "那为什么？",
+        },
+    )
+
+    assert second_response.status_code == 200
+    assert second_response.json()["session_id"] == session_id
+    detail_response = client.get(f"/api/v1/agent-chat/sessions/{session_id}")
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["session"]["title"] == "今日推荐股票是什么？"
+    assert [message["role"] for message in detail["messages"]] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+    ]
+    assert [message["content"] for message in detail["messages"]][:3] == [
+        "今日推荐股票是什么？",
+        "LLM 基于当前推荐数据回答：000001.SZ。",
+        "那为什么？",
+    ]
+    sessions_response = client.get("/api/v1/agent-chat/sessions")
+    assert sessions_response.status_code == 200
+    assert sessions_response.json()["items"][0]["session_id"] == session_id
+    assert any(
+        "今日推荐股票是什么？" in prompt
+        and "LLM 基于当前推荐数据回答：000001.SZ。" in prompt
+        for prompt in llm_provider.prompts
+    )
+
+
+def test_user_qna_rejects_unknown_chat_session() -> None:
+    """Test that clients cannot append to a missing chat session."""
+    client = _client_with_agent_runtime()
+
+    response = client.post(
+        "/api/v1/agent-runs/user-qna",
+        headers=_idempotency_headers("qna-missing-session"),
+        json={
+            "scope_version_id": "scope-1",
+            "session_id": "acs_missing",
+            "message": "继续上次问题",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "chat_session_not_found"
 
 
 def test_stock_analysis_schedule_can_be_saved_and_read() -> None:
@@ -167,6 +258,7 @@ def test_user_qna_guardrail_blocks_guaranteed_return_claims() -> None:
 
 def _client_with_agent_runtime(
     llm_provider: DeterministicLLMProvider | None = None,
+    chat_repository: AgentChatRepository | None = None,
 ) -> TestClient:
     """Build a test client with in-memory agent runtime dependencies."""
     dashboard_repository = MemoryDashboardRepository()
@@ -223,6 +315,7 @@ def _client_with_agent_runtime(
                 llm_provider_factory=llm_provider_factory,
             ),
             agent_schedule_repository=MemoryAgentScheduleRepository(),
+            agent_chat_repository=chat_repository or MemoryAgentChatRepository(),
             strategy_service=_FakeStrategyService(),
             llm_provider_factory=llm_provider_factory,
         )
@@ -254,6 +347,7 @@ class _PlannerAndAnswerLLMProvider(DeterministicLLMProvider):
         self._plan_response = plan_response
         self._answer = answer
         self.calls: list[str] = []
+        self.prompts: list[str] = []
 
     def complete(
         self,
@@ -262,7 +356,8 @@ class _PlannerAndAnswerLLMProvider(DeterministicLLMProvider):
         response_schema: dict[str, object] | None = None,
         temperature: float = 0.0,
     ) -> LLMResult:
-        del prompt, temperature
+        del temperature
+        self.prompts.append(prompt)
         if response_schema:
             self.calls.append("planner")
             return LLMResult(

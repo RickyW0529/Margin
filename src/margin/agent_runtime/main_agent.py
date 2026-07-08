@@ -142,6 +142,7 @@ class MainAgentRuntime:
         *,
         run_id: str,
         user_input: str,
+        conversation_context: list[dict[str, str]] | None = None,
     ) -> MainAgentPlanResult:
         """Create a dynamic read-only user-Q&A plan from exposed ExpertAgent cards."""
         input_decision = self._input_guardrail.evaluate(user_input, run_id=run_id)
@@ -183,6 +184,7 @@ class MainAgentRuntime:
         selected_agents = self._select_user_qna_agents(
             user_input=user_input,
             run_id=run_id,
+            conversation_context=conversation_context or [],
         )
 
         steps = tuple(
@@ -292,10 +294,12 @@ class MainAgentRuntime:
         *,
         user_input: str,
         run_id: str,
+        conversation_context: list[dict[str, str]],
     ) -> tuple[str, ...]:
         return self._select_user_qna_agents_with_llm(
             user_input=user_input,
             run_id=run_id,
+            conversation_context=conversation_context,
         )
 
     def _select_user_qna_agents_with_llm(
@@ -303,6 +307,7 @@ class MainAgentRuntime:
         *,
         user_input: str,
         run_id: str,
+        conversation_context: list[dict[str, str]],
     ) -> tuple[str, ...]:
         if self._llm_provider_factory is None:
             raise MainAgentPlanningError("LLM planner is not configured")
@@ -312,6 +317,7 @@ class MainAgentRuntime:
             template,
             variables={
                 "user_request": user_input,
+                "conversation_context": conversation_context,
                 "run_context": {
                     "run_id": run_id,
                     "run_type": AgentRunType.USER_QNA.value,

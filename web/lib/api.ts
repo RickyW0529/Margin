@@ -126,6 +126,9 @@ export type ValuationDiscoveryRunStatus = {
 
 /** MainAgent-backed read-only Q&A response. */
 export type MainAgentQnaResponse = {
+  session_id: string;
+  user_message_id: string;
+  assistant_message_id: string;
   run_id: string;
   answer: string;
   guardrail: {
@@ -149,6 +152,39 @@ export type MainAgentQnaResponse = {
     payload_hash: string;
   }>;
   references: Array<Record<string, string>>;
+};
+
+/** Persisted Agent chat session shown in the sidebar. */
+export type AgentChatSession = {
+  session_id: string;
+  title: string;
+  scope_version_id: string;
+  universe: string;
+  language: "zh" | "en";
+  created_at: string;
+  updated_at: string;
+};
+
+/** Persisted Agent chat message used to restore a conversation. */
+export type AgentChatMessage = {
+  message_id: string;
+  session_id: string;
+  role: "user" | "assistant";
+  content: string;
+  run_id: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
+
+/** Recent Agent chat session list response. */
+export type AgentChatSessionListResponse = {
+  items: AgentChatSession[];
+};
+
+/** One Agent chat session plus ordered messages. */
+export type AgentChatSessionDetail = {
+  session: AgentChatSession;
+  messages: AgentChatMessage[];
 };
 
 /** Persisted automatic stock-analysis schedule. */
@@ -444,6 +480,7 @@ export function fetchResearchRunDetailV2(
 export function askMainAgentQna(requestBody: {
   scope_version_id: string;
   message: string;
+  session_id?: string | null;
   universe?: string;
   language?: "zh" | "en";
 }): Promise<MainAgentQnaResponse> {
@@ -451,6 +488,23 @@ export function askMainAgentQna(requestBody: {
     "/api/v1/agent-runs/user-qna",
     "POST",
     requestBody,
+  );
+}
+
+/** Fetches recent persisted Agent chat sessions for the sidebar. */
+export function fetchAgentChatSessions(): Promise<AgentChatSessionListResponse> {
+  return request<AgentChatSessionListResponse>("/api/v1/agent-chat/sessions", {
+    cache: "no-store",
+  });
+}
+
+/** Fetches one persisted Agent chat session and its ordered messages. */
+export function fetchAgentChatSession(
+  sessionId: string,
+): Promise<AgentChatSessionDetail> {
+  return request<AgentChatSessionDetail>(
+    `/api/v1/agent-chat/sessions/${encodeURIComponent(sessionId)}`,
+    { cache: "no-store" },
   );
 }
 

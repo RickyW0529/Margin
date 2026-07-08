@@ -107,3 +107,38 @@ class AgentRuntimeScheduleRow(Base):
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class AgentChatSessionRow(Base):
+    """One persisted user-facing chat session."""
+
+    __tablename__ = "agent_chat_sessions"
+    __table_args__ = (
+        Index("ix_agent_chat_sessions_updated", "updated_at"),
+    )
+
+    session_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    scope_version_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    universe: Mapped[str] = mapped_column(String(32), nullable=False)
+    language: Mapped[str] = mapped_column(String(8), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class AgentChatMessageRow(Base):
+    """One persisted user or assistant chat message."""
+
+    __tablename__ = "agent_chat_messages"
+    __table_args__ = (
+        Index("ix_agent_chat_messages_session_created", "session_id", "created_at"),
+        Index("ix_agent_chat_messages_run", "run_id"),
+    )
+
+    message_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    session_id: Mapped[str] = mapped_column(String(96), nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    run_id: Mapped[str | None] = mapped_column(String(64))
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
