@@ -39,10 +39,10 @@ class SecretManager:
         self._cache: dict[str, str] = {}
 
     def resolve(self, ref: str) -> str:
-        """Resolve a Secret value by its reference name.
+        """Resolve a legacy env/file Secret value by its reference name.
 
-        Deprecated: prefer ``margin.core.secret_resolution.resolve_named_secret``
-        which reads the encrypted Secret Store first.
+        Prefer ``margin.core.secret_resolution.resolve_named_secret`` in new
+        code so the encrypted Secret Store is checked before this fallback.
 
         Args:
             ref: str: .
@@ -50,14 +50,6 @@ class SecretManager:
         Returns:
             str: .
         """
-        import warnings
-
-        warnings.warn(
-            "SecretManager.resolve is deprecated; use resolve_named_secret "
-            "(encrypted Secret Store) for production credentials.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         if ref in self._cache:
             return self._cache[ref]
 

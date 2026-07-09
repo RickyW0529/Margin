@@ -67,13 +67,7 @@ def test_resolve_named_secret_falls_back_to_env_alias(monkeypatch) -> None:
     """Direct env aliases still work when the store is empty."""
     monkeypatch.delenv("MARGIN_SECRET_TUSHARE_TOKEN", raising=False)
     monkeypatch.setenv("MARGIN_TUSHARE_TOKEN", "alias-token")
-    value = resolve_named_secret(
-        "tushare_token",
-        secret_store=None,  # force no store
-        allow_legacy_env=True,
-    )
-    # secret_store=None still tries AppContainer; monkeypatch resolution via alias first
-    # by injecting empty store path: call with a dummy store that returns nothing.
+
     class _Empty:
         def list_metadata(self, **_kwargs):
             return []
@@ -86,12 +80,19 @@ def test_resolve_named_secret_falls_back_to_env_alias(monkeypatch) -> None:
     assert value == "alias-token"
 
 
-def test_secret_manager_resolve_emits_deprecation(monkeypatch) -> None:
-    """Legacy SecretManager.resolve warns callers."""
-    from margin.core.secret import SecretManager
+def test_resolve_named_secret_legacy_fallback_emits_deprecation(monkeypatch) -> None:
+    """Unified resolution warns only when it must use the legacy fallback."""
+
+    class _Empty:
+        def list_metadata(self, **_kwargs):
+            return []
 
     monkeypatch.setenv("MARGIN_SECRET_DEMO", "x")
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        assert SecretManager().resolve("demo") == "x"
+        assert resolve_named_secret(
+            "demo",
+            secret_store=_Empty(),  # type: ignore[arg-type]
+            allow_legacy_env=True,
+        ) == "x"
     assert any(item.category is DeprecationWarning for item in caught)

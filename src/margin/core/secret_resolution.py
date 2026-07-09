@@ -48,13 +48,19 @@ def resolve_named_secret(
     normalized_secret = secret_name.strip().lower()
     normalized_provider = provider_name.strip().lower() if provider_name else None
 
+    store_is_default = secret_store is None
     store = secret_store if secret_store is not None else _try_default_secret_store()
     if store is not None:
-        value = _resolve_from_store(
-            store,
-            provider_name=normalized_provider,
-            secret_name=normalized_secret,
-        )
+        try:
+            value = _resolve_from_store(
+                store,
+                provider_name=normalized_provider,
+                secret_name=normalized_secret,
+            )
+        except Exception:  # noqa: BLE001 - default store may be unavailable before migrations
+            if not store_is_default:
+                raise
+            value = None
         if value:
             return value
 
