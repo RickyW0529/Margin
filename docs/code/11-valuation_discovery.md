@@ -8,6 +8,7 @@
 - 从 PIT-safe 数据构建量化特征。
 - 运行 ML / 量化筛选策略。
 - 把量化结果、评分、解释、风险和 lineage 发布到 Analysis Mart。
+- 同步写入规范化 Mart：`mart.factor_panel`、`mart.quant_candidate_mart`、`mart.stock_analysis_mart`，并提供 `app.company_profile_page_v1` 给前端/API 使用。
 
 ## 它怎么跑
 
@@ -15,7 +16,7 @@
 公司池快照
   -> Quant Feature Mart
   -> ML / 量化策略
-  -> Analysis Mart
+  -> mart / app serving
   -> Agent 复核
   -> Dashboard 推荐
 ```
@@ -27,6 +28,7 @@
 - `src/margin/valuation_discovery/`：公司池、orchestrator、Analysis Mart。
 - `src/margin/valuation_discovery/quant/`：量化因子、筛选、ML lifecycle。
 - `src/margin/valuation_discovery/quant_adapter.py`：量化结果发布适配。
+- `alembic/versions/20260709_0059_complete_v1_warehouse_layers.py`：旧量化/分析表到新 Mart/App 层的兼容迁移。
 
 ## 输出给谁
 

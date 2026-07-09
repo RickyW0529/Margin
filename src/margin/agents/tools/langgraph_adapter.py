@@ -1,4 +1,4 @@
-"""LangChain-facing adapter that only calls ToolGateway."""
+"""LangGraph-facing adapter that only calls ToolGateway."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from margin.agents.tools.gateway import ToolGateway
 from margin.agents.tools.specs import ToolCallRequest, ToolCallResult, ToolSpec
 
 
-class LangChainRuntimeContext(BaseModel):
-    """LangChainRuntimeContext.."""
+class LangGraphRuntimeContext(BaseModel):
+    """Runtime context passed from a LangGraph node to ToolGateway."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -23,18 +23,15 @@ class LangChainRuntimeContext(BaseModel):
     deadline_ms: int = Field(ge=1)
 
 
-class LangChainToolAdapter:
-    """LangChainToolAdapter.."""
+class LangGraphToolAdapter:
+    """Adapter for LangGraph nodes that delegates every call to ToolGateway."""
 
     def __init__(self, *, tool_spec: ToolSpec, gateway: ToolGateway) -> None:
-        """Init .
+        """Initialize the adapter.
 
         Args:
-            tool_spec: ToolSpec: .
-            gateway: ToolGateway: .
-
-        Returns:
-            None: .
+            tool_spec: Registered tool specification.
+            gateway: Unified ToolGateway.
         """
         self.tool_spec = tool_spec
         self.gateway = gateway
@@ -42,16 +39,16 @@ class LangChainToolAdapter:
     def invoke(
         self,
         input_json: dict,
-        runtime_context: LangChainRuntimeContext,
+        runtime_context: LangGraphRuntimeContext,
     ) -> ToolCallResult:
-        """Invoke.
+        """Invoke a tool through ToolGateway.
 
         Args:
-            input_json: dict: .
-            runtime_context: LangChainRuntimeContext: .
+            input_json: Tool input payload.
+            runtime_context: LangGraph node runtime context.
 
         Returns:
-            ToolCallResult: .
+            ToolGateway result.
         """
         return self.gateway.call(
             ToolCallRequest(

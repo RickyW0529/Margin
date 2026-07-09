@@ -27,6 +27,7 @@ class ProductionWritePolicy(StrEnum):
     WRITE_ANALYSIS_MART = "write_analysis_mart"
     WRITE_PROVIDER_CONFIG = "write_provider_config"
     WRITE_SCHEDULE = "write_schedule"
+    WRITE_BACKFILL_STATE = "write_backfill_state"
 
 
 class ToolPolicy(StrEnum):

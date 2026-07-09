@@ -7,7 +7,6 @@ from typing import Protocol
 
 from sqlalchemy import select
 
-from margin.agent_runtime.context_store import stable_json_hash
 from margin.config_runtime.db_models import (
     AgentFlowVersionRow,
     ConfigResolutionSnapshotEntryRow,
@@ -21,6 +20,7 @@ from margin.config_runtime.models import (
     ConfigResolutionSnapshotEntry,
     QuantAgentProfileConfigVersion,
 )
+from margin.core.hashing import stable_json_hash
 from margin.news.models import ensure_utc
 from margin.strategy.models import ConfigLifecycle
 

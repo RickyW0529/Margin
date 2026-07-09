@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from margin.agent_runtime.context_store import stable_json_hash
+from margin.core.hashing import stable_json_hash
 from margin.data.backfill.planner import BackfillPartition, PartitionStatus
 
 

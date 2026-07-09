@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from margin.agent_runtime.models import ContextArtifact
 from margin.agents.context.budget import estimate_fact_tokens
 from margin.agents.context.fact_extractor import ContextFactExtractor, chat_memory_fact
+from margin.agents.context.lineage import ArtifactLineageValidator
 from margin.agents.context.ranker import ContextFactRanker
 from margin.agents.protocol.models import ContextFact, ContextOmission, ContextPack
 from margin.agents.security.capability import CapabilityToken
@@ -32,18 +33,21 @@ class ContextPackBuilder:
         *,
         extractor: ContextFactExtractor | None = None,
         ranker: ContextFactRanker | None = None,
+        lineage_validator: ArtifactLineageValidator | None = None,
     ) -> None:
         """Init .
 
         Args:
             extractor: ContextFactExtractor | None: .
             ranker: ContextFactRanker | None: .
+            lineage_validator: ArtifactLineageValidator | None: .
 
         Returns:
             None: .
         """
         self._extractor = extractor or ContextFactExtractor()
         self._ranker = ranker or ContextFactRanker()
+        self._lineage_validator = lineage_validator or ArtifactLineageValidator()
 
     def build(
         self,
@@ -84,6 +88,27 @@ class ContextPackBuilder:
             candidate_facts.append(chat_memory_fact(chat_memory_summary))
 
         for artifact in artifacts:
+            lineage = self._lineage_validator.validate(artifact)
+            if not lineage.valid:
+                omissions.append(
+                    ContextOmission(
+                        omitted_ref=artifact.artifact_id,
+                        reason="invalid_lineage",
+                    )
+                )
+                continue
+            if (
+                purpose == "final_answer"
+                and artifact.artifact_type == "stock_analysis_result"
+                and not artifact.evidence_refs
+            ):
+                omissions.append(
+                    ContextOmission(
+                        omitted_ref=artifact.artifact_id,
+                        reason="invalid_lineage",
+                    )
+                )
+                continue
             if (
                 capability_token.allowed_artifact_types
                 and artifact.artifact_type not in capability_token.allowed_artifact_types

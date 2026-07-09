@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from margin.agent_runtime.context_store import stable_json_hash
 from margin.agent_runtime.models import ContextArtifact
 from margin.agents.context.fact_extractor import ContextFactExtractor
 from margin.agents.protocol.models import (
@@ -10,6 +9,7 @@ from margin.agents.protocol.models import (
     DomainContextCapsule,
     DomainTaskRequest,
 )
+from margin.core.hashing import stable_json_hash
 
 CAPSULE_POLICY_VERSION = "domain-capsule-builder-v1"
 

@@ -50,7 +50,7 @@ class WorkerAgentCard(BaseModel):
     description: str
     skills: tuple[WorkerSkill, ...]
     supported_runtimes: tuple[
-        Literal["deterministic", "langchain", "langgraph", "python"],
+        Literal["deterministic", "langgraph", "python"],
         ...,
     ] = ("deterministic",)
     data_access_policy: tuple[DataAccessPolicy, ...] = ()

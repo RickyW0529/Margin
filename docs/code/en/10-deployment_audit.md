@@ -8,7 +8,10 @@ This module makes the system runnable, inspectable, degradable, and auditable.
 - Exposes health checks, Prometheus metrics, and structured logs.
 - Stores audit records, snapshots, task state, and degradation reasons.
 - Reports explicit status when providers, config, or tasks fail.
-- Adds v1 runtime/control-plane tables for agent tasks/artifacts/context, tool audit, prompt render history, backfill campaigns, outbox, DLQ, and freshness state.
+- Keeps the active runtime tables for orchestration, outbox, audit, Agent chat, versioned config, data sync state, Dashboard state, and formal `platform.*` / `ops.*` records.
+- Uses `20260709_0058` to remove unused v1 draft control-plane tables.
+- Uses `20260709_0059` to complete the PIT warehouse layers and migrate legacy table data into the new layers non-destructively.
+- Uses `20260709_0063` to reintroduce formal platform/ops tables for idempotency, runtime environments, config snapshots, outbox, dead letters, backfill, health, and freshness.
 
 ## How It Runs
 
@@ -27,9 +30,10 @@ It does not produce recommendations, but it makes failures diagnosable.
 - `Dockerfile`, `web/Dockerfile`, `docker-compose.yml`
 - `scripts/`
 - `src/margin/core/`
+- `src/margin/platform_runtime/`
 - `src/margin/api/routes/health.py`
 - `/metrics`
-- `alembic/versions/20260708_0053` through `20260708_0057`
+- `alembic/versions/20260708_0053` through `20260709_0063`
 - `src/margin/api/routes/backfill.py`, `freshness.py`, `tool_audit.py`
 
 ## Who Uses It

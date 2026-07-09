@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from margin.agent_runtime.context_store import stable_json_hash
+from margin.core.hashing import stable_json_hash
 from margin.data.backfill.campaign import BackfillCampaign
 
 ALWAYS_INCLUDED_PROVIDERS = {

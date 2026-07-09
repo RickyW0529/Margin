@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from margin.agent_runtime.context_store import stable_json_hash
+from margin.core.hashing import stable_json_hash
 
 PROTOCOL_VERSION = "margin-a2a-v1"
 
@@ -33,18 +33,46 @@ class ContextFact(BaseModel):
     statement: str
     confidence: float = Field(ge=0.0, le=1.0)
     fact_type: Literal[
+        "backtest_metric",
+        "citation_status",
+        "data_freshness",
         "user_constraint",
         "data_status",
+        "factor_score",
+        "financial_metric",
         "quant_signal",
+        "quant_candidate",
         "evidence_claim",
+        "market_metric",
+        "platform_status",
         "risk_flag",
+        "valuation_metric",
         "metric",
         "open_question",
         "decision",
     ]
+    subject_type: Literal[
+        "stock",
+        "company",
+        "industry",
+        "run",
+        "dataset",
+        "tool",
+        "user",
+        "unknown",
+    ] = "unknown"
+    subject_id: str = ""
+    value_json: dict[str, Any] | None = None
+    as_of_date: date | None = None
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
+    available_at: datetime | None = None
     artifact_refs: tuple[str, ...] = ()
     evidence_refs: tuple[str, ...] = ()
     source_refs: tuple[str, ...] = ()
+    source_locators: tuple[str, ...] = ()
+    freshness_status: Literal["fresh", "stale", "unknown"] = "unknown"
+    pii_or_secret_risk: bool = False
     valid_at: datetime | None = None
 
 
@@ -61,7 +89,12 @@ class ContextOmission(BaseModel):
         "unsafe",
         "stale",
         "not_authorized",
+        "permission_denied",
+        "unsafe_key",
+        "raw_payload_forbidden",
+        "invalid_lineage",
     ]
+    summary: str = ""
 
 
 class ContextPack(BaseModel):
@@ -240,6 +273,7 @@ class DomainContextCapsule(BaseModel):
     source_refs: tuple[str, ...] = ()
     artifact_refs: tuple[str, ...] = ()
     open_questions: tuple[str, ...] = ()
+    conflicting_facts: tuple[dict[str, Any], ...] = ()
     recommended_next_steps: tuple[str, ...] = ()
     compression_policy_version: str
     input_hash: str

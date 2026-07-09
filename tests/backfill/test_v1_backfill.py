@@ -216,6 +216,35 @@ def test_quality_report_blocks_publish_on_schema_drift() -> None:
         publisher.publish(campaign, report)
 
 
+def test_backfill_gap_report_records_missing_provider_data() -> None:
+    """Provider gaps should be explicit in the quality report and block publish."""
+    service = BackfillCampaignService(today=date(2026, 7, 8))
+    quality = BackfillQualityService()
+    campaign = service.init_campaign(
+        campaign_name="provider_gap",
+        providers=("tushare",),
+        end_date=date(2006, 1, 31),
+    )
+
+    report = quality.build_report(
+        campaign=campaign,
+        endpoint_results=[
+            {
+                "provider_name": "tushare",
+                "endpoint_name": "daily",
+                "expected_partitions": 1,
+                "completed_partitions": 0,
+                "missing_dates": ["2006-01-04"],
+                "schema_drift": False,
+            }
+        ],
+    )
+
+    assert report.publish_allowed is False
+    assert report.endpoint_reports[0].quality_status == "blocked"
+    assert report.endpoint_reports[0].missing_dates == ("2006-01-04",)
+
+
 def test_pit_promotion_no_future_financials() -> None:
     """test_pit_promotion_no_future_financials implementation.
 

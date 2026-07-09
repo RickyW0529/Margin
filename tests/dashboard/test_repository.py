@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from margin.agent_runtime.context_store import MemoryAgentContextStore
-from margin.agent_runtime.expert_agents import StockAnalystAgent
+from margin.agents.workers.dashboard_publisher_worker import DashboardPublisherWorker
 from margin.dashboard.db_models import (
     DashboardFeedbackRow,
     DashboardItemRow,
@@ -271,7 +271,7 @@ def test_sqlalchemy_candidate_list_prefers_stock_analyst_adjusted_projection(
         ),
     ]
     context_store = MemoryAgentContextStore()
-    analyst = StockAnalystAgent(
+    analyst = DashboardPublisherWorker(
         write_context_artifact=context_store.add_artifact,
         dashboard_repository=repo,
     )
@@ -322,7 +322,9 @@ def test_sqlalchemy_candidate_list_prefers_stock_analyst_adjusted_projection(
             "000002.SZ",
         ]
         assert [item.adjusted_weight for item in response.items] == [0.4, 0.4]
-        assert {item.agent_adjustment["source"] for item in response.items} == {"StockAnalystAgent"}
+        assert {item.agent_adjustment["source"] for item in response.items} == {
+            "DashboardPublisherWorker"
+        }
         artifact = context_store.get_artifact("ctx_ar_sql_projection_portfolio_adjustment")
         assert artifact is not None
         assert artifact.payload_json["removed_security_ids"] == ["000003.SZ"]

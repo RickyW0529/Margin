@@ -8,6 +8,7 @@
 - 管理数据库连接、迁移、事务和测试隔离。
 - 提供 Provider 抽象、注册表、密钥存储和健康检查。
 - 记录审计、快照、日志、指标、降级状态和后台任务状态。
+- 提供正式 platform runtime repository，保存幂等、outbox、dead-letter、健康和数据新鲜度运行状态。
 
 ## 它怎么跑
 
@@ -26,6 +27,7 @@
 - `src/margin/settings.py`：全局配置。
 - `src/margin/storage/`：数据库和 session。
 - `src/margin/core/`：Provider、secret、audit、metrics、degradation 等共享逻辑。
+- `src/margin/platform_runtime/`：平台运行态表和 repository。
 - `src/margin/api/`：FastAPI 依赖和中间件。
 - `src/margin/worker.py`：后台调度入口。
 

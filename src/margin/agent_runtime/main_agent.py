@@ -7,11 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from margin.agent_runtime.cards import AgentCardRegistry
-from margin.agent_runtime.context_store import (
-    AgentContextStore,
-    make_context_artifact,
-    stable_json_hash,
-)
+from margin.agent_runtime.context_store import AgentContextStore, make_context_artifact
 from margin.agent_runtime.guardrails import (
     GuardrailDecisionType,
     InputGuardrail,
@@ -36,6 +32,7 @@ from margin.agents.runtime.executor_registry import (
     ExecutorRegistry,
     default_qna_executor_registry,
 )
+from margin.core.hashing import stable_json_hash
 from margin.prompts.agent_runtime import agent_runtime_prompt_templates
 from margin.prompts.registry import PromptRegistry
 from margin.prompts.renderer import PromptRenderer

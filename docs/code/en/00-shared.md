@@ -8,6 +8,7 @@ This module is the common foundation used by the rest of the project.
 - Manages database sessions, migrations, transactions, and test isolation.
 - Provides provider abstractions, registries, secret storage, and health checks.
 - Records audit events, snapshots, logs, metrics, degradation state, and worker state.
+- Provides the formal platform runtime repository for idempotency, outbox, dead-letter, health, and data freshness state.
 
 ## How It Runs
 
@@ -26,6 +27,7 @@ Business modules should not reimplement connection handling, secrets, logs, or a
 - `src/margin/settings.py`
 - `src/margin/storage/`
 - `src/margin/core/`
+- `src/margin/platform_runtime/`
 - `src/margin/api/`
 - `src/margin/worker.py`
 

@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from margin.agent_runtime.cards import default_agent_card_registry
 from margin.agent_runtime.chat_repository import (
     AgentChatRepository,
     MemoryAgentChatRepository,
@@ -16,12 +14,9 @@ from margin.agent_runtime.context_store import (
     MemoryAgentContextStore,
     make_context_artifact,
 )
-from margin.agent_runtime.main_agent import MainAgentRuntime
-from margin.agent_runtime.models import AgentExecutionStatus, AgentStep
 from margin.agent_runtime.schedules import MemoryAgentScheduleRepository
-from margin.agent_runtime.step_definitions import load_scheduled_stock_analysis_flow
+from margin.agents.runtime.service import AgentRuntimeService
 from margin.api.main import create_app
-from margin.api.routes.agent_runtime import UserQnaRunRequest, _execute_user_qna_plan
 from margin.dashboard.models import ResearchItem, ResearchRun
 from margin.dashboard.repository import MemoryDashboardRepository
 from margin.dashboard.service import DashboardServiceBundle
@@ -36,19 +31,7 @@ def test_user_qna_agent_run_returns_main_agent_trace() -> None:
     Returns:
         None: .
     """
-    llm_provider = _PlannerAndAnswerLLMProvider(
-        plan_response={
-            "plan_id": "plan_ar_qna_recommendation",
-            "fixed_flow": False,
-            "steps": [
-                {
-                    "expert_agent_name": "DataAnalystAgent",
-                    "skill_id": "answer_with_analysis_artifacts",
-                }
-            ],
-        },
-        answer="LLM 基于当前推荐数据回答：000001.SZ。",
-    )
+    llm_provider = _AnswerLLMProvider("LLM 基于当前推荐数据回答：000001.SZ。")
     client = _client_with_agent_runtime(llm_provider=llm_provider)
 
     response = client.post(
@@ -66,10 +49,13 @@ def test_user_qna_agent_run_returns_main_agent_trace() -> None:
     assert "000001.SZ" in body["answer"]
     assert body["answer"] == "LLM 基于当前推荐数据回答：000001.SZ。"
     assert body["guardrail"]["allowed"] is True
-    assert body["agent_trace"]["steps"][0]["expert_agent_name"] == "DataAnalystAgent"
-    assert body["artifacts"][0]["artifact_type"] == "analysis_table"
-    assert body["artifacts"][1]["artifact_type"] == "explanation"
-    assert llm_provider.calls == ["planner", "answer"]
+    assert body["agent_trace"]["steps"][0]["expert_agent_name"].endswith("ExpertAgent")
+    assert {artifact["artifact_type"] for artifact in body["artifacts"]} >= {
+        "analysis_table",
+        "qna_answer",
+        "final_user_answer",
+    }
+    assert llm_provider.calls == ["answer"]
 
 
 def test_user_qna_greeting_runs_general_llm_agent() -> None:
@@ -78,19 +64,7 @@ def test_user_qna_greeting_runs_general_llm_agent() -> None:
     Returns:
         None: .
     """
-    llm_provider = _PlannerAndAnswerLLMProvider(
-        plan_response={
-            "plan_id": "plan_ar_qna_greeting",
-            "fixed_flow": False,
-            "steps": [
-                {
-                    "expert_agent_name": "GeneralQnaAgent",
-                    "skill_id": "answer_general_qna",
-                }
-            ],
-        },
-        answer="你好，我是 Margin。",
-    )
+    llm_provider = _AnswerLLMProvider("你好，我是 Margin。")
     client = _client_with_agent_runtime(llm_provider=llm_provider)
 
     response = client.post(
@@ -104,15 +78,14 @@ def test_user_qna_greeting_runs_general_llm_agent() -> None:
     assert body["answer"] == "你好，我是 Margin。"
     assert body["agent_trace"]["steps"] == [
         {
-            "step_id": "qna_1_generalqna",
-            "expert_agent_name": "GeneralQnaAgent",
+            "step_id": "dt_general",
+            "expert_agent_name": "GeneralQnaExpertAgent",
             "skill_id": "answer_general_qna",
             "status": "succeeded",
         }
     ]
-    assert body["artifacts"][0]["artifact_type"] == "explanation"
-    assert body["artifacts"][0]["producer_agent"] == "GeneralQnaAgent"
-    assert llm_provider.calls == ["planner", "answer"]
+    assert any(artifact["artifact_type"] == "qna_answer" for artifact in body["artifacts"])
+    assert llm_provider.calls == ["answer"]
 
 
 def test_user_qna_persists_chat_session_and_uses_context_for_followup() -> None:
@@ -121,19 +94,7 @@ def test_user_qna_persists_chat_session_and_uses_context_for_followup() -> None:
     Returns:
         None: .
     """
-    llm_provider = _PlannerAndAnswerLLMProvider(
-        plan_response={
-            "plan_id": "plan_ar_qna_context",
-            "fixed_flow": False,
-            "steps": [
-                {
-                    "expert_agent_name": "DataAnalystAgent",
-                    "skill_id": "answer_with_analysis_artifacts",
-                }
-            ],
-        },
-        answer="LLM 基于当前推荐数据回答：000001.SZ。",
-    )
+    llm_provider = _AnswerLLMProvider("LLM 基于当前推荐数据回答：000001.SZ。")
     chat_repository = MemoryAgentChatRepository()
     client = _client_with_agent_runtime(
         llm_provider=llm_provider,
@@ -241,7 +202,7 @@ def test_agent_artifact_detail_returns_persisted_payload() -> None:
         artifact_id="ctx_test_table",
         run_id="ar_qna_1",
         artifact_type="analysis_table",
-        producer_agent="DataAnalystAgent",
+        producer_agent="DataQuestionWorker",
         payload_json={
             "columns": ["symbol", "score"],
             "rows": [
@@ -263,7 +224,7 @@ def test_agent_artifact_detail_returns_persisted_payload() -> None:
     body = response.json()
     assert body["artifact_id"] == "ctx_test_table"
     assert body["artifact_type"] == "analysis_table"
-    assert body["producer_agent"] == "DataAnalystAgent"
+    assert body["producer_agent"] == "DataQuestionWorker"
     assert body["payload_json"]["rows"][0]["symbol"] == "000001.SZ"
     assert body["payload_json"]["raw_text"] == "[redacted]"
     assert body["payload_json"]["nested"]["provider_token"] == "[redacted]"
@@ -284,66 +245,6 @@ def test_agent_artifact_detail_returns_404_for_missing_artifact() -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == "agent_artifact_not_found"
-
-
-def test_user_qna_execution_tracks_step_status_by_step_id() -> None:
-    """Test that repeated agent names cannot collapse execution status.
-
-    Returns:
-        None: .
-    """
-    llm_provider = _PlannerAndAnswerLLMProvider(
-        plan_response={"steps": []},
-        answer="你好，我是 Margin。",
-    )
-    runtime = MainAgentRuntime(
-        context_store=MemoryAgentContextStore(),
-        card_registry=default_agent_card_registry(),
-        scheduled_flow=load_scheduled_stock_analysis_flow(),
-        llm_provider_factory=lambda: llm_provider,
-    )
-    services = DashboardServiceBundle.in_memory(
-        dashboard_repository=MemoryDashboardRepository(),
-    )
-
-    execution = _execute_user_qna_plan(
-        request=UserQnaRunRequest(scope_version_id="scope-1", message="你好"),
-        run_id="ar_qna_steps",
-        plan_steps=(
-            AgentStep(
-                step_id="qna_1_general",
-                run_id="ar_qna_steps",
-                expert_agent_name="GeneralQnaAgent",
-                skill_id="answer_general_qna",
-                status=AgentExecutionStatus.PENDING,
-            ),
-            AgentStep(
-                step_id="qna_2_same_unknown",
-                run_id="ar_qna_steps",
-                expert_agent_name="RepeatedAgent",
-                skill_id="x",
-                status=AgentExecutionStatus.PENDING,
-            ),
-            AgentStep(
-                step_id="qna_3_same_unknown",
-                run_id="ar_qna_steps",
-                expert_agent_name="RepeatedAgent",
-                skill_id="y",
-                status=AgentExecutionStatus.PENDING,
-            ),
-        ),
-        runtime=runtime,
-        services=services,
-        strategy_service=_FakeStrategyService(),
-        llm_provider_factory=lambda: llm_provider,
-        conversation_context=[],
-    )
-
-    assert execution.step_statuses == {
-        "qna_1_general": AgentExecutionStatus.SUCCEEDED,
-        "qna_2_same_unknown": AgentExecutionStatus.PARTIAL,
-        "qna_3_same_unknown": AgentExecutionStatus.PARTIAL,
-    }
 
 
 def test_stock_analysis_schedule_can_be_saved_and_read() -> None:
@@ -470,19 +371,8 @@ def _client_with_agent_runtime(
     )
     dashboard_repository.add_run(run)
     dashboard_repository.add_items([item])
-    fallback_llm_provider = llm_provider or _PlannerAndAnswerLLMProvider(
-        plan_response={
-            "plan_id": "plan_ar_qna_default",
-            "fixed_flow": False,
-            "steps": [
-                {
-                    "expert_agent_name": "DataAnalystAgent",
-                    "skill_id": "answer_with_analysis_artifacts",
-                }
-            ],
-        },
-        answer="LLM 默认测试回答：000001.SZ。",
-    )
+    context_store = context_store or MemoryAgentContextStore()
+    fallback_llm_provider = llm_provider or _AnswerLLMProvider("LLM 默认测试回答：000001.SZ。")
 
     def llm_provider_factory() -> DeterministicLLMProvider:
         """Process llm_provider_factory.
@@ -495,15 +385,13 @@ def _client_with_agent_runtime(
     return TestClient(
         create_app(
             dashboard_services=bundle,
-            main_agent_runtime=MainAgentRuntime(
+            agent_runtime_service=AgentRuntimeService(
                 context_store=context_store or MemoryAgentContextStore(),
-                card_registry=default_agent_card_registry(),
-                scheduled_flow=load_scheduled_stock_analysis_flow(),
+                dashboard_services=bundle,
                 llm_provider_factory=llm_provider_factory,
             ),
             agent_schedule_repository=MemoryAgentScheduleRepository(),
             agent_chat_repository=chat_repository or MemoryAgentChatRepository(),
-            strategy_service=_FakeStrategyService(),
             llm_provider_factory=llm_provider_factory,
         )
     )
@@ -521,40 +409,12 @@ def _idempotency_headers(key: str) -> dict[str, str]:
     return {"Idempotency-Key": key}
 
 
-class _FakeStrategyService:
-    """Fake strategy service exposing one active research scope.."""
+class _AnswerLLMProvider(DeterministicLLMProvider):
+    """Test LLM that returns a free-form answer."""
 
-    def ensure_current_research_scope(self, owner_id: str) -> SimpleNamespace:
-        """Return the active scope.
-
-        Args:
-            owner_id: str: .
-
-        Returns:
-            SimpleNamespace: .
-        """
-        return SimpleNamespace(
-            owner_id=owner_id,
-            version_id="scope-1",
-            lifecycle="active",
-        )
-
-
-class _PlannerAndAnswerLLMProvider(DeterministicLLMProvider):
-    """Test LLM that returns a structured plan first and free-form answer later.."""
-
-    def __init__(self, *, plan_response: dict[str, object], answer: str) -> None:
-        """Helper _init__.
-
-        Args:
-            plan_response: dict[str, object]: .
-            answer: str: .
-
-        Returns:
-            None: .
-        """
+    def __init__(self, answer: str) -> None:
+        """Initialize with one deterministic answer."""
         super().__init__(response={})
-        self._plan_response = plan_response
         self._answer = answer
         self.calls: list[str] = []
         self.prompts: list[str] = []
@@ -578,14 +438,8 @@ class _PlannerAndAnswerLLMProvider(DeterministicLLMProvider):
         """
         del temperature
         self.prompts.append(prompt)
-        if response_schema:
-            self.calls.append("planner")
-            return LLMResult(
-                output=self._plan_response,
-                model="test",
-                success=True,
-                latency_ms=0.0,
-            )
+        if response_schema is not None:
+            raise AssertionError("v1 API Q&A tests must not call the old planner")
         self.calls.append("answer")
         return LLMResult(
             output={"content": self._answer},

@@ -8,12 +8,15 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from margin.agents.tools.audit import InMemoryToolAuditStore
+from margin.agents.tools.audit import InMemoryToolAuditStore, SQLAlchemyToolAuditStore
 from margin.api.dependencies import get_tool_audit_store
 
 router = APIRouter(prefix="/api/v1", tags=["tool-audit"])
 
-ToolAuditStore = Annotated[InMemoryToolAuditStore, Depends(get_tool_audit_store)]
+ToolAuditStore = Annotated[
+    InMemoryToolAuditStore | SQLAlchemyToolAuditStore,
+    Depends(get_tool_audit_store),
+]
 
 
 class ToolCallAuditResponse(BaseModel):
@@ -50,7 +53,7 @@ def get_tool_call_audit(
     Returns:
         ToolCallAuditResponse: .
     """
-    record = audit_store.records.get(audit_ref)
+    record = audit_store.get_record(audit_ref)
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

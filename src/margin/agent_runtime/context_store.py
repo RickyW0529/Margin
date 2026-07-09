@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -23,25 +21,7 @@ from margin.agent_runtime.models import (
     ContextArtifact,
     GuardrailDecision,
 )
-
-
-def stable_json_hash(payload: Any) -> str:
-    """Return a stable sha256 hash for JSON-compatible payloads.
-
-    Args:
-        payload: Any: .
-
-    Returns:
-        str: .
-    """
-    raw = json.dumps(
-        payload,
-        sort_keys=True,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        default=str,
-    ).encode()
-    return f"sha256:{hashlib.sha256(raw).hexdigest()}"
+from margin.core.hashing import stable_json_hash
 
 
 def make_context_artifact(

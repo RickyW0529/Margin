@@ -5,17 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from margin.agent_runtime.cards import default_agent_card_registry
 from margin.agent_runtime.context_store import MemoryAgentContextStore
-from margin.agent_runtime.expert_agents import StockAnalystAgent
-from margin.agent_runtime.main_agent import MainAgentRuntime
 from margin.agent_runtime.quant_agent import CURRENT_QUANT_AGENT_ML_PROFILE
 from margin.agent_runtime.schedules import (
-    ScheduledStockAnalysisRunner,
     StockAnalysisSchedule,
     compute_next_run_at,
 )
 from margin.agent_runtime.step_definitions import load_scheduled_stock_analysis_flow
+from margin.agents.runtime.scheduled import ScheduledAgentRuntimeRunner
+from margin.agents.workers.dashboard_publisher_worker import DashboardPublisherWorker
 from margin.config_runtime.bootstrap import SCHEDULED_QUANT_PROFILE_KEY
 from margin.config_runtime.models import (
     AgentFlowConfigVersion,
@@ -68,18 +66,13 @@ def test_compute_next_run_at_rolls_to_next_local_day() -> None:
     assert next_run == datetime(2026, 7, 8, 0, 30, tzinfo=UTC)
 
 
-def test_scheduled_runner_triggers_main_agent_and_refresh() -> None:
-    """Test that due schedules trigger MainAgent planning and valuation refresh.
+def test_scheduled_runner_triggers_v1_plan_and_refresh() -> None:
+    """Test that due schedules trigger v1 planning and valuation refresh.
 
     Returns:
         None: .
     """
     context_store = MemoryAgentContextStore()
-    main_agent = MainAgentRuntime(
-        context_store=context_store,
-        card_registry=default_agent_card_registry(),
-        scheduled_flow=load_scheduled_stock_analysis_flow(),
-    )
     valuation_service = _FakeValuationService()
     repository = _DueScheduleRepository(
         StockAnalysisSchedule(
@@ -93,26 +86,26 @@ def test_scheduled_runner_triggers_main_agent_and_refresh() -> None:
         )
     )
 
-    processed = ScheduledStockAnalysisRunner(
+    processed = ScheduledAgentRuntimeRunner(
         repository=repository,
-        main_agent=main_agent,
+        context_store=context_store,
         valuation_service=valuation_service,
         scope_resolver=lambda scope: "scope-1" if scope == "scope-current" else scope,
     ).run_once(now=datetime(2026, 7, 7, 0, 31, tzinfo=UTC))
 
     assert processed == 1
-    assert context_store.list_steps("ar_sched_20260707_0830")[0].expert_agent_name == (
-        "DataInspectionAgent"
-    )
     assert len(valuation_service.calls) == 1
     scope_version_id, decision_at, idempotency_key, metadata = valuation_service.calls[0]
     assert scope_version_id == "scope-1"
     assert decision_at == datetime(2026, 7, 7, 0, 31, tzinfo=UTC)
     assert idempotency_key == "stock_analysis_daily:2026-07-07"
     assert metadata is not None
+    assert metadata["agent_runtime_version"] == "scheduled-agent-runtime-v1"
     assert metadata["agent_run_id"] == "ar_sched_20260707_0830"
     assert metadata["schedule_id"] == "stock_analysis_daily"
     assert metadata["universe"] == "ALL_A"
+    assert metadata["global_plan"]["created_by"] == "MainAgent"
+    assert metadata["global_plan"]["domain_task_count"] >= 3
     assert metadata["quant_agent_strategy_profile"]["strategy_family"] == ("ml_lgbm_lifecycle")
     assert metadata["quant_strategy"]["strategy_family"] == "ml_lgbm_lifecycle"
     assert metadata["agent_flow"]["dependency_waves"][:2] == [
@@ -129,12 +122,16 @@ def test_scheduled_runner_triggers_main_agent_and_refresh() -> None:
     assert metadata["agent_flow"]["branches"]["fusion"] == ["fusion_research"]
     assert metadata["agent_flow"]["quant_branch_uses_websearch"] is False
     artifacts = context_store.list_artifacts("ar_sched_20260707_0830")
-    assert [artifact.artifact_type for artifact in artifacts] == ["valuation_refresh"]
-    assert artifacts[0].producer_agent == "QuantAgent"
-    assert artifacts[0].payload_json["valuation_refresh_run_id"] == "refresh-1"
-    assert artifacts[0].payload_json["dashboard_projection"] == "expected_after_refresh"
+    assert [artifact.artifact_type for artifact in artifacts] == [
+        "scheduled_global_plan",
+        "valuation_refresh",
+    ]
+    assert artifacts[0].producer_agent == "MainAgent"
+    assert artifacts[1].producer_agent == "QuantExpertAgent"
+    assert artifacts[1].payload_json["valuation_refresh_run_id"] == "refresh-1"
+    assert artifacts[1].payload_json["dashboard_projection"] == "expected_after_refresh"
     assert (
-        artifacts[0].payload_json["quant_agent_strategy_profile"]["profile_id"]
+        artifacts[1].payload_json["quant_agent_strategy_profile"]["profile_id"]
         == "liquid-large-mid-lgbm-recent-trend80-ddstop-v1"
     )
     assert repository.saved.last_triggered_at == datetime(2026, 7, 7, 0, 31, tzinfo=UTC)
@@ -169,11 +166,6 @@ def test_scheduled_runner_records_runtime_config_resolution_snapshot() -> None:
     )
     config_resolver = ConfigResolver(config_repository)
     context_store = MemoryAgentContextStore()
-    main_agent = MainAgentRuntime(
-        context_store=context_store,
-        card_registry=default_agent_card_registry(),
-        scheduled_flow=load_scheduled_stock_analysis_flow(),
-    )
     valuation_service = _FakeValuationService()
     repository = _DueScheduleRepository(
         StockAnalysisSchedule(
@@ -187,9 +179,9 @@ def test_scheduled_runner_records_runtime_config_resolution_snapshot() -> None:
         )
     )
 
-    ScheduledStockAnalysisRunner(
+    ScheduledAgentRuntimeRunner(
         repository=repository,
-        main_agent=main_agent,
+        context_store=context_store,
         valuation_service=valuation_service,
         scope_resolver=lambda scope: scope,
         config_resolver=config_resolver,
@@ -218,11 +210,6 @@ def test_scheduled_runner_can_drive_full_adjusted_dashboard_projection() -> None
     """
     decision_at = datetime(2026, 7, 7, 0, 31, tzinfo=UTC)
     context_store = MemoryAgentContextStore()
-    main_agent = MainAgentRuntime(
-        context_store=context_store,
-        card_registry=default_agent_card_registry(),
-        scheduled_flow=load_scheduled_stock_analysis_flow(),
-    )
     dashboard = MemoryDashboardRepository()
     review_repository = MemoryResearchDeltaRepository()
     valuation_repository = MemoryValuationDiscoveryRepository()
@@ -242,7 +229,7 @@ def test_scheduled_runner_can_drive_full_adjusted_dashboard_projection() -> None
             review_repository=review_repository,
             valuation_repository=valuation_repository,
             dashboard_repository=dashboard,
-            stock_analyst_agent=StockAnalystAgent(
+            stock_analyst_agent=DashboardPublisherWorker(
                 write_context_artifact=context_store.add_artifact,
                 dashboard_repository=dashboard,
             ),
@@ -261,9 +248,9 @@ def test_scheduled_runner_can_drive_full_adjusted_dashboard_projection() -> None
         )
     )
 
-    processed = ScheduledStockAnalysisRunner(
+    processed = ScheduledAgentRuntimeRunner(
         repository=repository,
-        main_agent=main_agent,
+        context_store=context_store,
         valuation_service=valuation_service,
         scope_resolver=lambda scope: "scope-1" if scope == "scope-current" else scope,
     ).run_once(now=decision_at)
@@ -291,7 +278,9 @@ def test_scheduled_runner_can_drive_full_adjusted_dashboard_projection() -> None
     )
     assert [item.security_id for item in response.items] == ["000001.SZ", "000002.SZ"]
     assert [item.adjusted_weight for item in response.items] == [0.4, 0.4]
-    assert {item.agent_adjustment["source"] for item in response.items} == {"StockAnalystAgent"}
+    assert {item.agent_adjustment["source"] for item in response.items} == {
+        "DashboardPublisherWorker"
+    }
     portfolio_artifact = context_store.get_artifact(
         "ctx_ar_sched_20260707_0830_portfolio_adjustment"
     )

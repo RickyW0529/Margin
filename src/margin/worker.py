@@ -292,17 +292,17 @@ def main() -> None:
             logger.exception("valuation_discovery_sweep_failed")
 
     def scheduled_agent_job() -> None:
-        """Trigger due user-configured MainAgent schedules.
+        """Trigger due user-configured v1 Agent schedules.
 
         Returns:
             None: .
         """
         try:
-            from margin.agent_runtime.schedules import ScheduledStockAnalysisRunner
+            from margin.agents.runtime.scheduled import ScheduledAgentRuntimeRunner
             from margin.api.dependencies import (
+                get_agent_context_store,
                 get_agent_schedule_repository,
                 get_config_resolver,
-                get_main_agent_runtime,
                 get_strategy_service,
                 get_valuation_discovery_service_for_api,
             )
@@ -326,9 +326,9 @@ def main() -> None:
                     ).version_id
                 )
 
-            processed_count = ScheduledStockAnalysisRunner(
+            processed_count = ScheduledAgentRuntimeRunner(
                 repository=get_agent_schedule_repository(),
-                main_agent=get_main_agent_runtime(),
+                context_store=get_agent_context_store(),
                 valuation_service=get_valuation_discovery_service_for_api(),
                 scope_resolver=resolve_scope,
                 config_resolver=get_config_resolver(),

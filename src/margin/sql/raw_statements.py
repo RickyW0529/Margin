@@ -14,6 +14,9 @@ PGVECTOR_EXTENSION = text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
 
 NON_SYSTEM_TABLES = text(
     "SELECT schemaname, tablename FROM pg_tables "
+    "WHERE schemaname NOT IN ('pg_catalog', 'information_schema') "
+    "UNION ALL "
+    "SELECT schemaname, matviewname AS tablename FROM pg_matviews "
     "WHERE schemaname NOT IN ('pg_catalog', 'information_schema')"
 )
 

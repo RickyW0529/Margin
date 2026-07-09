@@ -156,18 +156,21 @@ def test_runtime_factory_dependency_uses_active_versioned_config(
     engine.dispose()
 
 
-def test_get_main_agent_runtime_returns_cached_runtime() -> None:
-    """Test that the v0.4 MainAgent runtime dependency is cached.
+def test_get_agent_runtime_service_returns_cached_runtime() -> None:
+    """Test that the v1 Agent runtime service dependency is cached.
 
     Returns:
         None: .
     """
     from margin.agent_runtime.context_store import SQLAlchemyAgentContextStore
-    from margin.api.dependencies import get_main_agent_runtime
+    from margin.agents.runtime.service import AgentRuntimeService
+    from margin.api.dependencies import get_agent_context_store, get_agent_runtime_service
 
-    get_main_agent_runtime.cache_clear()
-    first = get_main_agent_runtime()
-    second = get_main_agent_runtime()
+    get_agent_context_store.cache_clear()
+    get_agent_runtime_service.cache_clear()
+    first = get_agent_runtime_service()
+    second = get_agent_runtime_service()
 
     assert first is second
-    assert isinstance(first._context_store, SQLAlchemyAgentContextStore)
+    assert isinstance(first, AgentRuntimeService)
+    assert isinstance(get_agent_context_store(), SQLAlchemyAgentContextStore)

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated
 from uuid import uuid4
@@ -17,48 +15,28 @@ from margin.agent_runtime.chat_repository import (
     new_chat_session,
     summarize_messages_for_prompt,
 )
-from margin.agent_runtime.context_store import make_context_artifact
-from margin.agent_runtime.expert_agents import DataAnalystAgent, GeneralQnaAgent
-from margin.agent_runtime.main_agent import MainAgentPlanningError, MainAgentRuntime
-from margin.agent_runtime.models import AgentExecutionStatus, AgentStep, ContextArtifact
 from margin.agent_runtime.schedules import (
     AgentScheduleRepository,
     StockAnalysisSchedule,
 )
-from margin.agents.context.router import ContextRouter
+from margin.agents.runtime.service import (
+    AgentInputBlockedError,
+    AgentRuntimeService,
+    AgentRuntimeUnavailableError,
+    UserQnaCommand,
+)
 from margin.api.dependencies import (
     get_agent_chat_repository,
+    get_agent_runtime_service,
     get_agent_schedule_repository,
-    get_dashboard_services,
-    get_llm_provider_factory,
-    get_main_agent_runtime,
-    get_strategy_service,
     require_idempotency_key,
     require_local_admin,
 )
-from margin.dashboard.service import DashboardServiceBundle
-from margin.research.llm import LLMProvider
-from margin.strategy.service import StrategyService
+from margin.api.serialization import safe_artifact_payload
 
 router = APIRouter(prefix="/api/v1", tags=["agent-runtime"])
-_SENSITIVE_PAYLOAD_KEYS = (
-    "api_key",
-    "authorization",
-    "password",
-    "provider_token",
-    "raw_text",
-    "secret",
-    "system_prompt",
-    "token",
-)
 
-RuntimeDep = Annotated[MainAgentRuntime, Depends(get_main_agent_runtime)]
-DashboardServices = Annotated[DashboardServiceBundle, Depends(get_dashboard_services)]
-StrategyServices = Annotated[StrategyService, Depends(get_strategy_service)]
-LLMProviderFactory = Annotated[
-    Callable[[], LLMProvider],
-    Depends(get_llm_provider_factory),
-]
+RuntimeDep = Annotated[AgentRuntimeService, Depends(get_agent_runtime_service)]
 ScheduleRepo = Annotated[
     AgentScheduleRepository,
     Depends(get_agent_schedule_repository),
@@ -208,36 +186,19 @@ class StockAnalysisScheduleResponse(BaseModel):
     next_run_at: datetime | None
     updated_at: datetime
 
-
-@dataclass(frozen=True)
-class _UserQnaExecution:
-    """Class implementing _UserQnaExecution.."""
-
-    answer: str
-    step_statuses: dict[str, AgentExecutionStatus]
-    artifacts: tuple[ContextArtifact, ...]
-    references: tuple[dict[str, str], ...]
-
-
 @router.post("/agent-runs/user-qna", response_model=UserQnaRunResponse)
 def run_user_qna_agent(
     request: UserQnaRunRequest,
     runtime: RuntimeDep,
     chat_repository: ChatRepo,
-    services: DashboardServices,
-    strategy_service: StrategyServices,
-    llm_provider_factory: LLMProviderFactory,
     _idempotency_key: IdempotencyKey,
 ) -> UserQnaRunResponse:
-    """Run a read-only user Q&A request through MainAgent-planned ExpertAgents.
+    """Run a read-only user Q&A request through the v1 Agent runtime service.
 
     Args:
         request: UserQnaRunRequest: .
         runtime: RuntimeDep: .
         chat_repository: ChatRepo: .
-        services: DashboardServices: .
-        strategy_service: StrategyServices: .
-        llm_provider_factory: LLMProviderFactory: .
         _idempotency_key: IdempotencyKey: .
 
     Returns:
@@ -295,60 +256,34 @@ def run_user_qna_agent(
     )
 
     run_id = f"ar_qna_{uuid4().hex}"
-    context_pack = ContextRouter().build_context_pack(
-        run_id=run_id,
-        requester_agent="MainAgent",
-        target_agent="MainAgent",
-        purpose="user_qna_planning",
-        token_budget=4000,
-        included_chat_summary_ref=f"chat_summary:{session_id}",
-    )
-    runtime.add_context_artifact(
-        make_context_artifact(
-            artifact_id=context_pack.context_pack_id,
-            run_id=run_id,
-            artifact_type="context_pack",
-            producer_agent="MainAgent",
-            payload_json=context_pack.model_dump(mode="json"),
-            source_refs=(f"chat_summary:{session_id}",),
-        )
-    )
     try:
-        plan_result = runtime.create_user_qna_plan(
-            run_id=run_id,
-            user_input=request.message,
-            conversation_context=conversation_context,
-            context_pack=context_pack,
+        execution = runtime.run_user_qna(
+            UserQnaCommand(
+                run_id=run_id,
+                scope_version_id=request.scope_version_id,
+                message=request.message,
+                universe=request.universe,
+                language=request.language,
+                conversation_context=tuple(conversation_context),
+            )
         )
-    except MainAgentPlanningError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "code": "main_agent_planner_unavailable",
-                "message": str(exc),
-            },
-        ) from exc
-    guardrail = plan_result.guardrail_decision
-    if not guardrail.allowed:
+    except AgentInputBlockedError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "code": "agent_guardrail_blocked",
-                "message": guardrail.user_message or guardrail.evaluation_summary,
-                "triggered_policies": list(guardrail.triggered_policies),
+                "message": exc.guardrail.summary,
+                "triggered_policies": list(exc.guardrail.triggered_policies),
             },
-        )
-
-    execution = _execute_user_qna_plan(
-        request=request,
-        run_id=run_id,
-        plan_steps=plan_result.plan.steps,
-        runtime=runtime,
-        services=services,
-        strategy_service=strategy_service,
-        llm_provider_factory=llm_provider_factory,
-        conversation_context=conversation_context,
-    )
+        ) from exc
+    except AgentRuntimeUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "agent_runtime_unavailable",
+                "message": str(exc),
+            },
+        ) from exc
 
     response = UserQnaRunResponse(
         session_id=session_id,
@@ -357,10 +292,10 @@ def run_user_qna_agent(
         run_id=run_id,
         answer=execution.answer,
         guardrail=GuardrailSummaryResponse(
-            allowed=guardrail.allowed,
-            decision=guardrail.decision,
-            summary=guardrail.safe_summary or guardrail.evaluation_summary,
-            triggered_policies=list(guardrail.triggered_policies),
+            allowed=execution.guardrail.allowed,
+            decision=execution.guardrail.decision,
+            summary=execution.guardrail.summary,
+            triggered_policies=list(execution.guardrail.triggered_policies),
         ),
         agent_trace=AgentTraceResponse(
             steps=[
@@ -368,12 +303,9 @@ def run_user_qna_agent(
                     step_id=step.step_id,
                     expert_agent_name=step.expert_agent_name,
                     skill_id=step.skill_id,
-                    status=execution.step_statuses.get(
-                        step.step_id,
-                        AgentExecutionStatus.PENDING,
-                    ).value,
+                    status=step.status.value,
                 )
-                for step in plan_result.plan.steps
+                for step in execution.trace_steps
             ]
         ),
         artifacts=[
@@ -398,115 +330,6 @@ def run_user_qna_agent(
         )
     )
     return response
-
-
-def _execute_user_qna_plan(
-    *,
-    request: UserQnaRunRequest,
-    run_id: str,
-    plan_steps: tuple[AgentStep, ...],
-    runtime: MainAgentRuntime,
-    services: DashboardServiceBundle,
-    strategy_service: StrategyService,
-    llm_provider_factory: Callable[[], LLMProvider],
-    conversation_context: list[dict[str, str]],
-) -> _UserQnaExecution:
-    """Execute ExpertAgents selected by MainAgent for a user Q&A run.
-
-    Args:
-        request: UserQnaRunRequest: .
-        run_id: str: .
-        plan_steps: tuple[AgentStep, ...]: .
-        runtime: MainAgentRuntime: .
-        services: DashboardServiceBundle: .
-        strategy_service: StrategyService: .
-        llm_provider_factory: Callable[[], LLMProvider]: .
-        conversation_context: list[dict[str, str]]: .
-
-    Returns:
-        _UserQnaExecution: .
-    """
-    answer = ""
-    step_statuses: dict[str, AgentExecutionStatus] = {}
-    artifacts: list[ContextArtifact] = []
-    references: list[dict[str, str]] = []
-
-    for step in plan_steps:
-        if step.expert_agent_name == GeneralQnaAgent.name:
-            try:
-                result = GeneralQnaAgent(
-                    llm_provider=llm_provider_factory(),
-                    write_context_artifact=runtime.add_context_artifact,
-                ).answer_general_question(
-                    run_id=run_id,
-                    message=request.message,
-                    language=request.language,
-                    conversation_context=conversation_context,
-                    available_artifacts=tuple(artifacts),
-                )
-            except RuntimeError as exc:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail={
-                        "code": "llm_unavailable",
-                        "message": str(exc),
-                    },
-                ) from exc
-            answer = result.answer
-            step_statuses[step.step_id] = result.status
-            artifacts.extend(result.artifacts)
-            references.extend(result.references)
-            continue
-
-        if step.expert_agent_name == DataAnalystAgent.name:
-            scope_version_id = _resolve_scope_alias(
-                request.scope_version_id,
-                strategy_service=strategy_service,
-            )
-            try:
-                result = DataAnalystAgent(
-                    llm_provider=llm_provider_factory(),
-                    write_context_artifact=runtime.add_context_artifact,
-                ).answer_recommendation_question(
-                    run_id=run_id,
-                    message=request.message,
-                    scope_version_id=scope_version_id,
-                    universe=request.universe,
-                    language=request.language,
-                    conversation_context=conversation_context,
-                    services=services,
-                )
-            except RuntimeError as exc:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail={
-                        "code": "llm_unavailable",
-                        "message": str(exc),
-                    },
-                ) from exc
-            answer = result.answer
-            step_statuses[step.step_id] = result.status
-            artifacts.extend(result.artifacts)
-            references.extend(result.references)
-            continue
-
-        step_statuses[step.step_id] = AgentExecutionStatus.PARTIAL
-
-    if not answer:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "agent_plan_not_executable",
-                "message": "MainAgent produced no executable Q&A expert step.",
-            },
-        )
-
-    return _UserQnaExecution(
-        answer=answer,
-        step_statuses=step_statuses,
-        artifacts=tuple(artifacts),
-        references=tuple(references),
-    )
 
 
 @router.get(
@@ -540,7 +363,7 @@ def get_agent_artifact(
         run_id=artifact.run_id,
         artifact_type=artifact.artifact_type,
         producer_agent=artifact.producer_agent,
-        payload_json=_safe_artifact_payload(artifact.payload_json),
+        payload_json=safe_artifact_payload(artifact.payload_json),
         payload_hash=artifact.payload_hash,
         source_refs=list(artifact.source_refs),
         evidence_refs=list(artifact.evidence_refs),
@@ -685,37 +508,6 @@ def _schedule_to_response(
     )
 
 
-def _resolve_scope_alias(
-    scope_version_id: str,
-    *,
-    strategy_service: StrategyService,
-    owner_id: str = "local-admin",
-) -> str:
-    """Resolve user-facing scope aliases to persisted scope version IDs.
-
-    Args:
-        scope_version_id: str: .
-        strategy_service: StrategyService: .
-        owner_id: str: .
-
-    Returns:
-        str: .
-    """
-    if scope_version_id != "scope-current":
-        return scope_version_id
-    try:
-        scope = strategy_service.ensure_current_research_scope(owner_id)
-    except KeyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "code": "service_not_configured",
-                "message": "active research scope not found",
-            },
-        ) from exc
-    return str(scope.version_id)
-
-
 def _chat_title(message: str) -> str:
     """Return a compact session title from the first user message.
 
@@ -747,37 +539,3 @@ def _chat_session_to_response(session) -> AgentChatSessionResponse:
         created_at=session.created_at,
         updated_at=session.updated_at,
     )
-
-
-def _safe_artifact_payload(payload: dict) -> dict:
-    """Return a frontend-safe artifact payload view.
-
-    Args:
-        payload: dict: .
-
-    Returns:
-        dict: .
-    """
-    return {key: _redact_payload_value(key, value) for key, value in payload.items()}
-
-
-def _redact_payload_value(key: str, value):  # noqa: ANN001, ANN202
-    """Process _redact_payload_value.
-
-    Args:
-        key: str: .
-        value: Any: .
-
-    Returns:
-        Any: .
-    """
-    lowered = key.lower()
-    if any(marker in lowered for marker in _SENSITIVE_PAYLOAD_KEYS):
-        return "[redacted]"
-    if isinstance(value, dict):
-        return _safe_artifact_payload(value)
-    if isinstance(value, list):
-        return [_redact_payload_value(key, item) for item in value[:50]]
-    if isinstance(value, str) and len(value) > 2000:
-        return value[:2000] + "...[truncated]"
-    return value

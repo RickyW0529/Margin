@@ -8,7 +8,10 @@
 - 暴露健康检查、Prometheus 指标和结构化日志。
 - 保存审计记录、快照、任务状态和降级原因。
 - 在 Provider 不可用、配置缺失或任务失败时给出明确状态。
-- 新增 v1 runtime/control-plane 表：agent/task/artifact/context、tool audit、prompt render、backfill campaign、outbox、DLQ 和 freshness state。
+- 保留当前正在使用的运行态表：orchestration、outbox、audit、Agent 会话、配置拉链表、数据同步状态、Dashboard 状态，以及正式的 `platform.*` / `ops.*` 运行表。
+- 已通过 `20260709_0058` 清理未接入的 v1 草稿 control-plane 表。
+- 已通过 `20260709_0059` 补齐 PIT 数据仓库分层，并把旧表数据非破坏式迁移到新层。
+- 已通过 `20260709_0063` 重新引入正式 platform/ops 表：idempotency、runtime environment、config snapshot、outbox、dead-letter、backfill、health、freshness。
 
 ## 它怎么跑
 
@@ -27,8 +30,9 @@
 - `Dockerfile`、`web/Dockerfile`、`docker-compose.yml`。
 - `scripts/`：开发、迁移、回填、smoke。
 - `src/margin/core/`：audit、metrics、degradation、run states。
+- `src/margin/platform_runtime/`：platform/ops 运行表 ORM 和 repository。
 - `src/margin/api/routes/health.py` 和 `/metrics`。
-- `alembic/versions/20260708_0053` 到 `20260708_0057`：v1 schema、warehouse、mart、agent/tool/prompt/platform runtime 表。
+- `alembic/versions/20260708_0053` 到 `20260709_0063`：v1 schema、warehouse、mart、app serving、草稿表清理和正式 platform/ops 表。
 - `src/margin/api/routes/backfill.py`、`freshness.py`、`tool_audit.py`：回填、新鲜度和工具审计 safe API。
 
 ## 输出给谁

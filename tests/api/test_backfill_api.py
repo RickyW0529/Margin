@@ -78,7 +78,9 @@ def test_backfill_mutations_require_idempotency_key() -> None:
     Returns:
         None: .
     """
-    client = TestClient(create_app())
+    client = TestClient(
+        create_app(backfill_application_service=BackfillApplicationService(today=date(2026, 7, 8)))
+    )
 
     response = client.post(
         "/api/v1/backfill-campaigns",

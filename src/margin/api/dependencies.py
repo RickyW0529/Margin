@@ -9,19 +9,18 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Annotated, Any
 
 from fastapi import Depends, Header, HTTPException, status
 
-from margin.agent_runtime.cards import default_agent_card_registry
 from margin.agent_runtime.chat_repository import SQLAlchemyAgentChatRepository
 from margin.agent_runtime.context_store import SQLAlchemyAgentContextStore
-from margin.agent_runtime.expert_agents import StockAnalystAgent
-from margin.agent_runtime.main_agent import MainAgentRuntime
 from margin.agent_runtime.schedules import SQLAlchemyAgentScheduleRepository
-from margin.agent_runtime.step_definitions import load_scheduled_stock_analysis_flow
+from margin.agents.context.repository import SQLAlchemyContextRepository
+from margin.agents.runtime.service import AgentRuntimeService
+from margin.agents.tools.audit import SQLAlchemyToolAuditStore
+from margin.agents.workers.dashboard_publisher_worker import DashboardPublisherWorker
 from margin.bootstrap.container import AppContainer
 from margin.config_runtime.repository import ConfigResolver, SQLAlchemyConfigRepository
 from margin.core.orchestration_repository import SQLAlchemyOrchestrationRepository
@@ -35,6 +34,8 @@ from margin.core.secret_store import SecretStore
 from margin.dashboard.detail_context import make_dashboard_detail_context_loader
 from margin.dashboard.repository import SQLAlchemyDashboardRepository
 from margin.dashboard.service import DashboardServiceBundle
+from margin.data.backfill.repository import SQLAlchemyBackfillRepository
+from margin.data.backfill.service import BackfillApplicationService
 from margin.data.company_pool import SQLAlchemyCompanyPoolRepository
 from margin.data.ingestion import DataWarehouseIngestionStack
 from margin.data.policy import (
@@ -440,38 +441,38 @@ def get_config_resolver() -> ConfigResolver:
     )
 
 
-def _resolve_scheduled_stock_analysis_flow():
-    """Resolve the scheduled Agent flow from DB with a local default fallback.
+@lru_cache
+def get_agent_context_store() -> SQLAlchemyAgentContextStore:
+    """Return the persisted Agent context store.
 
     Returns:
-        Any: .
+        SQLAlchemyAgentContextStore: .
     """
-    try:
-        return (
-            get_config_resolver()
-            .resolve_agent_flow(
-                flow_id="scheduled_stock_analysis",
-                decision_at=datetime.now(UTC),
-            )
-            .to_flow()
-        )
-    except LookupError:
-        return load_scheduled_stock_analysis_flow()
+    return SQLAlchemyAgentContextStore(get_app_container().session_factory)
 
 
 @lru_cache
-def get_main_agent_runtime() -> MainAgentRuntime:
-    """Return the v0.4 MainAgent runtime foundation.
+def get_context_repository() -> SQLAlchemyContextRepository:
+    """Return the structured Context Engineering repository.
 
     Returns:
-        MainAgentRuntime: .
+        SQLAlchemyContextRepository: .
     """
-    container = get_app_container()
+    return SQLAlchemyContextRepository(get_app_container().session_factory)
+
+
+@lru_cache
+def get_agent_runtime_service() -> AgentRuntimeService:
+    """Return the v1 application-facing Agent runtime service.
+
+    Returns:
+        AgentRuntimeService: .
+    """
     runtime_factory = get_provider_runtime_factory()
-    return MainAgentRuntime(
-        context_store=SQLAlchemyAgentContextStore(container.session_factory),
-        card_registry=default_agent_card_registry(),
-        scheduled_flow=_resolve_scheduled_stock_analysis_flow(),
+    return AgentRuntimeService(
+        context_store=get_agent_context_store(),
+        context_repository=get_context_repository(),
+        dashboard_services=get_dashboard_services(),
         llm_provider_factory=lambda: runtime_factory.build_llm().adapter,
     )
 
@@ -825,8 +826,8 @@ def get_valuation_discovery_service() -> ValuationDiscoveryService:
         review_repository=SQLAlchemyResearchDeltaRepository(session_factory),
         valuation_repository=valuation_repository,
         dashboard_repository=dashboard_repository,
-        stock_analyst_agent=StockAnalystAgent(
-            write_context_artifact=get_main_agent_runtime().add_context_artifact,
+        stock_analyst_agent=DashboardPublisherWorker(
+            write_context_artifact=get_agent_context_store().add_artifact,
             dashboard_repository=dashboard_repository,
         ),
     )
@@ -1202,6 +1203,28 @@ def get_data_policy_service() -> DataAcquisitionPolicyService:
 
 
 @lru_cache
+def get_backfill_application_service() -> BackfillApplicationService:
+    """Return the PostgreSQL-backed backfill control-plane service.
+
+    Returns:
+        BackfillApplicationService: .
+    """
+    return BackfillApplicationService(
+        repository=SQLAlchemyBackfillRepository(get_app_container().session_factory)
+    )
+
+
+@lru_cache
+def get_tool_audit_store() -> SQLAlchemyToolAuditStore:
+    """Return the persisted safe tool audit store.
+
+    Returns:
+        SQLAlchemyToolAuditStore: .
+    """
+    return SQLAlchemyToolAuditStore(get_app_container().session_factory)
+
+
+@lru_cache
 def get_dashboard_services() -> DashboardServiceBundle:
     """Return production dashboard services backed by PostgreSQL.
 
@@ -1288,4 +1311,6 @@ def clear_provider_runtime_caches() -> None:
     get_agentic_news_service.cache_clear()
     get_valuation_discovery_service.cache_clear()
     get_valuation_discovery_step_worker.cache_clear()
+    get_backfill_application_service.cache_clear()
+    get_tool_audit_store.cache_clear()
     get_dashboard_services.cache_clear()

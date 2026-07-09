@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from margin.agent_runtime.context_store import stable_json_hash
 from margin.agent_runtime.models import ContextArtifact
 from margin.agents.context.capsule_builder import DomainContextCapsuleBuilder
+from margin.agents.context.lineage import ArtifactLineageValidator
 from margin.agents.context.pack_builder import ContextPackBuilder
 from margin.agents.context.validators import (
     NoRawPayloadValidator,
@@ -159,6 +160,8 @@ def test_quant_result_extractor_creates_quant_fact_with_refs() -> None:
     )
 
     assert pack.facts[0].fact_type == "quant_signal"
+    assert pack.facts[0].subject_type == "stock"
+    assert pack.facts[0].subject_id == "300502.SZ"
     assert "300502.SZ" in pack.facts[0].statement
     assert pack.facts[0].evidence_refs == ("ev_quant",)
     assert pack.source_refs == ("mart.quant_candidate_mart:run_ctx",)
@@ -235,3 +238,56 @@ def test_domain_capsule_builder_preserves_evidence_gaps_and_conflicts() -> None:
     assert capsule.evidence_refs == ("ev_stock",)
     assert capsule.open_questions == ("缺少最新调研纪要",)
     assert capsule.conflicting_facts == ({"summary": "收入增长和现金流走弱同时存在"},)
+
+
+def test_final_answer_pack_omits_unevidenced_stock_analysis_result() -> None:
+    """Final-answer context must not use stock conclusions without evidence."""
+    artifact = _artifact(
+        "artifact_stock_no_evidence",
+        "stock_analysis_result",
+        {"summary": "该公司产品供不应求。"},
+        evidence_refs=(),
+    )
+
+    pack = ContextPackBuilder().build(
+        run_id="run_ctx",
+        requester_agent="MainAgent",
+        target_agent="MainAgent",
+        purpose="final_answer",
+        user_goal="总结最终研究结论",
+        capability_token=_token(),
+        artifacts=(artifact,),
+        token_budget=800,
+    )
+
+    assert pack.facts == ()
+    assert pack.included_artifact_refs == ()
+    assert [(omission.omitted_ref, omission.reason) for omission in pack.omissions] == [
+        ("artifact_stock_no_evidence", "invalid_lineage")
+    ]
+
+
+def test_context_pack_omits_artifact_with_invalid_payload_hash() -> None:
+    """Context packs should reject artifacts with broken immutable lineage."""
+    artifact = _artifact(
+        "artifact_bad_hash",
+        "quant_result",
+        {"ts_code": "300502.SZ", "rank": 1, "composite_score": 91.2},
+    ).model_copy(update={"payload_hash": "sha256:tampered"})
+
+    pack = ContextPackBuilder(lineage_validator=ArtifactLineageValidator()).build(
+        run_id="run_ctx",
+        requester_agent="MainAgent",
+        target_agent="QuantExpertAgent",
+        purpose="domain_task",
+        user_goal="解释量化结果",
+        capability_token=_token(),
+        artifacts=(artifact,),
+        token_budget=800,
+    )
+
+    assert pack.facts == ()
+    assert pack.included_artifact_refs == ()
+    assert [(omission.omitted_ref, omission.reason) for omission in pack.omissions] == [
+        ("artifact_bad_hash", "invalid_lineage")
+    ]

@@ -7,9 +7,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from margin.agent_runtime.context_store import stable_json_hash
 from margin.agent_runtime.models import AgentFlowDefinition
 from margin.agent_runtime.quant_agent import QuantAgentStrategyProfile
+from margin.core.hashing import stable_json_hash
 from margin.news.models import ensure_utc, utc_now
 from margin.strategy.models import ConfigLifecycle
 

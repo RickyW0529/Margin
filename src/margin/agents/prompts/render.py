@@ -8,8 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from margin.agent_runtime.context_store import stable_json_hash
 from margin.agents.prompts.bundles import PromptBundle
+from margin.core.hashing import stable_json_hash
 
 _VARIABLE_PATTERN = re.compile(r"{{\s*([A-Za-z_][A-Za-z0-9_]*)\s*}}")
 
@@ -33,13 +33,17 @@ class PromptRenderRecord(BaseModel):
 class PromptRenderer:
     """PromptRenderer.."""
 
-    def __init__(self) -> None:
+    def __init__(self, render_history_repository: Any | None = None) -> None:
         """Init .
+
+        Args:
+            render_history_repository: Optional persistent render history writer.
 
         Returns:
             None: .
         """
         self.history: dict[str, PromptRenderRecord] = {}
+        self._render_history_repository = render_history_repository
 
     def render_bundle(
         self,
@@ -97,4 +101,6 @@ class PromptRenderer:
             rendered_messages=tuple(messages),
         )
         self.history[record.render_id] = record
+        if self._render_history_repository is not None:
+            self._render_history_repository.record_render(record)
         return record

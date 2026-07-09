@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from margin.agent_runtime.context_store import MemoryAgentContextStore
-from margin.agent_runtime.expert_agents import StockAnalystAgent
+from margin.agents.workers.dashboard_publisher_worker import DashboardPublisherWorker
 from margin.dashboard.models import DashboardFilters, DashboardSort
 from margin.dashboard.repository import MemoryDashboardRepository
 from margin.research.delta_repository import (
@@ -271,8 +271,8 @@ def test_dashboard_refresh_publishes_latest_quant_projection_items() -> None:
     assert response.items[1].review_required is True
 
 
-def test_dashboard_refresh_can_publish_stock_analyst_adjusted_projection() -> None:
-    """Publisher can let StockAnalystAgent remove risky names and update dashboard.
+def test_dashboard_refresh_can_publish_agent_adjusted_projection() -> None:
+    """Publisher can let the v1 dashboard worker remove risky names.
 
     Returns:
         None: .
@@ -286,7 +286,7 @@ def test_dashboard_refresh_can_publish_stock_analyst_adjusted_projection() -> No
         review_repository=reviews,
         valuation_repository=valuations,
         dashboard_repository=dashboard,
-        stock_analyst_agent=StockAnalystAgent(
+        stock_analyst_agent=DashboardPublisherWorker(
             write_context_artifact=context_store.add_artifact,
             dashboard_repository=dashboard,
         ),
@@ -331,7 +331,7 @@ def test_dashboard_refresh_can_publish_stock_analyst_adjusted_projection() -> No
     assert projection.visible_item_count == 2
     assert [item.security_id for item in response.items] == ["000001.SZ", "000002.SZ"]
     assert sum(item.adjusted_weight or 0.0 for item in response.items) == 0.80
-    assert response.items[0].agent_adjustment["source"] == "StockAnalystAgent"
+    assert response.items[0].agent_adjustment["source"] == "DashboardPublisherWorker"
     artifact = context_store.get_artifact("ctx_ar_dashboard_quant-1_portfolio_adjustment")
     assert artifact is not None
     assert artifact.payload_json["removed_security_ids"] == ["000003.SZ"]

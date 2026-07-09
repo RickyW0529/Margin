@@ -25,6 +25,7 @@ from margin.data.backfill.quality import (
     EndpointQualityReport,
     PITValidationResult,
 )
+from margin.data.backfill.repository import BackfillRepository, SQLAlchemyBackfillRepository
 from margin.data.backfill.service import (
     BackfillApplicationService,
     BackfillCampaignSummary,
@@ -47,6 +48,7 @@ __all__ = [
     "BackfillPublisher",
     "BackfillQualityReport",
     "BackfillQualityService",
+    "BackfillRepository",
     "BackfillRunSummary",
     "DryRunBackfillExecutor",
     "EndpointQualityReport",
@@ -54,5 +56,6 @@ __all__ = [
     "PITValidationResult",
     "PartitionStatus",
     "RawSnapshotMetadata",
+    "SQLAlchemyBackfillRepository",
     "TWENTY_YEAR_BACKFILL_START_DATE",
 ]

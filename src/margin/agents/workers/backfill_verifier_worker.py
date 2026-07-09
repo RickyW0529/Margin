@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from datetime import date
 
-from margin.agent_runtime.context_store import stable_json_hash
 from margin.agents.protocol.models import (
     AgentExecutionStatus,
     WorkerTaskRequest,
     WorkerTaskResult,
 )
+from margin.core.hashing import stable_json_hash
 from margin.data.backfill.campaign import BackfillCampaignService
 from margin.data.backfill.quality import BackfillQualityService
 

@@ -8,6 +8,7 @@ This module turns trusted data into stock candidates and analysis output.
 - Builds quant features from PIT-safe data.
 - Runs ML / quant screening strategies.
 - Publishes scores, explanations, risks, and lineage to Analysis Mart.
+- Mirrors outputs into normalized Mart tables: `mart.factor_panel`, `mart.quant_candidate_mart`, `mart.stock_analysis_mart`, plus `app.company_profile_page_v1` for API/UI serving.
 
 ## How It Runs
 
@@ -15,7 +16,7 @@ This module turns trusted data into stock candidates and analysis output.
 company pool snapshot
   -> Quant Feature Mart
   -> ML / quant strategy
-  -> Analysis Mart
+  -> mart / app serving
   -> Agent review
   -> Dashboard recommendations
 ```
@@ -27,6 +28,7 @@ It is the bridge between trusted data and Agent / Dashboard output. Upper layers
 - `src/margin/valuation_discovery/`
 - `src/margin/valuation_discovery/quant/`
 - `src/margin/valuation_discovery/quant_adapter.py`
+- `alembic/versions/20260709_0059_complete_v1_warehouse_layers.py`
 
 ## Who Uses It
 
