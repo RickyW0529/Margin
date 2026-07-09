@@ -14,7 +14,7 @@ from margin.agents.security.policies import (
 
 
 class RetryPolicy(BaseModel):
-    """Worker retry policy."""
+    """Worker retry policy.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -23,7 +23,7 @@ class RetryPolicy(BaseModel):
 
 
 class WorkerSkill(BaseModel):
-    """One executable or planned WorkerAgent skill."""
+    """One executable or planned WorkerAgent skill.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -39,7 +39,7 @@ class WorkerSkill(BaseModel):
 
 
 class WorkerAgentCard(BaseModel):
-    """Layer-3 WorkerAgent card visible only through an executor registry."""
+    """Layer-3 WorkerAgent card visible only through an executor registry.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

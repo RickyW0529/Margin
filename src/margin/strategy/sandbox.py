@@ -7,14 +7,16 @@ from margin.strategy.validator import StrategyValidator
 
 
 class StrategySandbox:
-    """Run lightweight checks before a strategy version is promoted."""
+    """Run lightweight checks before a strategy version is promoted.."""
 
     def __init__(self, validator: StrategyValidator | None = None) -> None:
         """Initialize the sandbox with an optional validator.
 
         Args:
-            validator: The validator used for guardrail checks. A default
-                :class:`StrategyValidator` is created when omitted.
+            validator: StrategyValidator | None: .
+
+        Returns:
+            None: .
         """
         self._validator = validator or StrategyValidator()
 
@@ -22,12 +24,10 @@ class StrategySandbox:
         """Run all sandbox checks and return a structured result.
 
         Args:
-            config: The strategy configuration to evaluate.
+            config: StrategyConfig: .
 
         Returns:
-            A :class:`StrategySandboxResult` summarizing validation, sample
-            run, backtest, data-leak, cost, and preview checks together with
-            any diagnostic messages.
+            StrategySandboxResult: .
         """
         messages: list[str] = []
 
@@ -65,11 +65,10 @@ class StrategySandbox:
         """Placeholder: ensure no future-dated constraints are present.
 
         Args:
-            config: The strategy configuration to inspect.
+            config: StrategyConfig: .
 
         Returns:
-            ``True`` when the horizon is non-negative and at least one evidence
-            item is required.
+            bool: .
         """
         if config.horizon < 0:
             return False

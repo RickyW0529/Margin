@@ -19,7 +19,7 @@ from margin.news.models import ensure_utc
 
 
 class SourceQualityDecision(BaseModel):
-    """Immutable publication decision for one source landing row."""
+    """Immutable publication decision for one source landing row.."""
 
     decision_id: str
     provider: str = "tushare"
@@ -43,12 +43,11 @@ def select_current_non_st_securities(
     """Filter stock-basic rows before persistence and report exclusion counts.
 
     Args:
-        records: Raw ``stock_basic`` rows from Tushare.
-        as_of: Optional reference date for listing-date filtering.
+        records: list[dict[str, Any]]: .
+        as_of: datetime | date | None: .
 
     Returns:
-        A tuple of ``(accepted_rows, excluded_counts)`` where ``excluded_counts``
-        breaks down exclusions by ``st``, ``not_listed``, and ``invalid_symbol``.
+        tuple[list[dict[str, Any]], dict[str, int]]: .
     """
     accepted: list[dict[str, Any]] = []
     excluded = {"st": 0, "not_listed": 0, "invalid_symbol": 0}
@@ -76,7 +75,7 @@ def select_current_non_st_securities(
 
 
 class TushareQualityScreen:
-    """Apply deterministic row-level admission before warehouse publication."""
+    """Apply deterministic row-level admission before warehouse publication.."""
 
     _WINDOWED_ENDPOINTS = {
         "daily",
@@ -124,14 +123,14 @@ class TushareQualityScreen:
         """Return accepted, quarantined, or rejected with stable issue codes.
 
         Args:
-            record: The landing record to evaluate.
-            window_start: The rolling-window start boundary.
-            window_end: The rolling-window end boundary.
-            eligible_symbols: The set of company-pool eligible symbols.
-            checked_at: Optional override for the decision timestamp.
+            record: TushareLandingRecord: .
+            window_start: datetime: .
+            window_end: datetime: .
+            eligible_symbols: set[str]: .
+            checked_at: datetime | None: .
 
         Returns:
-            A ``SourceQualityDecision`` with the admission verdict and score.
+            SourceQualityDecision: .
         """
         start = ensure_utc(window_start).date()
         end = ensure_utc(window_end).date()
@@ -141,14 +140,10 @@ class TushareQualityScreen:
             record.endpoint,
         )
         if any(
-            record.raw_payload.get(field) in (None, "")
-            for field in endpoint.natural_key_fields
+            record.raw_payload.get(field) in (None, "") for field in endpoint.natural_key_fields
         ):
             issues.append("missing_natural_key")
-        if (
-            record.endpoint in self._SYMBOL_ENDPOINTS
-            and record.symbol not in eligible_symbols
-        ):
+        if record.endpoint in self._SYMBOL_ENDPOINTS and record.symbol not in eligible_symbols:
             issues.append("symbol_not_in_company_pool")
         if (
             record.endpoint in self._WINDOWED_ENDPOINTS
@@ -156,10 +151,7 @@ class TushareQualityScreen:
             and not start <= record.business_date <= end
         ):
             issues.append("outside_rolling_window")
-        if (
-            record.published_at is not None
-            and record.published_at.date() > end
-        ):
+        if record.published_at is not None and record.published_at.date() > end:
             issues.append("future_publication")
 
         reject_issues = {
@@ -176,10 +168,7 @@ class TushareQualityScreen:
         score = max(Decimal("0"), Decimal("1") - Decimal("0.25") * len(issues))
         observed_at = ensure_utc(checked_at or record.fetched_at)
         digest = hashlib.sha256(
-            (
-                f"tushare|{record.endpoint}|{record.source_row_id}|"
-                f"tushare-quality-v0.3.0"
-            ).encode()
+            (f"tushare|{record.endpoint}|{record.source_row_id}|tushare-quality-v0.3.0").encode()
         ).hexdigest()
         return SourceQualityDecision(
             decision_id=f"sqd:{digest}",
@@ -193,7 +182,14 @@ class TushareQualityScreen:
 
 
 def _normalize_date(value: datetime | date | None) -> date | None:
-    """Return a date boundary for as-of security-master filtering."""
+    """Return a date boundary for as-of security-master filtering.
+
+    Args:
+        value: datetime | date | None: .
+
+    Returns:
+        date | None: .
+    """
     if value is None:
         return None
     if isinstance(value, datetime):
@@ -202,7 +198,14 @@ def _normalize_date(value: datetime | date | None) -> date | None:
 
 
 def _parse_yyyymmdd(value: Any) -> date | None:
-    """Parse Tushare date strings without rejecting unknown legacy blanks."""
+    """Parse Tushare date strings without rejecting unknown legacy blanks.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        date | None: .
+    """
     normalized = str(value or "").strip()
     if not normalized:
         return None

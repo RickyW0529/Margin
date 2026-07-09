@@ -16,13 +16,16 @@ from margin.news.models import ensure_utc
 
 
 class TushareWarehousePublisher:
-    """Translate quality-accepted source rows into existing warehouse contracts."""
+    """Translate quality-accepted source rows into existing warehouse contracts.."""
 
     def __init__(self, stack: Any) -> None:
         """Initialize with the production warehouse ingestion stack.
 
         Args:
-            stack: The ``DataWarehouseIngestionStack`` used to persist rows.
+            stack: Any: .
+
+        Returns:
+            None: .
         """
         self._stack = stack
 
@@ -37,13 +40,13 @@ class TushareWarehousePublisher:
         """Publish one accepted endpoint batch and return inserted fact count.
 
         Args:
-            api_name: The Tushare API name being published.
-            records: Quality-accepted source rows to publish.
-            run_id: The source-system sync run ID.
-            decision_at: The point-in-time decision timestamp.
+            api_name: str: .
+            records: list[dict[str, Any]]: .
+            run_id: str: .
+            decision_at: datetime: .
 
         Returns:
-            The number of facts inserted into the warehouse.
+            int: .
         """
         if not records:
             return 0
@@ -111,7 +114,16 @@ class TushareWarehousePublisher:
         records: list[dict[str, Any]],
         fetched_at: datetime,
     ) -> list[dict[str, Any]]:
-        """Map accepted source rows to warehouse indicator records by API."""
+        """Map accepted source rows to warehouse indicator records by API.
+
+        Args:
+            api_name: str: .
+            records: list[dict[str, Any]]: .
+            fetched_at: datetime: .
+
+        Returns:
+            list[dict[str, Any]]: .
+        """
         if api_name == "adj_factor":
             return [
                 _map_adjustment_row(
@@ -328,7 +340,15 @@ class TushareWarehousePublisher:
 
 
 def _financial_base(row: dict[str, Any], fetched_at: datetime) -> dict[str, Any]:
-    """Return shared financial record fields from one source row."""
+    """Return shared financial record fields from one source row.
+
+    Args:
+        row: dict[str, Any]: .
+        fetched_at: datetime: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     announced = row.get("f_ann_date") or row.get("ann_date") or row.get("end_date")
     return {
         "symbol": row.get("ts_code"),
@@ -341,7 +361,15 @@ def _financial_base(row: dict[str, Any], fetched_at: datetime) -> dict[str, Any]
 
 
 def _balance_record(row: dict[str, Any], fetched_at: datetime) -> dict[str, Any]:
-    """Map one balance-sheet row to warehouse indicator fields."""
+    """Map one balance-sheet row to warehouse indicator fields.
+
+    Args:
+        row: dict[str, Any]: .
+        fetched_at: datetime: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     assets = _number(row.get("total_assets"))
     liabilities = _number(row.get("total_liab"))
     equity = _number(row.get("total_hldr_eqy_exc_min_int"))
@@ -358,14 +386,30 @@ def _balance_record(row: dict[str, Any], fetched_at: datetime) -> dict[str, Any]
 
 
 def _divide(numerator: float | None, denominator: float | None) -> float | None:
-    """Return a safe ratio, or ``None`` when the denominator is missing or zero."""
+    """Return a safe ratio, or ``None`` when the denominator is missing or zero.
+
+    Args:
+        numerator: float | None: .
+        denominator: float | None: .
+
+    Returns:
+        float | None: .
+    """
     if numerator is None or denominator in (None, 0):
         return None
     return numerator / denominator
 
 
 def _subtract(left: Any, right: Any) -> float | None:
-    """Subtract two provider numbers, returning ``None`` if either is missing."""
+    """Subtract two provider numbers, returning ``None`` if either is missing.
+
+    Args:
+        left: Any: .
+        right: Any: .
+
+    Returns:
+        float | None: .
+    """
     left_number = _number(left)
     right_number = _number(right)
     if left_number is None or right_number is None:
@@ -374,7 +418,15 @@ def _subtract(left: Any, right: Any) -> float | None:
 
 
 def _midpoint(left: Any, right: Any) -> float | None:
-    """Return the midpoint of two provider numbers when both exist."""
+    """Return the midpoint of two provider numbers when both exist.
+
+    Args:
+        left: Any: .
+        right: Any: .
+
+    Returns:
+        float | None: .
+    """
     left_number = _number(left)
     right_number = _number(right)
     if left_number is None or right_number is None:
@@ -383,19 +435,41 @@ def _midpoint(left: Any, right: Any) -> float | None:
 
 
 def _number(value: Any) -> float | None:
-    """Convert a provider value to a float, or ``None`` when blank."""
+    """Convert a provider value to a float, or ``None`` when blank.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        float | None: .
+    """
     if value is None or value == "":
         return None
     return float(value)
 
 
 def _percent_ratio(value: Any) -> float | None:
-    """Normalize a percentage field to a decimal ratio."""
+    """Normalize a percentage field to a decimal ratio.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        float | None: .
+    """
     number = _number(value)
     return number / 100.0 if number is not None else None
 
 
 def _scaled_number(value: Any, multiplier: float) -> float | None:
-    """Return a numeric value scaled by a multiplier, or ``None``."""
+    """Return a numeric value scaled by a multiplier, or ``None``.
+
+    Args:
+        value: Any: .
+        multiplier: float: .
+
+    Returns:
+        float | None: .
+    """
     number = _number(value)
     return number * multiplier if number is not None else None

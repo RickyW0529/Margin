@@ -13,33 +13,21 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 
-DEFAULT_TEST_DATABASE_URL = (
-    "postgresql+psycopg://margin:margin@localhost:5432/margin_test"
-)
+DEFAULT_TEST_DATABASE_URL = "postgresql+psycopg://margin:margin@localhost:5432/margin_test"
 
 
 def resolve_test_database_url() -> str:
     """Resolve and validate the dedicated PostgreSQL test database URL.
 
     Returns:
-        The validated test database URL.
-
-    Raises:
-        RuntimeError: If the database name contains unsupported characters or
-            does not follow the required ``_test`` suffix / ``test_`` prefix
-            convention.
+        str: .
     """
     url = os.getenv("MARGIN_TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
     database_name = make_url(url).database or ""
     if not re.fullmatch(r"[A-Za-z0-9_]+", database_name):
         raise RuntimeError("test database name contains unsupported characters")
-    if not (
-        database_name.endswith("_test")
-        or database_name.startswith("test_")
-    ):
-        raise RuntimeError(
-            "MARGIN_TEST_DATABASE_URL must point to a dedicated test database"
-        )
+    if not (database_name.endswith("_test") or database_name.startswith("test_")):
+        raise RuntimeError("MARGIN_TEST_DATABASE_URL must point to a dedicated test database")
     return url
 
 
@@ -53,7 +41,11 @@ os.environ["MARGIN_WEBSEARCH_API_KEY"] = ""
 
 @pytest.fixture(scope="session", autouse=True)
 def ensure_test_database() -> None:
-    """Create the isolated test database when the local PostgreSQL user permits it."""
+    """Create the isolated test database when the local PostgreSQL user permits it.
+
+    Returns:
+        None: .
+    """
     test_url = make_url(TEST_DATABASE_URL)
     database_name = test_url.database
     assert database_name is not None
@@ -85,7 +77,6 @@ def database_url() -> str:
     """Return the PostgreSQL integration-test URL.
 
     Returns:
-        The database URL from the ``MARGIN_DATABASE_URL`` environment variable,
-        falling back to a local development PostgreSQL instance.
+        str: .
     """
     return TEST_DATABASE_URL

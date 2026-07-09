@@ -86,7 +86,7 @@ _OFFICIAL_SOURCE_TERMS = (
 
 
 class KeywordWorkflow:
-    """Generate reviewed WebSearch queries for a news target."""
+    """Generate reviewed WebSearch queries for a news target.."""
 
     def __init__(
         self,
@@ -98,10 +98,12 @@ class KeywordWorkflow:
         """Initialize the workflow.
 
         Args:
-            llm_service: LLM service used for structured completion calls.
-            query_factory: Optional query template factory for fallback plans. Defaults to
-                a new ``QueryTemplateFactory``.
-            max_review_rounds: Maximum number of writer/review revision rounds.
+            llm_service: Any: .
+            query_factory: QueryTemplateFactory | None: .
+            max_review_rounds: int: .
+
+        Returns:
+            None: .
         """
         self._llm = llm_service
         self._query_factory = query_factory or QueryTemplateFactory()
@@ -110,16 +112,12 @@ class KeywordWorkflow:
     def build_plan(self, *, run_id: str, target: NewsTarget) -> NewsSearchPlan:
         """Return an approved or deterministic fallback search plan.
 
-        Runs the keyword writer/reviewer loop up to ``max_review_rounds`` times. If the
-        LLM fails or the reviewer never approves, a deterministic fallback plan is
-        returned.
-
         Args:
-            run_id: Identifier of the agentic news acquisition run.
-            target: News target to build queries for.
+            run_id: str: .
+            target: NewsTarget: .
 
         Returns:
-            A ``NewsSearchPlan`` with review_status "approved" or "fallback".
+            NewsSearchPlan: .
         """
         revision_notes: tuple[str, ...] = ()
         last_prompt_hash = ""
@@ -189,7 +187,17 @@ class KeywordWorkflow:
         prompt_hash: str,
         response_hash: str | None,
     ) -> NewsSearchPlan:
-        """Build a deterministic fallback search plan."""
+        """Build a deterministic fallback search plan.
+
+        Args:
+            run_id: str: .
+            target: NewsTarget: .
+            prompt_hash: str: .
+            response_hash: str | None: .
+
+        Returns:
+            NewsSearchPlan: .
+        """
         queries = tuple(query.query for query in self._query_factory.build_queries(target))
         return NewsSearchPlan(
             plan_id=_plan_id(run_id, target.security_id),
@@ -207,7 +215,14 @@ class KeywordWorkflow:
 
 
 def _clean_queries(value: Any) -> tuple[str, ...]:
-    """Normalize model output into unique non-empty queries."""
+    """Normalize model output into unique non-empty queries.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     queries: list[str] = []
     for item in value or ():
         query = str(item).strip()
@@ -217,16 +232,22 @@ def _clean_queries(value: Any) -> tuple[str, ...]:
 
 
 def _guardrail_review(target: NewsTarget, queries: tuple[str, ...]) -> tuple[str, ...]:
-    """Return local review notes for unsafe or low-quality search queries."""
+    """Return local review notes for unsafe or low-quality search queries.
+
+    Args:
+        target: NewsTarget: .
+        queries: tuple[str, ...]: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     notes: list[str] = []
     if not queries:
         return ("missing queries",)
     company_terms = _company_terms(target)
     ticker_terms = _ticker_terms(target)
     has_official_source = any(
-        source in query.lower()
-        for query in queries
-        for source in _OFFICIAL_SOURCE_TERMS
+        source in query.lower() for query in queries for source in _OFFICIAL_SOURCE_TERMS
     )
     if not has_official_source:
         notes.append("query plan missing official disclosure source")
@@ -239,27 +260,46 @@ def _guardrail_review(target: NewsTarget, queries: tuple[str, ...]) -> tuple[str
             notes.append(f"query missing concrete news event term: {query}")
         forbidden = [term for term in _FORBIDDEN_MARKET_TERMS if term in query]
         if forbidden:
-            notes.append(
-                f"query contains market/trading terms {','.join(forbidden)}: {query}"
-            )
+            notes.append(f"query contains market/trading terms {','.join(forbidden)}: {query}")
     return tuple(notes)
 
 
 def _company_terms(target: NewsTarget) -> tuple[str, ...]:
-    """Return accepted company identifiers for keyword review."""
+    """Return accepted company identifiers for keyword review.
+
+    Args:
+        target: NewsTarget: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     terms = [target.name, *target.aliases]
     return tuple(term for term in _unique_texts(*terms) if term != target.security_id)
 
 
 def _ticker_terms(target: NewsTarget) -> tuple[str, ...]:
-    """Return accepted ticker variants for keyword review."""
+    """Return accepted ticker variants for keyword review.
+
+    Args:
+        target: NewsTarget: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     raw = target.symbol or target.security_id
     numeric = raw.split(".")[0]
     return _unique_texts(raw, target.security_id, numeric)
 
 
 def _unique_texts(*values: Any) -> tuple[str, ...]:
-    """Return unique non-empty text values, preserving order."""
+    """Return unique non-empty text values, preserving order.
+
+    Args:
+        *values: Any: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     seen: set[str] = set()
     result: list[str] = []
     for value in values:
@@ -271,13 +311,28 @@ def _unique_texts(*values: Any) -> tuple[str, ...]:
 
 
 def _plan_id(run_id: str, security_id: str) -> str:
-    """Return a stable plan id for a run/security pair."""
+    """Return a stable plan id for a run/security pair.
+
+    Args:
+        run_id: str: .
+        security_id: str: .
+
+    Returns:
+        str: .
+    """
     digest = hashlib.sha256(f"{run_id}|{security_id}".encode()).hexdigest()
     return f"nsp_{digest[:24]}"
 
 
 def _hash_json(value: Any) -> str:
-    """Hash a JSON-serializable value."""
+    """Hash a JSON-serializable value.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        str: .
+    """
     encoded = json.dumps(
         value,
         sort_keys=True,

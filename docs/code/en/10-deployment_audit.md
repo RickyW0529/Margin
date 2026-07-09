@@ -8,6 +8,7 @@ This module makes the system runnable, inspectable, degradable, and auditable.
 - Exposes health checks, Prometheus metrics, and structured logs.
 - Stores audit records, snapshots, task state, and degradation reasons.
 - Reports explicit status when providers, config, or tasks fail.
+- Adds v1 runtime/control-plane tables for agent tasks/artifacts/context, tool audit, prompt render history, backfill campaigns, outbox, DLQ, and freshness state.
 
 ## How It Runs
 
@@ -28,6 +29,8 @@ It does not produce recommendations, but it makes failures diagnosable.
 - `src/margin/core/`
 - `src/margin/api/routes/health.py`
 - `/metrics`
+- `alembic/versions/20260708_0053` through `20260708_0057`
+- `src/margin/api/routes/backfill.py`, `freshness.py`, `tool_audit.py`
 
 ## Who Uses It
 

@@ -16,7 +16,10 @@ def test_run_pool_backtest_can_disable_theme_hotness(monkeypatch) -> None:
     """Test that the theme toggle isolates the additive theme-hotness factor.
 
     Args:
-        monkeypatch: Pytest fixture for patching module-level preset defaults.
+        monkeypatch: Any: .
+
+    Returns:
+        None: .
     """
     rebalance_date = pd.Timestamp("2026-01-31")
     next_date = pd.Timestamp("2026-02-28")
@@ -96,7 +99,15 @@ def test_run_pool_backtest_can_disable_theme_hotness(monkeypatch) -> None:
 
 
 def _prices(rebalance_date: pd.Timestamp, next_date: pd.Timestamp) -> dict[str, object]:
-    """Build a deterministic price and feature panel fixture for two dates."""
+    """Build a deterministic price and feature panel fixture for two dates.
+
+    Args:
+        rebalance_date: pd.Timestamp: .
+        next_date: pd.Timestamp: .
+
+    Returns:
+        dict[str, object]: .
+    """
     securities = ["300308.SZ", "plain.SZ"]
     index = pd.DatetimeIndex([rebalance_date, next_date])
     feature_panel = pd.DataFrame(
@@ -120,7 +131,15 @@ def _prices(rebalance_date: pd.Timestamp, next_date: pd.Timestamp) -> dict[str, 
 
 
 def _daily_basic(security_id: str, trade_date: pd.Timestamp) -> dict[str, object]:
-    """Build a deterministic daily-basic row fixture for one security and date."""
+    """Build a deterministic daily-basic row fixture for one security and date.
+
+    Args:
+        security_id: str: .
+        trade_date: pd.Timestamp: .
+
+    Returns:
+        dict[str, object]: .
+    """
     return {
         "security_id": security_id,
         "trade_date": trade_date,

@@ -8,7 +8,7 @@ from margin.valuation_discovery.quant.normalization import FactorNormalizer
 
 
 class QualityFactorCalculator:
-    """Calculate quality factor scores from standardized quant columns."""
+    """Calculate quality factor scores from standardized quant columns.."""
 
     WEIGHTS = {
         "roe_ttm": 0.20,
@@ -31,11 +31,25 @@ class QualityFactorCalculator:
     }
 
     def __init__(self, normalizer: FactorNormalizer | None = None) -> None:
-        """Initialize the calculator with an optional custom normalizer."""
+        """Initialize the calculator with an optional custom normalizer.
+
+        Args:
+            normalizer: FactorNormalizer | None: .
+
+        Returns:
+            None: .
+        """
         self._normalizer = normalizer or FactorNormalizer()
 
     def calculate(self, frame: pd.DataFrame) -> pd.DataFrame:
-        """Return frame with component scores and `quality_score`."""
+        """Return frame with component scores and `quality_score`.
+
+        Args:
+            frame: pd.DataFrame: .
+
+        Returns:
+            pd.DataFrame: .
+        """
         scored = frame.copy()
         available_weights: dict[str, float] = {}
         for column, weight in self.WEIGHTS.items():

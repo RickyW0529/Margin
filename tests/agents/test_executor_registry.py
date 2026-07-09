@@ -13,9 +13,12 @@ from margin.agents.runtime.executor_registry import (
 
 
 def test_planner_only_sees_worker_cards_with_registered_executors() -> None:
-    worker_cards = v0_agent_cards_to_worker_cards(
-        default_agent_card_registry().list_cards()
-    )
+    """Test planner_only_sees_worker_cards_with_registered_executors.
+
+    Returns:
+        None: .
+    """
+    worker_cards = v0_agent_cards_to_worker_cards(default_agent_card_registry().list_cards())
     registry = default_qna_executor_registry()
 
     visible = registry.planner_visible_worker_cards(worker_cards)
@@ -26,9 +29,12 @@ def test_planner_only_sees_worker_cards_with_registered_executors() -> None:
 
 
 def test_code_sandbox_becomes_visible_only_after_executor_registration() -> None:
-    worker_cards = v0_agent_cards_to_worker_cards(
-        default_agent_card_registry().list_cards()
-    )
+    """Test code_sandbox_becomes_visible_only_after_executor_registration.
+
+    Returns:
+        None: .
+    """
+    worker_cards = v0_agent_cards_to_worker_cards(default_agent_card_registry().list_cards())
     registry = default_qna_executor_registry()
     registry.register(
         agent_name="CodeSandboxAgent",
@@ -46,9 +52,12 @@ def test_code_sandbox_becomes_visible_only_after_executor_registration() -> None
 
 
 def test_validate_visible_cards_rejects_unregistered_skill() -> None:
-    worker_cards = v0_agent_cards_to_worker_cards(
-        default_agent_card_registry().list_cards()
-    )
+    """Test validate_visible_cards_rejects_unregistered_skill.
+
+    Returns:
+        None: .
+    """
+    worker_cards = v0_agent_cards_to_worker_cards(default_agent_card_registry().list_cards())
     registry = ExecutorRegistry()
 
     with pytest.raises(ValueError, match="missing executor"):

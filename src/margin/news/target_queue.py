@@ -17,17 +17,16 @@ from margin.news.repository import NewsRepository
 
 
 class NewsTargetQueue:
-    """Persistence-backed queue that owns refresh target completeness semantics.
-
-    The queue never calls external search providers. It only creates runs, persists the
-    complete target set, leases work items, and records per-target outcomes.
-    """
+    """Persistence-backed queue that owns refresh target completeness semantics.."""
 
     def __init__(self, repository: NewsRepository) -> None:
         """Initialize the instance.
 
         Args:
-            repository: Repository used to persist runs, targets, and outcomes.
+            repository: NewsRepository: .
+
+        Returns:
+            None: .
         """
         self._repository = repository
 
@@ -40,12 +39,12 @@ class NewsTargetQueue:
         """Create a refresh run and return its durable identifier.
 
         Args:
-            scope_version_id: Identifier of the scope version that produced the quant run.
-            quant_run_id: Identifier of the quant run being refreshed.
-            decision_at: Decision timestamp used to scope the quant run.
+            scope_version_id: str: .
+            quant_run_id: str: .
+            decision_at: datetime: .
 
         Returns:
-            The durable run identifier string.
+            str: .
         """
         material = "|".join(
             (
@@ -67,8 +66,11 @@ class NewsTargetQueue:
         """Persist the full target set idempotently before any external call.
 
         Args:
-            run_id: Identifier of the parent refresh run.
-            targets: Sequence of news targets to persist.
+            run_id: str: .
+            targets: Sequence[NewsTarget]: .
+
+        Returns:
+            None: .
         """
         target_count = self._repository.upsert_news_targets(run_id, list(targets))
         self._repository.set_news_refresh_target_count(run_id, target_count)
@@ -83,12 +85,12 @@ class NewsTargetQueue:
         """Claim a batch of eligible targets ordered by priority and retry time.
 
         Args:
-            run_id: Identifier of the parent refresh run.
-            limit: Maximum number of targets to claim.
-            now: Optional timestamp for claim eligibility; defaults to current UTC time.
+            run_id: str: .
+            limit: int: .
+            now: datetime | None: .
 
         Returns:
-            List of claimed ``NewsTargetWorkItem`` objects.
+            list[NewsTargetWorkItem]: .
         """
         return self._repository.claim_news_targets(
             run_id,
@@ -104,8 +106,11 @@ class NewsTargetQueue:
         """Mark a target completed with optional linked document events.
 
         Args:
-            target_id: Identifier of the target to mark completed.
-            event_ids: Sequence of document event ids linked to the target.
+            target_id: str: .
+            event_ids: Sequence[str]: .
+
+        Returns:
+            None: .
         """
         self._repository.mark_news_target_completed(target_id, tuple(event_ids))
 
@@ -120,10 +125,13 @@ class NewsTargetQueue:
         """Mark a target retryable with explicit backoff timestamp.
 
         Args:
-            target_id: Identifier of the target to mark retryable.
-            error_code: Stable error code from the failure.
-            error_message: Human-readable error message.
-            next_attempt_at: Timestamp when the target becomes eligible for retry.
+            target_id: str: .
+            error_code: str: .
+            error_message: str: .
+            next_attempt_at: datetime: .
+
+        Returns:
+            None: .
         """
         self._repository.mark_news_target_retry(
             target_id,
@@ -142,9 +150,12 @@ class NewsTargetQueue:
         """Mark a target as terminal failed.
 
         Args:
-            target_id: Identifier of the target to mark failed.
-            error_code: Stable error code from the failure.
-            error_message: Human-readable error message.
+            target_id: str: .
+            error_code: str: .
+            error_message: str: .
+
+        Returns:
+            None: .
         """
         self._repository.mark_news_target_failed_final(
             target_id,
@@ -156,10 +167,10 @@ class NewsTargetQueue:
         """Return and persist current target counts for a run.
 
         Args:
-            run_id: Identifier of the parent refresh run.
+            run_id: str: .
 
         Returns:
-            A ``TargetReconciliation`` with current target counts and terminal state.
+            TargetReconciliation: .
         """
         return self._repository.reconcile_news_refresh_run(run_id)
 
@@ -173,9 +184,12 @@ class NewsTargetQueue:
         """Persist provider-level wait/failure status for the run.
 
         Args:
-            run_id: Identifier of the parent refresh run.
-            status: New durable status to persist.
-            error_summary: Optional structured error summary for the run.
+            run_id: str: .
+            status: NewsRefreshStatus: .
+            error_summary: dict[str, object] | None: .
+
+        Returns:
+            None: .
         """
         self._repository.update_news_refresh_run_status(
             run_id,

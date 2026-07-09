@@ -17,12 +17,11 @@ def test_text_indexing_smoke_blocks_without_embedding_config_and_masks_secret(
 ) -> None:
     """Missing embedding config must fail closed without printing secret values.
 
-    Runs the smoke script in a subprocess with an API key set but no base URL,
-    model, or dimension, then verifies that the exit code indicates a blocked
-    provider and that the secret key value never appears in stdout or stderr.
-
     Args:
-        database_url: pytest fixture providing the connection URL for the test database.
+        database_url: str: .
+
+    Returns:
+        None: .
     """
     env = {
         **os.environ,

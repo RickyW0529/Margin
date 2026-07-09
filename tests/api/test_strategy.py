@@ -9,18 +9,33 @@ from margin.strategy.service import StrategyService
 
 
 def _client() -> TestClient:
-    """Build a test client wired to an in-memory strategy service."""
+    """Build a test client wired to an in-memory strategy service.
+
+    Returns:
+        TestClient: .
+    """
     app = create_app(strategy_service=StrategyService())
     return TestClient(app)
 
 
 def _idempotency_headers(key: str) -> dict[str, str]:
-    """Return headers required by mutating strategy endpoints."""
+    """Return headers required by mutating strategy endpoints.
+
+    Args:
+        key: str: .
+
+    Returns:
+        dict[str, str]: .
+    """
     return {"Idempotency-Key": key}
 
 
 def test_create_strategy_endpoint():
-    """Test that the create strategy endpoint returns the expected strategy."""
+    """Test that the create strategy endpoint returns the expected strategy.
+
+    Returns:
+        Any: .
+    """
     client = _client()
     response = client.post(
         "/strategies",
@@ -34,7 +49,11 @@ def test_create_strategy_endpoint():
 
 
 def test_list_templates_endpoint():
-    """Test that the list templates endpoint returns all available templates."""
+    """Test that the list templates endpoint returns all available templates.
+
+    Returns:
+        Any: .
+    """
     client = _client()
     response = client.get("/strategies/templates")
     assert response.status_code == 200
@@ -42,7 +61,11 @@ def test_list_templates_endpoint():
 
 
 def test_strategy_mutations_require_idempotency_key():
-    """Test that strategy mutations reject missing idempotency keys."""
+    """Test that strategy mutations reject missing idempotency keys.
+
+    Returns:
+        Any: .
+    """
     client = _client()
 
     response = client.post(
@@ -55,7 +78,11 @@ def test_strategy_mutations_require_idempotency_key():
 
 
 def test_get_strategy_endpoint():
-    """Test that the get strategy endpoint returns the requested strategy."""
+    """Test that the get strategy endpoint returns the requested strategy.
+
+    Returns:
+        Any: .
+    """
     client = _client()
     create_resp = client.post(
         "/strategies",
@@ -69,7 +96,11 @@ def test_get_strategy_endpoint():
 
 
 def test_update_strategy_endpoint():
-    """Test that the update strategy endpoint creates a new version."""
+    """Test that the update strategy endpoint creates a new version.
+
+    Returns:
+        Any: .
+    """
     client = _client()
     create_resp = client.post(
         "/strategies",
@@ -87,7 +118,11 @@ def test_update_strategy_endpoint():
 
 
 def test_activate_version_endpoint():
-    """Test that the activate version endpoint sets the active version."""
+    """Test that the activate version endpoint sets the active version.
+
+    Returns:
+        Any: .
+    """
     client = _client()
     create_resp = client.post(
         "/strategies",
@@ -117,7 +152,11 @@ def test_activate_version_endpoint():
 
 
 def test_get_prompt_endpoint():
-    """Test that the get prompt endpoint returns the version prompt."""
+    """Test that the get prompt endpoint returns the version prompt.
+
+    Returns:
+        Any: .
+    """
     client = _client()
     create_resp = client.post(
         "/strategies",

@@ -14,7 +14,7 @@ from typing import Any
 
 @dataclass(frozen=True)
 class QuantAgentStrategyProfile:
-    """Stable strategy fingerprint emitted by QuantAgent scheduled runs."""
+    """Stable strategy fingerprint emitted by QuantAgent scheduled runs.."""
 
     profile_id: str
     strategy_family: str
@@ -33,7 +33,11 @@ class QuantAgentStrategyProfile:
     required_feature_groups: tuple[str, ...]
 
     def to_metadata(self) -> dict[str, Any]:
-        """Return JSON-safe metadata for Context Store and orchestration logs."""
+        """Return JSON-safe metadata for Context Store and orchestration logs.
+
+        Returns:
+            dict[str, Any]: .
+        """
         return {
             "profile_id": self.profile_id,
             "strategy_family": self.strategy_family,
@@ -56,7 +60,11 @@ class QuantAgentStrategyProfile:
         }
 
     def to_quant_strategy_metadata(self) -> dict[str, Any]:
-        """Return the shape consumed by QuantInputSnapshot metadata."""
+        """Return the shape consumed by QuantInputSnapshot metadata.
+
+        Returns:
+            dict[str, Any]: .
+        """
         metadata = self.to_metadata()
         return {
             "quant_strategy_version_id": self.strategy_version,
@@ -95,5 +103,9 @@ CURRENT_QUANT_AGENT_ML_PROFILE = QuantAgentStrategyProfile(
 
 
 def current_quant_agent_strategy_profile() -> QuantAgentStrategyProfile:
-    """Return the currently selected scheduled QuantAgent strategy profile."""
+    """Return the currently selected scheduled QuantAgent strategy profile.
+
+    Returns:
+        QuantAgentStrategyProfile: .
+    """
     return CURRENT_QUANT_AGENT_ML_PROFILE

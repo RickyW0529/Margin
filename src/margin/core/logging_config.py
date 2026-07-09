@@ -24,9 +24,12 @@ def configure_logging(
     """Configure structlog and stdlib logging for Margin.
 
     Args:
-        log_level: Minimum log level (e.g. ``INFO``, ``DEBUG``).
-        log_format: Output format, either ``json`` or ``console``.
-        secret_values: Runtime secret values that must be removed from strings.
+        log_level: str: .
+        log_format: str: .
+        secret_values: tuple[str, ...]: .
+
+    Returns:
+        None: .
     """
     redactor = SecretRedactingProcessor(secret_values=secret_values)
     # Shared processors run for both stdlib logging and structlog bound loggers.
@@ -63,9 +66,7 @@ def configure_logging(
 
     structlog.configure(
         processors=shared_processors + [structlog.stdlib.ProcessorFormatter.wrap_for_formatter],
-        wrapper_class=structlog.make_filtering_bound_logger(
-            getattr(logging, log_level.upper())
-        ),
+        wrapper_class=structlog.make_filtering_bound_logger(getattr(logging, log_level.upper())),
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,

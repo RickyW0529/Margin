@@ -27,7 +27,14 @@ PUB_AT = datetime(2026, 6, 17, tzinfo=UTC)
 
 @pytest.fixture
 def evidence_repository(database_url):
-    """Yield a clean evidence repository backed by PostgreSQL."""
+    """Yield a clean evidence repository backed by PostgreSQL.
+
+    Args:
+        database_url: Any: .
+
+    Yields:
+        Any: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -45,7 +52,14 @@ def evidence_repository(database_url):
 
 
 def _evidence(evidence_id: str = "ev_persisted") -> Evidence:
-    """Build a deterministic evidence fixture."""
+    """Build a deterministic evidence fixture.
+
+    Args:
+        evidence_id: str: .
+
+    Returns:
+        Evidence: .
+    """
     chunk = make_chunk(
         document_id="doc_001",
         content="经营现金流同比增长32%",
@@ -62,7 +76,14 @@ def _evidence(evidence_id: str = "ev_persisted") -> Evidence:
 
 
 def _claim(evidence: Evidence):
-    """Build a deterministic claim fixture with an embedded primary locator."""
+    """Build a deterministic claim fixture with an embedded primary locator.
+
+    Args:
+        evidence: Evidence: .
+
+    Returns:
+        Any: .
+    """
     locator = CitationLocator.from_evidence(evidence)
     return make_claim(
         statement="经营现金流质量改善",
@@ -77,7 +98,14 @@ def _claim(evidence: Evidence):
 
 
 def test_repository_persists_evidence_claim_audit_and_research_link(evidence_repository):
-    """Evidence, claims, validation audits, and research links round-trip."""
+    """Evidence, claims, validation audits, and research links round-trip.
+
+    Args:
+        evidence_repository: Any: .
+
+    Returns:
+        Any: .
+    """
     evidence = _evidence()
     claim = _claim(evidence)
 
@@ -108,7 +136,14 @@ def test_repository_persists_evidence_claim_audit_and_research_link(evidence_rep
 
 
 def test_repository_rejects_mutating_existing_claim(evidence_repository):
-    """Persisted claims are append-only and cannot be mutated by reinsert."""
+    """Persisted claims are append-only and cannot be mutated by reinsert.
+
+    Args:
+        evidence_repository: Any: .
+
+    Returns:
+        Any: .
+    """
     evidence = _evidence()
     claim = _claim(evidence)
     evidence_repository.add_evidence(evidence)

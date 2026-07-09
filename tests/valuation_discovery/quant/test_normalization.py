@@ -15,7 +15,7 @@ def test_industry_percentile_direction_higher_is_better() -> None:
     """Verify industry percentile scoring assigns 100 to the highest value.
 
     Returns:
-        None.
+        None: .
     """
     frame = pd.DataFrame(
         {
@@ -34,7 +34,7 @@ def test_industry_percentile_direction_lower_is_better() -> None:
     """Verify industry percentile scoring assigns 100 to the lowest value.
 
     Returns:
-        None.
+        None: .
     """
     frame = pd.DataFrame(
         {

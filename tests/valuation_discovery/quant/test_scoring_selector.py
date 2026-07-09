@@ -29,7 +29,7 @@ def test_negative_pe_does_not_get_high_value_score() -> None:
     """Verify a negative PE does not receive a high value score.
 
     Returns:
-        None.
+        None: .
     """
     frame = pd.DataFrame(
         {
@@ -50,7 +50,7 @@ def test_final_score_uses_configured_group_weights() -> None:
     """Verify the final score uses configured factor group weights.
 
     Returns:
-        None.
+        None: .
     """
     result = FactorScorer().combine(
         FactorGroupScores(
@@ -69,9 +69,10 @@ def test_final_score_uses_configured_group_weights() -> None:
 
 def test_selector_includes_pass_and_near_threshold_without_block_buy() -> None:
     """Verify the selector includes pass and near-threshold results without block-buy.
+    Returns:.
 
     Returns:
-        None.
+        None: .
     """
     results = (
         QuantResult(
@@ -97,9 +98,7 @@ def test_selector_includes_pass_and_near_threshold_without_block_buy() -> None:
         ),
     )
 
-    selected = MultiFactorSelector(
-        SelectorConfig(top_n=10, min_score=70)
-    ).select(results)
+    selected = MultiFactorSelector(SelectorConfig(top_n=10, min_score=70)).select(results)
 
     assert [item.security_id for item in selected] == ["pass", "near"]
 
@@ -108,7 +107,7 @@ def test_status_decider_prevents_low_quality_pass() -> None:
     """Verify the status decider prevents a low-quality result from passing.
 
     Returns:
-        None.
+        None: .
     """
     combined = FactorScorer().combine(
         FactorGroupScores(
@@ -136,7 +135,7 @@ def test_quant_service_rejects_invalid_input_snapshot() -> None:
     """Verify the quant service rejects an input snapshot with missing required indicators.
 
     Returns:
-        None.
+        None: .
     """
     snapshot = QuantInputSnapshot(
         snapshot_id="qis-invalid",
@@ -159,7 +158,7 @@ def test_filtered_companies_are_still_persisted() -> None:
     """Verify filtered companies are still persisted with reject status and reasons.
 
     Returns:
-        None.
+        None: .
     """
     snapshot = QuantInputSnapshot(
         snapshot_id="qis-valid",
@@ -196,7 +195,7 @@ def test_quant_service_assigns_overall_and_industry_ranks() -> None:
     """Verify the quant service assigns overall and industry ranks to results.
 
     Returns:
-        None.
+        None: .
     """
     snapshot = QuantInputSnapshot(
         snapshot_id="qis-ranks",
@@ -251,7 +250,7 @@ def test_quant_service_final_score_uses_confirmed_theme_hotness() -> None:
     """Verify confirmed theme hotness changes real quant score, rank, and status.
 
     Returns:
-        None.
+        None: .
     """
     theme_only_weights = {
         "value": 0.0,
@@ -310,21 +309,26 @@ def test_quant_service_final_score_uses_confirmed_theme_hotness() -> None:
     )
 
     by_security = {
-        result.security_id: result
-        for result in repository.list_results(quant_run.quant_run_id)
+        result.security_id: result for result in repository.list_results(quant_run.quant_run_id)
     }
     assert by_security["theme.SZ"].final_score == pytest.approx(85.0)
     assert by_security["plain.SZ"].final_score == pytest.approx(0.0)
     assert by_security["theme.SZ"].rank_overall == 1
     assert by_security["plain.SZ"].screening_status == ScreeningStatus.REJECT
     assert by_security["theme.SZ"].screening_status == ScreeningStatus.PASS
-    assert by_security["theme.SZ"].factor_details["scores"][
-        "theme_hotness"
-    ] == pytest.approx(85.0)
+    assert by_security["theme.SZ"].factor_details["scores"]["theme_hotness"] == pytest.approx(85.0)
 
 
 def _quant_row(security_id: str, *, is_st: bool) -> dict[str, object]:
-    """Build one deterministic quant cross-section row for scoring tests."""
+    """Build one deterministic quant cross-section row for scoring tests.
+
+    Args:
+        security_id: str: .
+        is_st: bool: .
+
+    Returns:
+        dict[str, object]: .
+    """
     return {
         "security_id": security_id,
         "industry_id": "bank",

@@ -8,6 +8,7 @@
 - 暴露健康检查、Prometheus 指标和结构化日志。
 - 保存审计记录、快照、任务状态和降级原因。
 - 在 Provider 不可用、配置缺失或任务失败时给出明确状态。
+- 新增 v1 runtime/control-plane 表：agent/task/artifact/context、tool audit、prompt render、backfill campaign、outbox、DLQ 和 freshness state。
 
 ## 它怎么跑
 
@@ -27,6 +28,8 @@
 - `scripts/`：开发、迁移、回填、smoke。
 - `src/margin/core/`：audit、metrics、degradation、run states。
 - `src/margin/api/routes/health.py` 和 `/metrics`。
+- `alembic/versions/20260708_0053` 到 `20260708_0057`：v1 schema、warehouse、mart、agent/tool/prompt/platform runtime 表。
+- `src/margin/api/routes/backfill.py`、`freshness.py`、`tool_audit.py`：回填、新鲜度和工具审计 safe API。
 
 ## 输出给谁
 

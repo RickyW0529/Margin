@@ -15,7 +15,14 @@ from margin.valuation_discovery.scope import ScopeBinding
 
 
 def _normalize_datetime(value: datetime) -> datetime:
-    """Normalize a datetime to timezone-aware UTC."""
+    """Normalize a datetime to timezone-aware UTC.
+
+    Args:
+        value: datetime: .
+
+    Returns:
+        datetime: .
+    """
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
@@ -23,7 +30,7 @@ def _normalize_datetime(value: datetime) -> datetime:
 
 @dataclass(frozen=True)
 class CanonicalFactRef:
-    """Minimal lineage reference to a PIT-safe canonical warehouse fact."""
+    """Minimal lineage reference to a PIT-safe canonical warehouse fact.."""
 
     fact_id: str
     security_id: str
@@ -33,7 +40,7 @@ class CanonicalFactRef:
 
 
 class QuantWarehouseRepository(Protocol):
-    """Warehouse boundary consumed by QuantInputSnapshotBuilder."""
+    """Warehouse boundary consumed by QuantInputSnapshotBuilder.."""
 
     def get_latest_fact(
         self,
@@ -42,7 +49,16 @@ class QuantWarehouseRepository(Protocol):
         indicator_id: str,
         known_at: datetime,
     ) -> CanonicalFactRef | None:
-        """Return latest fact available at known_at, or None if unavailable."""
+        """Return latest fact available at known_at, or None if unavailable.
+
+        Args:
+            security_id: str: .
+            indicator_id: str: .
+            known_at: datetime: .
+
+        Returns:
+            CanonicalFactRef | None: .
+        """
 
     def get_latest_facts(
         self,
@@ -51,24 +67,47 @@ class QuantWarehouseRepository(Protocol):
         indicator_ids: tuple[str, ...],
         known_at: datetime,
     ) -> tuple[CanonicalFactRef, ...]:
-        """Batch-return latest facts for a complete quant input request."""
+        """Batch-return latest facts for a complete quant input request.
+
+        Args:
+            security_ids: tuple[str, ...]: .
+            indicator_ids: tuple[str, ...]: .
+            known_at: datetime: .
+
+        Returns:
+            tuple[CanonicalFactRef, ...]: .
+        """
 
 
 class QuantInputSnapshotRepository(Protocol):
-    """Persistence boundary for quant input snapshots."""
+    """Persistence boundary for quant input snapshots.."""
 
     def add_quant_input_snapshot(self, snapshot: QuantInputSnapshot) -> None:
-        """Persist a frozen quant input snapshot."""
+        """Persist a frozen quant input snapshot.
+
+        Args:
+            snapshot: QuantInputSnapshot: .
+
+        Returns:
+            None: .
+        """
 
     def get_quant_input_snapshot(
         self,
         snapshot_id: str,
     ) -> QuantInputSnapshot | None:
-        """Return one frozen quant input snapshot."""
+        """Return one frozen quant input snapshot.
+
+        Args:
+            snapshot_id: str: .
+
+        Returns:
+            QuantInputSnapshot | None: .
+        """
 
 
 class QuantInputSnapshotBuilder:
-    """Build and persist frozen PIT-safe quant input snapshots."""
+    """Build and persist frozen PIT-safe quant input snapshots.."""
 
     def __init__(
         self,
@@ -78,8 +117,11 @@ class QuantInputSnapshotBuilder:
         """Initialize the builder with persistence and warehouse boundaries.
 
         Args:
-            repository: Persistence boundary for frozen quant input snapshots.
-            warehouse_repository: Warehouse boundary for PIT-safe fact loading.
+            repository: QuantInputSnapshotRepository: .
+            warehouse_repository: QuantWarehouseRepository: .
+
+        Returns:
+            None: .
         """
         self._repository = repository
         self._warehouse_repository = warehouse_repository
@@ -94,17 +136,14 @@ class QuantInputSnapshotBuilder:
     ) -> QuantInputSnapshot:
         """Build a frozen snapshot from scope and warehouse facts.
 
-        Invalid snapshots are still persisted for auditability. Downstream quant
-        services decide whether a snapshot can be used for publishable results.
-
         Args:
-            scope: The frozen scope binding with universe and feature set.
-            decision_at: Timezone-aware decision timestamp.
-            market_window_days: Number of calendar days for the market window.
-            persist: Whether to persist the snapshot immediately.
+            scope: ScopeBinding: .
+            decision_at: datetime: .
+            market_window_days: int: .
+            persist: bool: .
 
         Returns:
-            A frozen ``QuantInputSnapshot`` with PIT-validated fact references.
+            QuantInputSnapshot: .
         """
         decision = _normalize_datetime(decision_at)
         market_window_start = decision - timedelta(days=market_window_days)
@@ -122,9 +161,7 @@ class QuantInputSnapshotBuilder:
             indicator_ids=indicator_ids,
             known_at=decision,
         )
-        fact_by_key = {
-            (fact.security_id, fact.indicator_id): fact for fact in fact_refs
-        }
+        fact_by_key = {(fact.security_id, fact.indicator_id): fact for fact in fact_refs}
         missing_counts = {
             indicator_id: sum(
                 1
@@ -148,9 +185,7 @@ class QuantInputSnapshotBuilder:
         for fact in fact_refs:
             available_at = _normalize_datetime(fact.available_at)
             if available_at > decision:
-                pit_errors.append(
-                    f"{fact.security_id}:{fact.indicator_id}:future_available_at"
-                )
+                pit_errors.append(f"{fact.security_id}:{fact.indicator_id}:future_available_at")
                 continue
             legal_fact_refs.append(fact)
 
@@ -187,11 +222,25 @@ class QuantInputSnapshotBuilder:
         return snapshot
 
     def persist(self, snapshot: QuantInputSnapshot) -> None:
-        """Persist a frozen quant input snapshot."""
+        """Persist a frozen quant input snapshot.
+
+        Args:
+            snapshot: QuantInputSnapshot: .
+
+        Returns:
+            None: .
+        """
         self._repository.add_quant_input_snapshot(snapshot)
 
     def get(self, snapshot_id: str) -> QuantInputSnapshot | None:
-        """Reload a persisted input snapshot for orchestration recovery."""
+        """Reload a persisted input snapshot for orchestration recovery.
+
+        Args:
+            snapshot_id: str: .
+
+        Returns:
+            QuantInputSnapshot | None: .
+        """
         getter = getattr(self._repository, "get_quant_input_snapshot", None)
         if not callable(getter):
             raise RuntimeError("quant input repository does not support recovery")
@@ -204,7 +253,16 @@ class QuantInputSnapshotBuilder:
         indicator_ids: tuple[str, ...],
         known_at: datetime,
     ) -> list[CanonicalFactRef]:
-        """Use the production batch boundary with compatibility for test doubles."""
+        """Use the production batch boundary with compatibility for test doubles.
+
+        Args:
+            security_ids: tuple[str, ...]: .
+            indicator_ids: tuple[str, ...]: .
+            known_at: datetime: .
+
+        Returns:
+            list[CanonicalFactRef]: .
+        """
         batch_loader = getattr(
             self._warehouse_repository,
             "get_latest_facts",

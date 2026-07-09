@@ -17,9 +17,8 @@ from margin.news.parsed import StructuredDocumentParser
 def test_html_parser_emits_ordered_blocks_with_sections_and_quote_spans():
     """HTML headings and paragraphs are parsed with preserved source locators.
 
-    Verifies that the parser emits heading and paragraph blocks in document
-    order, assigns the current section heading to each block, and records the
-    paragraph index and quote span for locating text in the original page.
+    Returns:
+        Any: .
     """
     parser = StructuredDocumentParser()
     document = parser.parse_html(
@@ -42,8 +41,8 @@ def test_html_parser_emits_ordered_blocks_with_sections_and_quote_spans():
 def test_csv_parser_emits_table_rows_with_table_and_row_ids():
     """CSV rows become table blocks with stable table and row identifiers.
 
-    Verifies that the parser emits one block per CSV row, assigns a consistent
-    ``table_id`` to all rows, and uses predictable ``row_id`` values.
+    Returns:
+        Any: .
     """
     parser = StructuredDocumentParser()
     document = parser.parse_csv(
@@ -58,7 +57,11 @@ def test_csv_parser_emits_table_rows_with_table_and_row_ids():
 
 
 def test_pdf_parser_emits_page_blocks_with_page_numbers():
-    """PDF parser must expose page-level locators even when text is sparse."""
+    """PDF parser must expose page-level locators even when text is sparse.
+
+    Returns:
+        Any: .
+    """
     buffer = io.BytesIO()
     writer = PdfWriter()
     writer.add_blank_page(width=72, height=72)

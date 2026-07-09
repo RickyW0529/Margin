@@ -33,7 +33,14 @@ from margin.storage.database import (
 
 @pytest.fixture
 def news_repository(database_url: str) -> Iterator[NewsRepository]:
-    """Create a clean news repository."""
+    """Create a clean news repository.
+
+    Args:
+        database_url: str: .
+
+    Yields:
+        Any: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -46,7 +53,14 @@ def news_repository(database_url: str) -> Iterator[NewsRepository]:
 def test_agentic_acquisition_persists_run_plan_findings_and_brief(
     news_repository: NewsRepository,
 ) -> None:
-    """A normal agentic acquisition run persists all auditable artifacts."""
+    """A normal agentic acquisition run persists all auditable artifacts.
+
+    Args:
+        news_repository: NewsRepository: .
+
+    Returns:
+        None: .
+    """
     target = _target()
     websearch = FakeWebSearch(news_repository)
     service = AgenticNewsAcquisitionService(
@@ -78,7 +92,14 @@ def test_agentic_acquisition_persists_run_plan_findings_and_brief(
 def test_agentic_acquisition_empty_pass_set_completes_without_provider_calls(
     news_repository: NewsRepository,
 ) -> None:
-    """An empty PASS target set completes without WebSearch or LLM work."""
+    """An empty PASS target set completes without WebSearch or LLM work.
+
+    Args:
+        news_repository: NewsRepository: .
+
+    Returns:
+        None: .
+    """
     websearch = FakeWebSearch(news_repository)
     service = AgenticNewsAcquisitionService(
         repository=news_repository,
@@ -103,7 +124,14 @@ def test_agentic_acquisition_empty_pass_set_completes_without_provider_calls(
 def test_agentic_acquisition_waits_when_websearch_budget_is_exceeded(
     news_repository: NewsRepository,
 ) -> None:
-    """Provider budget errors pause the run instead of becoming generic partials."""
+    """Provider budget errors pause the run instead of becoming generic partials.
+
+    Args:
+        news_repository: NewsRepository: .
+
+    Returns:
+        None: .
+    """
     target = _target()
     service = AgenticNewsAcquisitionService(
         repository=news_repository,
@@ -129,7 +157,14 @@ def test_agentic_acquisition_waits_when_websearch_budget_is_exceeded(
 def test_agentic_acquisition_is_idempotent_for_same_key(
     news_repository: NewsRepository,
 ) -> None:
-    """Repeating the same idempotency key should return the existing run."""
+    """Repeating the same idempotency key should return the existing run.
+
+    Args:
+        news_repository: NewsRepository: .
+
+    Returns:
+        None: .
+    """
     target = _target()
     websearch = FakeWebSearch(news_repository)
     service = AgenticNewsAcquisitionService(
@@ -160,7 +195,14 @@ def test_agentic_acquisition_is_idempotent_for_same_key(
 def test_agentic_acquisition_uses_max_workers_for_targets(
     news_repository: NewsRepository,
 ) -> None:
-    """Multiple targets should be processed concurrently when max_workers allows it."""
+    """Multiple targets should be processed concurrently when max_workers allows it.
+
+    Args:
+        news_repository: NewsRepository: .
+
+    Returns:
+        None: .
+    """
     targets = (
         _target(security_id="000001.SZ", name="平安银行"),
         _target(security_id="000002.SZ", name="万科A"),
@@ -191,7 +233,14 @@ def test_agentic_acquisition_uses_max_workers_for_targets(
 def test_agentic_acquisition_persists_failed_target_task(
     news_repository: NewsRepository,
 ) -> None:
-    """Target failures should include security-level task audit details."""
+    """Target failures should include security-level task audit details.
+
+    Args:
+        news_repository: NewsRepository: .
+
+    Returns:
+        None: .
+    """
     targets = (
         _target(security_id="000001.SZ", name="平安银行"),
         _target(security_id="000002.SZ", name="万科A"),
@@ -221,26 +270,44 @@ def test_agentic_acquisition_persists_failed_target_task(
 
 
 class FakeTargetRepository:
-    """Fake quant target repository."""
+    """Fake quant target repository.."""
 
     def __init__(self, targets: tuple[NewsTarget, ...]) -> None:
         """Initialize the fake target repository with a fixed target tuple.
 
         Args:
-            targets: The targets returned by ``list_targets``.
+            targets: tuple[NewsTarget, ...]: .
+
+        Returns:
+            None: .
         """
         self._targets = targets
 
     def list_targets(self, **_: object) -> tuple[NewsTarget, ...]:
-        """Return configured targets."""
+        """Return configured targets.
+
+        Args:
+            **_: object: .
+
+        Returns:
+            tuple[NewsTarget, ...]: .
+        """
         return self._targets
 
 
 class FakeKeywordWorkflow:
-    """Fake keyword workflow."""
+    """Fake keyword workflow.."""
 
     def build_plan(self, *, run_id: str, target: NewsTarget) -> NewsSearchPlan:
-        """Return one approved search plan."""
+        """Return one approved search plan.
+
+        Args:
+            run_id: str: .
+            target: NewsTarget: .
+
+        Returns:
+            NewsSearchPlan: .
+        """
         return NewsSearchPlan(
             plan_id=f"nsp_{target.security_id}",
             run_id=run_id,
@@ -254,10 +321,18 @@ class FakeKeywordWorkflow:
 
 
 class TargetKeywordWorkflow:
-    """Keyword workflow that emits one target-specific query."""
+    """Keyword workflow that emits one target-specific query.."""
 
     def build_plan(self, *, run_id: str, target: NewsTarget) -> NewsSearchPlan:
-        """Return one query using the target name and symbol."""
+        """Return one query using the target name and symbol.
+
+        Args:
+            run_id: str: .
+            target: NewsTarget: .
+
+        Returns:
+            NewsSearchPlan: .
+        """
         return NewsSearchPlan(
             plan_id=f"nsp_{target.security_id}",
             run_id=run_id,
@@ -271,13 +346,16 @@ class TargetKeywordWorkflow:
 
 
 class FakeWebSearch:
-    """Fake WebSearch service that persists a ready document event."""
+    """Fake WebSearch service that persists a ready document event.."""
 
     def __init__(self, repository: NewsRepository) -> None:
         """Initialize the fake WebSearch service with a repository.
 
         Args:
-            repository: The news repository used to persist document events.
+            repository: NewsRepository: .
+
+        Returns:
+            None: .
         """
         self._repository = repository
         self.calls: list[str] = []
@@ -287,7 +365,15 @@ class FakeWebSearch:
         query: str,
         max_results: int = 10,
     ) -> tuple[SimpleNamespace, list[object]]:
-        """Persist and return one event."""
+        """Persist and return one event.
+
+        Args:
+            query: str: .
+            max_results: int: .
+
+        Returns:
+            tuple[SimpleNamespace, list[object]]: .
+        """
         self.calls.append(query)
         event = make_document_event(
             source_url="https://example.com/agentic",
@@ -308,10 +394,17 @@ class FakeWebSearch:
 
 
 class BarrierWebSearch:
-    """Fake WebSearch that fails under serial execution and succeeds in parallel."""
+    """Fake WebSearch that fails under serial execution and succeeds in parallel.."""
 
     def __init__(self, parties: int) -> None:
-        """Initialize the barrier fake."""
+        """Initialize the barrier fake.
+
+        Args:
+            parties: int: .
+
+        Returns:
+            None: .
+        """
         self._barrier = Barrier(parties, timeout=1.0)
         self.calls: list[str] = []
 
@@ -320,7 +413,15 @@ class BarrierWebSearch:
         query: str,
         max_results: int = 10,
     ) -> tuple[SimpleNamespace, list[object]]:
-        """Wait for the peer target before returning no events."""
+        """Wait for the peer target before returning no events.
+
+        Args:
+            query: str: .
+            max_results: int: .
+
+        Returns:
+            tuple[SimpleNamespace, list[object]]: .
+        """
         del max_results
         self.calls.append(query)
         try:
@@ -331,10 +432,17 @@ class BarrierWebSearch:
 
 
 class FailingWebSearch:
-    """Fake WebSearch that fails for one query."""
+    """Fake WebSearch that fails for one query.."""
 
     def __init__(self, *, fail_query: str) -> None:
-        """Initialize with the query that should fail."""
+        """Initialize with the query that should fail.
+
+        Args:
+            fail_query: str: .
+
+        Returns:
+            None: .
+        """
         self._fail_query = fail_query
 
     def search_and_acquire(
@@ -342,7 +450,15 @@ class FailingWebSearch:
         query: str,
         max_results: int = 10,
     ) -> tuple[SimpleNamespace, list[object]]:
-        """Raise for one query and return no events for others."""
+        """Raise for one query and return no events for others.
+
+        Args:
+            query: str: .
+            max_results: int: .
+
+        Returns:
+            tuple[SimpleNamespace, list[object]]: .
+        """
         del max_results
         if query == self._fail_query:
             raise RuntimeError("download failed")
@@ -350,20 +466,28 @@ class FailingWebSearch:
 
 
 class BudgetExceededWebSearch:
-    """Fake WebSearch service that raises a stable provider budget error."""
+    """Fake WebSearch service that raises a stable provider budget error.."""
 
     def search_and_acquire(
         self,
         query: str,
         max_results: int = 10,
     ) -> tuple[SimpleNamespace, list[object]]:
-        """Raise a provider budget error."""
+        """Raise a provider budget error.
+
+        Args:
+            query: str: .
+            max_results: int: .
+
+        Returns:
+            tuple[SimpleNamespace, list[object]]: .
+        """
         del query, max_results
         raise ProviderBudgetExceeded()
 
 
 class ProviderBudgetExceeded(RuntimeError):
-    """Stable fake Tavily budget exception."""
+    """Stable fake Tavily budget exception.."""
 
     provider_name = "tavily_websearch"
     code = "provider_budget_exceeded"
@@ -371,7 +495,7 @@ class ProviderBudgetExceeded(RuntimeError):
 
 
 class FakeArticleWorkflow:
-    """Fake article workflow."""
+    """Fake article workflow.."""
 
     def extract_findings(
         self,
@@ -380,7 +504,16 @@ class FakeArticleWorkflow:
         target: NewsTarget,
         events: tuple[object, ...],
     ) -> tuple[NewsArticleFinding, ...]:
-        """Return one approved finding for returned events."""
+        """Return one approved finding for returned events.
+
+        Args:
+            run_id: str: .
+            target: NewsTarget: .
+            events: tuple[object, ...]: .
+
+        Returns:
+            tuple[NewsArticleFinding, ...]: .
+        """
         return (
             NewsArticleFinding(
                 finding_id="naf_agentic",
@@ -403,7 +536,16 @@ class FakeArticleWorkflow:
         target: NewsTarget,
         findings: tuple[NewsArticleFinding, ...],
     ) -> NewsSecurityBrief:
-        """Return one derived brief."""
+        """Return one derived brief.
+
+        Args:
+            run_id: str: .
+            target: NewsTarget: .
+            findings: tuple[NewsArticleFinding, ...]: .
+
+        Returns:
+            NewsSecurityBrief: .
+        """
         return NewsSecurityBrief(
             brief_id="nsb_agentic",
             run_id=run_id,
@@ -415,7 +557,7 @@ class FakeArticleWorkflow:
 
 
 class EmptyArticleWorkflow:
-    """Article workflow that returns no findings."""
+    """Article workflow that returns no findings.."""
 
     def extract_findings(
         self,
@@ -424,7 +566,16 @@ class EmptyArticleWorkflow:
         target: NewsTarget,
         events: tuple[object, ...],
     ) -> tuple[NewsArticleFinding, ...]:
-        """Return no findings."""
+        """Return no findings.
+
+        Args:
+            run_id: str: .
+            target: NewsTarget: .
+            events: tuple[object, ...]: .
+
+        Returns:
+            tuple[NewsArticleFinding, ...]: .
+        """
         del run_id, target, events
         return ()
 
@@ -435,7 +586,16 @@ class EmptyArticleWorkflow:
         target: NewsTarget,
         findings: tuple[NewsArticleFinding, ...],
     ) -> None:
-        """Return no brief."""
+        """Return no brief.
+
+        Args:
+            run_id: str: .
+            target: NewsTarget: .
+            findings: tuple[NewsArticleFinding, ...]: .
+
+        Returns:
+            None: .
+        """
         del run_id, target, findings
         return None
 
@@ -445,7 +605,15 @@ def _target(
     security_id: str = "000001.SZ",
     name: str = "平安银行",
 ) -> NewsTarget:
-    """Return one PASS target."""
+    """Return one PASS target.
+
+    Args:
+        security_id: str: .
+        name: str: .
+
+    Returns:
+        NewsTarget: .
+    """
     return NewsTarget(
         scope_version_id="scope_v1",
         quant_run_id="qr_test",

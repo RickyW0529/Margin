@@ -34,12 +34,19 @@ DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 
 
 class FakeProvider:
-    """Provider double covering security master and daily bars."""
+    """Provider double covering security master and daily bars.."""
 
     name = "fake"
 
     def get_securities(self, as_of: datetime) -> list[dict]:
-        """Return one listed A-share security."""
+        """Return one listed A-share security.
+
+        Args:
+            as_of: datetime: .
+
+        Returns:
+            list[dict]: .
+        """
         assert as_of == DECISION_AT
         return [
             {
@@ -60,7 +67,17 @@ class FakeProvider:
         end: datetime,
         frequency: str = "1d",
     ) -> list[dict]:
-        """Return one daily bar for the synchronized security master."""
+        """Return one daily bar for the synchronized security master.
+
+        Args:
+            symbols: list[str]: .
+            start: datetime: .
+            end: datetime: .
+            frequency: str: .
+
+        Returns:
+            list[dict]: .
+        """
         assert symbols == ["000001.SZ"]
         assert start == DECISION_AT
         assert end == DECISION_AT
@@ -86,7 +103,15 @@ def test_worker_executes_security_then_market_data(
     database_url: str,
     tmp_path,
 ) -> None:
-    """A pending run reaches succeeded with real persisted warehouse outputs."""
+    """A pending run reaches succeeded with real persisted warehouse outputs.
+
+    Args:
+        database_url: str: .
+        tmp_path: Any: .
+
+    Returns:
+        None: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -142,9 +167,7 @@ def test_worker_executes_security_then_market_data(
     assert stored_run.status == DataSyncStatus.SUCCEEDED
     with session_factory() as session:
         security = session.scalar(
-            select(SecurityMasterRow).where(
-                SecurityMasterRow.security_id == "000001.SZ"
-            )
+            select(SecurityMasterRow).where(SecurityMasterRow.security_id == "000001.SZ")
         )
     assert security is not None
     values = stack.warehouse.canonical_values(

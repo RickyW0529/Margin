@@ -8,7 +8,7 @@ from margin.valuation_discovery.quant.normalization import FactorNormalizer
 
 
 class MomentumFactorCalculator:
-    """Calculate medium-term relative momentum with explicit overheat penalties."""
+    """Calculate medium-term relative momentum with explicit overheat penalties.."""
 
     WEIGHTS = {
         "return_6m_ex_1m": 0.30,
@@ -19,11 +19,25 @@ class MomentumFactorCalculator:
     }
 
     def __init__(self, normalizer: FactorNormalizer | None = None) -> None:
-        """Initialize the calculator."""
+        """Initialize the calculator.
+
+        Args:
+            normalizer: FactorNormalizer | None: .
+
+        Returns:
+            None: .
+        """
         self._normalizer = normalizer or FactorNormalizer()
 
     def calculate(self, frame: pd.DataFrame) -> pd.DataFrame:
-        """Return momentum scores and structured short-term heat controls."""
+        """Return momentum scores and structured short-term heat controls.
+
+        Args:
+            frame: pd.DataFrame: .
+
+        Returns:
+            pd.DataFrame: .
+        """
         scored = frame.copy()
         if "industry_id" not in scored.columns:
             scored["industry_id"] = "__all__"
@@ -44,9 +58,7 @@ class MomentumFactorCalculator:
         else:
             result = 0.0
             for column, weight in available.items():
-                result = result + scored[f"{column}_momentum_score"] * (
-                    weight / total_weight
-                )
+                result = result + scored[f"{column}_momentum_score"] * (weight / total_weight)
             scored["momentum_score"] = result
 
         return_20d = pd.to_numeric(

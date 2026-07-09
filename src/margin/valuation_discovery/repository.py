@@ -42,35 +42,77 @@ from margin.valuation_discovery.models import (
 
 
 class ValuationDiscoveryRepository(Protocol):
-    """Persistence boundary for valuation discovery."""
+    """Persistence boundary for valuation discovery.."""
 
     def add_universe_membership(self, membership: UniverseMembership) -> None:
-        """Persist a bitemporal universe membership."""
+        """Persist a bitemporal universe membership.
+
+        Args:
+            membership: UniverseMembership: .
+
+        Returns:
+            None: .
+        """
 
     def list_universe_memberships(
         self,
         *,
         universe_code: str | None = None,
     ) -> list[UniverseMembership]:
-        """Return universe memberships visible to the repository implementation."""
+        """Return universe memberships visible to the repository implementation.
+
+        Args:
+            universe_code: str | None: .
+
+        Returns:
+            list[UniverseMembership]: .
+        """
 
     def add_universe_snapshot(self, snapshot: UniverseSnapshot) -> None:
-        """Persist a frozen universe snapshot."""
+        """Persist a frozen universe snapshot.
+
+        Args:
+            snapshot: UniverseSnapshot: .
+
+        Returns:
+            None: .
+        """
 
     def add_quant_input_snapshot(self, snapshot: QuantInputSnapshot) -> None:
-        """Persist a frozen quant input snapshot."""
+        """Persist a frozen quant input snapshot.
+
+        Args:
+            snapshot: QuantInputSnapshot: .
+
+        Returns:
+            None: .
+        """
 
     def get_quant_input_snapshot(
         self,
         snapshot_id: str,
     ) -> QuantInputSnapshot | None:
-        """Return one frozen quant input snapshot by ID."""
+        """Return one frozen quant input snapshot by ID.
+
+        Args:
+            snapshot_id: str: .
+
+        Returns:
+            QuantInputSnapshot | None: .
+        """
 
     def add_effective_assessment_pointer(
         self,
         pointer: EffectiveAssessmentPointer,
     ) -> None:
-        """Persist an effective assessment pointer event."""
+        """Persist an effective assessment pointer event.
+
+        Args:
+            pointer: EffectiveAssessmentPointer: .
+
+        Returns:
+            None: .
+        """
 
     def publish_valuation_result(
         self,
@@ -79,13 +121,29 @@ class ValuationDiscoveryRepository(Protocol):
         evidence_edges: tuple[ValuationAssessmentEvidence, ...],
         pointer: EffectiveAssessmentPointer,
     ) -> None:
-        """Atomically publish one immutable assessment result."""
+        """Atomically publish one immutable assessment result.
+
+        Args:
+            assessment: ValuationAssessment | None: .
+            evidence_edges: tuple[ValuationAssessmentEvidence, ...]: .
+            pointer: EffectiveAssessmentPointer: .
+
+        Returns:
+            None: .
+        """
 
     def get_valuation_assessment(
         self,
         assessment_id: str,
     ) -> ValuationAssessment | None:
-        """Return one assessment by ID."""
+        """Return one assessment by ID.
+
+        Args:
+            assessment_id: str: .
+
+        Returns:
+            ValuationAssessment | None: .
+        """
 
     def count_effective_assessments(
         self,
@@ -93,14 +151,26 @@ class ValuationDiscoveryRepository(Protocol):
         scope_version_id: str,
         as_of: datetime,
     ) -> int:
-        """Count latest effective assessment pointers visible as of a time."""
+        """Count latest effective assessment pointers visible as of a time.
+
+        Args:
+            scope_version_id: str: .
+            as_of: datetime: .
+
+        Returns:
+            int: .
+        """
 
 
 class MemoryValuationDiscoveryRepository:
-    """In-memory repository used by unit tests and local composition tests."""
+    """In-memory repository used by unit tests and local composition tests.."""
 
     def __init__(self) -> None:
-        """Initialize an empty in-memory valuation discovery repository."""
+        """Initialize an empty in-memory valuation discovery repository.
+
+        Returns:
+            None: .
+        """
         self._definitions: dict[str, UniverseDefinition] = {}
         self._memberships: dict[str, UniverseMembership] = {}
         self._snapshots: dict[str, UniverseSnapshot] = {}
@@ -110,18 +180,36 @@ class MemoryValuationDiscoveryRepository:
         self._assessment_evidence: dict[str, ValuationAssessmentEvidence] = {}
 
     def add_universe_definition(self, definition: UniverseDefinition) -> None:
-        """Persist a universe definition idempotently by definition ID."""
+        """Persist a universe definition idempotently by definition ID.
+
+        Args:
+            definition: UniverseDefinition: .
+
+        Returns:
+            None: .
+        """
         self._definitions.setdefault(definition.definition_id, definition)
 
     def list_universe_definitions(self) -> list[UniverseDefinition]:
-        """Return all universe definitions sorted by code/name for determinism."""
+        """Return all universe definitions sorted by code/name for determinism.
+
+        Returns:
+            list[UniverseDefinition]: .
+        """
         return sorted(
             self._definitions.values(),
             key=lambda item: (str(item.universe_code), item.name, item.definition_id),
         )
 
     def add_universe_membership(self, membership: UniverseMembership) -> None:
-        """Persist a bitemporal universe membership."""
+        """Persist a bitemporal universe membership.
+
+        Args:
+            membership: UniverseMembership: .
+
+        Returns:
+            None: .
+        """
         self._memberships[membership.membership_id] = membership
 
     def list_universe_memberships(
@@ -129,7 +217,14 @@ class MemoryValuationDiscoveryRepository:
         *,
         universe_code: str | None = None,
     ) -> list[UniverseMembership]:
-        """Return memberships, optionally filtered by universe code."""
+        """Return memberships, optionally filtered by universe code.
+
+        Args:
+            universe_code: str | None: .
+
+        Returns:
+            list[UniverseMembership]: .
+        """
         memberships = self._memberships.values()
         if universe_code is not None:
             memberships = [
@@ -143,40 +238,80 @@ class MemoryValuationDiscoveryRepository:
         )
 
     def add_universe_snapshot(self, snapshot: UniverseSnapshot) -> None:
-        """Persist a frozen universe snapshot."""
+        """Persist a frozen universe snapshot.
+
+        Args:
+            snapshot: UniverseSnapshot: .
+
+        Returns:
+            None: .
+        """
         self._snapshots[snapshot.snapshot_id] = snapshot
 
     def list_universe_snapshots(self) -> list[UniverseSnapshot]:
-        """Return stored snapshots sorted by creation time."""
+        """Return stored snapshots sorted by creation time.
+
+        Returns:
+            list[UniverseSnapshot]: .
+        """
         return sorted(self._snapshots.values(), key=lambda item: item.created_at)
 
     def add_quant_input_snapshot(self, snapshot: QuantInputSnapshot) -> None:
-        """Persist a frozen quant input snapshot."""
+        """Persist a frozen quant input snapshot.
+
+        Args:
+            snapshot: QuantInputSnapshot: .
+
+        Returns:
+            None: .
+        """
         self._quant_input_snapshots[snapshot.snapshot_id] = snapshot
 
     def list_quant_input_snapshots(self) -> list[QuantInputSnapshot]:
-        """Return stored quant input snapshots sorted by creation time."""
+        """Return stored quant input snapshots sorted by creation time.
+
+        Returns:
+            list[QuantInputSnapshot]: .
+        """
         return sorted(self._quant_input_snapshots.values(), key=lambda item: item.created_at)
 
     def get_quant_input_snapshot(
         self,
         snapshot_id: str,
     ) -> QuantInputSnapshot | None:
-        """Return one frozen quant input snapshot by ID."""
+        """Return one frozen quant input snapshot by ID.
+
+        Args:
+            snapshot_id: str: .
+
+        Returns:
+            QuantInputSnapshot | None: .
+        """
         return self._quant_input_snapshots.get(snapshot_id)
 
     def add_effective_assessment_pointer(
         self,
         pointer: EffectiveAssessmentPointer,
     ) -> None:
-        """Persist an effective assessment pointer event."""
+        """Persist an effective assessment pointer event.
+
+        Args:
+            pointer: EffectiveAssessmentPointer: .
+
+        Returns:
+            None: .
+        """
         existing = self._effective_pointers.get(pointer.pointer_id)
         if existing is not None and existing != pointer:
             raise ValueError("conflicting effective assessment pointer")
         self._effective_pointers.setdefault(pointer.pointer_id, pointer)
 
     def list_effective_assessment_pointers(self) -> list[EffectiveAssessmentPointer]:
-        """Return effective assessment pointer events sorted by creation time."""
+        """Return effective assessment pointer events sorted by creation time.
+
+        Returns:
+            list[EffectiveAssessmentPointer]: .
+        """
         return sorted(self._effective_pointers.values(), key=lambda item: item.created_at)
 
     def publish_valuation_result(
@@ -186,7 +321,16 @@ class MemoryValuationDiscoveryRepository:
         evidence_edges: tuple[ValuationAssessmentEvidence, ...],
         pointer: EffectiveAssessmentPointer,
     ) -> None:
-        """Atomically publish one result in the in-memory repository."""
+        """Atomically publish one result in the in-memory repository.
+
+        Args:
+            assessment: ValuationAssessment | None: .
+            evidence_edges: tuple[ValuationAssessmentEvidence, ...]: .
+            pointer: EffectiveAssessmentPointer: .
+
+        Returns:
+            None: .
+        """
         if assessment is not None:
             existing = self._assessments.get(assessment.assessment_id)
             if existing is not None and existing != assessment:
@@ -204,11 +348,22 @@ class MemoryValuationDiscoveryRepository:
         self,
         assessment_id: str,
     ) -> ValuationAssessment | None:
-        """Return one assessment by ID."""
+        """Return one assessment by ID.
+
+        Args:
+            assessment_id: str: .
+
+        Returns:
+            ValuationAssessment | None: .
+        """
         return self._assessments.get(assessment_id)
 
     def list_valuation_assessments(self) -> list[ValuationAssessment]:
-        """Return assessments in deterministic decision order."""
+        """Return assessments in deterministic decision order.
+
+        Returns:
+            list[ValuationAssessment]: .
+        """
         return sorted(
             self._assessments.values(),
             key=lambda item: (item.decision_at, item.assessment_id),
@@ -218,7 +373,14 @@ class MemoryValuationDiscoveryRepository:
         self,
         assessment_id: str,
     ) -> list[ValuationAssessmentEvidence]:
-        """Return evidence edges for one assessment."""
+        """Return evidence edges for one assessment.
+
+        Args:
+            assessment_id: str: .
+
+        Returns:
+            list[ValuationAssessmentEvidence]: .
+        """
         return sorted(
             (
                 edge
@@ -234,13 +396,18 @@ class MemoryValuationDiscoveryRepository:
         scope_version_id: str,
         as_of: datetime,
     ) -> int:
-        """Count latest visible pointers per security."""
+        """Count latest visible pointers per security.
+
+        Args:
+            scope_version_id: str: .
+            as_of: datetime: .
+
+        Returns:
+            int: .
+        """
         latest: dict[str, EffectiveAssessmentPointer] = {}
         for pointer in self._effective_pointers.values():
-            if (
-                pointer.scope_version_id != scope_version_id
-                or pointer.effective_from > as_of
-            ):
+            if pointer.scope_version_id != scope_version_id or pointer.effective_from > as_of:
                 continue
             current = latest.get(pointer.security_id)
             if current is None or (
@@ -257,25 +424,41 @@ class MemoryValuationDiscoveryRepository:
 
 
 class SQLAlchemyValuationDiscoveryRepository:
-    """PostgreSQL-backed valuation discovery repository."""
+    """PostgreSQL-backed valuation discovery repository.."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
-        """Initialize the repository with a SQLAlchemy session factory."""
+        """Initialize the repository with a SQLAlchemy session factory.
+
+        Args:
+            session_factory: Callable[[], Session]: .
+
+        Returns:
+            None: .
+        """
         self._session_factory = session_factory
 
     def add_quant_input_snapshot(self, snapshot: QuantInputSnapshot) -> None:
-        """Persist a quant input snapshot and its fact lineage in one transaction."""
+        """Persist a quant input snapshot and its fact lineage in one transaction.
+
+        Args:
+            snapshot: QuantInputSnapshot: .
+
+        Returns:
+            None: .
+        """
         with self._session_factory.begin() as session:
             session.add(_quant_input_snapshot_to_row(snapshot))
             for index, fact_ref in enumerate(snapshot.fact_refs):
                 session.add(_quant_input_fact_to_row(snapshot.snapshot_id, index, fact_ref))
 
     def list_quant_input_snapshots(self) -> list[QuantInputSnapshot]:
-        """Return persisted quant input snapshots ordered by creation time."""
+        """Return persisted quant input snapshots ordered by creation time.
+
+        Returns:
+            list[QuantInputSnapshot]: .
+        """
         with self._session_factory() as session:
-            rows = session.scalars(
-                quant_input_snapshots_ordered()
-            ).all()
+            rows = session.scalars(quant_input_snapshots_ordered()).all()
             facts_by_snapshot: dict[str, list[QuantInputSnapshotFactRow]] = {}
             for fact in session.scalars(all_quant_input_snapshot_facts()).all():
                 facts_by_snapshot.setdefault(fact.snapshot_id, []).append(fact)
@@ -288,30 +471,44 @@ class SQLAlchemyValuationDiscoveryRepository:
         self,
         snapshot_id: str,
     ) -> QuantInputSnapshot | None:
-        """Return one frozen quant input snapshot with its fact lineage."""
+        """Return one frozen quant input snapshot with its fact lineage.
+
+        Args:
+            snapshot_id: str: .
+
+        Returns:
+            QuantInputSnapshot | None: .
+        """
         with self._session_factory() as session:
             row = session.get(QuantInputSnapshotRow, snapshot_id)
             if row is None:
                 return None
-            facts = session.scalars(
-                quant_input_snapshot_facts(snapshot_id)
-            ).all()
+            facts = session.scalars(quant_input_snapshot_facts(snapshot_id)).all()
         return _quant_input_snapshot_from_row(row, list(facts))
 
     def add_effective_assessment_pointer(
         self,
         pointer: EffectiveAssessmentPointer,
     ) -> None:
-        """Persist an effective assessment pointer event."""
+        """Persist an effective assessment pointer event.
+
+        Args:
+            pointer: EffectiveAssessmentPointer: .
+
+        Returns:
+            None: .
+        """
         with self._session_factory.begin() as session:
             _persist_pointer(session, pointer)
 
     def list_effective_assessment_pointers(self) -> list[EffectiveAssessmentPointer]:
-        """Return effective assessment pointer events ordered by creation time."""
+        """Return effective assessment pointer events ordered by creation time.
+
+        Returns:
+            list[EffectiveAssessmentPointer]: .
+        """
         with self._session_factory() as session:
-            rows = session.scalars(
-                effective_assessment_pointers_ordered()
-            ).all()
+            rows = session.scalars(effective_assessment_pointers_ordered()).all()
         return [_effective_pointer_from_row(row) for row in rows]
 
     def publish_valuation_result(
@@ -321,7 +518,16 @@ class SQLAlchemyValuationDiscoveryRepository:
         evidence_edges: tuple[ValuationAssessmentEvidence, ...],
         pointer: EffectiveAssessmentPointer,
     ) -> None:
-        """Atomically persist assessment, evidence edges, and pointer."""
+        """Atomically persist assessment, evidence edges, and pointer.
+
+        Args:
+            assessment: ValuationAssessment | None: .
+            evidence_edges: tuple[ValuationAssessmentEvidence, ...]: .
+            pointer: EffectiveAssessmentPointer: .
+
+        Returns:
+            None: .
+        """
         with self._session_factory.begin() as session:
             if assessment is not None:
                 _persist_assessment(session, assessment)
@@ -333,28 +539,42 @@ class SQLAlchemyValuationDiscoveryRepository:
         self,
         assessment_id: str,
     ) -> ValuationAssessment | None:
-        """Return one persisted assessment by ID."""
+        """Return one persisted assessment by ID.
+
+        Args:
+            assessment_id: str: .
+
+        Returns:
+            ValuationAssessment | None: .
+        """
         with self._session_factory() as session:
             row = session.get(ValuationAssessmentRow, assessment_id)
             return _valuation_assessment_from_row(row) if row is not None else None
 
     def list_valuation_assessments(self) -> list[ValuationAssessment]:
-        """Return assessments ordered by decision time."""
+        """Return assessments ordered by decision time.
+
+        Returns:
+            list[ValuationAssessment]: .
+        """
         with self._session_factory() as session:
-            rows = session.scalars(
-                valuation_assessments_ordered()
-            ).all()
+            rows = session.scalars(valuation_assessments_ordered()).all()
         return [_valuation_assessment_from_row(row) for row in rows]
 
     def list_valuation_assessment_evidence(
         self,
         assessment_id: str,
     ) -> list[ValuationAssessmentEvidence]:
-        """Return evidence edges for one assessment."""
+        """Return evidence edges for one assessment.
+
+        Args:
+            assessment_id: str: .
+
+        Returns:
+            list[ValuationAssessmentEvidence]: .
+        """
         with self._session_factory() as session:
-            rows = session.scalars(
-                valuation_assessment_evidence_by_assessment(assessment_id)
-            ).all()
+            rows = session.scalars(valuation_assessment_evidence_by_assessment(assessment_id)).all()
         return [_valuation_evidence_from_row(row) for row in rows]
 
     def count_effective_assessments(
@@ -363,7 +583,15 @@ class SQLAlchemyValuationDiscoveryRepository:
         scope_version_id: str,
         as_of: datetime,
     ) -> int:
-        """Count latest visible pointers per security."""
+        """Count latest visible pointers per security.
+
+        Args:
+            scope_version_id: str: .
+            as_of: datetime: .
+
+        Returns:
+            int: .
+        """
         with self._session_factory() as session:
             rows = session.scalars(
                 effective_assessment_pointers_for_count(scope_version_id, as_of)
@@ -372,7 +600,14 @@ class SQLAlchemyValuationDiscoveryRepository:
 
 
 def _quant_input_snapshot_to_row(snapshot: QuantInputSnapshot) -> QuantInputSnapshotRow:
-    """Convert a ``QuantInputSnapshot`` to its database row."""
+    """Convert a ``QuantInputSnapshot`` to its database row.
+
+    Args:
+        snapshot: QuantInputSnapshot: .
+
+    Returns:
+        QuantInputSnapshotRow: .
+    """
     return QuantInputSnapshotRow(
         snapshot_id=snapshot.snapshot_id,
         scope_version_id=snapshot.scope_version_id,
@@ -405,7 +640,16 @@ def _quant_input_fact_to_row(
     index: int,
     fact_ref: dict[str, Any],
 ) -> QuantInputSnapshotFactRow:
-    """Convert a fact reference dict to a ``QuantInputSnapshotFactRow``."""
+    """Convert a fact reference dict to a ``QuantInputSnapshotFactRow``.
+
+    Args:
+        snapshot_id: str: .
+        index: int: .
+        fact_ref: dict[str, Any]: .
+
+    Returns:
+        QuantInputSnapshotFactRow: .
+    """
     unique_material = f"{snapshot_id}:{index}:{fact_ref['fact_id']}:{fact_ref['indicator_id']}"
     fact_ref_id = "qisf_" + hashlib.sha256(unique_material.encode("utf-8")).hexdigest()[:24]
     return QuantInputSnapshotFactRow(
@@ -423,7 +667,15 @@ def _quant_input_snapshot_from_row(
     row: QuantInputSnapshotRow,
     fact_rows: list[QuantInputSnapshotFactRow],
 ) -> QuantInputSnapshot:
-    """Convert a snapshot row and fact rows to the immutable domain model."""
+    """Convert a snapshot row and fact rows to the immutable domain model.
+
+    Args:
+        row: QuantInputSnapshotRow: .
+        fact_rows: list[QuantInputSnapshotFactRow]: .
+
+    Returns:
+        QuantInputSnapshot: .
+    """
     return QuantInputSnapshot(
         snapshot_id=row.snapshot_id,
         scope_version_id=row.scope_version_id,
@@ -460,7 +712,14 @@ def _quant_input_snapshot_from_row(
 
 
 def _parse_datetime(value: Any) -> datetime:
-    """Parse a datetime or ISO string into a timezone-aware UTC datetime."""
+    """Parse a datetime or ISO string into a timezone-aware UTC datetime.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        datetime: .
+    """
     if isinstance(value, datetime):
         return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
     if isinstance(value, str):
@@ -472,7 +731,14 @@ def _parse_datetime(value: Any) -> datetime:
 def _effective_pointer_to_row(
     pointer: EffectiveAssessmentPointer,
 ) -> EffectiveAssessmentPointerRow:
-    """Convert an ``EffectiveAssessmentPointer`` to its database row."""
+    """Convert an ``EffectiveAssessmentPointer`` to its database row.
+
+    Args:
+        pointer: EffectiveAssessmentPointer: .
+
+    Returns:
+        EffectiveAssessmentPointerRow: .
+    """
     return EffectiveAssessmentPointerRow(
         pointer_id=pointer.pointer_id,
         security_id=pointer.security_id,
@@ -491,7 +757,14 @@ def _effective_pointer_to_row(
 def _effective_pointer_from_row(
     row: EffectiveAssessmentPointerRow,
 ) -> EffectiveAssessmentPointer:
-    """Convert an effective pointer row to the immutable domain model."""
+    """Convert an effective pointer row to the immutable domain model.
+
+    Args:
+        row: EffectiveAssessmentPointerRow: .
+
+    Returns:
+        EffectiveAssessmentPointer: .
+    """
     return EffectiveAssessmentPointer(
         pointer_id=row.pointer_id,
         security_id=row.security_id,
@@ -510,7 +783,14 @@ def _effective_pointer_from_row(
 def _valuation_assessment_to_row(
     assessment: ValuationAssessment,
 ) -> ValuationAssessmentRow:
-    """Convert an immutable valuation assessment to its database row."""
+    """Convert an immutable valuation assessment to its database row.
+
+    Args:
+        assessment: ValuationAssessment: .
+
+    Returns:
+        ValuationAssessmentRow: .
+    """
     return ValuationAssessmentRow(
         assessment_id=assessment.assessment_id,
         security_id=assessment.security_id,
@@ -528,7 +808,14 @@ def _valuation_assessment_to_row(
 def _valuation_assessment_from_row(
     row: ValuationAssessmentRow,
 ) -> ValuationAssessment:
-    """Convert a valuation assessment row to its immutable model."""
+    """Convert a valuation assessment row to its immutable model.
+
+    Args:
+        row: ValuationAssessmentRow: .
+
+    Returns:
+        ValuationAssessment: .
+    """
     return ValuationAssessment(
         assessment_id=row.assessment_id,
         security_id=row.security_id,
@@ -546,7 +833,14 @@ def _valuation_assessment_from_row(
 def _valuation_evidence_to_row(
     edge: ValuationAssessmentEvidence,
 ) -> ValuationAssessmentEvidenceRow:
-    """Convert an immutable assessment-evidence edge to a row."""
+    """Convert an immutable assessment-evidence edge to a row.
+
+    Args:
+        edge: ValuationAssessmentEvidence: .
+
+    Returns:
+        ValuationAssessmentEvidenceRow: .
+    """
     return ValuationAssessmentEvidenceRow(
         edge_id=edge.edge_id,
         assessment_id=edge.assessment_id,
@@ -560,7 +854,14 @@ def _valuation_evidence_to_row(
 def _valuation_evidence_from_row(
     row: ValuationAssessmentEvidenceRow,
 ) -> ValuationAssessmentEvidence:
-    """Convert an assessment-evidence row to its immutable model."""
+    """Convert an assessment-evidence row to its immutable model.
+
+    Args:
+        row: ValuationAssessmentEvidenceRow: .
+
+    Returns:
+        ValuationAssessmentEvidence: .
+    """
     return ValuationAssessmentEvidence(
         edge_id=row.edge_id,
         assessment_id=row.assessment_id,
@@ -575,7 +876,15 @@ def _persist_assessment(
     session: Session,
     assessment: ValuationAssessment,
 ) -> None:
-    """Persist one assessment idempotently or reject conflicting replay."""
+    """Persist one assessment idempotently or reject conflicting replay.
+
+    Args:
+        session: Session: .
+        assessment: ValuationAssessment: .
+
+    Returns:
+        None: .
+    """
     existing = session.get(ValuationAssessmentRow, assessment.assessment_id)
     if existing is not None:
         if _valuation_assessment_from_row(existing) != assessment:
@@ -588,7 +897,15 @@ def _persist_assessment_evidence(
     session: Session,
     edge: ValuationAssessmentEvidence,
 ) -> None:
-    """Persist one evidence edge idempotently."""
+    """Persist one evidence edge idempotently.
+
+    Args:
+        session: Session: .
+        edge: ValuationAssessmentEvidence: .
+
+    Returns:
+        None: .
+    """
     existing = session.get(ValuationAssessmentEvidenceRow, edge.edge_id)
     if existing is not None:
         if _valuation_evidence_from_row(existing) != edge:
@@ -601,7 +918,15 @@ def _persist_pointer(
     session: Session,
     pointer: EffectiveAssessmentPointer,
 ) -> None:
-    """Persist one effective pointer idempotently."""
+    """Persist one effective pointer idempotently.
+
+    Args:
+        session: Session: .
+        pointer: EffectiveAssessmentPointer: .
+
+    Returns:
+        None: .
+    """
     existing = session.get(EffectiveAssessmentPointerRow, pointer.pointer_id)
     if existing is not None:
         if _effective_pointer_from_row(existing) != pointer:

@@ -30,12 +30,12 @@ from margin.sql.data_queries import (
 
 
 class PITQueryError(ValueError):
-    """Raised when a historical warehouse query omits PIT parameters."""
+    """Raised when a historical warehouse query omits PIT parameters.."""
 
 
 @dataclass(frozen=True)
 class CanonicalQuery:
-    """Query canonical indicator values as known at ``decision_at``."""
+    """Query canonical indicator values as known at ``decision_at``.."""
 
     security_ids: tuple[str, ...]
     indicator_ids: tuple[str, ...] = ()
@@ -44,7 +44,7 @@ class CanonicalQuery:
 
 @dataclass(frozen=True)
 class CanonicalValue:
-    """Canonical indicator value selected from provider candidates."""
+    """Canonical indicator value selected from provider candidates.."""
 
     canonical_id: str
     security_id: str
@@ -63,7 +63,7 @@ class CanonicalValue:
 
 @dataclass(frozen=True)
 class IndustryQuery:
-    """Query bitemporal industry membership."""
+    """Query bitemporal industry membership.."""
 
     security_ids: tuple[str, ...]
     on_date: date
@@ -73,7 +73,7 @@ class IndustryQuery:
 
 @dataclass(frozen=True)
 class IndustryMembershipValue:
-    """Industry membership as known at a system time."""
+    """Industry membership as known at a system time.."""
 
     membership_id: str
     security_id: str
@@ -90,7 +90,7 @@ class IndustryMembershipValue:
 
 @dataclass(frozen=True)
 class AdjustedPriceQuery:
-    """Query as-of adjusted prices."""
+    """Query as-of adjusted prices.."""
 
     security_ids: tuple[str, ...]
     start_date: date
@@ -100,7 +100,7 @@ class AdjustedPriceQuery:
 
 @dataclass(frozen=True)
 class AdjustedPriceValue:
-    """As-of adjusted price point."""
+    """As-of adjusted price point.."""
 
     security_id: str
     trade_date: date
@@ -114,7 +114,7 @@ class AdjustedPriceValue:
 
 @dataclass(frozen=True)
 class FreshnessRecord:
-    """Persisted freshness state."""
+    """Persisted freshness state.."""
 
     provider: str
     endpoint_code: str
@@ -127,7 +127,7 @@ class FreshnessRecord:
 
 @dataclass(frozen=True)
 class QualityEventQuery:
-    """Query append-only data-quality events."""
+    """Query append-only data-quality events.."""
 
     security_ids: tuple[str, ...] = ()
     since: datetime | None = None
@@ -135,7 +135,7 @@ class QualityEventQuery:
 
 @dataclass(frozen=True)
 class QualityEvent:
-    """Data-quality event visible to downstream modules."""
+    """Data-quality event visible to downstream modules.."""
 
     event_id: str
     security_id: str | None
@@ -149,11 +149,7 @@ class QualityEvent:
 
 @dataclass(frozen=True)
 class MarketWindowQuery:
-    """Placeholder-compatible query for downstream market reads.
-
-    Raw market bars will be materialized in a later implementation task; for now
-    downstream PIT price reads use ``AdjustedPriceQuery``.
-    """
+    """Placeholder-compatible query for downstream market reads.."""
 
     security_ids: tuple[str, ...]
     start_date: date
@@ -163,7 +159,7 @@ class MarketWindowQuery:
 
 @dataclass(frozen=True)
 class SecurityProfileValue:
-    """Security-master attributes known at a system time."""
+    """Security-master attributes known at a system time.."""
 
     security_id: str
     symbol: str
@@ -176,7 +172,7 @@ class SecurityProfileValue:
 
 @dataclass(frozen=True)
 class IndicatorHistoryQuery:
-    """Query historical numeric indicator facts with PIT enforcement."""
+    """Query historical numeric indicator facts with PIT enforcement.."""
 
     security_ids: tuple[str, ...]
     indicator_ids: tuple[str, ...]
@@ -188,7 +184,7 @@ class IndicatorHistoryQuery:
 
 @dataclass(frozen=True)
 class IndicatorHistoryValue:
-    """One canonicalized historical numeric fact for a business timestamp."""
+    """One canonicalized historical numeric fact for a business timestamp.."""
 
     fact_id: str
     provider: str
@@ -202,13 +198,16 @@ class IndicatorHistoryValue:
 
 
 class SQLAlchemyWarehouseRepository:
-    """PIT-safe warehouse repository backed by SQLAlchemy."""
+    """PIT-safe warehouse repository backed by SQLAlchemy.."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
         """Initialize the repository.
 
         Args:
-            session_factory: Callable returning a SQLAlchemy ``Session``.
+            session_factory: Callable[[], Session]: .
+
+        Returns:
+            None: .
         """
         self._session_factory = session_factory
 
@@ -216,13 +215,10 @@ class SQLAlchemyWarehouseRepository:
         """Return latest canonical values known at ``query.decision_at``.
 
         Args:
-            query: The canonical value query with security IDs and decision time.
+            query: CanonicalQuery: .
 
         Returns:
-            A list of ``CanonicalValue`` objects, one per security/indicator.
-
-        Raises:
-            PITQueryError: If ``query.decision_at`` is ``None``.
+            list[CanonicalValue]: .
         """
         decision_at = _require_decision_at(query.decision_at)
         if not query.security_ids:
@@ -244,13 +240,10 @@ class SQLAlchemyWarehouseRepository:
         """Return adjusted prices for the requested PIT market window.
 
         Args:
-            query: The market window query with security IDs and date range.
+            query: MarketWindowQuery: .
 
         Returns:
-            A list of ``AdjustedPriceValue`` objects.
-
-        Raises:
-            PITQueryError: If ``query.decision_at`` is ``None``.
+            list[AdjustedPriceValue]: .
         """
         return self.adjusted_prices(
             AdjustedPriceQuery(
@@ -265,13 +258,10 @@ class SQLAlchemyWarehouseRepository:
         """Return industry memberships valid at business and system time.
 
         Args:
-            query: The bitemporal industry membership query.
+            query: IndustryQuery: .
 
         Returns:
-            A list of ``IndustryMembershipValue`` objects, one per security.
-
-        Raises:
-            PITQueryError: If ``query.system_as_of`` is ``None``.
+            list[IndustryMembershipValue]: .
         """
         system_as_of = _require_system_as_of(query.system_as_of)
         if not query.security_ids:
@@ -294,13 +284,10 @@ class SQLAlchemyWarehouseRepository:
         """Return latest adjusted prices known at ``query.decision_at``.
 
         Args:
-            query: The adjusted price query with security IDs and date range.
+            query: AdjustedPriceQuery: .
 
         Returns:
-            A list of ``AdjustedPriceValue`` objects, one per security/date.
-
-        Raises:
-            PITQueryError: If ``query.decision_at`` is ``None``.
+            list[AdjustedPriceValue]: .
         """
         decision_at = _require_decision_at(query.decision_at)
         if not query.security_ids:
@@ -322,15 +309,11 @@ class SQLAlchemyWarehouseRepository:
     def freshness(self, domains: set[DataDomain | str] | None = None) -> list[FreshnessRecord]:
         """Return persisted freshness records.
 
-        Results contain only the latest as-of row for each provider endpoint.
-        Domain filtering joins the endpoint registry instead of guessing from
-        endpoint names.
-
         Args:
-            domains: Optional set of data domains to filter by.
+            domains: set[DataDomain | str] | None: .
 
         Returns:
-            A list of ``FreshnessRecord`` objects, one per provider endpoint.
+            list[FreshnessRecord]: .
         """
         normalized_domains = {DataDomain(domain).value for domain in domains or set()}
         statement = freshness_records(normalized_domains or None)
@@ -348,10 +331,10 @@ class SQLAlchemyWarehouseRepository:
         """Return append-only quality events.
 
         Args:
-            query: The quality event query with optional security and time filters.
+            query: QualityEventQuery: .
 
         Returns:
-            A list of ``QualityEvent`` objects matching the query.
+            list[QualityEvent]: .
         """
         statement = quality_events_recent(
             security_ids=query.security_ids,
@@ -370,14 +353,11 @@ class SQLAlchemyWarehouseRepository:
         """Return active security-master records known at ``system_as_of``.
 
         Args:
-            security_ids: The security IDs to look up.
-            system_as_of: The system time for bitemporal visibility.
+            security_ids: tuple[str, ...]: .
+            system_as_of: datetime: .
 
         Returns:
-            A list of ``SecurityProfileValue`` objects, one per security.
-
-        Raises:
-            PITQueryError: If ``system_as_of`` is ``None``.
+            list[SecurityProfileValue]: .
         """
         known_at = _require_system_as_of(system_as_of)
         if not security_ids:
@@ -412,13 +392,10 @@ class SQLAlchemyWarehouseRepository:
         """Return one deterministic provider fact per security/indicator/event.
 
         Args:
-            query: The indicator history query with PIT enforcement.
+            query: IndicatorHistoryQuery: .
 
         Returns:
-            A list of ``IndicatorHistoryValue`` objects.
-
-        Raises:
-            PITQueryError: If ``query.decision_at`` is ``None``.
+            list[IndicatorHistoryValue]: .
         """
         decision_at = _require_decision_at(query.decision_at)
         if not query.security_ids or not query.indicator_ids:
@@ -450,21 +427,42 @@ class SQLAlchemyWarehouseRepository:
 
 
 def _require_decision_at(value: datetime | None) -> datetime:
-    """Return a UTC decision timestamp or raise a PIT query error."""
+    """Return a UTC decision timestamp or raise a PIT query error.
+
+    Args:
+        value: datetime | None: .
+
+    Returns:
+        datetime: .
+    """
     if value is None:
         raise PITQueryError("decision_at is required for PIT warehouse queries")
     return ensure_utc(value)
 
 
 def _require_system_as_of(value: datetime | None) -> datetime:
-    """Return a UTC system-as-of timestamp or raise a PIT query error."""
+    """Return a UTC system-as-of timestamp or raise a PIT query error.
+
+    Args:
+        value: datetime | None: .
+
+    Returns:
+        datetime: .
+    """
     if value is None:
         raise PITQueryError("system_as_of is required for bitemporal warehouse queries")
     return ensure_utc(value)
 
 
 def _canonical_value_from_row(row: CanonicalIndicatorValueRow) -> CanonicalValue:
-    """Map a canonical indicator ORM row to the public value dataclass."""
+    """Map a canonical indicator ORM row to the public value dataclass.
+
+    Args:
+        row: CanonicalIndicatorValueRow: .
+
+    Returns:
+        CanonicalValue: .
+    """
     return CanonicalValue(
         canonical_id=row.canonical_id,
         security_id=row.security_id,
@@ -483,7 +481,14 @@ def _canonical_value_from_row(row: CanonicalIndicatorValueRow) -> CanonicalValue
 
 
 def _industry_from_row(row: SecurityIndustryMembershipRow) -> IndustryMembershipValue:
-    """Map an industry membership ORM row to the public value dataclass."""
+    """Map an industry membership ORM row to the public value dataclass.
+
+    Args:
+        row: SecurityIndustryMembershipRow: .
+
+    Returns:
+        IndustryMembershipValue: .
+    """
     return IndustryMembershipValue(
         membership_id=row.membership_id,
         security_id=row.security_id,
@@ -500,7 +505,14 @@ def _industry_from_row(row: SecurityIndustryMembershipRow) -> IndustryMembership
 
 
 def _adjusted_price_from_row(row: AdjustedPriceSeriesRow) -> AdjustedPriceValue:
-    """Map an adjusted price ORM row to the public value dataclass."""
+    """Map an adjusted price ORM row to the public value dataclass.
+
+    Args:
+        row: AdjustedPriceSeriesRow: .
+
+    Returns:
+        AdjustedPriceValue: .
+    """
     return AdjustedPriceValue(
         security_id=row.security_id,
         trade_date=row.trade_date,
@@ -514,7 +526,14 @@ def _adjusted_price_from_row(row: AdjustedPriceSeriesRow) -> AdjustedPriceValue:
 
 
 def _freshness_from_row(row: DataFreshnessStateRow) -> FreshnessRecord:
-    """Map a freshness state ORM row to the public record dataclass."""
+    """Map a freshness state ORM row to the public record dataclass.
+
+    Args:
+        row: DataFreshnessStateRow: .
+
+    Returns:
+        FreshnessRecord: .
+    """
     return FreshnessRecord(
         provider=row.provider,
         endpoint_code=row.endpoint_code,
@@ -527,7 +546,14 @@ def _freshness_from_row(row: DataFreshnessStateRow) -> FreshnessRecord:
 
 
 def _quality_event_from_row(row: DataQualityEventRow) -> QualityEvent:
-    """Map a quality event ORM row to the public event dataclass."""
+    """Map a quality event ORM row to the public event dataclass.
+
+    Args:
+        row: DataQualityEventRow: .
+
+    Returns:
+        QualityEvent: .
+    """
     return QualityEvent(
         event_id=row.event_id,
         security_id=row.security_id,

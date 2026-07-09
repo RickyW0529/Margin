@@ -17,10 +17,8 @@ from margin.vector.chunker import Chunker
 def test_chunker_preserves_structured_locators_and_adjusts_quote_spans():
     """Splitting a block must inherit locators and remap quote spans per chunk.
 
-    The chunker receives a single paragraph block with page/section/paragraph/table/row
-    metadata and a quote span covering the full text. It should produce multiple chunks,
-    each keeping the same structured locators, while the quote span is clipped to the
-    character range covered by that chunk.
+    Returns:
+        Any: .
     """
     event = make_document_event(
         source_url="https://example.com/report.html",

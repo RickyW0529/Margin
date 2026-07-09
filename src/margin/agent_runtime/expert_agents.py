@@ -21,7 +21,7 @@ from margin.research.llm import LLMProvider, LLMResult
 
 @dataclass(frozen=True)
 class DataAnalystQnaResult:
-    """Result produced by DataAnalystAgent for user Q&A."""
+    """Result produced by DataAnalystAgent for user Q&A.."""
 
     answer: str
     status: AgentExecutionStatus
@@ -31,7 +31,7 @@ class DataAnalystQnaResult:
 
 @dataclass(frozen=True)
 class GeneralQnaResult:
-    """Result produced by GeneralQnaAgent for user Q&A."""
+    """Result produced by GeneralQnaAgent for user Q&A.."""
 
     answer: str
     status: AgentExecutionStatus
@@ -41,7 +41,7 @@ class GeneralQnaResult:
 
 @dataclass(frozen=True)
 class StockAnalystAdjustmentResult:
-    """Result produced by StockAnalystAgent candidate adjustment."""
+    """Result produced by StockAnalystAgent candidate adjustment.."""
 
     status: AgentExecutionStatus
     artifacts: tuple[ContextArtifact, ...]
@@ -51,7 +51,7 @@ class StockAnalystAdjustmentResult:
 
 
 class GeneralQnaAgent:
-    """Read-only ExpertAgent that answers general Q&A through the real LLM."""
+    """Read-only ExpertAgent that answers general Q&A through the real LLM.."""
 
     name = "GeneralQnaAgent"
     skill_id = "answer_general_qna"
@@ -64,6 +64,17 @@ class GeneralQnaAgent:
         prompt_registry: PromptRegistry | None = None,
         prompt_renderer: PromptRenderer | None = None,
     ) -> None:
+        """Process __init__.
+
+        Args:
+            llm_provider: LLMProvider: .
+            write_context_artifact: Callable[[ContextArtifact], None]: .
+            prompt_registry: PromptRegistry | None: .
+            prompt_renderer: PromptRenderer | None: .
+
+        Returns:
+            None: .
+        """
         self._llm_provider = llm_provider
         self._write_context_artifact = write_context_artifact
         self._prompt_registry = prompt_registry or PromptRegistry(
@@ -80,7 +91,18 @@ class GeneralQnaAgent:
         conversation_context: list[dict[str, str]],
         available_artifacts: tuple[ContextArtifact, ...],
     ) -> GeneralQnaResult:
-        """Answer a MainAgent-authorized general Q&A request with an LLM call."""
+        """Answer a MainAgent-authorized general Q&A request with an LLM call.
+
+        Args:
+            run_id: str: .
+            message: str: .
+            language: str: .
+            conversation_context: list[dict[str, str]]: .
+            available_artifacts: tuple[ContextArtifact, ...]: .
+
+        Returns:
+            GeneralQnaResult: .
+        """
         template = self._prompt_registry.get("general_qna_agent_v0.4")
         rendered = self._prompt_renderer.render(
             template,
@@ -132,12 +154,7 @@ class GeneralQnaAgent:
 
 
 class DataAnalystAgent:
-    """Read-only expert agent for recommendation Q&A.
-
-    The MainAgent plans and authorizes this expert. This class performs the
-    actual read-only data access, writes Context Store artifacts, and produces
-    the user-visible answer.
-    """
+    """Read-only expert agent for recommendation Q&A.."""
 
     name = "DataAnalystAgent"
     skill_id = "answer_with_analysis_artifacts"
@@ -150,6 +167,17 @@ class DataAnalystAgent:
         prompt_registry: PromptRegistry | None = None,
         prompt_renderer: PromptRenderer | None = None,
     ) -> None:
+        """Process __init__.
+
+        Args:
+            llm_provider: LLMProvider: .
+            write_context_artifact: Callable[[ContextArtifact], None]: .
+            prompt_registry: PromptRegistry | None: .
+            prompt_renderer: PromptRenderer | None: .
+
+        Returns:
+            None: .
+        """
         self._llm_provider = llm_provider
         self._write_context_artifact = write_context_artifact
         self._prompt_registry = prompt_registry or PromptRegistry(
@@ -168,7 +196,20 @@ class DataAnalystAgent:
         conversation_context: list[dict[str, str]],
         services: DashboardServiceBundle,
     ) -> DataAnalystQnaResult:
-        """Answer one recommendation question from read-only dashboard data."""
+        """Answer one recommendation question from read-only dashboard data.
+
+        Args:
+            run_id: str: .
+            message: str: .
+            scope_version_id: str: .
+            universe: str: .
+            language: str: .
+            conversation_context: list[dict[str, str]]: .
+            services: DashboardServiceBundle: .
+
+        Returns:
+            DataAnalystQnaResult: .
+        """
         candidates = services.query.list_research_candidates_v2(
             scope_version_id=scope_version_id,
             universe_code=universe,
@@ -237,11 +278,7 @@ class DataAnalystAgent:
         self._write_context_artifact(answer_artifact)
         return DataAnalystQnaResult(
             answer=answer,
-            status=(
-                AgentExecutionStatus.SUCCEEDED
-                if rows
-                else AgentExecutionStatus.PARTIAL
-            ),
+            status=(AgentExecutionStatus.SUCCEEDED if rows else AgentExecutionStatus.PARTIAL),
             artifacts=(table_artifact, answer_artifact),
             references=references,
         )
@@ -256,6 +293,19 @@ class DataAnalystAgent:
         language: str,
         conversation_context: list[dict[str, str]],
     ) -> tuple[str, RenderedPrompt, LLMResult]:
+        """Process _answer_from_llm.
+
+        Args:
+            rows: list[dict[str, object]]: .
+            message: str: .
+            scope_version_id: str: .
+            universe: str: .
+            language: str: .
+            conversation_context: list[dict[str, str]]: .
+
+        Returns:
+            tuple[str, RenderedPrompt, LLMResult]: .
+        """
         template = self._prompt_registry.get("data_analyst_qna_agent_v0.4")
         rendered = self._prompt_renderer.render(
             template,
@@ -281,13 +331,7 @@ class DataAnalystAgent:
 
 
 class StockAnalystAgent:
-    """Write-capable expert that adjusts quant candidates after evidence review.
-
-    The agent is deterministic and artifact-first: it does not read raw/source
-    tables and does not issue orders. It records how quant target weights were
-    kept, reduced, or removed so downstream dashboard/Q&A layers can audit the
-    expert overlay.
-    """
+    """Write-capable expert that adjusts quant candidates after evidence review.."""
 
     name = "StockAnalystAgent"
     skill_id = "analyze_quant_candidates"
@@ -298,6 +342,15 @@ class StockAnalystAgent:
         write_context_artifact: Callable[[ContextArtifact], None],
         dashboard_repository: DashboardRepository | None = None,
     ) -> None:
+        """Process __init__.
+
+        Args:
+            write_context_artifact: Callable[[ContextArtifact], None]: .
+            dashboard_repository: DashboardRepository | None: .
+
+        Returns:
+            None: .
+        """
         self._write_context_artifact = write_context_artifact
         self._dashboard_repository = dashboard_repository
 
@@ -308,16 +361,23 @@ class StockAnalystAgent:
         candidates: tuple[dict[str, Any], ...],
         max_stock_exposure: float = 0.80,
     ) -> StockAnalystAdjustmentResult:
-        """Build and persist a portfolio-adjustment artifact for quant candidates."""
+        """Build and persist a portfolio-adjustment artifact for quant candidates.
+
+        Args:
+            run_id: str: .
+            candidates: tuple[dict[str, Any], ...]: .
+            max_stock_exposure: float: .
+
+        Returns:
+            StockAnalystAdjustmentResult: .
+        """
         raw_adjustments = tuple(_candidate_adjustment(candidate) for candidate in candidates)
         adjustments = _scale_adjustments_to_exposure(
             raw_adjustments,
             max_stock_exposure=max_stock_exposure,
         )
         removed = tuple(
-            str(item["security_id"])
-            for item in adjustments
-            if item.get("action") == "delete"
+            str(item["security_id"]) for item in adjustments if item.get("action") == "delete"
         )
         dashboard_run_id = self._publish_dashboard_adjustment_projection(
             run_id=run_id,
@@ -372,7 +432,15 @@ class StockAnalystAgent:
         run_id: str,
         adjustments: tuple[dict[str, Any], ...],
     ) -> str | None:
-        """Write an adjusted dashboard projection when a repository is configured."""
+        """Write an adjusted dashboard projection when a repository is configured.
+
+        Args:
+            run_id: str: .
+            adjustments: tuple[dict[str, Any], ...]: .
+
+        Returns:
+            str | None: .
+        """
         if self._dashboard_repository is None or not adjustments:
             return None
         source_items = _source_dashboard_items(
@@ -387,8 +455,7 @@ class StockAnalystAgent:
 
         dashboard_run_id = f"dr_agent_{run_id}"
         adjustment_by_security_id = {
-            str(adjustment.get("security_id")): adjustment
-            for adjustment in adjustments
+            str(adjustment.get("security_id")): adjustment for adjustment in adjustments
         }
         adjusted_items: list[ResearchItem] = []
         for item in source_items:
@@ -402,19 +469,13 @@ class StockAnalystAgent:
                     update={
                         "item_id": f"{dashboard_run_id}_{item.symbol}",
                         "run_id": dashboard_run_id,
-                        "adjusted_weight": _optional_float(
-                            adjustment.get("adjusted_weight")
-                        ),
+                        "adjusted_weight": _optional_float(adjustment.get("adjusted_weight")),
                         "agent_adjustment": {
                             "source": self.name,
                             "run_id": run_id,
                             "action": str(adjustment.get("action") or "keep"),
-                            "target_weight": _optional_float(
-                                adjustment.get("target_weight")
-                            ),
-                            "adjusted_weight": _optional_float(
-                                adjustment.get("adjusted_weight")
-                            ),
+                            "target_weight": _optional_float(adjustment.get("target_weight")),
+                            "adjusted_weight": _optional_float(adjustment.get("adjusted_weight")),
                             "reasons": list(adjustment.get("reasons", ())),
                             "risk_flags": list(adjustment.get("risk_flags", ())),
                         },
@@ -435,7 +496,14 @@ class StockAnalystAgent:
 def _artifact_summaries(
     artifacts: tuple[ContextArtifact, ...],
 ) -> list[dict[str, object]]:
-    """Return token-safe artifact summaries for prompt context."""
+    """Return token-safe artifact summaries for prompt context.
+
+    Args:
+        artifacts: tuple[ContextArtifact, ...]: .
+
+    Returns:
+        list[dict[str, object]]: .
+    """
     return [
         {
             "artifact_id": artifact.artifact_id,
@@ -449,7 +517,14 @@ def _artifact_summaries(
 
 
 def _candidate_adjustment(candidate: dict[str, Any]) -> dict[str, Any]:
-    """Return one deterministic post-quant adjustment row."""
+    """Return one deterministic post-quant adjustment row.
+
+    Args:
+        candidate: dict[str, Any]: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     security_id = str(candidate.get("security_id") or candidate.get("symbol") or "")
     item_id = str(candidate.get("item_id") or "")
     target_weight = _optional_float(candidate.get("target_weight")) or 0.0
@@ -489,7 +564,15 @@ def _scale_adjustments_to_exposure(
     *,
     max_stock_exposure: float,
 ) -> tuple[dict[str, Any], ...]:
-    """Scale kept/reduced weights so actual projected exposure respects the cap."""
+    """Scale kept/reduced weights so actual projected exposure respects the cap.
+
+    Args:
+        adjustments: tuple[dict[str, Any], ...]: .
+        max_stock_exposure: float: .
+
+    Returns:
+        tuple[dict[str, Any], ...]: .
+    """
     total = sum(
         _optional_float(item.get("adjusted_weight")) or 0.0
         for item in adjustments
@@ -518,7 +601,14 @@ def _scale_adjustments_to_exposure(
 
 
 def _optional_float(value: Any) -> float | None:
-    """Return a float when conversion is possible."""
+    """Return a float when conversion is possible.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        float | None: .
+    """
     if value is None:
         return None
     try:
@@ -531,7 +621,15 @@ def _source_dashboard_items(
     repository: DashboardRepository,
     adjustments: tuple[dict[str, Any], ...],
 ) -> tuple[ResearchItem, ...]:
-    """Load source dashboard items referenced by adjustment rows."""
+    """Load source dashboard items referenced by adjustment rows.
+
+    Args:
+        repository: DashboardRepository: .
+        adjustments: tuple[dict[str, Any], ...]: .
+
+    Returns:
+        tuple[ResearchItem, ...]: .
+    """
     item_ids = tuple(
         str(adjustment.get("item_id") or "")
         for adjustment in adjustments
@@ -539,18 +637,12 @@ def _source_dashboard_items(
     )
     if item_ids:
         items = tuple(
-            item
-            for item_id in item_ids
-            if (item := repository.get_item(item_id)) is not None
+            item for item_id in item_ids if (item := repository.get_item(item_id)) is not None
         )
         if items:
             return items
     source_run_id = next(
-        (
-            str(adjustment.get("run_id"))
-            for adjustment in adjustments
-            if adjustment.get("run_id")
-        ),
+        (str(adjustment.get("run_id")) for adjustment in adjustments if adjustment.get("run_id")),
         "",
     )
     if source_run_id:
@@ -571,7 +663,17 @@ def _dashboard_adjusted_run(
     run_id: str,
     items: tuple[ResearchItem, ...],
 ) -> ResearchRun:
-    """Build the latest dashboard run representing StockAnalystAgent overlay."""
+    """Build the latest dashboard run representing StockAnalystAgent overlay.
+
+    Args:
+        source_run: ResearchRun: .
+        dashboard_run_id: str: .
+        run_id: str: .
+        items: tuple[ResearchItem, ...]: .
+
+    Returns:
+        ResearchRun: .
+    """
     published_count = sum(1 for item in items if item.status.value == "published")
     return source_run.model_copy(
         update={

@@ -28,10 +28,10 @@ def test_postgres_strategy_repository_round_trips_prompt_layers(database_url):
     """Verify strategy versions keep prompt layers across fresh repository instances.
 
     Args:
-        database_url: PostgreSQL connection URL for the isolated test database.
+        database_url: Any: .
 
     Returns:
-        None.
+        Any: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -88,10 +88,10 @@ def test_postgres_strategy_repository_updates_existing_version_lifecycle_state(
     """Verify lifecycle state and sandbox results persist for existing versions.
 
     Args:
-        database_url: PostgreSQL connection URL for the isolated test database.
+        database_url: Any: .
 
     Returns:
-        None.
+        Any: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -131,9 +131,7 @@ def test_postgres_strategy_repository_updates_existing_version_lifecycle_state(
         )
         repo.update_profile(profile.model_copy(update={"versions": (updated_version,)}))
 
-        stored = SQLAlchemyStrategyRepository(session_factory).get_profile(
-            profile.strategy_id
-        )
+        stored = SQLAlchemyStrategyRepository(session_factory).get_profile(profile.strategy_id)
 
         assert stored.versions[0].state == StrategyState.BACKTESTING
         assert stored.versions[0].sandbox_result.validation_ok is True

@@ -12,18 +12,7 @@ from margin.news.models import ensure_utc, utc_now
 
 
 class NewsAgentRunStatus(StrEnum):
-    """Durable status for one agentic news acquisition run.
-
-    Attributes:
-        PENDING: Run has been created but not yet started.
-        RUNNING: Run is actively processing targets.
-        COMPLETED: All targets processed successfully.
-        COMPLETED_EMPTY: Run completed with no eligible targets.
-        WAITING_PROVIDER: Run is waiting for a provider to become available.
-        WAITING_RATE_LIMIT: Run is waiting for a provider rate limit to reset.
-        PARTIAL: Some targets failed but the run completed.
-        FAILED: Run failed before completing.
-    """
+    """Durable status for one agentic news acquisition run.."""
 
     PENDING = "pending"
     RUNNING = "running"
@@ -36,16 +25,7 @@ class NewsAgentRunStatus(StrEnum):
 
 
 class NewsAgentTaskStatus(StrEnum):
-    """Durable status for one agentic node/task.
-
-    Attributes:
-        PENDING: Task has been created but not yet started.
-        RUNNING: Task is actively executing.
-        APPROVED: Task output was reviewed and approved.
-        FALLBACK: Task used a deterministic fallback instead of LLM output.
-        RETRY: Task is scheduled for retry after a failure.
-        FAILED_FINAL: Task has failed terminally after exhausting retries.
-    """
+    """Durable status for one agentic node/task.."""
 
     PENDING = "pending"
     RUNNING = "running"
@@ -56,22 +36,7 @@ class NewsAgentTaskStatus(StrEnum):
 
 
 class NewsAgentRun(BaseModel):
-    """Auditable top-level agentic news acquisition run.
-
-    Attributes:
-        run_id: Unique identifier for the run.
-        scope_version_id: Identifier of the scope version that produced the quant run.
-        quant_run_id: Identifier of the quant run being acquired for.
-        decision_at: Decision timestamp used to scope the quant run.
-        status: Current durable status of the run.
-        target_count: Total number of targets in the run.
-        include_near_threshold: Whether near-threshold securities were included.
-        config_hash: Stable hash of the run configuration for audit.
-        created_at: Timestamp when the run was created.
-        started_at: Timestamp when the run started processing, if any.
-        finished_at: Timestamp when the run finished, if any.
-        error_summary: Structured error summary for failed or partial runs.
-    """
+    """Auditable top-level agentic news acquisition run.."""
 
     run_id: str
     scope_version_id: str
@@ -92,10 +57,10 @@ class NewsAgentRun(BaseModel):
         """Normalize timestamps to UTC.
 
         Args:
-            value: Datetime value provided during model construction.
+            value: datetime | None: .
 
         Returns:
-            Timezone-aware UTC datetime, or None if the input is None.
+            datetime | None: .
         """
         if value is None:
             return None
@@ -105,26 +70,7 @@ class NewsAgentRun(BaseModel):
 
 
 class NewsAgentTask(BaseModel):
-    """One persisted LLM or deterministic task in the agentic pipeline.
-
-    Attributes:
-        task_id: Unique identifier for the task.
-        run_id: Identifier of the parent agentic run.
-        security_id: Identifier of the security the task operates on, if any.
-        task_type: Semantic type of the task (e.g., keyword_writer, article_writer).
-        status: Current durable status of the task.
-        attempt: Zero-based attempt number for retry tracking.
-        prompt_version: Version of the prompt template used.
-        prompt_hash: Hash of the rendered prompt for audit.
-        schema_hash: Hash of the output JSON schema for audit.
-        request_hash: Hash of the full request payload for audit.
-        response_hash: Hash of the LLM response, if any.
-        error_code: Stable error code when the task fails.
-        error_message: Human-readable error message when the task fails.
-        payload: Structured task-specific payload.
-        created_at: Timestamp when the task was created.
-        completed_at: Timestamp when the task completed, if any.
-    """
+    """One persisted LLM or deterministic task in the agentic pipeline.."""
 
     task_id: str
     run_id: str
@@ -149,10 +95,10 @@ class NewsAgentTask(BaseModel):
         """Normalize timestamps to UTC.
 
         Args:
-            value: Datetime value provided during model construction.
+            value: datetime | None: .
 
         Returns:
-            Timezone-aware UTC datetime, or None if the input is None.
+            datetime | None: .
         """
         if value is None:
             return None
@@ -162,22 +108,7 @@ class NewsAgentTask(BaseModel):
 
 
 class NewsSearchPlan(BaseModel):
-    """Reviewed query plan for one security target.
-
-    Attributes:
-        plan_id: Unique identifier for the plan.
-        run_id: Identifier of the parent agentic run.
-        security_id: Identifier of the security the plan targets.
-        symbol: Ticker symbol of the target security.
-        name: Display name of the target security.
-        queries: Tuple of WebSearch query strings.
-        review_status: Review outcome (approved or fallback).
-        fallback_used: Whether a deterministic fallback was used instead of LLM output.
-        prompt_version: Version of the prompt template used.
-        prompt_hash: Hash of the rendered prompt for audit.
-        response_hash: Hash of the LLM response, if any.
-        created_at: Timestamp when the plan was created.
-    """
+    """Reviewed query plan for one security target.."""
 
     plan_id: str
     run_id: str
@@ -198,10 +129,10 @@ class NewsSearchPlan(BaseModel):
         """Normalize timestamp to UTC.
 
         Args:
-            value: Datetime value provided during model construction.
+            value: datetime: .
 
         Returns:
-            Timezone-aware UTC datetime.
+            datetime: .
         """
         return ensure_utc(value)
 
@@ -209,27 +140,7 @@ class NewsSearchPlan(BaseModel):
 
 
 class NewsArticleFinding(BaseModel):
-    """Reviewed article-level finding extracted from a persisted document event.
-
-    Attributes:
-        finding_id: Unique identifier for the finding.
-        run_id: Identifier of the parent agentic run.
-        security_id: Identifier of the security the finding relates to.
-        event_id: Identifier of the source document event.
-        title: Title of the source document.
-        source_url: URL of the source document.
-        key_points: Tuple of evidence-bound key points extracted from the article.
-        materiality: Materiality classification, if any.
-        sentiment: Sentiment classification, if any.
-        risk_flags: Tuple of risk flag strings.
-        cited_spans: Tuple of cited source span dictionaries.
-        review_status: Review outcome (approved or rejected).
-        confidence: Confidence score in the range [0, 1].
-        prompt_version: Version of the prompt template used.
-        prompt_hash: Hash of the rendered prompt for audit.
-        response_hash: Hash of the LLM response, if any.
-        created_at: Timestamp when the finding was created.
-    """
+    """Reviewed article-level finding extracted from a persisted document event.."""
 
     finding_id: str
     run_id: str
@@ -255,10 +166,10 @@ class NewsArticleFinding(BaseModel):
         """Normalize timestamp to UTC.
 
         Args:
-            value: Datetime value provided during model construction.
+            value: datetime: .
 
         Returns:
-            Timezone-aware UTC datetime.
+            datetime: .
         """
         return ensure_utc(value)
 
@@ -266,23 +177,7 @@ class NewsArticleFinding(BaseModel):
 
 
 class NewsSecurityBrief(BaseModel):
-    """Derived security-level news brief assembled from approved findings.
-
-    Attributes:
-        brief_id: Unique identifier for the brief.
-        run_id: Identifier of the parent agentic run.
-        security_id: Identifier of the security the brief covers.
-        summary: Summarized news brief text.
-        finding_ids: Tuple of finding identifiers that contributed to the brief.
-        source_event_ids: Tuple of source document event identifiers.
-        is_derived: Whether the brief is derived (non-primary) rather than from an original
-            source.
-        trust_level: Trust level label for the brief.
-        prompt_version: Version of the prompt template used.
-        prompt_hash: Hash of the rendered prompt for audit.
-        response_hash: Hash of the LLM response, if any.
-        created_at: Timestamp when the brief was created.
-    """
+    """Derived security-level news brief assembled from approved findings.."""
 
     brief_id: str
     run_id: str
@@ -300,7 +195,14 @@ class NewsSecurityBrief(BaseModel):
     @field_validator("created_at")
     @classmethod
     def normalize_created_at(cls, value: datetime) -> datetime:
-        """Normalize timestamp to UTC."""
+        """Normalize timestamp to UTC.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)
 
     model_config = {"frozen": True}

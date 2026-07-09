@@ -17,7 +17,7 @@ OPEN_ENDED_VALID_TO = datetime(9999, 12, 31, tzinfo=UTC)
 
 
 class AgentFlowConfigVersion(BaseModel):
-    """Versioned Agent flow configuration stored in ``agent_flow_versions``."""
+    """Versioned Agent flow configuration stored in ``agent_flow_versions``.."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -45,7 +45,14 @@ class AgentFlowConfigVersion(BaseModel):
     @field_validator("valid_from", "valid_to", "available_at", "created_at")
     @classmethod
     def normalize_datetime(cls, value: datetime) -> datetime:
-        """Normalize timestamps to UTC."""
+        """Normalize timestamps to UTC.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)
 
     @classmethod
@@ -66,7 +73,26 @@ class AgentFlowConfigVersion(BaseModel):
         supersedes_version_id: str | None = None,
         idempotency_key: str = "",
     ) -> AgentFlowConfigVersion:
-        """Build a config version from an AgentFlowDefinition."""
+        """Build a config version from an AgentFlowDefinition.
+
+        Args:
+            version_id: str: .
+            flow: AgentFlowDefinition: .
+            valid_from: datetime: .
+            available_at: datetime: .
+            valid_to: datetime: .
+            owner_id: str: .
+            environment: str: .
+            lifecycle: ConfigLifecycle: .
+            is_current: bool: .
+            created_by: str: .
+            change_reason: str: .
+            supersedes_version_id: str | None: .
+            idempotency_key: str: .
+
+        Returns:
+            AgentFlowConfigVersion: .
+        """
         step_graph = {
             "flow": flow.model_dump(mode="json"),
             "dependency_waves": [
@@ -113,12 +139,16 @@ class AgentFlowConfigVersion(BaseModel):
         )
 
     def to_flow(self) -> AgentFlowDefinition:
-        """Return the typed Agent flow definition."""
+        """Return the typed Agent flow definition.
+
+        Returns:
+            AgentFlowDefinition: .
+        """
         return AgentFlowDefinition.model_validate(self.step_graph_json["flow"])
 
 
 class QuantAgentProfileConfigVersion(BaseModel):
-    """Versioned QuantAgent profile stored in ``quant_agent_profile_versions``."""
+    """Versioned QuantAgent profile stored in ``quant_agent_profile_versions``.."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -156,7 +186,14 @@ class QuantAgentProfileConfigVersion(BaseModel):
     @field_validator("valid_from", "valid_to", "available_at", "created_at")
     @classmethod
     def normalize_datetime(cls, value: datetime) -> datetime:
-        """Normalize timestamps to UTC."""
+        """Normalize timestamps to UTC.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)
 
     @classmethod
@@ -178,7 +215,27 @@ class QuantAgentProfileConfigVersion(BaseModel):
         supersedes_version_id: str | None = None,
         idempotency_key: str = "",
     ) -> QuantAgentProfileConfigVersion:
-        """Build a config version from a QuantAgentStrategyProfile."""
+        """Build a config version from a QuantAgentStrategyProfile.
+
+        Args:
+            version_id: str: .
+            profile_key: str: .
+            profile: QuantAgentStrategyProfile: .
+            valid_from: datetime: .
+            available_at: datetime: .
+            valid_to: datetime: .
+            owner_id: str: .
+            environment: str: .
+            lifecycle: ConfigLifecycle: .
+            is_current: bool: .
+            created_by: str: .
+            change_reason: str: .
+            supersedes_version_id: str | None: .
+            idempotency_key: str: .
+
+        Returns:
+            QuantAgentProfileConfigVersion: .
+        """
         payload = {
             "profile_key": profile_key,
             "profile": profile.to_metadata(),
@@ -216,7 +273,11 @@ class QuantAgentProfileConfigVersion(BaseModel):
         )
 
     def to_profile(self) -> QuantAgentStrategyProfile:
-        """Return the typed QuantAgent strategy profile."""
+        """Return the typed QuantAgent strategy profile.
+
+        Returns:
+            QuantAgentStrategyProfile: .
+        """
         return QuantAgentStrategyProfile(
             profile_id=self.profile_id,
             strategy_family=self.strategy_family,
@@ -237,7 +298,7 @@ class QuantAgentProfileConfigVersion(BaseModel):
 
 
 class ConfigReference(BaseModel):
-    """A resolved domain config reference stored in a run snapshot."""
+    """A resolved domain config reference stored in a run snapshot.."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -252,11 +313,17 @@ class ConfigReference(BaseModel):
         domain: str,
         version: AgentFlowConfigVersion | QuantAgentProfileConfigVersion,
     ) -> ConfigReference:
-        """Build a reference from one resolved domain config version."""
+        """Build a reference from one resolved domain config version.
+
+        Args:
+            domain: str: .
+            version: AgentFlowConfigVersion | QuantAgentProfileConfigVersion: .
+
+        Returns:
+            ConfigReference: .
+        """
         config_key = (
-            version.flow_id
-            if isinstance(version, AgentFlowConfigVersion)
-            else version.profile_key
+            version.flow_id if isinstance(version, AgentFlowConfigVersion) else version.profile_key
         )
         return cls(
             domain=domain,
@@ -267,13 +334,13 @@ class ConfigReference(BaseModel):
 
 
 class ConfigResolutionSnapshotEntry(ConfigReference):
-    """One resolved config entry in a runtime snapshot."""
+    """One resolved config entry in a runtime snapshot.."""
 
     snapshot_id: str
 
 
 class ConfigResolutionSnapshot(BaseModel):
-    """Resolved runtime configuration lineage for one run."""
+    """Resolved runtime configuration lineage for one run.."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -288,5 +355,12 @@ class ConfigResolutionSnapshot(BaseModel):
     @field_validator("decision_at", "created_at")
     @classmethod
     def normalize_datetime(cls, value: datetime) -> datetime:
-        """Normalize timestamps to UTC."""
+        """Normalize timestamps to UTC.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)

@@ -24,7 +24,7 @@ from margin.news.models import utc_now
 
 
 class TaskType(StrEnum):
-    """Research task types used for routing."""
+    """Research task types used for routing.."""
 
     UNIVERSE_FILTER = "universe_filter"
     QUANT = "quant"
@@ -41,7 +41,7 @@ class TaskType(StrEnum):
 
 @dataclass(frozen=True)
 class LLMResult:
-    """Result of an LLM completion call."""
+    """Result of an LLM completion call.."""
 
     output: dict[str, Any]
     model: str
@@ -52,12 +52,19 @@ class LLMResult:
 
 
 def _compute_hash(data: Any) -> str:
-    """Return a deterministic SHA-256 hash for the supplied data."""
+    """Return a deterministic SHA-256 hash for the supplied data.
+
+    Args:
+        data: Any: .
+
+    Returns:
+        str: .
+    """
     return hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()
 
 
 class LLMProvider(BaseProvider):
-    """OpenAI-compatible LLM provider with structured JSON output."""
+    """OpenAI-compatible LLM provider with structured JSON output.."""
 
     def __init__(
         self,
@@ -72,12 +79,15 @@ class LLMProvider(BaseProvider):
         """Initialize the provider.
 
         Args:
-            name: Provider name used in the registry.
-            api_key: LLM API key resolved by the caller.
-            base_url: LLM API base URL resolved by the caller.
-            model: Model identifier resolved by the caller.
-            client: Optional ``httpx.Client`` instance.
-            timeout: Request timeout in seconds.
+            name: str: .
+            api_key: str | None: .
+            base_url: str | None: .
+            model: str | None: .
+            client: httpx.Client | None: .
+            timeout: float: .
+
+        Returns:
+            None: .
         """
         self._api_key = api_key
         self._base_url = (base_url or "").rstrip("/")
@@ -95,7 +105,11 @@ class LLMProvider(BaseProvider):
 
     @property
     def descriptor(self) -> ProviderDescriptor:
-        """Return the provider descriptor for registry integration."""
+        """Return the provider descriptor for registry integration.
+
+        Returns:
+            ProviderDescriptor: .
+        """
         return self._descriptor
 
     def complete(
@@ -108,12 +122,12 @@ class LLMProvider(BaseProvider):
         """Call the LLM with an optional structured JSON schema.
 
         Args:
-            prompt: User prompt sent to the model.
-            response_schema: Optional JSON schema to enforce structured output.
-            temperature: Sampling temperature.
+            prompt: str: .
+            response_schema: dict[str, Any] | None: .
+            temperature: float: .
 
         Returns:
-            An ``LLMResult`` containing the parsed output or error details.
+            LLMResult: .
         """
         if not self._api_key or not self._base_url:
             return LLMResult(
@@ -186,15 +200,12 @@ class LLMProvider(BaseProvider):
         """Registry-compatible completion that raises on Provider failure.
 
         Args:
-            prompt: User prompt sent to the model.
-            response_schema: Optional JSON schema to enforce structured output.
-            temperature: Sampling temperature.
+            prompt: str: .
+            response_schema: dict[str, Any] | None: .
+            temperature: float: .
 
         Returns:
-            The successful ``LLMResult``.
-
-        Raises:
-            ProviderError: If the completion fails.
+            LLMResult: .
         """
         result = self.complete(
             prompt,
@@ -209,7 +220,10 @@ class LLMProvider(BaseProvider):
         """Receive the LLM API key from :class:`ProviderRegistry`.
 
         Args:
-            secrets: Mapping of secret names to values.
+            secrets: dict[str, str]: .
+
+        Returns:
+            None: .
         """
         api_key = secrets.get("llm_api_key")
         if api_key:
@@ -219,7 +233,7 @@ class LLMProvider(BaseProvider):
         """Check connectivity and credentials.
 
         Returns:
-            A ``HealthCheckResult`` describing the provider status.
+            HealthCheckResult: .
         """
         if not self._api_key or not self._base_url:
             return HealthCheckResult(
@@ -256,7 +270,7 @@ class LLMProvider(BaseProvider):
 
 
 class DeterministicLLMProvider(LLMProvider):
-    """Test double that ignores prompts and returns a fixed JSON object."""
+    """Test double that ignores prompts and returns a fixed JSON object.."""
 
     def __init__(
         self,
@@ -268,10 +282,13 @@ class DeterministicLLMProvider(LLMProvider):
         """Initialize the deterministic test provider.
 
         Args:
-            name: Provider name.
-            response: Fixed JSON object returned on success.
-            fail: Whether every call should fail.
-            error: Error message used when ``fail`` is True.
+            name: str: .
+            response: dict[str, Any] | None: .
+            fail: bool: .
+            error: str: .
+
+        Returns:
+            None: .
         """
         self._response = response or {"result": "ok"}
         self._fail = fail
@@ -286,7 +303,11 @@ class DeterministicLLMProvider(LLMProvider):
 
     @property
     def descriptor(self) -> ProviderDescriptor:
-        """Return the provider descriptor."""
+        """Return the provider descriptor.
+
+        Returns:
+            ProviderDescriptor: .
+        """
         return self._descriptor
 
     def complete(
@@ -299,12 +320,12 @@ class DeterministicLLMProvider(LLMProvider):
         """Return the configured deterministic response.
 
         Args:
-            prompt: Ignored.
-            response_schema: Ignored.
-            temperature: Ignored.
+            prompt: str: .
+            response_schema: dict[str, Any] | None: .
+            temperature: float: .
 
         Returns:
-            A successful ``LLMResult`` or a failure when configured to fail.
+            LLMResult: .
         """
         del prompt, response_schema, temperature
         if self._fail:
@@ -327,7 +348,7 @@ class DeterministicLLMProvider(LLMProvider):
         """Always report healthy.
 
         Returns:
-            A healthy ``HealthCheckResult``.
+            HealthCheckResult: .
         """
         return HealthCheckResult(
             provider_name=self._descriptor.name,
@@ -337,7 +358,7 @@ class DeterministicLLMProvider(LLMProvider):
 
 
 class ModelRouter:
-    """Route research tasks to model/tool/budget/schema configurations."""
+    """Route research tasks to model/tool/budget/schema configurations.."""
 
     DEFAULTS: dict[TaskType, str] = {
         TaskType.UNIVERSE_FILTER: "rule",
@@ -362,9 +383,12 @@ class ModelRouter:
         """Initialize the router.
 
         Args:
-            overrides: Mapping that overrides default task-to-provider routing.
-            llm_providers: Named LLM providers to register.
-            provider_registry: Optional shared provider registry.
+            overrides: dict[TaskType, str] | None: .
+            llm_providers: dict[str, LLMProvider] | None: .
+            provider_registry: ProviderRegistry | None: .
+
+        Returns:
+            None: .
         """
         self._mapping = dict(self.DEFAULTS)
         if overrides:
@@ -378,10 +402,10 @@ class ModelRouter:
         """Return the provider name selected for a task.
 
         Args:
-            task: Research task type.
+            task: TaskType: .
 
         Returns:
-            Provider identifier (e.g. ``"rule"`` or a registered model name).
+            str: .
         """
         return self._mapping.get(task, "rule")
 
@@ -389,10 +413,10 @@ class ModelRouter:
         """Return a registered provider by name.
 
         Args:
-            name: Provider identifier.
+            name: str: .
 
         Returns:
-            The registered ``LLMProvider`` or ``None``.
+            LLMProvider | None: .
         """
         return self._providers.get(name)
 
@@ -406,9 +430,12 @@ class ModelRouter:
         """Register a named provider with the shared registry.
 
         Args:
-            name: Provider identifier.
-            provider: LLM provider instance.
-            fallback_names: Ordered list of fallback provider names.
+            name: str: .
+            provider: LLMProvider: .
+            fallback_names: list[str] | None: .
+
+        Returns:
+            None: .
         """
         self._providers[name] = provider
         self._registry.register(
@@ -428,13 +455,13 @@ class ModelRouter:
         """Route a completion through the shared Provider Registry.
 
         Args:
-            task: Research task type.
-            prompt: User prompt.
-            response_schema: Optional JSON schema for structured output.
-            trace_id: Trace identifier for observability.
+            task: TaskType: .
+            prompt: str: .
+            response_schema: dict[str, Any] | None: .
+            trace_id: str: .
 
         Returns:
-            The routed ``LLMResult`` or a failure result on error.
+            LLMResult: .
         """
         provider_name = self.select(task)
         if provider_name == "rule":
@@ -475,13 +502,16 @@ class ModelRouter:
 
 
 class StructuredOutputGuardrail:
-    """Validate that an LLM output conforms to the supported JSON Schema subset."""
+    """Validate that an LLM output conforms to the supported JSON Schema subset.."""
 
     def __init__(self, schema: dict[str, Any]) -> None:
         """Initialize the guardrail with a JSON schema.
 
         Args:
-            schema: JSON Schema dictionary describing the expected output.
+            schema: dict[str, Any]: .
+
+        Returns:
+            None: .
         """
         self._schema = schema
 
@@ -489,10 +519,10 @@ class StructuredOutputGuardrail:
         """Validate ``output`` against the configured schema.
 
         Args:
-            output: Parsed JSON output from an LLM.
+            output: dict[str, Any]: .
 
         Returns:
-            A tuple of ``(is_valid, error_message)``.
+            tuple[bool, str]: .
         """
         return self._validate_value(output, self._schema, "$")
 
@@ -502,7 +532,16 @@ class StructuredOutputGuardrail:
         schema: dict[str, Any],
         path: str,
     ) -> tuple[bool, str]:
-        """Recursively validate a value against a schema fragment."""
+        """Recursively validate a value against a schema fragment.
+
+        Args:
+            value: Any: .
+            schema: dict[str, Any]: .
+            path: str: .
+
+        Returns:
+            tuple[bool, str]: .
+        """
         expected_type = schema.get("type")
         type_checks = {
             "object": lambda candidate: isinstance(candidate, dict),

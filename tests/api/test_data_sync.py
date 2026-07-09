@@ -28,7 +28,16 @@ def test_default_data_sync_request_creates_executable_work_items(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    """Test that a default API request never creates a zero-work pending run."""
+    """Test that a default API request never creates a zero-work pending run.
+
+    Args:
+        database_url: str: .
+        monkeypatch: pytest.MonkeyPatch: .
+        tmp_path: Any: .
+
+    Returns:
+        None: .
+    """
     get_settings.cache_clear()
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -40,9 +49,7 @@ def test_default_data_sync_request_creates_executable_work_items(
     )
     app = create_app()
     app.dependency_overrides[get_data_warehouse_stack] = lambda: stack
-    policy_service = DataAcquisitionPolicyService(
-        MemoryDataAcquisitionPolicyRepository()
-    )
+    policy_service = DataAcquisitionPolicyService(MemoryDataAcquisitionPolicyRepository())
     active_policy = policy_service.create(
         rolling_window_months=24,
         actor_id="local-admin",
@@ -83,7 +90,11 @@ def test_default_data_sync_request_creates_executable_work_items(
 
 
 def test_data_sync_accepts_personal_mode_frontend_write() -> None:
-    """Test that manual sync accepts personal-mode writes with idempotency."""
+    """Test that manual sync accepts personal-mode writes with idempotency.
+
+    Returns:
+        None: .
+    """
     response = TestClient(create_app()).post(
         "/api/v1/data-sync",
         json={"requested_by": "local-user"},

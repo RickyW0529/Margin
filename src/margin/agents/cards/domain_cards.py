@@ -14,7 +14,7 @@ from margin.agents.security.policies import (
 
 
 class DomainAgentCard(BaseModel):
-    """Layer-2 Domain ExpertAgent card selected by L1."""
+    """Layer-2 Domain ExpertAgent card selected by L1.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

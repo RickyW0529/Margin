@@ -21,7 +21,7 @@ from margin.vector.models import RetrievalResult
 
 
 class RagEvidenceRetrievalTool(Protocol):
-    """Protocol for vector-backed retrieval tools exposed to this adapter."""
+    """Protocol for vector-backed retrieval tools exposed to this adapter.."""
 
     def search(
         self,
@@ -33,18 +33,37 @@ class RagEvidenceRetrievalTool(Protocol):
         top_k: int,
         prefer_official: bool,
     ) -> list[RetrievalResult]:
-        """Search for PIT-safe retrieval results."""
+        """Search for PIT-safe retrieval results.
+
+        Args:
+            query: str: .
+            symbol: str: .
+            decision_at: datetime: .
+            doc_types: list[str] | None: .
+            top_k: int: .
+            prefer_official: bool: .
+
+        Returns:
+            list[RetrievalResult]: .
+        """
 
 
 class EvidencePackageBuilderLike(Protocol):
-    """Protocol for optional package builders used by RAG evidence tools."""
+    """Protocol for optional package builders used by RAG evidence tools.."""
 
     def build(self, **kwargs: Any) -> Any:
-        """Build and persist an EvidencePackage-like value."""
+        """Build and persist an EvidencePackage-like value.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
 
 
 class RagEvidenceRetrieveInput(BaseModel):
-    """Input schema for scoped RAG evidence retrieval."""
+    """Input schema for scoped RAG evidence retrieval.."""
 
     security_id: str
     decision_at: datetime
@@ -64,7 +83,14 @@ class RagEvidenceRetrieveInput(BaseModel):
     @field_validator("decision_at")
     @classmethod
     def normalize_decision_at(cls, value: datetime) -> datetime:
-        """Normalize decision timestamps to UTC."""
+        """Normalize decision timestamps to UTC.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)
 
 
@@ -83,14 +109,15 @@ def register_rag_evidence_tools(
     """Register a scoped RAG evidence retrieval tool.
 
     Args:
-        registry: Tool registry to populate.
-        retrieval_tool: PIT-safe vector retrieval adapter.
-        package_builder: Optional EvidencePackage builder. When present and the
-            call requests ``build_package=True``, retrieval output is frozen into
-            the RAG evidence package system.
-        scope_hash_factory: Optional deterministic scope hash provider.
-        name: Tool name to register.
-        version: Tool version string.
+        registry: ToolDefinitionRegistry: .
+        retrieval_tool: RagEvidenceRetrievalTool: .
+        package_builder: EvidencePackageBuilderLike | None: .
+        scope_hash_factory: ScopeHashFactory | None: .
+        name: str: .
+        version: str: .
+
+    Returns:
+        None: .
     """
     factory = scope_hash_factory or _default_scope_hash
     registry.register(
@@ -121,7 +148,17 @@ def _retrieve_rag_evidence(
     package_builder: EvidencePackageBuilderLike | None,
     scope_hash_factory: ScopeHashFactory,
 ) -> dict[str, Any]:
-    """Run retrieval and return an agent/evidence-system friendly payload."""
+    """Run retrieval and return an agent/evidence-system friendly payload.
+
+    Args:
+        payload: dict[str, Any]: .
+        retrieval_tool: RagEvidenceRetrievalTool: .
+        package_builder: EvidencePackageBuilderLike | None: .
+        scope_hash_factory: ScopeHashFactory: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     security_id = str(payload["security_id"])
     decision_at = ensure_utc(payload["decision_at"])
     questions = tuple(str(value) for value in payload.get("questions", ()))
@@ -158,10 +195,7 @@ def _retrieve_rag_evidence(
     evidence_ids = (
         tuple(str(value) for value in getattr(package, "evidence_ids", ()))
         if package is not None
-        else tuple(
-            make_stable_evidence_id(security_id, result.chunk)
-            for result in results
-        )
+        else tuple(make_stable_evidence_id(security_id, result.chunk) for result in results)
     )
     blocks = _evidence_blocks(
         security_id=security_id,
@@ -218,7 +252,17 @@ def _resolve_query(
     evidence_gaps: tuple[str, ...],
     supplemental: bool,
 ) -> str:
-    """Resolve the search text sent to the retriever."""
+    """Resolve the search text sent to the retriever.
+
+    Args:
+        query: str: .
+        questions: tuple[str, ...]: .
+        evidence_gaps: tuple[str, ...]: .
+        supplemental: bool: .
+
+    Returns:
+        str: .
+    """
     stripped = query.strip()
     if stripped:
         return stripped
@@ -236,15 +280,20 @@ def _evidence_blocks(
     package_evidence_ids: tuple[str, ...],
     filter_to_package: bool,
 ) -> list[dict[str, Any]]:
-    """Serialize retrieval results into agent-ready evidence blocks."""
-    default_ids = [
-        make_stable_evidence_id(security_id, result.chunk)
-        for result in results
-    ]
+    """Serialize retrieval results into agent-ready evidence blocks.
+
+    Args:
+        security_id: str: .
+        results: list[RetrievalResult]: .
+        package_evidence_ids: tuple[str, ...]: .
+        filter_to_package: bool: .
+
+    Returns:
+        list[dict[str, Any]]: .
+    """
+    default_ids = [make_stable_evidence_id(security_id, result.chunk) for result in results]
     evidence_ids = (
-        list(package_evidence_ids)
-        if len(package_evidence_ids) == len(results)
-        else default_ids
+        list(package_evidence_ids) if len(package_evidence_ids) == len(results) else default_ids
     )
     package_id_set = set(package_evidence_ids)
     blocks: list[dict[str, Any]] = []
@@ -281,7 +330,14 @@ def _evidence_blocks(
 
 
 def _locator_payload(chunk: Any) -> dict[str, Any]:
-    """Return the source locator fields agents may cite."""
+    """Return the source locator fields agents may cite.
+
+    Args:
+        chunk: Any: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     locator = getattr(chunk, "locator", None)
     page = chunk.page if chunk.page is not None else getattr(locator, "page", None)
     section = chunk.section or getattr(locator, "section", None)
@@ -304,7 +360,14 @@ def _locator_payload(chunk: Any) -> dict[str, Any]:
 
 
 def _default_scope_hash(payload: dict[str, Any]) -> str:
-    """Compute a stable scope hash for one retrieval request."""
+    """Compute a stable scope hash for one retrieval request.
+
+    Args:
+        payload: dict[str, Any]: .
+
+    Returns:
+        str: .
+    """
     relevant = {
         "security_id": payload.get("security_id"),
         "decision_at": ensure_utc(payload["decision_at"]).isoformat(),

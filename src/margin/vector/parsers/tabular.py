@@ -13,13 +13,16 @@ from margin.vector.parsers.base import ParsedBlock
 
 
 class CsvParser:
-    """Parse CSV rows into table-row blocks."""
+    """Parse CSV rows into table-row blocks.."""
 
     def __init__(self, parser_version: str = "csv-v0.2.0") -> None:
         """Initialize the CSV parser.
 
         Args:
-            parser_version: Version label recorded in parsed block metadata.
+            parser_version: str: .
+
+        Returns:
+            None: .
         """
         self.parser_version = parser_version
 
@@ -32,11 +35,11 @@ class CsvParser:
         """Parse CSV content into table-row blocks with row locators.
 
         Args:
-            content: Raw CSV bytes to parse.
-            source_url: Optional URL of the original source.
+            content: bytes: .
+            source_url: str | None: .
 
         Returns:
-            A list of ``ParsedBlock`` instances with table and row locators.
+            list[ParsedBlock]: .
         """
         text = content.decode("utf-8-sig", errors="replace")
         reader = csv.DictReader(io.StringIO(text))
@@ -58,13 +61,16 @@ class CsvParser:
 
 
 class JsonParser:
-    """Flatten scalar JSON fields into locatable blocks."""
+    """Flatten scalar JSON fields into locatable blocks.."""
 
     def __init__(self, parser_version: str = "json-v0.2.0") -> None:
         """Initialize the JSON parser.
 
         Args:
-            parser_version: Version label recorded in parsed block metadata.
+            parser_version: str: .
+
+        Returns:
+            None: .
         """
         self.parser_version = parser_version
 
@@ -77,11 +83,11 @@ class JsonParser:
         """Parse JSON content into flattened scalar field blocks with path locators.
 
         Args:
-            content: Raw JSON bytes to parse.
-            source_url: Optional URL of the original source.
+            content: bytes: .
+            source_url: str | None: .
 
         Returns:
-            A list of ``ParsedBlock`` instances with JSON path locators.
+            list[ParsedBlock]: .
         """
         payload = json.loads(content.decode("utf-8", errors="replace"))
         blocks: list[ParsedBlock] = []
@@ -98,7 +104,15 @@ class JsonParser:
 
 
 def _flatten(value: Any, prefix: str = "") -> Iterator[tuple[str, Any]]:
-    """Flatten nested JSON into (path, scalar_value) pairs."""
+    """Flatten nested JSON into (path, scalar_value) pairs.
+
+    Args:
+        value: Any: .
+        prefix: str: .
+
+    Yields:
+        Any: .
+    """
     if isinstance(value, dict):
         for key, nested in value.items():
             path = f"{prefix}.{key}" if prefix else str(key)

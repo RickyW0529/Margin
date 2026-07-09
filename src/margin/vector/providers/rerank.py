@@ -14,20 +14,7 @@ from margin.news.models import utc_now
 
 
 class HTTPRerankProvider:
-    """Rerank provider for Cohere-style or OpenAI-compatible HTTP endpoints.
-
-    The provider calls a ``/rerank`` endpoint to obtain relevance scores for a
-    query-document pair list. It supports both the top-level ``scores`` response
-    format and the ``results`` format with ``index`` and ``score`` fields.
-
-    Attributes:
-        _api_key: Bearer token used to authenticate API requests.
-        _base_url: Base URL of the rerank endpoint.
-        _model: Model identifier sent to the endpoint.
-        _timeout: Request timeout in seconds.
-        _client: HTTP client used to call the endpoint.
-        _descriptor: Provider descriptor exposed by the ``descriptor`` property.
-    """
+    """Rerank provider for Cohere-style or OpenAI-compatible HTTP endpoints.."""
 
     def __init__(
         self,
@@ -41,15 +28,14 @@ class HTTPRerankProvider:
         """Initialize the HTTP rerank provider.
 
         Args:
-            api_key: API key for the rerank endpoint.
-            base_url: Base URL of the rerank endpoint.
-            model: Model identifier. Defaults to ``rerank``.
-            client: Optional pre-configured HTTP client. If omitted, an ``httpx``
-                client is created.
-            timeout: Request timeout in seconds.
+            api_key: str | None: .
+            base_url: str | None: .
+            model: str | None: .
+            client: Any | None: .
+            timeout: float: .
 
-        Raises:
-            RuntimeError: If ``api_key`` or ``base_url`` cannot be resolved.
+        Returns:
+            None: .
         """
         self._api_key = api_key
         self._base_url = (base_url or "").rstrip("/")
@@ -78,29 +64,19 @@ class HTTPRerankProvider:
         """Return the provider descriptor.
 
         Returns:
-            A ``ProviderDescriptor`` describing name, version, type, capabilities,
-            secret references, and configuration.
+            ProviderDescriptor: .
         """
         return self._descriptor
 
     def rerank(self, query: str, documents: list[str]) -> list[float]:
         """Return a relevance score for each document relative to the query.
 
-        The method accepts two response shapes:
-        - A top-level ``scores`` array in the same order as ``documents``.
-        - A ``results`` array containing objects with ``index`` and either
-          ``relevance_score`` or ``score``.
-
         Args:
-            query: The plain-text query.
-            documents: The list of plain-text documents to score.
+            query: str: .
+            documents: list[str]: .
 
         Returns:
-            A list of relevance scores, one per document, in the original order.
-
-        Raises:
-            RuntimeError: If the response is malformed or the score count does not
-                match the document count.
+            list[float]: .
         """
         response = self._client.post(
             f"{self._base_url}/rerank",
@@ -133,11 +109,8 @@ class HTTPRerankProvider:
     def healthcheck(self) -> HealthCheckResult:
         """Run a lightweight health check against the rerank endpoint.
 
-        Performs a trivial rerank request and reports whether it succeeds.
-
         Returns:
-            A ``HealthCheckResult`` with status ``HEALTHY`` or ``UNHEALTHY`` and
-            an optional error message.
+            HealthCheckResult: .
         """
         try:
             self.rerank("healthcheck", ["ok"])

@@ -11,7 +11,7 @@ from margin.research.graph.state import AIDeltaGraphState, ReviewMode
 
 
 class GraphContextSnapshot(BaseModel):
-    """Minimal immutable routing view of a ResearchContextSnapshot."""
+    """Minimal immutable routing view of a ResearchContextSnapshot.."""
 
     context_snapshot_id: str
     input_hash: str
@@ -34,18 +34,28 @@ class GraphContextSnapshot(BaseModel):
     @field_validator("decision_at")
     @classmethod
     def normalize_decision_at(cls, value: datetime) -> datetime:
-        """Normalize the decision timestamp to UTC."""
+        """Normalize the decision timestamp to UTC.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)
 
 
 class ContextPrecheckNode:
-    """Validate identity, PIT, quant input, news completion, and budget."""
+    """Validate identity, PIT, quant input, news completion, and budget.."""
 
     def __init__(self, context: GraphContextSnapshot) -> None:
         """Initialize the precheck node.
 
         Args:
-            context: Frozen context snapshot for identity and quality validation.
+            context: GraphContextSnapshot: .
+
+        Returns:
+            None: .
         """
         self._context = context
 
@@ -53,10 +63,10 @@ class ContextPrecheckNode:
         """Return a state routed to ABSTAIN/DEFERRED or ready for change-set.
 
         Args:
-            state: Current graph state.
+            state: AIDeltaGraphState: .
 
         Returns:
-            Updated state with review mode and degradation flags set.
+            AIDeltaGraphState: .
         """
         identity_errors = _identity_errors(state, self._context)
         if identity_errors:
@@ -100,13 +110,16 @@ class ContextPrecheckNode:
 
 
 class ChangeSetBuilderNode:
-    """Build deterministic change flags and select FULL/DELTA/CARRY."""
+    """Build deterministic change flags and select FULL/DELTA/CARRY.."""
 
     def __init__(self, context: GraphContextSnapshot) -> None:
         """Initialize the change-set builder.
 
         Args:
-            context: Frozen context snapshot with change flags.
+            context: GraphContextSnapshot: .
+
+        Returns:
+            None: .
         """
         self._context = context
 
@@ -114,10 +127,10 @@ class ChangeSetBuilderNode:
         """Compare frozen references and assign ReviewMode when deterministic.
 
         Args:
-            state: Current graph state.
+            state: AIDeltaGraphState: .
 
         Returns:
-            Updated state with change set and review mode assigned.
+            AIDeltaGraphState: .
         """
         if state.review_mode in {ReviewMode.ABSTAIN, ReviewMode.REVIEW_DEFERRED}:
             return state
@@ -157,13 +170,16 @@ class ChangeSetBuilderNode:
 
 
 class CarryForwardRuleNode:
-    """Apply the verified zero-LLM carry-forward rule."""
+    """Apply the verified zero-LLM carry-forward rule.."""
 
     def __init__(self, context: GraphContextSnapshot) -> None:
         """Initialize the carry-forward rule node.
 
         Args:
-            context: Frozen context snapshot for precheck and change-set.
+            context: GraphContextSnapshot: .
+
+        Returns:
+            None: .
         """
         self._context = context
 
@@ -171,10 +187,10 @@ class CarryForwardRuleNode:
         """Route unchanged, complete context to the fast path.
 
         Args:
-            state: Current graph state.
+            state: AIDeltaGraphState: .
 
         Returns:
-            State routed through precheck and change-set builder.
+            AIDeltaGraphState: .
         """
         checked = ContextPrecheckNode(self._context).run(state)
         if checked.review_mode is not None:
@@ -186,7 +202,15 @@ def _identity_errors(
     state: AIDeltaGraphState,
     context: GraphContextSnapshot,
 ) -> list[str]:
-    """Return field mismatch error codes between state and frozen context."""
+    """Return field mismatch error codes between state and frozen context.
+
+    Args:
+        state: AIDeltaGraphState: .
+        context: GraphContextSnapshot: .
+
+    Returns:
+        list[str]: .
+    """
     checks = {
         "context_snapshot_id": (
             state.context_snapshot_id,
@@ -198,7 +222,5 @@ def _identity_errors(
         "decision_at": (state.decision_at, context.decision_at),
     }
     return [
-        f"{field}_mismatch"
-        for field, (expected, actual) in checks.items()
-        if expected != actual
+        f"{field}_mismatch" for field, (expected, actual) in checks.items() if expected != actual
     ]

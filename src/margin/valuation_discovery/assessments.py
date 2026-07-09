@@ -9,7 +9,7 @@ from margin.valuation_discovery.models import EffectiveAssessmentPointer
 
 
 class EffectiveAssessmentService:
-    """Build effective assessment pointer events from terminal review outcomes."""
+    """Build effective assessment pointer events from terminal review outcomes.."""
 
     _KEEP_PREVIOUS_STALE = {"abstain", "review_deferred"}
     _KEEP_PREVIOUS_VERIFIED = {"carry_forward_verified"}
@@ -28,13 +28,26 @@ class EffectiveAssessmentService:
         last_successful_news_check_at: datetime | None = None,
         effective_from: datetime | None = None,
     ) -> EffectiveAssessmentPointer:
-        """Create and persist the next effective assessment pointer."""
+        """Create and persist the next effective assessment pointer.
+
+        Args:
+            security_id: str: .
+            scope_version_id: str: .
+            previous_effective_assessment_id: str | None: .
+            current_review_outcome: str: .
+            new_assessment_id: str | None: .
+            stale_reason: str | None: .
+            last_successful_data_check_at: datetime | None: .
+            last_successful_news_check_at: datetime | None: .
+            effective_from: datetime | None: .
+
+        Returns:
+            EffectiveAssessmentPointer: .
+        """
         outcome = current_review_outcome.strip().lower()
         if outcome in self._KEEP_PREVIOUS_STALE:
             if previous_effective_assessment_id is None:
-                raise ValueError(
-                    f"cannot {outcome} without a previous assessment"
-                )
+                raise ValueError(f"cannot {outcome} without a previous assessment")
             effective_assessment_id = previous_effective_assessment_id
             freshness = "stale"
             final_stale_reason = stale_reason or outcome
@@ -80,7 +93,14 @@ class EffectiveAssessmentService:
 
 
 def allocation_freshness(value: str) -> str:
-    """Return a validated assessment freshness value."""
+    """Return a validated assessment freshness value.
+
+    Args:
+        value: str: .
+
+    Returns:
+        str: .
+    """
     if value not in {"current", "stale", "verified"}:
         raise ValueError(f"unsupported assessment freshness: {value}")
     return value
@@ -93,7 +113,17 @@ def _pointer_id(
     effective_assessment_id: str,
     effective_from: datetime,
 ) -> str:
-    """Build an idempotent pointer event ID."""
+    """Build an idempotent pointer event ID.
+
+    Args:
+        security_id: str: .
+        scope_version_id: str: .
+        effective_assessment_id: str: .
+        effective_from: datetime: .
+
+    Returns:
+        str: .
+    """
     material = "|".join(
         (
             security_id,

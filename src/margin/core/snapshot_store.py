@@ -20,18 +20,7 @@ import zstandard as zstd
 
 @dataclass(frozen=True)
 class SnapshotEntry:
-    """Pointer to a persisted snapshot.
-
-    Attributes:
-        snapshot_id: Unique snapshot identifier.
-        object_type: Category of the snapshotted object.
-        object_id: Identifier of the snapshotted object.
-        snapshot_path: Relative path where the snapshot is stored.
-        sha256: Content hash of the serialized snapshot.
-        created_at: UTC timestamp when the snapshot was created.
-        metadata: Optional key-value metadata.
-        payload: Deserialized snapshot payload, when loaded.
-    """
+    """Pointer to a persisted snapshot.."""
 
     snapshot_id: str
     object_type: str
@@ -45,17 +34,7 @@ class SnapshotEntry:
 
 @dataclass(frozen=True)
 class CompressedSnapshotEntry:
-    """Pointer to a compressed content-addressed provider payload.
-
-    Attributes:
-        provider: Normalized provider name.
-        storage_uri: Relative URI where the compressed snapshot is stored.
-        payload_hash: SHA-256 hash of the canonical JSON payload.
-        compression: Compression algorithm used (``zstd``).
-        raw_size: Size of the uncompressed serialized payload in bytes.
-        compressed_size: Size of the compressed payload in bytes.
-        created_at: UTC timestamp when the snapshot was created.
-    """
+    """Pointer to a compressed content-addressed provider payload.."""
 
     provider: str
     storage_uri: str
@@ -67,18 +46,17 @@ class CompressedSnapshotEntry:
 
 
 class CompressedSnapshotStore:
-    """Content-addressed JSON snapshot store using zstd compression.
-
-    The same canonical JSON payload is stored only once per provider and always
-    resolves to the same URI/hash pair.
-    """
+    """Content-addressed JSON snapshot store using zstd compression.."""
 
     def __init__(self, base_path: str | Path, *, compression_level: int = 3) -> None:
         """Initialize the snapshot store.
 
         Args:
-            base_path: Root directory for storing compressed snapshot files.
-            compression_level: Zstd compression level (default 3).
+            base_path: str | Path: .
+            compression_level: int: .
+
+        Returns:
+            None: .
         """
         self._base = Path(base_path)
         self._base.mkdir(parents=True, exist_ok=True)
@@ -87,18 +65,12 @@ class CompressedSnapshotStore:
     def write_json(self, provider: str, payload: Any) -> CompressedSnapshotEntry:
         """Write a canonical JSON payload and return its content-addressed pointer.
 
-        The same canonical JSON payload is stored only once per provider and
-        always resolves to the same URI/hash pair.
-
         Args:
-            provider: Provider name used to namespace the snapshot file.
-            payload: JSON-serializable payload to store.
+            provider: str: .
+            payload: Any: .
 
         Returns:
-            A CompressedSnapshotEntry describing the persisted snapshot.
-
-        Raises:
-            ValueError: When the provider name is empty.
+            CompressedSnapshotEntry: .
         """
         normalized_provider = provider.strip().lower()
         if not normalized_provider:
@@ -132,21 +104,16 @@ class CompressedSnapshotStore:
 
 
 class FileSnapshotStore:
-    """Append-only snapshot store on local filesystem.
-
-    Snapshots are serialized to JSON, content-hashed, and written under
-    ``<base>/<object_type>/<object_id>/<snapshot_id>.json``. An index file
-    records the lineage for each object.
-
-    Attributes:
-        _base: Root directory for all snapshot files.
-    """
+    """Append-only snapshot store on local filesystem.."""
 
     def __init__(self, base_path: str | Path) -> None:
         """Initialize the store.
 
         Args:
-            base_path: Root directory for snapshot files. Created if missing.
+            base_path: str | Path: .
+
+        Returns:
+            None: .
         """
         self._base = Path(base_path)
         self._base.mkdir(parents=True, exist_ok=True)
@@ -161,13 +128,13 @@ class FileSnapshotStore:
         """Persist a new snapshot for an object.
 
         Args:
-            object_type: Category of the object.
-            object_id: Identifier of the object.
-            payload: JSON-serializable snapshot payload.
-            metadata: Optional key-value metadata to store with the snapshot.
+            object_type: str: .
+            object_id: str: .
+            payload: Any: .
+            metadata: dict[str, Any] | None: .
 
         Returns:
-            A ``SnapshotEntry`` describing the persisted snapshot.
+            SnapshotEntry: .
         """
         snapshot_id = f"sn_{uuid.uuid4().hex[:12]}"
         # Serialize with sorted keys so the same payload always yields the same hash.
@@ -207,13 +174,10 @@ class FileSnapshotStore:
         """Load a snapshot by its identifier.
 
         Args:
-            snapshot_id: Unique snapshot identifier.
+            snapshot_id: str: .
 
         Returns:
-            A ``SnapshotEntry`` including the deserialized payload.
-
-        Raises:
-            KeyError: When no snapshot with the given id exists.
+            SnapshotEntry: .
         """
         # Search recursively by id; snapshots are content-addressed but indexed by id.
         for path in self._base.rglob(f"{snapshot_id}.json"):
@@ -241,11 +205,11 @@ class FileSnapshotStore:
         """List all snapshots for an object, ordered by filename.
 
         Args:
-            object_type: Category of the object.
-            object_id: Identifier of the object.
+            object_type: str: .
+            object_id: str: .
 
         Returns:
-            List of ``SnapshotEntry`` objects for the object.
+            list[SnapshotEntry]: .
         """
         dir_path = self._base / object_type / object_id
         if not dir_path.exists():

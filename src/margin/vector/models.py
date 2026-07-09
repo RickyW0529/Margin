@@ -69,7 +69,11 @@ class SourceLocator(BaseModel):
 
     @property
     def has_precise_anchor(self) -> bool:
-        """Return whether this locator can point back to a precise source region."""
+        """Return whether this locator can point back to a precise source region.
+
+        Returns:
+            bool: True when at least one precise locator field is present.
+        """
         return any(
             value is not None
             for value in (
@@ -100,7 +104,14 @@ class IndexingRequest(BaseModel):
     @field_validator("published_at", "available_at")
     @classmethod
     def normalize_indexing_timestamp(cls, value: datetime | None) -> datetime | None:
-        """Normalize indexing request timestamps to UTC."""
+        """Normalize indexing request timestamps to UTC.
+
+        Args:
+            value: Timestamp supplied in the indexing request.
+
+        Returns:
+            The timestamp converted to UTC, or ``None`` when unset.
+        """
         return ensure_utc(value) if value is not None else None
 
     model_config = {"frozen": True}
@@ -120,7 +131,14 @@ class IndexedDocument(BaseModel):
     @field_validator("created_at")
     @classmethod
     def normalize_indexed_document_created_at(cls, value: datetime) -> datetime:
-        """Normalize audit timestamp to UTC."""
+        """Normalize audit timestamp to UTC.
+
+        Args:
+            value: Timestamp to normalize.
+
+        Returns:
+            The timestamp converted to UTC.
+        """
         return ensure_utc(value)
 
     model_config = {"frozen": True}
@@ -136,7 +154,11 @@ class EmbeddingKey(BaseModel):
 
     @property
     def key_hash(self) -> str:
-        """Return deterministic embedding key hash."""
+        """Return deterministic embedding key hash.
+
+        Returns:
+            str: Stable hash for the model-versioned embedding key.
+        """
         payload = "|".join(
             [self.chunk_id, self.provider_name, self.model_name, self.model_version]
         )
@@ -268,13 +290,8 @@ class Chunk(BaseModel):
     def has_locator(self) -> bool:
         """Return whether the chunk can be traced back to its original source.
 
-        A chunk is considered locatable when it carries a source URL and at
-        least one structural locator such as page, section, paragraph index,
-        table id, row id, or character span.
-
         Returns:
-            ``True`` if the chunk has enough provenance to locate it in the
-            original source, otherwise ``False``.
+            bool: True when locator or legacy structural fields are present.
         """
         structural_locator = (
             self.locator.has_precise_anchor

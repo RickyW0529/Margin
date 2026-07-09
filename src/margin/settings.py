@@ -26,26 +26,7 @@ DEFAULT_SECRET_MASTER_KEY = "dev-only-change-me-32-byte-key!!"
 
 
 class MarginSettings(BaseSettings):
-    """Single source of truth for all Margin environment configuration.
-
-    Attributes:
-        database_url: SQLAlchemy connection URL for PostgreSQL.
-        database_echo: Whether SQLAlchemy logs emitted SQL statements.
-        database_pool_pre_ping: Whether to verify pool connections before checkout.
-        log_level: Logging level name (e.g. "INFO").
-        log_format: Output format for logs, either "json" or "console".
-        metrics_enabled: Whether observability metrics are enabled.
-        trace_id_header: HTTP header used to propagate trace identifiers.
-        monitoring_interval_seconds: Interval between periodic monitoring runs.
-        data_snapshot_root: Root directory for compressed provider payload snapshots.
-        data_sync_on_startup: Whether startup should enqueue stale data sync work.
-        data_freshness_timezone: Timezone used for data freshness calculations.
-        data_smoke_symbols: Comma-separated A-share symbols used by smoke checks.
-        audit_log_path: Filesystem path for the provider audit log.
-        environment: Deployment environment name.
-        service_name: Service identifier used in logs and metrics.
-        service_version: Application version string.
-    """
+    """Single source of truth for all Margin environment configuration.."""
 
     model_config = SettingsConfigDict(
         env_prefix="MARGIN_",
@@ -106,7 +87,11 @@ class MarginSettings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> MarginSettings:
-        """Reject local development credentials in production mode."""
+        """Reject local development credentials in production mode.
+
+        Returns:
+            MarginSettings: .
+        """
         if self.environment != "production":
             return self
         if self.secret_master_key.get_secret_value() == DEFAULT_SECRET_MASTER_KEY:
@@ -118,8 +103,7 @@ class MarginSettings(BaseSettings):
         database_url = make_url(str(self.database_url))
         if database_url.username == "margin" and database_url.password == "margin":
             raise ValueError(
-                "MARGIN_DATABASE_URL must not use default margin:margin credentials "
-                "in production"
+                "MARGIN_DATABASE_URL must not use default margin:margin credentials in production"
             )
         return self
 
@@ -128,7 +112,7 @@ class MarginSettings(BaseSettings):
 def get_settings() -> MarginSettings:
     """Return cached settings instance.
 
-    Caching avoids re-parsing environment variables on every call, which is
-    important for dependency injection paths that may run frequently.
+    Returns:
+        MarginSettings: .
     """
     return MarginSettings()

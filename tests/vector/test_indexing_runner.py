@@ -15,76 +15,135 @@ from margin.vector.indexing_runner import DocumentIndexingRunner
 
 
 class FakeNewsRepository:
-    """Stub news repository that yields a single outbox entry for testing.
-
-    Tracks delivered and failed outbox IDs to verify runner behavior.
-    """
+    """Stub news repository that yields a single outbox entry for testing.."""
 
     def __init__(self, event) -> None:
         """Initialize the fake repository with a document event.
 
         Args:
-            event: the document event returned by ``get_document_event``.
+            event: Any: .
+
+        Returns:
+            None: .
         """
         self.event = event
         self.delivered: list[int] = []
         self.failed: list[tuple[int, str]] = []
 
     def claim_outbox(self, topic, limit):
-        """Return a single-element outbox list regardless of topic or limit."""
+        """Return a single-element outbox list regardless of topic or limit.
+
+        Args:
+            topic: Any: .
+            limit: Any: .
+
+        Returns:
+            Any: .
+        """
         del topic, limit
         return [SimpleNamespace(outbox_id=1, event_id=self.event.event_id)]
 
     def get_document_event(self, event_id):
-        """Return the stored event when the ID matches, otherwise ``None``."""
+        """Return the stored event when the ID matches, otherwise ``None``.
+
+        Args:
+            event_id: Any: .
+
+        Returns:
+            Any: .
+        """
         return self.event if event_id == self.event.event_id else None
 
     def mark_outbox_delivered(self, outbox_id):
-        """Record an outbox ID as successfully delivered."""
+        """Record an outbox ID as successfully delivered.
+
+        Args:
+            outbox_id: Any: .
+
+        Returns:
+            Any: .
+        """
         self.delivered.append(outbox_id)
 
     def mark_outbox_failed(self, outbox_id, error):
-        """Record an outbox ID and error message as failed."""
+        """Record an outbox ID and error message as failed.
+
+        Args:
+            outbox_id: Any: .
+            error: Any: .
+
+        Returns:
+            Any: .
+        """
         self.failed.append((outbox_id, error))
 
 
 class FakeEmbeddingProvider:
-    """Stub embedding provider producing deterministic 2-D vectors for testing.
+    """Stub embedding provider producing deterministic 2-D vectors for testing.."""
 
-    Attributes:
-        name: provider name used in audit records.
-        version: provider version string.
-    """
     name = "fake_embedding"
     version = "v1"
 
     def embed_batch(self, texts):
-        """Return one 2-D vector per input text based on text length."""
+        """Return one 2-D vector per input text based on text length.
+
+        Args:
+            texts: Any: .
+
+        Returns:
+            Any: .
+        """
         return [[float(len(text)), 1.0] for text in texts]
 
 
 class FakeVectorRepository:
-    """Stub vector repository that records chunks, embeddings, and audit calls."""
+    """Stub vector repository that records chunks, embeddings, and audit calls.."""
 
     def __init__(self) -> None:
-        """Initialize empty storage lists for chunks, embeddings, and audits."""
+        """Initialize empty storage lists for chunks, embeddings, and audits.
+
+        Returns:
+            None: .
+        """
         self.chunks = []
         self.embeddings = []
         self.audits = []
 
     def upsert_chunks(self, chunks):
-        """Store chunks and return the count added."""
+        """Store chunks and return the count added.
+
+        Args:
+            chunks: Any: .
+
+        Returns:
+            Any: .
+        """
         self.chunks.extend(chunks)
         return len(chunks)
 
     def upsert_embeddings(self, items, **metadata):
-        """Store embedding items and metadata, returning the count added."""
+        """Store embedding items and metadata, returning the count added.
+
+        Args:
+            items: Any: .
+            **metadata: Any: .
+
+        Returns:
+            Any: .
+        """
         self.embeddings.extend(items)
         self.embedding_metadata = metadata
         return len(items)
 
     def record_index_audit(self, **audit):
-        """Record an audit entry and return a synthetic audit ID."""
+        """Record an audit entry and return a synthetic audit ID.
+
+        Args:
+            **audit: Any: .
+
+        Returns:
+            Any: .
+        """
         self.audits.append(audit)
         return 1
 
@@ -92,9 +151,8 @@ class FakeVectorRepository:
 def test_indexing_runner_consumes_outbox_and_persists_chunks_and_vectors():
     """Runner must consume outbox entries and persist chunks, embeddings, and audits.
 
-    Verifies that ``DocumentIndexingRunner.run_once`` claims an outbox entry, chunks
-    the document event, persists chunks and embeddings via the vector repository,
-    records a non-degraded audit entry, and marks the outbox as delivered.
+    Returns:
+        Any: .
     """
     event = make_document_event(
         source_url="https://example.com/filing",

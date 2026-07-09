@@ -6,7 +6,7 @@ from enum import StrEnum
 
 
 class DataAccessPolicy(StrEnum):
-    """Data scopes that an Agent may read."""
+    """Data scopes that an Agent may read.."""
 
     NO_DATA = "no_data"
     READ_CHAT_SUMMARY = "read_chat_summary"
@@ -19,7 +19,7 @@ class DataAccessPolicy(StrEnum):
 
 
 class ProductionWritePolicy(StrEnum):
-    """Write scopes that an Agent may use."""
+    """Write scopes that an Agent may use.."""
 
     NONE = "none"
     WRITE_CONTEXT_ONLY = "write_context_only"
@@ -30,7 +30,7 @@ class ProductionWritePolicy(StrEnum):
 
 
 class ToolPolicy(StrEnum):
-    """Tool execution scopes available to an Agent."""
+    """Tool execution scopes available to an Agent.."""
 
     NO_TOOLS = "no_tools"
     READ_ONLY_TOOLS = "read_only_tools"

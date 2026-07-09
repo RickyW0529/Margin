@@ -41,14 +41,14 @@ from margin.research.tools.factory import ScopedToolFactory
 
 @dataclass(frozen=True)
 class GraphDependencies:
-    """Dependencies required by the graph topology."""
+    """Dependencies required by the graph topology.."""
 
     tool_factory: ScopedToolFactory
     analysis_handlers: Mapping[str, AnalysisHandler]
     allow_supplemental_retrieval: bool = True
     decision_handler: DecisionHandler = lambda state: _default_decision(state)
-    citation_validator: CitationValidationHandler = (
-        lambda draft, state: _default_citation_validation(draft, state)
+    citation_validator: CitationValidationHandler = lambda draft, state: (
+        _default_citation_validation(draft, state)
     )
     checkpointer: Any | None = None
     interrupt_after: tuple[str, ...] | None = None
@@ -58,11 +58,10 @@ def build_ai_delta_review_graph(dependencies: GraphDependencies) -> Any:
     """Build a real LangGraph with centralized retrieval and parallel analyses.
 
     Args:
-        dependencies: Frozen dependencies including tool factory, handlers,
-            and optional checkpointer.
+        dependencies: GraphDependencies: .
 
     Returns:
-        A compiled LangGraph ready for invocation.
+        Any: .
     """
     graph = StateGraph(AIDeltaGraphState)
     graph.add_node("evidence_plan", EvidencePlanNode())
@@ -171,7 +170,14 @@ def build_ai_delta_review_graph(dependencies: GraphDependencies) -> Any:
 
 
 def _route_start(state: AIDeltaGraphState) -> str:
-    """Route the initial state to review, carry-forward, deferred, or abstain."""
+    """Route the initial state to review, carry-forward, deferred, or abstain.
+
+    Args:
+        state: AIDeltaGraphState: .
+
+    Returns:
+        str: .
+    """
     if state.review_mode in {ReviewMode.FULL_REVIEW, ReviewMode.DELTA_REVIEW}:
         return "review"
     if state.review_mode == ReviewMode.CARRY_FORWARD_FAST_PATH:
@@ -186,18 +192,29 @@ def _route_gap(
     *,
     allow_supplemental: bool,
 ) -> str:
-    """Route after analysis join to supplemental retrieval or decision."""
-    if (
-        allow_supplemental
-        and state.evidence_gaps
-        and state.retrieval_count == 1
-    ):
+    """Route after analysis join to supplemental retrieval or decision.
+
+    Args:
+        state: AIDeltaGraphState: .
+        allow_supplemental: bool: .
+
+    Returns:
+        str: .
+    """
+    if allow_supplemental and state.evidence_gaps and state.retrieval_count == 1:
         return "supplement"
     return "done"
 
 
 def _route_citation(state: AIDeltaGraphState) -> str:
-    """Route after citation validation to finalize, repair, or abstain."""
+    """Route after citation validation to finalize, repair, or abstain.
+
+    Args:
+        state: AIDeltaGraphState: .
+
+    Returns:
+        str: .
+    """
     if state.citation_report.get("valid") is True:
         return "valid"
     if state.repair_count == 0:
@@ -206,14 +223,28 @@ def _route_citation(state: AIDeltaGraphState) -> str:
 
 
 def _route_after_repair(state: AIDeltaGraphState) -> str:
-    """Route after repair decision to revalidation or abstain."""
+    """Route after repair decision to revalidation or abstain.
+
+    Args:
+        state: AIDeltaGraphState: .
+
+    Returns:
+        str: .
+    """
     if state.current_review_outcome == ReviewOutcome.ABSTAIN:
         return "abstain"
     return "revalidate"
 
 
 def _default_decision(state: AIDeltaGraphState) -> dict[str, Any]:
-    """Return a deterministic abstain decision when no handler is configured."""
+    """Return a deterministic abstain decision when no handler is configured.
+
+    Args:
+        state: AIDeltaGraphState: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     del state
     return {
         "outcome": ReviewOutcome.ABSTAIN.value,
@@ -228,7 +259,15 @@ def _default_citation_validation(
     draft: dict[str, Any],
     state: AIDeltaGraphState,
 ) -> dict[str, Any]:
-    """Return a default valid citation report when no validator is configured."""
+    """Return a default valid citation report when no validator is configured.
+
+    Args:
+        draft: dict[str, Any]: .
+        state: AIDeltaGraphState: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     del draft, state
     return {
         "valid": True,

@@ -9,7 +9,7 @@ from typing import Any
 
 @dataclass(frozen=True)
 class SourceFieldState:
-    """Lifecycle state for one observed source field."""
+    """Lifecycle state for one observed source field.."""
 
     endpoint_code: str
     field_name: str
@@ -22,17 +22,16 @@ class SourceFieldState:
 
 
 class SchemaDiscoveryService:
-    """Track source fields, type changes, and consecutive missing observations."""
+    """Track source fields, type changes, and consecutive missing observations.."""
 
     def __init__(self, *, missing_threshold: int = 3) -> None:
         """Initialize the service.
 
         Args:
-            missing_threshold: Number of consecutive missing observations
-                before a field is marked ``missing``.
+            missing_threshold: int: .
 
-        Raises:
-            ValueError: If ``missing_threshold`` is less than 1.
+        Returns:
+            None: .
         """
         if missing_threshold < 1:
             raise ValueError("missing_threshold must be positive")
@@ -49,9 +48,12 @@ class SchemaDiscoveryService:
         """Observe a provider payload and update field lifecycle state.
 
         Args:
-            endpoint_code: The endpoint code being observed.
-            payload: The raw provider payload dictionary.
-            observed_at: Optional override for the observation timestamp.
+            endpoint_code: str: .
+            payload: dict[str, Any]: .
+            observed_at: datetime | None: .
+
+        Returns:
+            None: .
         """
         timestamp = observed_at or datetime.now(UTC)
         endpoint = endpoint_code.strip().lower()
@@ -97,14 +99,11 @@ class SchemaDiscoveryService:
         """Return current lifecycle state for an endpoint field.
 
         Args:
-            endpoint_code: The endpoint code.
-            field_name: The source field name.
+            endpoint_code: str: .
+            field_name: str: .
 
         Returns:
-            The current ``SourceFieldState``.
-
-        Raises:
-            KeyError: If the field has never been observed.
+            SourceFieldState: .
         """
         key = (endpoint_code.strip().lower(), field_name)
         try:
@@ -114,7 +113,14 @@ class SchemaDiscoveryService:
 
 
 def _infer_type(value: Any) -> str:
-    """Infer a coarse type name from a single observed value."""
+    """Infer a coarse type name from a single observed value.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        str: .
+    """
     if value is None:
         return "null"
     if isinstance(value, bool):

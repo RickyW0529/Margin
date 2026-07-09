@@ -10,11 +10,11 @@ from margin.prompts.models import PromptTemplate, RenderedPrompt
 
 
 class PromptRenderError(ValueError):
-    """Raised when prompt rendering fails."""
+    """Raised when prompt rendering fails.."""
 
 
 class PromptRenderer:
-    """Render versioned prompt templates with explicit variable injection."""
+    """Render versioned prompt templates with explicit variable injection.."""
 
     def render(
         self,
@@ -25,20 +25,15 @@ class PromptRenderer:
         """Render a template with variables.
 
         Args:
-            template: Prompt template.
-            variables: Runtime variables. Values are serialized to strings.
+            template: PromptTemplate: .
+            variables: Mapping[str, object]: .
 
         Returns:
-            RenderedPrompt with audit hashes.
-
-        Raises:
-            PromptRenderError: If required variables are missing.
+            RenderedPrompt: .
         """
         missing = [name for name in template.required_variables if name not in variables]
         if missing:
-            raise PromptRenderError(
-                "missing prompt variables: " + ", ".join(sorted(missing))
-            )
+            raise PromptRenderError("missing prompt variables: " + ", ".join(sorted(missing)))
 
         rendered_sections: list[str] = []
         for section in template.sections:
@@ -68,12 +63,26 @@ class PromptRenderer:
         )
 
     def _stringify(self, value: object) -> str:
-        """Serialize a variable for prompt insertion."""
+        """Serialize a variable for prompt insertion.
+
+        Args:
+            value: object: .
+
+        Returns:
+            str: .
+        """
         if isinstance(value, str):
             return value
         return json.dumps(value, sort_keys=True, ensure_ascii=False)
 
     def _hash_json(self, payload: object) -> str:
-        """Return a stable JSON hash."""
+        """Return a stable JSON hash.
+
+        Args:
+            payload: object: .
+
+        Returns:
+            str: .
+        """
         raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
         return f"sha256:{hashlib.sha256(raw.encode()).hexdigest()}"

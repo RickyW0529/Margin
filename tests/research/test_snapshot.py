@@ -16,9 +16,8 @@ from margin.research.snapshot import ResearchSnapshotBuilder
 def test_snapshot_hashes_inputs_and_outputs():
     """Verify the snapshot builder hashes inputs and outputs and serializes JSON.
 
-    Builds a snapshot with a signal, symbols, and prior outputs, and asserts
-    that the run ID, input hash, output hash, workflow state, and serialized
-    agent outputs are correct.
+    Returns:
+        Any: .
     """
     signal = ResearchSignal(symbol="000001.SZ", signal_type=SignalType.WATCH, confidence=0.5)
     builder = ResearchSnapshotBuilder()
@@ -40,8 +39,8 @@ def test_snapshot_hashes_inputs_and_outputs():
 def test_snapshot_is_frozen():
     """Verify the snapshot model is frozen and rejects mutation attempts.
 
-    Builds a snapshot and attempts to mutate the ``run_id`` field, asserting
-    that the frozen model raises an exception rather than accepting the change.
+    Returns:
+        Any: .
     """
     snapshot = ResearchSnapshotBuilder().for_run("run_2").with_state(WorkflowState.ABORTED).build()
     # Pydantic frozen model should reject mutation attempts

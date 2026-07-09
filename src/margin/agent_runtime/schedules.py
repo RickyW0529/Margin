@@ -25,7 +25,7 @@ STOCK_ANALYSIS_SCHEDULE_ID = "stock_analysis_daily"
 
 
 class StockAnalysisSchedule(BaseModel):
-    """User-facing daily scheduled stock-analysis configuration."""
+    """User-facing daily scheduled stock-analysis configuration.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -45,7 +45,14 @@ class StockAnalysisSchedule(BaseModel):
     @field_validator("timezone")
     @classmethod
     def validate_timezone(cls, value: str) -> str:
-        """Validate that the timezone name is loadable."""
+        """Validate that the timezone name is loadable.
+
+        Args:
+            value: str: .
+
+        Returns:
+            str: .
+        """
         try:
             ZoneInfo(value)
         except ZoneInfoNotFoundError as exc:
@@ -53,7 +60,14 @@ class StockAnalysisSchedule(BaseModel):
         return value
 
     def with_next_run(self, *, now: datetime | None = None) -> StockAnalysisSchedule:
-        """Return this schedule with its next run timestamp recalculated."""
+        """Return this schedule with its next run timestamp recalculated.
+
+        Args:
+            now: datetime | None: .
+
+        Returns:
+            StockAnalysisSchedule: .
+        """
         resolved_now = now or datetime.now(UTC)
         next_run = (
             compute_next_run_at(
@@ -74,38 +88,74 @@ class StockAnalysisSchedule(BaseModel):
 
 
 class AgentScheduleRepository(Protocol):
-    """Repository contract for user-facing agent schedules."""
+    """Repository contract for user-facing agent schedules.."""
 
     def get_stock_analysis_schedule(self) -> StockAnalysisSchedule:
-        """Return the stock-analysis schedule, or a disabled default."""
+        """Return the stock-analysis schedule, or a disabled default.
+
+        Returns:
+            StockAnalysisSchedule: .
+        """
 
     def save_stock_analysis_schedule(
         self,
         schedule: StockAnalysisSchedule,
     ) -> StockAnalysisSchedule:
-        """Persist the stock-analysis schedule."""
+        """Persist the stock-analysis schedule.
+
+        Args:
+            schedule: StockAnalysisSchedule: .
+
+        Returns:
+            StockAnalysisSchedule: .
+        """
 
     def list_due_stock_analysis_schedules(
         self,
         *,
         now: datetime,
     ) -> list[StockAnalysisSchedule]:
-        """Return enabled schedules whose next run is due."""
+        """Return enabled schedules whose next run is due.
+
+        Args:
+            now: datetime: .
+
+        Returns:
+            list[StockAnalysisSchedule]: .
+        """
 
 
 class MemoryAgentScheduleRepository:
-    """In-memory schedule repository for tests."""
+    """In-memory schedule repository for tests.."""
 
     def __init__(self) -> None:
+        """Process __init__.
+
+        Returns:
+            None: .
+        """
         self._schedule: StockAnalysisSchedule | None = None
 
     def get_stock_analysis_schedule(self) -> StockAnalysisSchedule:
+        """Process get_stock_analysis_schedule.
+
+        Returns:
+            StockAnalysisSchedule: .
+        """
         return self._schedule or StockAnalysisSchedule()
 
     def save_stock_analysis_schedule(
         self,
         schedule: StockAnalysisSchedule,
     ) -> StockAnalysisSchedule:
+        """Process save_stock_analysis_schedule.
+
+        Args:
+            schedule: StockAnalysisSchedule: .
+
+        Returns:
+            StockAnalysisSchedule: .
+        """
         resolved = schedule.with_next_run(now=schedule.updated_at)
         if self._schedule is not None:
             resolved = resolved.model_copy(update={"created_at": self._schedule.created_at})
@@ -117,6 +167,14 @@ class MemoryAgentScheduleRepository:
         *,
         now: datetime,
     ) -> list[StockAnalysisSchedule]:
+        """Process list_due_stock_analysis_schedules.
+
+        Args:
+            now: datetime: .
+
+        Returns:
+            list[StockAnalysisSchedule]: .
+        """
         schedule = self.get_stock_analysis_schedule()
         if not schedule.enabled or schedule.next_run_at is None:
             return []
@@ -124,12 +182,25 @@ class MemoryAgentScheduleRepository:
 
 
 class SQLAlchemyAgentScheduleRepository:
-    """SQLAlchemy-backed schedule repository."""
+    """SQLAlchemy-backed schedule repository.."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
+        """Process __init__.
+
+        Args:
+            session_factory: Callable[[], Session]: .
+
+        Returns:
+            None: .
+        """
         self._session_factory = session_factory
 
     def get_stock_analysis_schedule(self) -> StockAnalysisSchedule:
+        """Process get_stock_analysis_schedule.
+
+        Returns:
+            StockAnalysisSchedule: .
+        """
         with self._session_factory() as session:
             row = session.get(AgentRuntimeScheduleRow, STOCK_ANALYSIS_SCHEDULE_ID)
             if row is None:
@@ -140,6 +211,14 @@ class SQLAlchemyAgentScheduleRepository:
         self,
         schedule: StockAnalysisSchedule,
     ) -> StockAnalysisSchedule:
+        """Process save_stock_analysis_schedule.
+
+        Args:
+            schedule: StockAnalysisSchedule: .
+
+        Returns:
+            StockAnalysisSchedule: .
+        """
         with self._session_factory.begin() as session:
             current = session.get(AgentRuntimeScheduleRow, schedule.schedule_id)
             created_at = current.created_at if current is not None else schedule.created_at
@@ -184,6 +263,14 @@ class SQLAlchemyAgentScheduleRepository:
         *,
         now: datetime,
     ) -> list[StockAnalysisSchedule]:
+        """Process list_due_stock_analysis_schedules.
+
+        Args:
+            now: datetime: .
+
+        Returns:
+            list[StockAnalysisSchedule]: .
+        """
         with self._session_factory() as session:
             rows = session.scalars(
                 select(AgentRuntimeScheduleRow).where(
@@ -195,7 +282,7 @@ class SQLAlchemyAgentScheduleRepository:
 
 
 class ScheduledStockAnalysisRunner:
-    """Runs due user-configured stock-analysis schedules."""
+    """Runs due user-configured stock-analysis schedules.."""
 
     def __init__(
         self,
@@ -207,17 +294,35 @@ class ScheduledStockAnalysisRunner:
         config_resolver: ConfigResolver | None = None,
         write_context_artifact: Callable[[ContextArtifact], None] | None = None,
     ) -> None:
+        """Process __init__.
+
+        Args:
+            repository: AgentScheduleRepository: .
+            main_agent: MainAgentRuntime: .
+            valuation_service: ValuationDiscoveryService: .
+            scope_resolver: Callable[[str], str]: .
+            config_resolver: ConfigResolver | None: .
+            write_context_artifact: Callable[[ContextArtifact], None] | None: .
+
+        Returns:
+            None: .
+        """
         self._repository = repository
         self._main_agent = main_agent
         self._valuation_service = valuation_service
         self._scope_resolver = scope_resolver
         self._config_resolver = config_resolver
-        self._write_context_artifact = (
-            write_context_artifact or main_agent.add_context_artifact
-        )
+        self._write_context_artifact = write_context_artifact or main_agent.add_context_artifact
 
     def run_once(self, *, now: datetime | None = None) -> int:
-        """Trigger each due enabled schedule once."""
+        """Trigger each due enabled schedule once.
+
+        Args:
+            now: datetime | None: .
+
+        Returns:
+            int: .
+        """
         resolved_now = now or datetime.now(UTC)
         processed = 0
         for schedule in self._repository.list_due_stock_analysis_schedules(
@@ -228,11 +333,17 @@ class ScheduledStockAnalysisRunner:
         return processed
 
     def _trigger(self, schedule: StockAnalysisSchedule, *, now: datetime) -> None:
+        """Process _trigger.
+
+        Args:
+            schedule: StockAnalysisSchedule: .
+            now: datetime: .
+
+        Returns:
+            None: .
+        """
         local_date = now.astimezone(ZoneInfo(schedule.timezone)).date().isoformat()
-        run_id = (
-            f"ar_sched_{local_date.replace('-', '')}_"
-            f"{schedule.hour:02d}{schedule.minute:02d}"
-        )
+        run_id = f"ar_sched_{local_date.replace('-', '')}_{schedule.hour:02d}{schedule.minute:02d}"
         scheduled_flow, flow_ref = self._resolve_agent_flow(now)
         plan_result = self._main_agent.create_scheduled_stock_analysis_plan(
             run_id=run_id,
@@ -318,7 +429,14 @@ class ScheduledStockAnalysisRunner:
         )
 
     def _resolve_quant_profile(self, decision_at: datetime):
-        """Resolve the scheduled QuantAgent profile from DB with a fallback."""
+        """Resolve the scheduled QuantAgent profile from DB with a fallback.
+
+        Args:
+            decision_at: datetime: .
+
+        Returns:
+            Any: .
+        """
         if self._config_resolver is None:
             return current_quant_agent_strategy_profile(), None
         try:
@@ -337,7 +455,14 @@ class ScheduledStockAnalysisRunner:
         self,
         decision_at: datetime,
     ) -> tuple[AgentFlowDefinition, ConfigReference | None]:
-        """Resolve the scheduled Agent flow from DB with a fallback."""
+        """Resolve the scheduled Agent flow from DB with a fallback.
+
+        Args:
+            decision_at: datetime: .
+
+        Returns:
+            tuple[AgentFlowDefinition, ConfigReference | None]: .
+        """
         if self._config_resolver is None:
             return self._main_agent.scheduled_flow, None
         try:
@@ -357,7 +482,17 @@ def compute_next_run_at(
     timezone: str,
     now: datetime,
 ) -> datetime:
-    """Compute the next UTC timestamp for a daily local schedule."""
+    """Compute the next UTC timestamp for a daily local schedule.
+
+    Args:
+        hour: int: .
+        minute: int: .
+        timezone: str: .
+        now: datetime: .
+
+    Returns:
+        datetime: .
+    """
     local_tz = ZoneInfo(timezone)
     local_now = now.astimezone(local_tz)
     candidate_date: date = local_now.date()

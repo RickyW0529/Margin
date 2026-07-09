@@ -15,7 +15,10 @@ def test_test_database_defaults_to_dedicated_database(monkeypatch):
     """Test that the database URL defaults to a dedicated test database.
 
     Args:
-        monkeypatch: Pytest fixture for modifying environment variables.
+        monkeypatch: Any: .
+
+    Returns:
+        Any: .
     """
     monkeypatch.delenv("MARGIN_TEST_DATABASE_URL", raising=False)
 
@@ -28,7 +31,10 @@ def test_test_database_rejects_development_database(monkeypatch):
     """Test that the resolver rejects a URL pointing at the development database.
 
     Args:
-        monkeypatch: Pytest fixture for modifying environment variables.
+        monkeypatch: Any: .
+
+    Returns:
+        Any: .
     """
     monkeypatch.setenv(
         "MARGIN_TEST_DATABASE_URL",

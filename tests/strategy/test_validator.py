@@ -14,7 +14,7 @@ def test_validator_accepts_valid_config():
     """Verify the validator accepts a valid default strategy configuration.
 
     Returns:
-        None.
+        Any: .
     """
     validator = StrategyValidator()
     config = StrategyConfig()
@@ -27,7 +27,7 @@ def test_merge_with_guardrails_adds_system_prohibited_outputs():
     """Verify merging with guardrails adds system-level prohibited outputs.
 
     Returns:
-        None.
+        Any: .
     """
     validator = StrategyValidator()
     config = StrategyConfig(
@@ -43,9 +43,10 @@ def test_merge_with_guardrails_adds_system_prohibited_outputs():
 
 def test_validator_rejects_missing_required_prohibited_outputs_after_merge():
     """Verify the validator accepts a config that becomes valid after guardrail merge.
+    Returns:.
 
     Returns:
-        None.
+        Any: .
     """
     validator = StrategyValidator()
     config = StrategyConfig(
@@ -64,7 +65,7 @@ def test_validator_rejects_empty_universe():
     """Verify the validator rejects a config with an empty universe.
 
     Returns:
-        None.
+        Any: .
     """
     validator = StrategyValidator()
     config = StrategyConfig(universe=[])

@@ -12,7 +12,7 @@ from margin.storage.base import Base
 
 
 class DashboardRunRow(Base):
-    """Run-level dashboard aggregate."""
+    """Run-level dashboard aggregate.."""
 
     __tablename__ = "dashboard_runs"
 
@@ -37,7 +37,7 @@ class DashboardRunRow(Base):
 
 
 class DashboardItemRow(Base):
-    """Symbol-level item inside a dashboard run."""
+    """Symbol-level item inside a dashboard run.."""
 
     __tablename__ = "dashboard_items"
 
@@ -73,7 +73,7 @@ class DashboardItemRow(Base):
 
 
 class DashboardFeedbackRow(Base):
-    """Append-only feedback record."""
+    """Append-only feedback record.."""
 
     __tablename__ = "dashboard_feedback"
 

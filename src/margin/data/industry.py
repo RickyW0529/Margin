@@ -10,7 +10,7 @@ from margin.news.models import ensure_utc
 
 
 class IndustryMembership(BaseModel):
-    """Industry membership with valid-time and system-time intervals."""
+    """Industry membership with valid-time and system-time intervals.."""
 
     security_id: str
     taxonomy: str
@@ -29,19 +29,25 @@ class IndustryMembership(BaseModel):
     @field_validator("system_from", "system_to")
     @classmethod
     def normalize_system_time(cls, value: datetime | None) -> datetime | None:
-        """Normalize system-time fields to UTC."""
+        """Normalize system-time fields to UTC.
+
+        Args:
+            value: datetime | None: .
+
+        Returns:
+            datetime | None: .
+        """
         return ensure_utc(value) if value is not None else None
 
     def is_visible_at(self, *, business_at: date, known_at: datetime) -> bool:
         """Return whether this membership is valid and known at the given times.
 
         Args:
-            business_at: The business date for valid-time checking.
-            known_at: The system time for system-time checking.
+            business_at: date: .
+            known_at: datetime: .
 
         Returns:
-            ``True`` if the membership is valid at ``business_at`` and known
-            at ``known_at``.
+            bool: .
         """
         normalized_known_at = ensure_utc(known_at)
         valid_time_match = self.valid_from <= business_at and (
@@ -54,13 +60,16 @@ class IndustryMembership(BaseModel):
 
 
 class BitemporalIndustryResolver:
-    """Resolve industry membership by security, taxonomy, valid time, and system time."""
+    """Resolve industry membership by security, taxonomy, valid time, and system time.."""
 
     def __init__(self, memberships: list[IndustryMembership]) -> None:
         """Initialize the resolver.
 
         Args:
-            memberships: All industry membership records to search.
+            memberships: list[IndustryMembership]: .
+
+        Returns:
+            None: .
         """
         self._memberships = tuple(memberships)
 
@@ -74,16 +83,13 @@ class BitemporalIndustryResolver:
         """Return the unique membership visible at the requested times.
 
         Args:
-            security_id: The security to resolve.
-            taxonomy: The industry taxonomy name.
-            business_at: The business date for valid-time matching.
-            known_at: The system time for system-time matching.
+            security_id: str: .
+            taxonomy: str: .
+            business_at: date: .
+            known_at: datetime: .
 
         Returns:
-            The most recent matching ``IndustryMembership``.
-
-        Raises:
-            KeyError: If no membership is visible at the requested times.
+            IndustryMembership: .
         """
         matches = [
             membership

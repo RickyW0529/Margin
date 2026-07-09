@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 
 class DataDomain(StrEnum):
-    """Warehouse data domains with different freshness semantics."""
+    """Warehouse data domains with different freshness semantics.."""
 
     MARKET = "market"
     VALUATION = "valuation"
@@ -19,7 +19,7 @@ class DataDomain(StrEnum):
 
 
 class FreshnessStatus(StrEnum):
-    """Current freshness status for an endpoint/domain."""
+    """Current freshness status for an endpoint/domain.."""
 
     FRESH = "fresh"
     STALE = "stale"
@@ -30,7 +30,7 @@ class FreshnessStatus(StrEnum):
 
 @dataclass(frozen=True)
 class FreshnessExpectation:
-    """Expected data availability for a domain at a decision time."""
+    """Expected data availability for a domain at a decision time.."""
 
     domain: DataDomain
     as_of_date: date
@@ -39,7 +39,7 @@ class FreshnessExpectation:
 
 @dataclass(frozen=True)
 class FreshnessState:
-    """Calculated freshness status from expected and observed availability."""
+    """Calculated freshness status from expected and observed availability.."""
 
     domain: DataDomain
     as_of_date: date
@@ -50,13 +50,7 @@ class FreshnessState:
 
 
 class FreshnessCalculator:
-    """Calculate expected-as-of dates and freshness states.
-
-    Market and valuation data follow the trading calendar and provider
-    availability time. Filing/news use natural-day freshness. Fundamentals are
-    expected after a configurable disclosure lag because disclosure availability
-    is event-driven rather than guaranteed every trading day.
-    """
+    """Calculate expected-as-of dates and freshness states.."""
 
     def __init__(
         self,
@@ -70,17 +64,14 @@ class FreshnessCalculator:
         """Initialize the calculator.
 
         Args:
-            trading_days: Set of trading calendar dates. Must be non-empty.
-            timezone: IANA timezone name for local market time.
-            market_available_time: Local time at which market data is
-                considered available.
-            natural_day_available_time: Local time at which natural-day
-                data is considered available.
-            financial_disclosure_lag_days: Number of days to subtract from
-                the current date for financial freshness expectations.
+            trading_days: set[date]: .
+            timezone: str: .
+            market_available_time: time: .
+            natural_day_available_time: time: .
+            financial_disclosure_lag_days: int: .
 
-        Raises:
-            ValueError: If ``trading_days`` is empty.
+        Returns:
+            None: .
         """
         if not trading_days:
             raise ValueError("trading_days must not be empty")
@@ -94,11 +85,11 @@ class FreshnessCalculator:
         """Return the expected data cut-off for a domain at ``now``.
 
         Args:
-            domain: The data domain or its string value.
-            now: The reference datetime for the expectation.
+            domain: DataDomain | str: .
+            now: datetime: .
 
         Returns:
-            A ``FreshnessExpectation`` with the expected as-of date and time.
+            FreshnessExpectation: .
         """
         normalized_domain = DataDomain(domain)
         local_now = _as_timezone(now, self._timezone)
@@ -150,15 +141,14 @@ class FreshnessCalculator:
         """Evaluate freshness from an expected cut-off and latest observation.
 
         Args:
-            domain: The data domain or its string value.
-            now: The reference datetime for the evaluation.
-            latest_observed_at: The most recent observed data timestamp, or
-                ``None`` if no data has been synced.
-            syncing: Whether a sync is currently in progress.
-            failed: Whether the latest sync attempt failed.
+            domain: DataDomain | str: .
+            now: datetime: .
+            latest_observed_at: datetime | None: .
+            syncing: bool: .
+            failed: bool: .
 
         Returns:
-            A ``FreshnessState`` with the computed status and lag.
+            FreshnessState: .
         """
         expectation = self.expected_as_of(domain, now=now)
         if failed:
@@ -179,7 +169,14 @@ class FreshnessCalculator:
         )
 
     def _expected_market_date(self, local_now: datetime) -> date:
-        """Return the expected market as-of date for a local datetime."""
+        """Return the expected market as-of date for a local datetime.
+
+        Args:
+            local_now: datetime: .
+
+        Returns:
+            date: .
+        """
         candidate = local_now.date()
         if (
             candidate in self._trading_days
@@ -189,7 +186,14 @@ class FreshnessCalculator:
         return self._previous_trading_day(candidate)
 
     def _previous_trading_day(self, before_or_on: date) -> date:
-        """Return the most recent trading day strictly before a date."""
+        """Return the most recent trading day strictly before a date.
+
+        Args:
+            before_or_on: date: .
+
+        Returns:
+            date: .
+        """
         previous = [trading_day for trading_day in self._trading_days if trading_day < before_or_on]
         if previous:
             return max(previous)
@@ -203,7 +207,17 @@ def _state(
     *,
     lag_seconds: int | None = None,
 ) -> FreshnessState:
-    """Build a ``FreshnessState`` from an expectation and observed data."""
+    """Build a ``FreshnessState`` from an expectation and observed data.
+
+    Args:
+        expectation: FreshnessExpectation: .
+        observed_at: datetime | None: .
+        status: FreshnessStatus: .
+        lag_seconds: int | None: .
+
+    Returns:
+        FreshnessState: .
+    """
     return FreshnessState(
         domain=expectation.domain,
         as_of_date=expectation.as_of_date,
@@ -215,7 +229,15 @@ def _state(
 
 
 def _as_timezone(value: datetime, timezone: ZoneInfo) -> datetime:
-    """Convert a datetime to a target timezone, defaulting naive values to UTC."""
+    """Convert a datetime to a target timezone, defaulting naive values to UTC.
+
+    Args:
+        value: datetime: .
+        timezone: ZoneInfo: .
+
+    Returns:
+        datetime: .
+    """
     if value.tzinfo is None:
         value = value.replace(tzinfo=UTC)
     return value.astimezone(timezone)

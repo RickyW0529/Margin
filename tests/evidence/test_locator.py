@@ -37,19 +37,19 @@ def _make_chunk(
     """Build a chunk for use in locator tests.
 
     Args:
-        source_level: Source reliability level.
-        doc_type: Document type classification.
-        content: Text content of the chunk.
-        source_url: URL or file path for the source.
-        page: Page number in the source document.
-        section: Section or heading name in the source.
-        paragraph_index: Index of the paragraph within the source.
-        table_id: Optional identifier of the source table.
-        row_id: Optional identifier of the source table row.
-        quote_span: Optional character span of the quoted content.
+        source_level: Any: .
+        doc_type: Any: .
+        content: Any: .
+        source_url: Any: .
+        page: Any: .
+        section: Any: .
+        paragraph_index: Any: .
+        table_id: Any: .
+        row_id: Any: .
+        quote_span: Any: .
 
     Returns:
-        A chunk created by the vector model factory.
+        Any: .
     """
     return make_chunk(
         document_id="doc_001",
@@ -70,10 +70,14 @@ def _make_chunk(
 
 
 class TestCitationLocator:
-    """Tests for building CitationLocator objects from chunks and evidence."""
+    """Tests for building CitationLocator objects from chunks and evidence.."""
 
     def test_from_evidence(self):
-        """Verify CitationLocator.from_evidence copies evidence locator fields."""
+        """Verify CitationLocator.from_evidence copies evidence locator fields.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk()
         ev = Evidence.from_chunk(chunk)
         locator = CitationLocator.from_evidence(ev)
@@ -84,26 +88,42 @@ class TestCitationLocator:
         assert locator.quote_span == (120, 188)
 
     def test_from_chunk(self):
-        """Verify CitationLocator.from_chunk copies core chunk fields."""
+        """Verify CitationLocator.from_chunk copies core chunk fields.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk()
         locator = CitationLocator.from_chunk(chunk)
         assert locator.document_id == chunk.document_id
         assert locator.source_level == SourceLevel.L1
 
     def test_is_locatable_with_page(self):
-        """Verify a locator is locatable when page and section are present."""
+        """Verify a locator is locatable when page and section are present.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk()
         locator = CitationLocator.from_chunk(chunk)
         assert locator.is_locatable is True
 
     def test_is_not_locatable_without_url(self):
-        """Verify a locator is not locatable when no source URL is set."""
+        """Verify a locator is not locatable when no source URL is set.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk(source_url=None)
         locator = CitationLocator.from_chunk(chunk)
         assert locator.is_locatable is False
 
     def test_is_not_locatable_without_structural(self):
-        """Verify a locator is not locatable without structural fields."""
+        """Verify a locator is not locatable without structural fields.
+
+        Returns:
+            Any: .
+        """
         chunk = make_chunk(
             document_id="d1",
             content="test",
@@ -114,14 +134,22 @@ class TestCitationLocator:
         assert locator.is_locatable is False
 
     def test_has_snapshot(self):
-        """Verify has_snapshot is False when no snapshot ID is set."""
+        """Verify has_snapshot is False when no snapshot ID is set.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk()
         ev = Evidence.from_chunk(chunk)
         locator = CitationLocator.from_evidence(ev)
         assert locator.has_snapshot is False
 
     def test_has_snapshot_true(self):
-        """Verify has_snapshot is True when a snapshot ID is present."""
+        """Verify has_snapshot is True when a snapshot ID is present.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk()
         ev = Evidence.from_chunk(chunk)
         ev_with_snapshot = ev.model_copy(update={"snapshot_id": "snp_001"})
@@ -129,7 +157,11 @@ class TestCitationLocator:
         assert locator.has_snapshot is True
 
     def test_frozen(self):
-        """Verify CitationLocator instances are immutable after creation."""
+        """Verify CitationLocator instances are immutable after creation.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk()
         locator = CitationLocator.from_chunk(chunk)
         with pytest.raises(Exception):
@@ -137,10 +169,14 @@ class TestCitationLocator:
 
 
 class TestBuildLocatorFromPDF:
-    """Tests for the build_locator_from_pdf helper."""
+    """Tests for the build_locator_from_pdf helper.."""
 
     def test_pdf_locator(self):
-        """Verify build_locator_from_pdf uses explicit page and section values."""
+        """Verify build_locator_from_pdf uses explicit page and section values.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk(doc_type=DocType.ANNUAL_REPORT)
         locator = build_locator_from_pdf(chunk, page=42, section="财务分析")
         assert locator.source_type == SourceType.FILING_PDF
@@ -149,7 +185,11 @@ class TestBuildLocatorFromPDF:
         assert locator.table_id is None
 
     def test_pdf_locator_defaults_from_chunk(self):
-        """Verify build_locator_from_pdf falls back to chunk page, section, and span."""
+        """Verify build_locator_from_pdf falls back to chunk page, section, and span.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk(doc_type=DocType.ANNUAL_REPORT)
         locator = build_locator_from_pdf(chunk)
         assert locator.page == 86
@@ -158,10 +198,15 @@ class TestBuildLocatorFromPDF:
 
 
 class TestBuildLocatorFromHTML:
-    """Tests for the build_locator_from_html helper."""
+    """Tests for the build_locator_from_html helper.."""
 
     def test_html_locator(self):
-        """Verify build_locator_from_html sets paragraph_index and clears non-HTML fields."""
+        """Verify build_locator_from_html sets paragraph_index and clears non-HTML fields.
+        Returns:.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk(doc_type=DocType.NEWS, page=None, table_id="t1")
         locator = build_locator_from_html(chunk, paragraph_index=5)
         assert locator.source_type == SourceType.WEB_PAGE
@@ -170,7 +215,11 @@ class TestBuildLocatorFromHTML:
         assert locator.table_id is None
 
     def test_html_locator_defaults(self):
-        """Verify build_locator_from_html uses the chunk paragraph_index by default."""
+        """Verify build_locator_from_html uses the chunk paragraph_index by default.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk(doc_type=DocType.NEWS)
         locator = build_locator_from_html(chunk)
         assert locator.paragraph_index == 12
@@ -178,10 +227,14 @@ class TestBuildLocatorFromHTML:
 
 
 class TestBuildLocatorFromTable:
-    """Tests for the build_locator_from_table helper."""
+    """Tests for the build_locator_from_table helper.."""
 
     def test_table_locator(self):
-        """Verify build_locator_from_table captures table_id, row_id, and clears quote_span."""
+        """Verify build_locator_from_table captures table_id, row_id, and clears quote_span.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk(
             doc_type=DocType.FILING,
             table_id="cash_flow_table",
@@ -194,7 +247,11 @@ class TestBuildLocatorFromTable:
         assert locator.quote_span is None
 
     def test_table_locator_custom_ids(self):
-        """Verify build_locator_from_table accepts explicit table and row IDs."""
+        """Verify build_locator_from_table accepts explicit table and row IDs.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk(doc_type=DocType.FILING)
         locator = build_locator_from_table(chunk, table_id="balance_sheet", row_id="total_assets")
         assert locator.table_id == "balance_sheet"
@@ -202,17 +259,25 @@ class TestBuildLocatorFromTable:
 
 
 class TestVerifyWebSearchOriginal:
-    """Tests for verifying web-search citations are original and locatable."""
+    """Tests for verifying web-search citations are original and locatable.."""
 
     def test_non_web_page_passes(self):
-        """Verify non-web-page locators pass web-search verification automatically."""
+        """Verify non-web-page locators pass web-search verification automatically.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk(doc_type=DocType.FILING)
         locator = CitationLocator.from_chunk(chunk)
         result = verify_websearch_original(locator)
         assert result.passed is True
 
     def test_web_page_without_snapshot_fails(self):
-        """Verify web-page locators fail when a snapshot is required but missing."""
+        """Verify web-page locators fail when a snapshot is required but missing.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk(doc_type=DocType.NEWS)
         locator = build_locator_from_html(chunk)
         result = verify_websearch_original(locator, require_snapshot=True)
@@ -220,7 +285,11 @@ class TestVerifyWebSearchOriginal:
         assert "snapshot" in result.reason
 
     def test_web_page_with_snapshot_passes(self):
-        """Verify web-page locators pass when a required snapshot is present."""
+        """Verify web-page locators pass when a required snapshot is present.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk(doc_type=DocType.NEWS)
         locator = build_locator_from_html(chunk)
         locator = locator.model_copy(update={"snapshot_id": "snp_001"})
@@ -228,14 +297,22 @@ class TestVerifyWebSearchOriginal:
         assert result.passed is True
 
     def test_web_page_without_snapshot_allowed(self):
-        """Verify web-page locators pass when snapshot requirement is disabled."""
+        """Verify web-page locators pass when snapshot requirement is disabled.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk(doc_type=DocType.NEWS)
         locator = build_locator_from_html(chunk)
         result = verify_websearch_original(locator, require_snapshot=False)
         assert result.passed is True
 
     def test_web_page_no_url_fails(self):
-        """Verify web-page locators fail when the source URL is missing."""
+        """Verify web-page locators fail when the source URL is missing.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk(doc_type=DocType.NEWS, source_url=None)
         locator = build_locator_from_html(chunk)
         result = verify_websearch_original(locator, require_snapshot=False)
@@ -243,7 +320,11 @@ class TestVerifyWebSearchOriginal:
         assert "source_url" in result.reason
 
     def test_web_page_not_locatable_fails(self):
-        """Verify web-page locators fail when no structural pointer exists."""
+        """Verify web-page locators fail when no structural pointer exists.
+
+        Returns:
+            Any: .
+        """
         chunk = make_chunk(
             document_id="d1",
             content="snippet only",
@@ -264,28 +345,42 @@ class TestVerifyWebSearchOriginal:
 
 
 class TestPointInTimeCheck:
-    """Tests for the single-locator point-in-time check."""
+    """Tests for the single-locator point-in-time check.."""
 
     def test_passes_when_available_before_decision(self):
-        """Verify check_point_in_time passes when the source was available before the decision."""
+        """Verify check_point_in_time passes when the source was available before the decision.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk()
         locator = CitationLocator.from_chunk(chunk)
         result = check_point_in_time(locator, datetime(2026, 6, 18, tzinfo=UTC))
         assert result.passed is True
 
     def test_passes_when_equal(self):
-        """Verify check_point_in_time passes when availability equals the decision time."""
+        """Verify check_point_in_time passes when availability equals the decision time.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk()
         locator = CitationLocator.from_chunk(chunk)
         result = check_point_in_time(locator, datetime(2026, 6, 17, tzinfo=UTC))
         assert result.passed is True
 
     def test_fails_when_available_after_decision(self):
-        """Verify check_point_in_time fails when the source is only available after the decision."""
+        """Verify check_point_in_time fails when the source is only available after the decision.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk()
-        chunk_future = chunk.model_copy(update={
-            "available_at": datetime(2026, 6, 20, tzinfo=UTC),
-        })
+        chunk_future = chunk.model_copy(
+            update={
+                "available_at": datetime(2026, 6, 20, tzinfo=UTC),
+            }
+        )
         ev = Evidence.from_chunk(chunk_future)
         locator = CitationLocator.from_evidence(ev)
         result = check_point_in_time(locator, datetime(2026, 6, 18, tzinfo=UTC))
@@ -293,7 +388,11 @@ class TestPointInTimeCheck:
         assert "lookahead" in result.reason
 
     def test_naive_decision_at_handled(self):
-        """Verify check_point_in_time treats a naive decision datetime as UTC."""
+        """Verify check_point_in_time treats a naive decision datetime as UTC.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk()
         locator = CitationLocator.from_chunk(chunk)
         result = check_point_in_time(locator, datetime(2026, 6, 18))
@@ -301,15 +400,21 @@ class TestPointInTimeCheck:
 
 
 class TestCheckLocatorsPointInTime:
-    """Tests for batch point-in-time checks over multiple locators."""
+    """Tests for batch point-in-time checks over multiple locators.."""
 
     def test_batch_mixed(self):
-        """Verify check_locators_point_in_time returns separate pass and fail groups."""
+        """Verify check_locators_point_in_time returns separate pass and fail groups.
+
+        Returns:
+            Any: .
+        """
         chunk_ok = _make_chunk()
         chunk_future = _make_chunk()
-        chunk_future = chunk_future.model_copy(update={
-            "available_at": datetime(2026, 6, 20, tzinfo=UTC),
-        })
+        chunk_future = chunk_future.model_copy(
+            update={
+                "available_at": datetime(2026, 6, 20, tzinfo=UTC),
+            }
+        )
 
         loc_ok = CitationLocator.from_chunk(chunk_ok)
         loc_future = CitationLocator.from_chunk(chunk_future)
@@ -324,7 +429,11 @@ class TestCheckLocatorsPointInTime:
         assert results[1].passed is False
 
     def test_batch_all_pass(self):
-        """Verify check_locators_point_in_time includes all valid locators in passed."""
+        """Verify check_locators_point_in_time includes all valid locators in passed.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk()
         locator = CitationLocator.from_chunk(chunk)
         passed, results = check_locators_point_in_time(
@@ -335,10 +444,14 @@ class TestCheckLocatorsPointInTime:
 
 
 class TestValidateLocator:
-    """Tests for the combined locator validation routine."""
+    """Tests for the combined locator validation routine.."""
 
     def test_all_pass_filing(self):
-        """Verify validate_locator passes for a locatable filing with no lookahead."""
+        """Verify validate_locator passes for a locatable filing with no lookahead.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk(doc_type=DocType.FILING)
         locator = CitationLocator.from_chunk(chunk)
         result = validate_locator(locator, datetime(2026, 6, 18, tzinfo=UTC))
@@ -347,7 +460,11 @@ class TestValidateLocator:
         assert result.pit_passed is True
 
     def test_not_locatable_fails(self):
-        """Verify validate_locator fails when the locator is not locatable."""
+        """Verify validate_locator fails when the locator is not locatable.
+
+        Returns:
+            Any: .
+        """
         chunk = make_chunk(
             document_id="d1",
             content="test",
@@ -360,18 +477,28 @@ class TestValidateLocator:
         assert "not locatable" in result.reasons[0]
 
     def test_lookahead_fails(self):
-        """Verify validate_locator fails when the source is only available after the decision."""
+        """Verify validate_locator fails when the source is only available after the decision.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk()
-        chunk_future = chunk.model_copy(update={
-            "available_at": datetime(2026, 6, 20, tzinfo=UTC),
-        })
+        chunk_future = chunk.model_copy(
+            update={
+                "available_at": datetime(2026, 6, 20, tzinfo=UTC),
+            }
+        )
         locator = CitationLocator.from_chunk(chunk_future)
         result = validate_locator(locator, datetime(2026, 6, 18, tzinfo=UTC))
         assert result.all_passed is False
         assert any("lookahead" in r for r in result.reasons)
 
     def test_websearch_without_snapshot_fails(self):
-        """Verify validate_locator fails web-search checks without a snapshot."""
+        """Verify validate_locator fails web-search checks without a snapshot.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk(doc_type=DocType.NEWS)
         locator = build_locator_from_html(chunk)
         result = validate_locator(locator, datetime(2026, 6, 18, tzinfo=UTC))
@@ -379,7 +506,11 @@ class TestValidateLocator:
         assert result.websearch_passed is False
 
     def test_websearch_with_snapshot_passes(self):
-        """Verify validate_locator passes web-search checks with a snapshot."""
+        """Verify validate_locator passes web-search checks with a snapshot.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk(doc_type=DocType.NEWS)
         locator = build_locator_from_html(chunk)
         locator = locator.model_copy(update={"snapshot_id": "snp_001"})
@@ -387,11 +518,13 @@ class TestValidateLocator:
         assert result.all_passed is True
 
     def test_skip_websearch_check(self):
-        """Verify validate_locator can skip the web-search original-source check."""
+        """Verify validate_locator can skip the web-search original-source check.
+
+        Returns:
+            Any: .
+        """
         chunk = _make_chunk(doc_type=DocType.NEWS)
         locator = build_locator_from_html(chunk)
-        result = validate_locator(
-            locator, datetime(2026, 6, 18, tzinfo=UTC), check_websearch=False
-        )
+        result = validate_locator(locator, datetime(2026, 6, 18, tzinfo=UTC), check_websearch=False)
         assert result.websearch_passed is None
         assert result.all_passed is True

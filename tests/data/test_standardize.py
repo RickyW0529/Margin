@@ -21,113 +21,201 @@ from margin.data.standardize import (
 
 
 class TestNormalizeSymbol:
-    """Unit tests for ``normalize_symbol`` converting tickers to the canonical format."""
+    """Unit tests for ``normalize_symbol`` converting tickers to the canonical format.."""
 
     def test_pure_digit_sh(self):
-        """A pure numeric Shanghai code is suffixed with ``.SH``."""
+        """A pure numeric Shanghai code is suffixed with ``.SH``.
+
+        Returns:
+            Any: .
+        """
         assert normalize_symbol("600000") == "600000.SH"
 
     def test_pure_digit_sz(self):
-        """A pure numeric Shenzhen code is suffixed with ``.SZ``."""
+        """A pure numeric Shenzhen code is suffixed with ``.SZ``.
+
+        Returns:
+            Any: .
+        """
         assert normalize_symbol("000001") == "000001.SZ"
 
     def test_already_standard(self):
-        """An already-canonical symbol is returned unchanged."""
+        """An already-canonical symbol is returned unchanged.
+
+        Returns:
+            Any: .
+        """
         assert normalize_symbol("000001.SZ") == "000001.SZ"
 
     def test_prefix_format(self):
-        """Prefix-style symbols are converted to the canonical suffix format."""
+        """Prefix-style symbols are converted to the canonical suffix format.
+
+        Returns:
+            Any: .
+        """
         assert normalize_symbol("SZ000001") == "000001.SZ"
         assert normalize_symbol("SH600000") == "600000.SH"
 
     def test_lowercase(self):
-        """Lowercase exchange suffixes are normalized to uppercase."""
+        """Lowercase exchange suffixes are normalized to uppercase.
+
+        Returns:
+            Any: .
+        """
         assert normalize_symbol("000001.sz") == "000001.SZ"
 
     def test_688_star(self):
-        """STAR board codes are mapped to the Shanghai exchange."""
+        """STAR board codes are mapped to the Shanghai exchange.
+
+        Returns:
+            Any: .
+        """
         assert normalize_symbol("688981") == "688981.SH"
 
     def test_invalid_passthrough(self):
-        """Non-matching symbols are returned as-is."""
+        """Non-matching symbols are returned as-is.
+
+        Returns:
+            Any: .
+        """
         assert normalize_symbol("FOO") == "FOO"
 
 
 class TestSymbolComponents:
-    """Unit tests for ``symbol_components`` parsing canonical symbols."""
+    """Unit tests for ``symbol_components`` parsing canonical symbols.."""
 
     def test_split(self):
-        """Splits a canonical symbol into code and exchange."""
+        """Splits a canonical symbol into code and exchange.
+
+        Returns:
+            Any: .
+        """
         code, exchange = symbol_components("000001.SZ")
         assert code == "000001"
         assert exchange == "SZ"
 
     def test_invalid_raises(self):
-        """Raises ``ValueError`` for symbols not in canonical form."""
+        """Raises ``ValueError`` for symbols not in canonical form.
+
+        Returns:
+            Any: .
+        """
         with pytest.raises(ValueError):
             symbol_components("000001")
 
 
 class TestUnitConverter:
-    """Unit tests for ``UnitConverter`` monetary and volume conversions."""
+    """Unit tests for ``UnitConverter`` monetary and volume conversions.."""
 
     def test_yuan_passthrough(self):
-        """Yuan amounts pass through unchanged."""
+        """Yuan amounts pass through unchanged.
+
+        Returns:
+            Any: .
+        """
         assert UnitConverter.convert_amount(100.0, "yuan") == 100.0
 
     def test_wan_yuan(self):
-        """Converts ``wan_yuan`` to yuan by multiplying by 10,000."""
+        """Converts ``wan_yuan`` to yuan by multiplying by 10,000.
+
+        Returns:
+            Any: .
+        """
         assert UnitConverter.convert_amount(1.5, "wan_yuan") == 15000.0
 
     def test_yi_yuan(self):
-        """Converts ``yi_yuan`` to yuan by multiplying by 100,000,000."""
+        """Converts ``yi_yuan`` to yuan by multiplying by 100,000,000.
+
+        Returns:
+            Any: .
+        """
         assert UnitConverter.convert_amount(2.0, "yi_yuan") == 200000000.0
 
     def test_qian_yuan(self):
-        """Converts ``qian_yuan`` to yuan by multiplying by 1,000."""
+        """Converts ``qian_yuan`` to yuan by multiplying by 1,000.
+
+        Returns:
+            Any: .
+        """
         assert UnitConverter.convert_amount(2.0, "qian_yuan") == 2000.0
 
     def test_volume_gu(self):
-        """Volumes in ``gu`` pass through unchanged."""
+        """Volumes in ``gu`` pass through unchanged.
+
+        Returns:
+            Any: .
+        """
         assert UnitConverter.convert_volume(100.0, "gu") == 100.0
 
     def test_volume_shou(self):
-        """Converts ``shou`` lots to individual shares by multiplying by 100."""
+        """Converts ``shou`` lots to individual shares by multiplying by 100.
+
+        Returns:
+            Any: .
+        """
         assert UnitConverter.convert_volume(5.0, "shou") == 500.0
 
 
 class TestTimeStandardizer:
-    """Unit tests for ``TimeStandardizer`` parsing and PIT field construction."""
+    """Unit tests for ``TimeStandardizer`` parsing and PIT field construction.."""
 
     def test_parse_yyyymmdd(self):
-        """Parses a ``YYYYMMDD`` string into a datetime."""
+        """Parses a ``YYYYMMDD`` string into a datetime.
+
+        Returns:
+            Any: .
+        """
         dt = TimeStandardizer.parse_date("20260617")
         assert dt == datetime(2026, 6, 17)
 
     def test_parse_iso(self):
-        """Parses an ISO date string into a datetime."""
+        """Parses an ISO date string into a datetime.
+
+        Returns:
+            Any: .
+        """
         dt = TimeStandardizer.parse_date("2026-06-17")
         assert dt == datetime(2026, 6, 17)
 
     def test_parse_datetime_obj(self):
-        """Returns an existing datetime object unchanged."""
+        """Returns an existing datetime object unchanged.
+
+        Returns:
+            Any: .
+        """
         original = datetime(2026, 6, 17, 15, 0, 0)
         assert TimeStandardizer.parse_date(original) is original
 
     def test_parse_none(self):
-        """Parsing ``None`` returns ``None``."""
+        """Parsing ``None`` returns ``None``.
+
+        Returns:
+            Any: .
+        """
         assert TimeStandardizer.parse_date(None) is None
 
     def test_parse_empty(self):
-        """Parsing an empty string returns ``None``."""
+        """Parsing an empty string returns ``None``.
+
+        Returns:
+            Any: .
+        """
         assert TimeStandardizer.parse_date("") is None
 
     def test_parse_invalid(self):
-        """Parsing an invalid string returns ``None``."""
+        """Parsing an invalid string returns ``None``.
+
+        Returns:
+            Any: .
+        """
         assert TimeStandardizer.parse_date("not-a-date") is None
 
     def test_to_pit_fields_defaults(self):
-        """Default PIT fields are generated with ``revised_at`` set to ``None``."""
+        """Default PIT fields are generated with ``revised_at`` set to ``None``.
+
+        Returns:
+            Any: .
+        """
         pit = TimeStandardizer.to_pit_fields()
         assert "event_at" in pit
         assert "published_at" in pit
@@ -136,22 +224,28 @@ class TestTimeStandardizer:
         assert pit["revised_at"] is None
 
     def test_to_pit_fields_explicit(self):
-        """Explicit timestamps are reflected in the generated PIT fields."""
+        """Explicit timestamps are reflected in the generated PIT fields.
+
+        Returns:
+            Any: .
+        """
         event = datetime(2026, 6, 17)
         published = datetime(2026, 6, 18)
-        pit = TimeStandardizer.to_pit_fields(
-            event_at=event, published_at=published
-        )
+        pit = TimeStandardizer.to_pit_fields(event_at=event, published_at=published)
         assert pit["event_at"] == event
         assert pit["published_at"] == published
         assert pit["available_at"] == published
 
 
 class TestStandardDataEvent:
-    """Unit tests for the immutability of ``StandardDataEvent``."""
+    """Unit tests for the immutability of ``StandardDataEvent``.."""
 
     def test_frozen(self):
-        """A ``StandardDataEvent`` instance cannot be modified after creation."""
+        """A ``StandardDataEvent`` instance cannot be modified after creation.
+
+        Returns:
+            Any: .
+        """
         event = StandardDataEvent(
             domain=DataDomain.MARKET_BAR,
             symbol="000001.SZ",
@@ -167,14 +261,22 @@ class TestStandardDataEvent:
 
 
 class TestStandardizer:
-    """Unit tests for ``Standardizer`` converting raw provider records to domain events."""
+    """Unit tests for ``Standardizer`` converting raw provider records to domain events.."""
 
     def setup_method(self):
-        """Initialize a fresh ``Standardizer`` instance before each test."""
+        """Initialize a fresh ``Standardizer`` instance before each test.
+
+        Returns:
+            Any: .
+        """
         self.std = Standardizer(mapping_version="v1")
 
     def test_standardize_bars(self):
-        """Converts raw bar records into canonical ``MARKET_BAR`` events."""
+        """Converts raw bar records into canonical ``MARKET_BAR`` events.
+
+        Returns:
+            Any: .
+        """
         raw = [
             {
                 "symbol": "000001",
@@ -201,7 +303,11 @@ class TestStandardizer:
         assert event.available_at == datetime(2026, 6, 17, 15, 0)
 
     def test_standardize_bars_applies_units(self):
-        """Applies volume and amount unit conversions during bar standardization."""
+        """Applies volume and amount unit conversions during bar standardization.
+
+        Returns:
+            Any: .
+        """
         raw = [
             {
                 "symbol": "000001",
@@ -222,7 +328,11 @@ class TestStandardizer:
         assert events[0].data["amount"] == 2000.0
 
     def test_standardize_financials_without_available_at_uses_fetched_at(self):
-        """Falls back to ``fetched_at`` when ``available_at`` is missing for financial records."""
+        """Falls back to ``fetched_at`` when ``available_at`` is missing for financial records.
+
+        Returns:
+            Any: .
+        """
         fetched_at = datetime(2026, 6, 18, 20, 0)
         raw = [
             {
@@ -236,7 +346,11 @@ class TestStandardizer:
         assert events[0].available_at == fetched_at
 
     def test_standardize_securities(self):
-        """Converts raw security metadata into ``SECURITY_META`` events."""
+        """Converts raw security metadata into ``SECURITY_META`` events.
+
+        Returns:
+            Any: .
+        """
         raw = [
             {
                 "symbol": "000001.SZ",
@@ -252,7 +366,11 @@ class TestStandardizer:
         assert events[0].data["name"] == "平安银行"
 
     def test_standardize_financials(self):
-        """Converts raw financial records into ``FINANCIAL`` events."""
+        """Converts raw financial records into ``FINANCIAL`` events.
+
+        Returns:
+            Any: .
+        """
         raw = [
             {
                 "symbol": "000001.SZ",
@@ -269,7 +387,11 @@ class TestStandardizer:
         assert events[0].event_at == datetime(2026, 3, 31)
 
     def test_standardize_index_members(self):
-        """Converts raw index constituents into ``INDEX_MEMBER`` events."""
+        """Converts raw index constituents into ``INDEX_MEMBER`` events.
+
+        Returns:
+            Any: .
+        """
         raw = [
             {
                 "symbol": "000001",
@@ -288,12 +410,20 @@ class TestStandardizer:
         assert events[0].data["weight"] == 0.5
 
     def test_standardize_bars_empty(self):
-        """An empty list of raw bars returns an empty event list."""
+        """An empty list of raw bars returns an empty event list.
+
+        Returns:
+            Any: .
+        """
         events = self.std.standardize_bars([], source="akshare")
         assert events == []
 
     def test_cross_source_consistency(self):
-        """The same symbol is normalized consistently across akshare and tushare."""
+        """The same symbol is normalized consistently across akshare and tushare.
+
+        Returns:
+            Any: .
+        """
         akshare_raw = [
             {
                 "symbol": "000001",

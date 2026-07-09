@@ -42,13 +42,7 @@ if TYPE_CHECKING:
 
 
 class DedupResult(BaseModel):
-    """Result container produced by the deduplication pipeline.
-
-    Attributes:
-        unique_events: List of events that passed all deduplication checks.
-        duplicate_count: Number of duplicate events detected.
-        duplicates: Metadata for each duplicate, including the original event and reason.
-    """
+    """Result container produced by the deduplication pipeline.."""
 
     unique_events: list[DocumentEvent] = Field(default_factory=list)
     duplicate_count: int = 0
@@ -59,7 +53,7 @@ class DedupResult(BaseModel):
         """Total number of events processed, both unique and duplicate.
 
         Returns:
-            Sum of unique events and duplicate events.
+            int: .
         """
         return len(self.unique_events) + self.duplicate_count
 
@@ -72,14 +66,11 @@ class DedupResult(BaseModel):
 def _tokenize(text: str) -> list[str]:
     """Tokenize text for SimHash processing.
 
-    English words are split by whitespace and alphabetic matching, while Chinese characters
-    are treated as individual tokens.
-
     Args:
-        text: Raw input text.
+        text: str: .
 
     Returns:
-        Lowercased list of tokens extracted from the text.
+        list[str]: .
     """
     text = text.lower().strip()
     tokens: list[str] = []
@@ -97,10 +88,10 @@ def _hash64(token: str) -> int:
     """Hash a token to a 64-bit integer.
 
     Args:
-        token: Input token string.
+        token: str: .
 
     Returns:
-        A 64-bit integer derived from the MD5 hash of the token.
+        int: .
     """
     h = hashlib.md5(token.encode("utf-8")).hexdigest()
     return int(h[:16], 16)
@@ -109,16 +100,11 @@ def _hash64(token: str) -> int:
 def compute_simhash(text: str) -> int:
     """Compute the SimHash fingerprint of a text.
 
-    Algorithm:
-        1. Tokenize the text and hash each token to a 64-bit integer.
-        2. For each bit position, increment the counter if the bit is 1, otherwise decrement.
-        3. Build the final fingerprint by setting each bit if its counter is positive.
-
     Args:
-        text: Input text for fingerprinting.
+        text: str: .
 
     Returns:
-        64-bit SimHash fingerprint, or 0 if the text contains no tokens.
+        int: .
     """
     tokens = _tokenize(text)
     if not tokens:
@@ -135,7 +121,7 @@ def compute_simhash(text: str) -> int:
     fingerprint = 0
     for i in range(64):
         if vector[i] > 0:
-            fingerprint |= (1 << i)
+            fingerprint |= 1 << i
 
     return fingerprint
 
@@ -144,11 +130,11 @@ def hamming_distance(a: int, b: int) -> int:
     """Calculate the Hamming distance between two SimHash fingerprints.
 
     Args:
-        a: First 64-bit fingerprint.
-        b: Second 64-bit fingerprint.
+        a: int: .
+        b: int: .
 
     Returns:
-        Number of differing bits between the two fingerprints.
+        int: .
     """
     return bin(a ^ b).count("1")
 
@@ -157,11 +143,11 @@ def simhash_similarity(a: int, b: int) -> float:
     """Compute the similarity between two SimHash fingerprints in the range [0, 1].
 
     Args:
-        a: First 64-bit fingerprint.
-        b: Second 64-bit fingerprint.
+        a: int: .
+        b: int: .
 
     Returns:
-        Similarity score where 1.0 means identical and 0.0 means completely different.
+        float: .
     """
     distance = hamming_distance(a, b)
     return 1.0 - distance / 64.0
@@ -173,30 +159,7 @@ def simhash_similarity(a: int, b: int) -> float:
 
 
 class Deduplicator:
-    """Multi-layer deduplicator implementing architecture section 6.4.
-
-    Checks are applied in the following order:
-        1. URL uniqueness.
-        2. Content hash.
-        3. Title and publication date.
-        4. Body SimHash against previously seen events (within threshold).
-        5. Optional vector similarity against previously seen events.
-        6. Repost-chain detection, keeping the earliest reliable source.
-
-    Attributes:
-        _simhash_threshold: Maximum Hamming distance allowed before two events are considered
-            similar.
-        _title_threshold: Minimum title similarity threshold (reserved for future use).
-        _vector_similarity_func: Optional callable that returns a similarity score between two
-            events.
-        _vector_similarity_threshold: Minimum vector similarity score that triggers a duplicate
-            decision.
-        _seen_urls: Mapping from seen URLs to their canonical events.
-        _seen_hashes: Mapping from seen content hashes to their canonical events.
-        _seen_title_dates: Mapping from normalized "title|date" keys to canonical events.
-        _seen_simhashes: List of (SimHash fingerprint, DocumentEvent) pairs already encountered.
-        _seen_events: List of events encountered, used for optional vector similarity checks.
-    """
+    """Multi-layer deduplicator implementing architecture section 6.4.."""
 
     def __init__(
         self,
@@ -208,12 +171,13 @@ class Deduplicator:
         """Initialize the deduplicator with configurable thresholds.
 
         Args:
-            simhash_threshold: Hamming distance threshold for SimHash deduplication.
-            title_similarity_threshold: Reserved threshold for future title similarity logic.
-            vector_similarity_func: Optional callable ``(event, existing) -> float`` used for
-                vector-similarity deduplication.
-            vector_similarity_threshold: Minimum similarity score for the vector similarity
-                check to flag a duplicate.
+            simhash_threshold: int: .
+            title_similarity_threshold: float: .
+            vector_similarity_func: Callable[[DocumentEvent, DocumentEvent], float] | None: .
+            vector_similarity_threshold: float: .
+
+        Returns:
+            None: .
         """
         self._simhash_threshold = simhash_threshold
         self._title_threshold = title_similarity_threshold
@@ -229,7 +193,10 @@ class Deduplicator:
         """Seed the deduplicator with already-known canonical events.
 
         Args:
-            events: List of canonical events to treat as already seen.
+            events: list[DocumentEvent]: .
+
+        Returns:
+            None: .
         """
         for event in events:
             self._record_seen(event)
@@ -241,10 +208,10 @@ class Deduplicator:
         """Public duplicate probe used by persistent processors.
 
         Args:
-            event: Document event to evaluate.
+            event: DocumentEvent: .
 
         Returns:
-            Tuple of (reason, canonical_event) if a duplicate is found, otherwise None.
+            tuple[str, DocumentEvent] | None: .
         """
         return self._check_duplicate(event)
 
@@ -252,7 +219,10 @@ class Deduplicator:
         """Record a canonical event after it is persisted.
 
         Args:
-            event: Document event that has been classified as unique.
+            event: DocumentEvent: .
+
+        Returns:
+            None: .
         """
         self._record_seen(event)
 
@@ -262,14 +232,11 @@ class Deduplicator:
     ) -> DedupResult:
         """Run multi-layer deduplication on a batch of document events.
 
-        Events are sorted by source authority and then publication time so that the earliest
-        event from the most reliable source is retained, per architecture section 6.4 rule 7.
-
         Args:
-            events: Batch of document events to deduplicate.
+            events: list[DocumentEvent]: .
 
         Returns:
-            DedupResult containing unique events and duplicate metadata.
+            DedupResult: .
         """
         sorted_events = sorted(events, key=lambda e: (e.source_level, e.published_at))
 
@@ -305,10 +272,10 @@ class Deduplicator:
         """Check whether a single event is a duplicate of one already seen.
 
         Args:
-            event: Document event to evaluate.
+            event: DocumentEvent: .
 
         Returns:
-            The duplicate reason and canonical event, or None if the event is unique.
+            tuple[str, DocumentEvent] | None: .
         """
         canonical = self._seen_urls.get(event.source_url)
         if canonical is not None:
@@ -344,7 +311,10 @@ class Deduplicator:
         """Record a unique event so it can be used for future duplicate checks.
 
         Args:
-            event: Document event that has been classified as unique.
+            event: DocumentEvent: .
+
+        Returns:
+            None: .
         """
         self._seen_urls[event.source_url] = event
         self._seen_hashes[event.content_hash] = event
@@ -364,17 +334,7 @@ class Deduplicator:
 
 
 class QualityScore(BaseModel):
-    """Source quality score for a document event.
-
-    Attributes:
-        event_id: Identifier of the evaluated event.
-        source_level: Compliance/source level of the evaluated event.
-        completeness: Content completeness score in the range [0, 1].
-        timeliness: Timeliness score in the range [0, 1].
-        uniqueness: Uniqueness score in the range [0, 1].
-        authority: Authority score in the range [0, 1].
-        total_score: Weighted aggregate quality score in the range [0, 1].
-    """
+    """Source quality score for a document event.."""
 
     event_id: str
     source_level: SourceLevel
@@ -388,18 +348,7 @@ class QualityScore(BaseModel):
 
 
 class QualityScorer:
-    """Quality scorer for document events (architecture section 6.2 Quality Scorer).
-
-    Scoring dimensions:
-        authority: Source level (L1=1.0, L2=0.8, L3=0.6, L4=0.4, L5=0.2).
-        completeness: Content completeness (full body vs title only vs empty).
-        timeliness: Recency of publication (closer to now is higher).
-        uniqueness: Whether the event is the original source after deduplication.
-
-    Attributes:
-        AUTHORITY_SCORES: Mapping from SourceLevel to authority score.
-        _decay_days: Number of days over which timeliness decays to zero.
-    """
+    """Quality scorer for document events (architecture section 6.2 Quality Scorer).."""
 
     AUTHORITY_SCORES = {
         SourceLevel.L1: 1.0,
@@ -416,7 +365,10 @@ class QualityScorer:
         """Initialize the quality scorer.
 
         Args:
-            timeliness_decay_days: Number of days after which timeliness reaches zero.
+            timeliness_decay_days: float: .
+
+        Returns:
+            None: .
         """
         self._decay_days = timeliness_decay_days
 
@@ -424,10 +376,10 @@ class QualityScorer:
         """Compute a QualityScore for a single document event.
 
         Args:
-            event: Document event to score.
+            event: DocumentEvent: .
 
         Returns:
-            QualityScore with all dimension and total scores populated.
+            QualityScore: .
         """
         authority = self.AUTHORITY_SCORES.get(event.source_level, 0.0)
 
@@ -446,12 +398,7 @@ class QualityScorer:
 
         uniqueness = 1.0 if event.is_original else 0.3
 
-        total = (
-            0.40 * authority
-            + 0.25 * completeness
-            + 0.20 * timeliness
-            + 0.15 * uniqueness
-        )
+        total = 0.40 * authority + 0.25 * completeness + 0.20 * timeliness + 0.15 * uniqueness
 
         return QualityScore(
             event_id=event.event_id,
@@ -467,10 +414,10 @@ class QualityScorer:
         """Compute QualityScore objects for a batch of events.
 
         Args:
-            events: List of document events to score.
+            events: list[DocumentEvent]: .
 
         Returns:
-            List of QualityScore objects in the same order as the input events.
+            list[QualityScore]: .
         """
         return [self.score(e) for e in events]
 
@@ -481,17 +428,7 @@ class QualityScorer:
 
 
 class NewsProcessor:
-    """News processor combining deduplication, grading, and quality scoring.
-
-    Corresponds to the architecture section 6.2 ingestion pipeline:
-    Deduplicator -> Classifier -> Quality Scorer -> Event Publisher.
-
-    Example:
-        processor = NewsProcessor()
-        result = processor.process(events)
-        for event in result.unique_events:
-            score = processor.score(event)
-    """
+    """News processor combining deduplication, grading, and quality scoring.."""
 
     def __init__(
         self,
@@ -501,8 +438,11 @@ class NewsProcessor:
         """Initialize the news processor.
 
         Args:
-            deduplicator: Deduplicator instance to use. Defaults to a new Deduplicator.
-            quality_scorer: QualityScorer instance to use. Defaults to a new QualityScorer.
+            deduplicator: Deduplicator | None: .
+            quality_scorer: QualityScorer | None: .
+
+        Returns:
+            None: .
         """
         self._deduplicator = deduplicator or Deduplicator()
         self._quality_scorer = quality_scorer or QualityScorer()
@@ -511,10 +451,10 @@ class NewsProcessor:
         """Deduplicate a batch of document events.
 
         Args:
-            events: Batch of document events.
+            events: list[DocumentEvent]: .
 
         Returns:
-            DedupResult containing unique events and duplicate metadata.
+            DedupResult: .
         """
         return self._deduplicator.deduplicate(events)
 
@@ -522,10 +462,10 @@ class NewsProcessor:
         """Compute a quality score for a single event.
 
         Args:
-            event: Document event to score.
+            event: DocumentEvent: .
 
         Returns:
-            QualityScore for the event.
+            QualityScore: .
         """
         return self._quality_scorer.score(event)
 
@@ -533,10 +473,10 @@ class NewsProcessor:
         """Compute quality scores for a batch of events.
 
         Args:
-            events: List of document events to score.
+            events: list[DocumentEvent]: .
 
         Returns:
-            List of QualityScore objects in the same order as the input events.
+            list[QualityScore]: .
         """
         return self._quality_scorer.score_batch(events)
 
@@ -547,10 +487,10 @@ class NewsProcessor:
         """Run deduplication and scoring in one call.
 
         Args:
-            events: Batch of document events to process.
+            events: list[DocumentEvent]: .
 
         Returns:
-            Tuple of (DedupResult, list of QualityScore for unique events).
+            tuple[DedupResult, list[QualityScore]]: .
         """
         result = self.process(events)
         scores = self.score_batch(result.unique_events)
@@ -564,25 +504,19 @@ class NewsProcessor:
     ) -> list[DocumentEvent]:
         """Filter events by source level.
 
-        By default retains L1-L3 events, which are trusted enough to influence research and
-        position state; L4/L5 events are typically used only as supplementary signals.
-
         Args:
-            events: List of document events to filter.
-            min_level: Minimum source level to include (inclusive).
-            max_level: Maximum source level to include (inclusive).
+            events: list[DocumentEvent]: .
+            min_level: SourceLevel: .
+            max_level: SourceLevel: .
 
         Returns:
-            Events whose source_level falls within the specified inclusive range.
+            list[DocumentEvent]: .
         """
-        return [
-            e for e in events
-            if min_level <= e.source_level <= max_level
-        ]
+        return [e for e in events if min_level <= e.source_level <= max_level]
 
 
 class PersistentNewsProcessor:
-    """News processor that persists unique events, duplicate decisions, and repost chains."""
+    """News processor that persists unique events, duplicate decisions, and repost chains.."""
 
     def __init__(
         self,
@@ -596,14 +530,14 @@ class PersistentNewsProcessor:
         """Initialize the persistent news processor.
 
         Args:
-            repository: Repository used to persist events, duplicate decisions, and repost
-                edges.
-            simhash_threshold: Hamming distance threshold for SimHash deduplication.
-            vector_similarity_func: Optional callable for vector-similarity deduplication.
-            vector_similarity_threshold: Minimum similarity score for vector duplicate
-                detection.
-            quality_scorer: Scorer used to compute event quality. Defaults to a new
-                ``QualityScorer``.
+            repository: NewsRepository: .
+            simhash_threshold: int: .
+            vector_similarity_func: Callable[[DocumentEvent, DocumentEvent], float] | None: .
+            vector_similarity_threshold: float: .
+            quality_scorer: QualityScorer | None: .
+
+        Returns:
+            None: .
         """
         self._repository = repository
         self._simhash_threshold = simhash_threshold
@@ -615,10 +549,10 @@ class PersistentNewsProcessor:
         """Deduplicate against persisted canonical events and record every decision.
 
         Args:
-            events: Batch of incoming document events.
+            events: list[DocumentEvent]: .
 
         Returns:
-            DedupResult containing unique events and duplicate metadata.
+            DedupResult: .
         """
         deduplicator = Deduplicator(
             simhash_threshold=self._simhash_threshold,
@@ -669,9 +603,9 @@ class PersistentNewsProcessor:
         """Compute quality score for a persisted or incoming event.
 
         Args:
-            event: Document event to score.
+            event: DocumentEvent: .
 
         Returns:
-            QualityScore for the event.
+            QualityScore: .
         """
         return self._quality_scorer.score(event)

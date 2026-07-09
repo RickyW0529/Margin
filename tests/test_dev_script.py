@@ -8,7 +8,11 @@ from scripts import dev
 
 
 def test_dev_commands_bind_to_loopback_without_duplicate_next_flags() -> None:
-    """Local dev commands should avoid wildcard binds and duplicate Next flags."""
+    """Local dev commands should avoid wildcard binds and duplicate Next flags.
+
+    Returns:
+        None: .
+    """
     config = dev.DevConfig(
         root=Path("/repo"),
         host="127.0.0.1",
@@ -38,7 +42,11 @@ def test_dev_commands_bind_to_loopback_without_duplicate_next_flags() -> None:
 
 
 def test_dev_setup_commands_use_project_python() -> None:
-    """Local dev startup should run migration and bootstrap with project Python."""
+    """Local dev startup should run migration and bootstrap with project Python.
+
+    Returns:
+        None: .
+    """
     config = dev.DevConfig(root=Path("/repo"))
 
     assert dev.build_migrate_command(config, python="/repo/.venv/bin/python") == [
@@ -52,7 +60,11 @@ def test_dev_setup_commands_use_project_python() -> None:
 
 
 def test_dev_environment_forces_localhost_proxy_bypass() -> None:
-    """The dev supervisor should keep localhost traffic out of proxies/VPN."""
+    """The dev supervisor should keep localhost traffic out of proxies/VPN.
+
+    Returns:
+        None: .
+    """
     env = dev.with_local_no_proxy({"NO_PROXY": "example.com"})
 
     assert env["NO_PROXY"] == "example.com,localhost,127.0.0.1,::1"
@@ -60,7 +72,11 @@ def test_dev_environment_forces_localhost_proxy_bypass() -> None:
 
 
 def test_project_worker_selection_ignores_other_repositories() -> None:
-    """Clean mode may only target margin.worker processes from this checkout."""
+    """Clean mode may only target margin.worker processes from this checkout.
+
+    Returns:
+        None: .
+    """
     root = Path("/repo")
     rows = [
         dev.ProcessRow(101, "python -m margin.worker"),

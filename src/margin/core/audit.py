@@ -18,11 +18,7 @@ from margin.core.provider import CallResult
 
 
 class SecretRedactingProcessor:
-    """Recursively redact sensitive fields and known secret values.
-
-    The callable signature is compatible with structlog processors, while the
-    implementation is also reusable for audit payloads and structured errors.
-    """
+    """Recursively redact sensitive fields and known secret values.."""
 
     sensitive_fragments: ClassVar[tuple[str, ...]] = (
         "token",
@@ -37,8 +33,10 @@ class SecretRedactingProcessor:
         """Initialize the redactor with known secret values to scrub.
 
         Args:
-            secret_values: Tuple of plaintext secret values to redact from
-                strings. Values are sorted longest-first for greedy matching.
+            secret_values: tuple[str, ...]: .
+
+        Returns:
+            None: .
         """
         self._secret_values = tuple(
             sorted(
@@ -57,18 +55,25 @@ class SecretRedactingProcessor:
         """Redact sensitive fields and known secret values from an event dict.
 
         Args:
-            logger: Logger instance (unused, required by structlog protocol).
-            method_name: Method name (unused, required by structlog protocol).
-            event_dict: Event dictionary to redact in place.
+            logger: object: .
+            method_name: str: .
+            event_dict: dict[str, Any]: .
 
         Returns:
-            A new dictionary with sensitive fields and secret values redacted.
+            dict[str, Any]: .
         """
         del logger, method_name
         return self._redact_mapping(event_dict)
 
     def _redact_mapping(self, value: dict[Any, Any]) -> dict[str, Any]:
-        """redact mapping."""
+        """redact mapping.
+
+        Args:
+            value: dict[Any, Any]: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         redacted: dict[str, Any] = {}
         for raw_key, raw_value in value.items():
             key = str(raw_key)
@@ -80,7 +85,14 @@ class SecretRedactingProcessor:
         return redacted
 
     def _redact_value(self, value: Any) -> Any:
-        """redact value."""
+        """redact value.
+
+        Args:
+            value: Any: .
+
+        Returns:
+            Any: .
+        """
         if isinstance(value, dict):
             return self._redact_mapping(value)
         if isinstance(value, list):
@@ -94,7 +106,14 @@ class SecretRedactingProcessor:
         return value
 
     def _redact_string(self, value: str) -> str:
-        """redact string."""
+        """redact string.
+
+        Args:
+            value: str: .
+
+        Returns:
+            str: .
+        """
         redacted = value
         for secret in self._secret_values:
             redacted = redacted.replace(secret, "[REDACTED]")
@@ -102,24 +121,7 @@ class SecretRedactingProcessor:
 
 
 class AuditRecord(BaseModel):
-    """A single immutable audit record describing a Provider call.
-
-    Attributes:
-        provider_name: Name of the Provider that was called.
-        provider_version: Version of the Provider.
-        method: Method name that was invoked.
-        params_summary: Sanitized summary of call parameters.
-        success: Whether the call succeeded.
-        error: Error message when the call failed.
-        fetched_at: Timestamp when the call was attempted.
-        available_at: Timestamp when the data becomes available, if known.
-        response_hash: SHA-256 hash of the response payload.
-        cost: Estimated monetary or quota cost of the call.
-        latency_ms: Round-trip latency in milliseconds.
-        attempt_count: Number of attempts made before the final result.
-        from_fallback: Whether the result came from a fallback Provider.
-        trace_id: Optional trace identifier.
-    """
+    """A single immutable audit record describing a Provider call.."""
 
     provider_name: str
     provider_version: str
@@ -143,10 +145,10 @@ def compute_hash(data: Any) -> str:
     """Compute a deterministic SHA256 hash for arbitrary data.
 
     Args:
-        data: Any JSON-serializable value. ``None`` is handled explicitly.
+        data: Any: .
 
     Returns:
-        A string of the form ``sha256:<hex_digest>`` or ``sha256:none``.
+        str: .
     """
     if data is None:
         return "sha256:none"
@@ -155,21 +157,16 @@ def compute_hash(data: Any) -> str:
 
 
 class AuditLogger:
-    """Append-only audit log writer.
-
-    The MVP implementation writes JSON Lines to a local file. Future iterations
-    will migrate to an immutable PostgreSQL audit table.
-
-    Attributes:
-        _log_path: Path to the JSONL audit log file.
-    """
+    """Append-only audit log writer.."""
 
     def __init__(self, log_path: Path | None = None) -> None:
         """Initialize the audit logger.
 
         Args:
-            log_path: Path to the JSONL log file. Defaults to
-                ``.margin/audit/provider_calls.jsonl``.
+            log_path: Path | None: .
+
+        Returns:
+            None: .
         """
         self._log_path = log_path or Path(".margin") / "audit" / "provider_calls.jsonl"
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -186,15 +183,15 @@ class AuditLogger:
         """Log a single Provider call and return the immutable record.
 
         Args:
-            provider_name: Name of the Provider that was called.
-            provider_version: Version of the Provider.
-            method: Method name that was invoked.
-            params: Original call parameters; sensitive values are redacted.
-            result: Call result containing status, timing, and cost metadata.
-            trace_id: Optional trace identifier for observability.
+            provider_name: str: .
+            provider_version: str: .
+            method: str: .
+            params: dict[str, Any]: .
+            result: CallResult: .
+            trace_id: str: .
 
         Returns:
-            The immutable ``AuditRecord`` that was appended to the log.
+            AuditRecord: .
         """
         params_summary = _summarize_params(params)
 
@@ -222,7 +219,10 @@ class AuditLogger:
         """Append a JSON-encoded record to the log file.
 
         Args:
-            record: The audit record to append.
+            record: AuditRecord: .
+
+        Returns:
+            None: .
         """
         line = record.model_dump_json() + "\n"
         with open(self._log_path, "a", encoding="utf-8") as f:
@@ -232,8 +232,7 @@ class AuditLogger:
         """Read all audit records from the log file.
 
         Returns:
-            List of parsed ``AuditRecord`` objects. Returns an empty list when
-            the log file does not exist.
+            list[AuditRecord]: .
         """
         if not self._log_path.is_file():
             return []
@@ -248,14 +247,11 @@ class AuditLogger:
 def _summarize_params(params: dict[str, Any]) -> dict[str, Any]:
     """Summarize call parameters for audit logging.
 
-    Sensitive keys are redacted, long strings are truncated, and long sequences
-    are replaced by a length summary.
-
     Args:
-        params: Original call parameters.
+        params: dict[str, Any]: .
 
     Returns:
-        A sanitized copy suitable for persistent audit logs.
+        dict[str, Any]: .
     """
     redacted_params = SecretRedactingProcessor()(None, "audit", params)
     summary: dict[str, Any] = {}

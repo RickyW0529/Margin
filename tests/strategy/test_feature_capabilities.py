@@ -7,7 +7,11 @@ from margin.strategy.models import ConfigLifecycle, ProviderConfigVersion
 
 
 def test_feature_capabilities_report_missing_provider_requirements() -> None:
-    """Verify missing provider categories are reported without raising."""
+    """Verify missing provider categories are reported without raising.
+
+    Returns:
+        None: .
+    """
     statuses = build_feature_capabilities(())
 
     assert statuses["api"].enabled is True
@@ -17,7 +21,11 @@ def test_feature_capabilities_report_missing_provider_requirements() -> None:
 
 
 def test_feature_capabilities_require_active_provider_secrets() -> None:
-    """Verify secret-backed providers without secrets are reported as missing."""
+    """Verify secret-backed providers without secrets are reported as missing.
+
+    Returns:
+        None: .
+    """
     statuses = build_feature_capabilities(
         (
             ProviderConfigVersion(
@@ -34,7 +42,11 @@ def test_feature_capabilities_require_active_provider_secrets() -> None:
 
 
 def test_feature_capabilities_enable_configured_local_stack() -> None:
-    """Verify feature capabilities from a minimally configured local stack."""
+    """Verify feature capabilities from a minimally configured local stack.
+
+    Returns:
+        None: .
+    """
     statuses = build_feature_capabilities(
         (
             ProviderConfigVersion(

@@ -30,20 +30,17 @@ PIT_FIELDS = ("event_at", "published_at", "available_at", "fetched_at", "revised
 
 
 class PITFieldError(ValueError):
-    """Raised when a required point-in-time field is missing or has an invalid type."""
+    """Raised when a required point-in-time field is missing or has an invalid type.."""
 
 
 def validate_pit_fields(record: dict[str, Any] | StandardDataEvent) -> None:
     """Validate that a record contains all required point-in-time fields with correct types.
 
-    The required fields are ``event_at``, ``published_at``, ``available_at``,
-    and ``fetched_at``. ``revised_at`` is optional and may be ``None``.
-
     Args:
-        record: A dictionary or ``StandardDataEvent`` containing point-in-time fields.
+        record: dict[str, Any] | StandardDataEvent: .
 
-    Raises:
-        PITFieldError: If a required field is missing or has an incorrect type.
+    Returns:
+        None: .
     """
     if isinstance(record, StandardDataEvent):
         for field_name in ("event_at", "published_at", "available_at", "fetched_at"):
@@ -73,11 +70,7 @@ def validate_pit_fields(record: dict[str, Any] | StandardDataEvent) -> None:
 
 
 class LookaheadError(ValueError):
-    """Raised when ``available_at`` is later than ``decision_at``.
-
-    This indicates future data leakage: the record was not yet available at the
-    simulated decision time.
-    """
+    """Raised when ``available_at`` is later than ``decision_at``.."""
 
 
 def check_no_lookahead(
@@ -86,17 +79,12 @@ def check_no_lookahead(
 ) -> bool:
     """Verify ``available_at <= decision_at`` to prevent future data leakage.
 
-    See architecture §4.5 for the anti-lookahead design rationale.
-
     Args:
-        record: A record containing ``available_at``.
-        decision_at: The point in time at which a decision would be made.
+        record: dict[str, Any] | StandardDataEvent: .
+        decision_at: datetime: .
 
     Returns:
-        ``True`` if the check passes.
-
-    Raises:
-        LookaheadError: If ``available_at`` is ``None`` or later than ``decision_at``.
+        bool: .
     """
     if isinstance(record, StandardDataEvent):
         available_at = record.available_at
@@ -119,15 +107,12 @@ def filter_by_decision_at(
 ) -> tuple[list[StandardDataEvent], list[StandardDataEvent]]:
     """Filter records based on ``decision_at``.
 
-    Records with ``available_at`` later than ``decision_at`` are considered
-    future data leakage and are returned as rejected.
-
     Args:
-        records: List of records to filter.
-        decision_at: The decision point used for filtering.
+        records: list[StandardDataEvent]: .
+        decision_at: datetime: .
 
     Returns:
-        A tuple of ``(passed_records, rejected_records)``.
+        tuple[list[StandardDataEvent], list[StandardDataEvent]]: .
     """
     passed: list[StandardDataEvent] = []
     rejected: list[StandardDataEvent] = []
@@ -145,7 +130,7 @@ def filter_by_decision_at(
 
 
 class QualityIssueType(StrEnum):
-    """Enumeration of data quality issue types."""
+    """Enumeration of data quality issue types.."""
 
     MISSING_FIELD = "missing_field"
     MISSING_VALUE = "missing_value"
@@ -157,15 +142,7 @@ class QualityIssueType(StrEnum):
 
 
 class QualityIssue(BaseModel):
-    """A single data quality issue.
-
-    Attributes:
-        issue_type: The type of quality issue.
-        symbol: The affected symbol, if any.
-        field_name: The affected field name, if any.
-        message: A human-readable description of the issue.
-        severity: Issue severity; one of ``info``, ``warning``, or ``critical``.
-    """
+    """A single data quality issue.."""
 
     issue_type: QualityIssueType
     symbol: str | None = None
@@ -177,14 +154,7 @@ class QualityIssue(BaseModel):
 
 
 class QualityReport(BaseModel):
-    """Report summarizing the result of a data quality check.
-
-    Attributes:
-        checked_at: Timestamp when the report was generated.
-        total_records: Number of records that were inspected.
-        issues: List of detected quality issues.
-        passed: Whether the check passed; ``False`` if any critical issue exists.
-    """
+    """Report summarizing the result of a data quality check.."""
 
     checked_at: datetime = Field(default_factory=lambda: datetime.now())
     total_records: int = 0
@@ -193,30 +163,25 @@ class QualityReport(BaseModel):
 
     @property
     def issue_count(self) -> int:
-        """Return the total number of issues in the report."""
+        """Return the total number of issues in the report.
+
+        Returns:
+            int: .
+        """
         return len(self.issues)
 
     @property
     def critical_count(self) -> int:
-        """Return the number of critical issues in the report."""
+        """Return the number of critical issues in the report.
+
+        Returns:
+            int: .
+        """
         return sum(1 for i in self.issues if i.severity == "critical")
 
 
 class DataQualityChecker:
-    """Inspects ``StandardDataEvent`` records and produces a ``QualityReport``.
-
-    Checks performed include:
-
-    - Required field/value presence (``MISSING_FIELD`` / ``MISSING_VALUE``).
-    - Outlier detection (``OUTLIER``): non-positive prices or negative volume.
-    - Revision tracking (``REVISION``): flagged when ``revised_at`` is set.
-    - Staleness detection (``STALE_DATA``): ``fetched_at`` is much later than
-      ``available_at``.
-
-    Attributes:
-        _required_fields: Mapping from domain name to required field names.
-        _stale_threshold_hours: Threshold for stale data detection in hours.
-    """
+    """Inspects ``StandardDataEvent`` records and produces a ``QualityReport``.."""
 
     def __init__(
         self,
@@ -226,9 +191,11 @@ class DataQualityChecker:
         """Initialize the checker with domain-specific required fields.
 
         Args:
-            required_fields: Optional mapping of domain names to required field
-                name lists. Defaults are used when not provided.
-            stale_threshold_hours: Hours after which a record is considered stale.
+            required_fields: dict[str, list[str]] | None: .
+            stale_threshold_hours: float: .
+
+        Returns:
+            None: .
         """
         self._required_fields = required_fields or {
             "market_bar": ["open", "close", "high", "low", "volume"],
@@ -242,10 +209,10 @@ class DataQualityChecker:
         """Run quality checks on a batch of records.
 
         Args:
-            records: Records to inspect.
+            records: list[StandardDataEvent]: .
 
         Returns:
-            A ``QualityReport`` containing all detected issues.
+            QualityReport: .
         """
         issues: list[QualityIssue] = []
 
@@ -325,7 +292,7 @@ class DataQualityChecker:
 
 
 class QualityEventSeverity(StrEnum):
-    """Severity levels for data quality events."""
+    """Severity levels for data quality events.."""
 
     INFO = "info"
     WARNING = "warning"
@@ -333,21 +300,7 @@ class QualityEventSeverity(StrEnum):
 
 
 class DataQualityEvent(BaseModel):
-    """Data quality event emitted downstream when anomalies are detected.
-
-    Critical events can be used to suppress high-confidence research signal
-    output, as described in architecture §25 and product §15 item 8.
-
-    Attributes:
-        event_id: Unique identifier for the event.
-        severity: Event severity level.
-        source: Source component that emitted the event.
-        domain: Data domain affected by the event.
-        message: Human-readable event description.
-        affected_symbols: Symbols impacted by the event.
-        issue_count: Number of underlying quality issues.
-        emitted_at: Timestamp when the event was emitted.
-    """
+    """Data quality event emitted downstream when anomalies are detected.."""
 
     event_id: str
     severity: QualityEventSeverity
@@ -362,24 +315,23 @@ class DataQualityEvent(BaseModel):
 
     @property
     def should_suppress_research(self) -> bool:
-        """Return whether this critical event should suppress research signals."""
+        """Return whether this critical event should suppress research signals.
+
+        Returns:
+            bool: .
+        """
         return self.severity == QualityEventSeverity.CRITICAL
 
 
 class QualityEventEmitter:
-    """Generates and tracks ``DataQualityEvent`` instances.
-
-    Events are derived from ``QualityReport`` objects or created manually for
-    custom notifications. Critical events may be consumed to suppress research
-    signal output.
-
-    Attributes:
-        _events: Internal list of emitted events.
-        _counter: Monotonically increasing event counter.
-    """
+    """Generates and tracks ``DataQualityEvent`` instances.."""
 
     def __init__(self) -> None:
-        """Initialize the emitter with an empty event history."""
+        """Initialize the emitter with an empty event history.
+
+        Returns:
+            None: .
+        """
         self._events: list[DataQualityEvent] = []
         self._counter = 0
 
@@ -392,13 +344,12 @@ class QualityEventEmitter:
         """Create a ``DataQualityEvent`` from a ``QualityReport``.
 
         Args:
-            report: The quality report to convert.
-            source: Source component name to record in the event.
-            domain: Data domain name to record in the event.
+            report: QualityReport: .
+            source: str: .
+            domain: str: .
 
         Returns:
-            A new ``DataQualityEvent`` if the report contains issues, otherwise
-            ``None``.
+            DataQualityEvent | None: .
         """
         if report.issue_count == 0:
             return None
@@ -412,9 +363,7 @@ class QualityEventEmitter:
             severity = QualityEventSeverity.INFO
 
         self._counter += 1
-        affected = sorted({
-            i.symbol for i in report.issues if i.symbol is not None
-        })
+        affected = sorted({i.symbol for i in report.issues if i.symbol is not None})
 
         event = DataQualityEvent(
             event_id=f"qe_{self._counter:06d}",
@@ -442,14 +391,14 @@ class QualityEventEmitter:
         """Emit a custom data quality event.
 
         Args:
-            severity: Severity level for the event.
-            source: Source component name.
-            domain: Data domain name.
-            message: Human-readable event description.
-            affected_symbols: Optional list of affected symbols.
+            severity: QualityEventSeverity: .
+            source: str: .
+            domain: str: .
+            message: str: .
+            affected_symbols: list[str] | None: .
 
         Returns:
-            The newly emitted ``DataQualityEvent``.
+            DataQualityEvent: .
         """
         self._counter += 1
         event = DataQualityEvent(
@@ -465,14 +414,18 @@ class QualityEventEmitter:
 
     @property
     def events(self) -> list[DataQualityEvent]:
-        """Return a copy of all emitted events."""
+        """Return a copy of all emitted events.
+
+        Returns:
+            list[DataQualityEvent]: .
+        """
         return list(self._events)
 
     @property
     def has_critical(self) -> bool:
         """Return whether any emitted event is critical.
 
-        Critical events should trigger suppression of high-confidence research
-        signal output.
+        Returns:
+            bool: .
         """
         return any(e.should_suppress_research for e in self._events)

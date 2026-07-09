@@ -17,20 +17,7 @@ from pydantic import BaseModel, Field
 
 
 class ParsedBlock(BaseModel):
-    """A parsed source block with exact source locator metadata.
-
-    Attributes:
-        block_id: Unique identifier for the block.
-        block_type: Semantic type of the block (heading, paragraph, table_row, page, json_row,
-            text).
-        text: Extracted text content of the block.
-        page: Optional page number for paginated sources.
-        section: Optional section or heading context.
-        paragraph_index: Optional paragraph index within the section.
-        table_id: Optional table identifier for table rows.
-        row_id: Optional row identifier for table or JSON rows.
-        quote_span: Optional character span (start, end) of the text in the original source.
-    """
+    """A parsed source block with exact source locator metadata.."""
 
     block_id: str
     block_type: Literal["heading", "paragraph", "table_row", "page", "json_row", "text"]
@@ -46,16 +33,7 @@ class ParsedBlock(BaseModel):
 
 
 class ParsedDocument(BaseModel):
-    """Structured parsed document consumed by locator-preserving chunking.
-
-    Attributes:
-        document_id: Unique identifier for the parsed document.
-        source_url: Optional URL of the original source.
-        title: Optional document title.
-        blocks: Ordered tuple of parsed blocks.
-        parse_status: Status of parsing (ready or failed).
-        parse_error: Optional error message when parsing fails.
-    """
+    """Structured parsed document consumed by locator-preserving chunking.."""
 
     document_id: str
     source_url: str | None = None
@@ -68,11 +46,7 @@ class ParsedDocument(BaseModel):
 
 
 class StructuredDocumentParser:
-    """Parser that emits ordered blocks for HTML, PDF text, CSV, JSON, and plain text.
-
-    Each parse method returns a ``ParsedDocument`` whose blocks preserve source locators for
-    downstream citation and chunking.
-    """
+    """Parser that emits ordered blocks for HTML, PDF text, CSV, JSON, and plain text.."""
 
     def parse_html(
         self,
@@ -84,12 +58,12 @@ class StructuredDocumentParser:
         """Parse HTML headings and paragraphs into ordered blocks.
 
         Args:
-            html: HTML content as text or bytes.
-            document_id: Unique identifier for the parsed document.
-            source_url: Optional URL of the original source.
+            html: str | bytes: .
+            document_id: str: .
+            source_url: str | None: .
 
         Returns:
-            Parsed document containing headings and paragraph blocks.
+            ParsedDocument: .
         """
         from bs4 import BeautifulSoup
 
@@ -142,12 +116,12 @@ class StructuredDocumentParser:
         """Parse CSV rows into table blocks with row locators.
 
         Args:
-            content: CSV content as text or bytes.
-            document_id: Unique identifier for the parsed document.
-            source_url: Optional URL of the original source.
+            content: str | bytes: .
+            document_id: str: .
+            source_url: str | None: .
 
         Returns:
-            Parsed document containing one block per CSV row.
+            ParsedDocument: .
         """
         text = content.decode("utf-8", errors="replace") if isinstance(content, bytes) else content
         reader = csv.DictReader(io.StringIO(text))
@@ -182,12 +156,12 @@ class StructuredDocumentParser:
         """Parse JSON objects or arrays into structured row blocks.
 
         Args:
-            content: JSON content as text or bytes.
-            document_id: Unique identifier for the parsed document.
-            source_url: Optional URL of the original source.
+            content: str | bytes: .
+            document_id: str: .
+            source_url: str | None: .
 
         Returns:
-            Parsed document containing one block per JSON row.
+            ParsedDocument: .
         """
         text = content.decode("utf-8", errors="replace") if isinstance(content, bytes) else content
         data = json.loads(text)
@@ -218,12 +192,12 @@ class StructuredDocumentParser:
         """Parse PDF pages into page blocks using pypdf.
 
         Args:
-            content: PDF content as bytes.
-            document_id: Unique identifier for the parsed document.
-            source_url: Optional URL of the original source.
+            content: bytes: .
+            document_id: str: .
+            source_url: str | None: .
 
         Returns:
-            Parsed document containing one block per PDF page.
+            ParsedDocument: .
         """
         import io
 
@@ -262,12 +236,12 @@ class StructuredDocumentParser:
         """Parse plain text paragraphs.
 
         Args:
-            content: Plain text content as text or bytes.
-            document_id: Unique identifier for the parsed document.
-            source_url: Optional URL of the original source.
+            content: str | bytes: .
+            document_id: str: .
+            source_url: str | None: .
 
         Returns:
-            Parsed document containing one block per paragraph.
+            ParsedDocument: .
         """
         text = content.decode("utf-8", errors="replace") if isinstance(content, bytes) else content
         blocks: list[ParsedBlock] = []

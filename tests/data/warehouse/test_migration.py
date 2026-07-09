@@ -8,7 +8,14 @@ from scripts.verify_migrations import verify_clean_database
 
 
 def test_data_warehouse_tables_exist(database_url: str) -> None:
-    """Alembic head includes the production warehouse tables required by v0.2."""
+    """Alembic head includes the production warehouse tables required by v0.2.
+
+    Args:
+        database_url: str: .
+
+    Returns:
+        None: .
+    """
     url = make_url(database_url)
     result = verify_clean_database(
         database_url,

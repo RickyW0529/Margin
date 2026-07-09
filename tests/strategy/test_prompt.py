@@ -14,7 +14,7 @@ def test_prompt_includes_guardrail_and_custom_instructions():
     """Verify the built prompt contains evidence guardrails and custom instructions.
 
     Returns:
-        None.
+        Any: .
     """
     config = StrategyConfig(ai={"custom_instructions": "focus on ROE"})
     prompt = PromptLayerBuilder().build(config)
@@ -26,7 +26,7 @@ def test_prompt_contains_no_return_guarantee_guardrail():
     """Verify the prompt includes a no-return-guarantee guardrail.
 
     Returns:
-        None.
+        Any: .
     """
     config = StrategyConfig()
     prompt = PromptLayerBuilder().build(config)
@@ -37,7 +37,7 @@ def test_prompt_layers_return_layer_contents():
     """Verify build_layers returns individual named prompt layers.
 
     Returns:
-        None.
+        Any: .
     """
     config = StrategyConfig(ai={"custom_instructions": "test"})
     layers = PromptLayerBuilder().build_layers(config)

@@ -22,12 +22,10 @@ from margin.storage.base import Base
 
 
 class ResearchSnapshotRow(Base):
-    """Append-only serialized research snapshot."""
+    """Append-only serialized research snapshot.."""
 
     __tablename__ = "research_snapshots"
-    __table_args__ = (
-        Index("ix_research_snapshots_run_created", "run_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_research_snapshots_run_created", "run_id", "created_at"),)
 
     snapshot_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     run_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
@@ -39,7 +37,7 @@ class ResearchSnapshotRow(Base):
 
 
 class AIGraphRunRow(Base):
-    """One durable execution of the v0.2 AI delta review graph."""
+    """One durable execution of the v0.2 AI delta review graph.."""
 
     __tablename__ = "ai_graph_runs"
     __table_args__ = (
@@ -71,7 +69,7 @@ class AIGraphRunRow(Base):
 
 
 class AIGraphNodeRunRow(Base):
-    """Append-only node attempt with input/output hashes and error metadata."""
+    """Append-only node attempt with input/output hashes and error metadata.."""
 
     __tablename__ = "ai_graph_node_runs"
     __table_args__ = (
@@ -104,12 +102,10 @@ class AIGraphNodeRunRow(Base):
 
 
 class AIGraphCheckpointRow(Base):
-    """Immutable graph checkpoint for crash recovery and identity validation."""
+    """Immutable graph checkpoint for crash recovery and identity validation.."""
 
     __tablename__ = "ai_graph_checkpoints"
-    __table_args__ = (
-        Index("ix_ai_graph_checkpoints_created", "graph_run_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_ai_graph_checkpoints_created", "graph_run_id", "created_at"),)
 
     graph_run_id: Mapped[str] = mapped_column(
         ForeignKey("ai_graph_runs.graph_run_id", ondelete="RESTRICT"),
@@ -126,12 +122,10 @@ class AIGraphCheckpointRow(Base):
 
 
 class ToolCallRecordRow(Base):
-    """Audited allowed or denied scoped tool call."""
+    """Audited allowed or denied scoped tool call.."""
 
     __tablename__ = "tool_call_records"
-    __table_args__ = (
-        Index("ix_tool_call_records_graph_node", "graph_run_id", "node_name"),
-    )
+    __table_args__ = (Index("ix_tool_call_records_graph_node", "graph_run_id", "node_name"),)
 
     tool_call_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     graph_run_id: Mapped[str] = mapped_column(
@@ -156,7 +150,7 @@ class ToolCallRecordRow(Base):
 
 
 class LLMCallRecordRow(Base):
-    """Audited structured LLM call with a unique billing key."""
+    """Audited structured LLM call with a unique billing key.."""
 
     __tablename__ = "llm_call_records"
     __table_args__ = (
@@ -193,7 +187,7 @@ class LLMCallRecordRow(Base):
 
 
 class ResearchDeltaReviewRow(Base):
-    """Immutable terminal delta-review result."""
+    """Immutable terminal delta-review result.."""
 
     __tablename__ = "research_delta_reviews"
     __table_args__ = (
@@ -238,7 +232,7 @@ class ResearchDeltaReviewRow(Base):
 
 
 class ResearchDeltaOutboxRow(Base):
-    """Transactional publication event for a terminal delta review."""
+    """Transactional publication event for a terminal delta review.."""
 
     __tablename__ = "research_delta_outbox"
     __table_args__ = (

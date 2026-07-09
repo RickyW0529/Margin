@@ -12,7 +12,7 @@ from margin.storage.base import Base
 
 
 class StrategyProfileRow(Base):
-    """Mutable strategy profile header."""
+    """Mutable strategy profile header.."""
 
     __tablename__ = "strategy_profiles"
 
@@ -31,7 +31,7 @@ class StrategyProfileRow(Base):
 
 
 class StrategyVersionRow(Base):
-    """Immutable strategy version snapshot."""
+    """Immutable strategy version snapshot.."""
 
     __tablename__ = "strategy_versions"
 
@@ -58,7 +58,7 @@ class StrategyVersionRow(Base):
 
 
 class ProviderSecretVersionRow(Base):
-    """Encrypted provider secret version metadata."""
+    """Encrypted provider secret version metadata.."""
 
     __tablename__ = "provider_secret_versions"
     __table_args__ = (
@@ -87,7 +87,7 @@ class ProviderSecretVersionRow(Base):
 
 
 class ProviderConfigVersionRow(Base):
-    """Versioned non-sensitive provider configuration."""
+    """Versioned non-sensitive provider configuration.."""
 
     __tablename__ = "provider_config_versions"
     __table_args__ = (
@@ -116,7 +116,7 @@ class ProviderConfigVersionRow(Base):
 
 
 class UniverseDefinitionVersionRow(Base):
-    """Versioned universe definition."""
+    """Versioned universe definition.."""
 
     __tablename__ = "universe_definition_versions"
     __table_args__ = (
@@ -140,7 +140,7 @@ class UniverseDefinitionVersionRow(Base):
 
 
 class IndicatorViewVersionRow(Base):
-    """Versioned user-facing indicator view."""
+    """Versioned user-facing indicator view.."""
 
     __tablename__ = "indicator_view_versions"
     __table_args__ = (
@@ -162,7 +162,7 @@ class IndicatorViewVersionRow(Base):
 
 
 class QuantFeatureSetVersionRow(Base):
-    """Versioned quant feature requirements."""
+    """Versioned quant feature requirements.."""
 
     __tablename__ = "quant_feature_set_versions"
     __table_args__ = (
@@ -185,7 +185,7 @@ class QuantFeatureSetVersionRow(Base):
 
 
 class QuantStrategyVersionRow(Base):
-    """Versioned quant strategy configuration."""
+    """Versioned quant strategy configuration.."""
 
     __tablename__ = "quant_strategy_versions"
     __table_args__ = (
@@ -209,7 +209,7 @@ class QuantStrategyVersionRow(Base):
 
 
 class UserStylePromptVersionRow(Base):
-    """Versioned user prompt overlay."""
+    """Versioned user prompt overlay.."""
 
     __tablename__ = "user_style_prompt_versions"
     __table_args__ = (
@@ -231,7 +231,7 @@ class UserStylePromptVersionRow(Base):
 
 
 class ToolPolicyVersionRow(Base):
-    """Versioned tool allow/deny policy used by AI orchestration."""
+    """Versioned tool allow/deny policy used by AI orchestration.."""
 
     __tablename__ = "tool_policy_versions"
     __table_args__ = (
@@ -252,7 +252,7 @@ class ToolPolicyVersionRow(Base):
 
 
 class ResearchScopeVersionRow(Base):
-    """Frozen references used by downstream data, quant, news, and AI runs."""
+    """Frozen references used by downstream data, quant, news, and AI runs.."""
 
     __tablename__ = "research_scope_versions"
     __table_args__ = (
@@ -283,7 +283,7 @@ class ResearchScopeVersionRow(Base):
 
 
 class StrategyConfigAuditRow(Base):
-    """Append-only audit event for strategy configuration changes."""
+    """Append-only audit event for strategy configuration changes.."""
 
     __tablename__ = "strategy_config_audits"
     __table_args__ = (

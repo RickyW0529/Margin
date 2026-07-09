@@ -17,7 +17,7 @@ from margin.valuation_discovery.analysis_mart import AnalysisMartRepository
 
 
 class AnalysisSnapshotQuery(BaseModel):
-    """Lookup the latest Analysis Mart snapshot for one security and scope."""
+    """Lookup the latest Analysis Mart snapshot for one security and scope.."""
 
     security_id: str
     scope_version_id: str
@@ -25,7 +25,7 @@ class AnalysisSnapshotQuery(BaseModel):
 
 
 class AnalysisRowsQuery(BaseModel):
-    """Read child rows from one Analysis Mart snapshot."""
+    """Read child rows from one Analysis Mart snapshot.."""
 
     security_id: str
     decision_at: datetime
@@ -33,14 +33,14 @@ class AnalysisRowsQuery(BaseModel):
 
 
 class QuantFeatureSnapshotQuery(BaseModel):
-    """Lookup the latest fourth-layer quant feature snapshot for one scope."""
+    """Lookup the latest fourth-layer quant feature snapshot for one scope.."""
 
     scope_version_id: str
     decision_at: datetime
 
 
 class QuantFeatureRowsQuery(BaseModel):
-    """Read current-security feature rows from one quant feature snapshot."""
+    """Read current-security feature rows from one quant feature snapshot.."""
 
     security_id: str
     decision_at: datetime
@@ -55,8 +55,11 @@ def register_analysis_mart_tools(
     """Register read-only Analysis Mart tools in a tool registry.
 
     Args:
-        registry: Tool definition registry to populate.
-        repository: Analysis Mart repository used by tool handlers.
+        registry: ToolDefinitionRegistry: .
+        repository: AnalysisMartRepository: .
+
+    Returns:
+        None: .
     """
     registry.register(
         ToolDefinition(
@@ -85,9 +88,7 @@ def register_analysis_mart_tools(
             name="quant_feature_snapshot_get",
             capability=ToolCapability.QUANT_READ,
             version="quant-feature-snapshot-get-v0.3.0",
-            description=(
-                "Read metadata for the latest fourth-layer quant feature snapshot."
-            ),
+            description=("Read metadata for the latest fourth-layer quant feature snapshot."),
             input_model=QuantFeatureSnapshotQuery,
             handler=lambda payload: _get_feature_snapshot(repository, payload),
             estimated_result_bytes=16_384,
@@ -98,9 +99,7 @@ def register_analysis_mart_tools(
             name="quant_feature_rows_list",
             capability=ToolCapability.QUANT_READ,
             version="quant-feature-rows-list-v0.3.0",
-            description=(
-                "List fourth-layer quant features for the scoped security only."
-            ),
+            description=("List fourth-layer quant features for the scoped security only."),
             input_model=QuantFeatureRowsQuery,
             handler=lambda payload: _list_feature_rows(repository, payload),
             estimated_result_bytes=32_768,
@@ -123,7 +122,15 @@ def _get_snapshot(
     repository: AnalysisMartRepository,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    """Return the latest analysis snapshot for one security and scope."""
+    """Return the latest analysis snapshot for one security and scope.
+
+    Args:
+        repository: AnalysisMartRepository: .
+        payload: dict[str, Any]: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     snapshot = repository.latest_snapshot(
         security_id=str(payload["security_id"]),
         scope_version_id=str(payload["scope_version_id"]),
@@ -136,15 +143,22 @@ def _list_metrics(
     repository: AnalysisMartRepository,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    """List structured metrics for one authorized analysis snapshot."""
+    """List structured metrics for one authorized analysis snapshot.
+
+    Args:
+        repository: AnalysisMartRepository: .
+        payload: dict[str, Any]: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     snapshot = _authorized_snapshot(repository, payload)
     if snapshot is None:
         return {"metrics": []}
     return {
         "analysis_snapshot_id": snapshot.analysis_snapshot_id,
         "metrics": [
-            _serialize(metric)
-            for metric in repository.list_metrics(snapshot.analysis_snapshot_id)
+            _serialize(metric) for metric in repository.list_metrics(snapshot.analysis_snapshot_id)
         ],
     }
 
@@ -153,7 +167,15 @@ def _list_findings(
     repository: AnalysisMartRepository,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    """List structured findings for one authorized analysis snapshot."""
+    """List structured findings for one authorized analysis snapshot.
+
+    Args:
+        repository: AnalysisMartRepository: .
+        payload: dict[str, Any]: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     snapshot = _authorized_snapshot(repository, payload)
     if snapshot is None:
         return {"findings": []}
@@ -170,21 +192,35 @@ def _get_feature_snapshot(
     repository: AnalysisMartRepository,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    """Return the latest quant feature snapshot metadata for one scope."""
+    """Return the latest quant feature snapshot metadata for one scope.
+
+    Args:
+        repository: AnalysisMartRepository: .
+        payload: dict[str, Any]: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     snapshot = repository.latest_feature_snapshot(
         scope_version_id=str(payload["scope_version_id"]),
         as_of=payload["decision_at"],
     )
-    return {
-        "feature_snapshot": _serialize(snapshot) if snapshot is not None else None
-    }
+    return {"feature_snapshot": _serialize(snapshot) if snapshot is not None else None}
 
 
 def _list_feature_rows(
     repository: AnalysisMartRepository,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    """List quant feature rows for the scoped security within one snapshot."""
+    """List quant feature rows for the scoped security within one snapshot.
+
+    Args:
+        repository: AnalysisMartRepository: .
+        payload: dict[str, Any]: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     snapshot = repository.get_feature_snapshot(str(payload["feature_snapshot_id"]))
     if snapshot is None or snapshot.decision_at > payload["decision_at"]:
         return {"feature_rows": []}
@@ -203,7 +239,15 @@ def _authorized_snapshot(
     repository: AnalysisMartRepository,
     payload: dict[str, Any],
 ):
-    """Return the snapshot only if it matches the scoped security and decision time."""
+    """Return the snapshot only if it matches the scoped security and decision time.
+
+    Args:
+        repository: AnalysisMartRepository: .
+        payload: dict[str, Any]: .
+
+    Returns:
+        Any: .
+    """
     snapshot = repository.get_snapshot(str(payload["analysis_snapshot_id"]))
     if snapshot is None:
         return None
@@ -215,7 +259,14 @@ def _authorized_snapshot(
 
 
 def _serialize(value) -> dict[str, Any]:
-    """Convert a dataclass value to a JSON-safe dict with tuple-to-list coercion."""
+    """Convert a dataclass value to a JSON-safe dict with tuple-to-list coercion.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     data = asdict(value)
     for key, item in list(data.items()):
         if isinstance(item, tuple):

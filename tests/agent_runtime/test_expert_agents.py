@@ -18,7 +18,11 @@ from margin.research.llm import DeterministicLLMProvider
 
 
 def test_data_analyst_agent_writes_analysis_and_answer_artifacts() -> None:
-    """DataAnalystAgent produces the user answer and Context Store artifacts."""
+    """DataAnalystAgent produces the user answer and Context Store artifacts.
+
+    Returns:
+        None: .
+    """
     context_store = MemoryAgentContextStore()
     repository = MemoryDashboardRepository()
     services = DashboardServiceBundle.in_memory(dashboard_repository=repository)
@@ -49,9 +53,7 @@ def test_data_analyst_agent_writes_analysis_and_answer_artifacts() -> None:
         ]
     )
 
-    provider = DeterministicLLMProvider(
-        response={"content": "LLM 基于当前数据回答：000001.SZ。"}
-    )
+    provider = DeterministicLLMProvider(response={"content": "LLM 基于当前数据回答：000001.SZ。"})
     result = DataAnalystAgent(
         llm_provider=provider,
         write_context_artifact=context_store.add_artifact,
@@ -75,13 +77,15 @@ def test_data_analyst_agent_writes_analysis_and_answer_artifacts() -> None:
     explanation = context_store.get_artifact("ctx_ar_qna_1_explanation")
     assert explanation is not None
     assert explanation.payload_json["answer"] == result.answer
-    assert explanation.payload_json["producer_prompt_id"] == (
-        "data_analyst_qna_agent_v0.4"
-    )
+    assert explanation.payload_json["producer_prompt_id"] == ("data_analyst_qna_agent_v0.4")
 
 
 def test_general_qna_agent_calls_llm_and_writes_explanation_artifact() -> None:
-    """GeneralQnaAgent answers greetings through the configured LLM provider."""
+    """GeneralQnaAgent answers greetings through the configured LLM provider.
+
+    Returns:
+        None: .
+    """
     context_store = MemoryAgentContextStore()
     provider = DeterministicLLMProvider(response={"content": "你好，我是 Margin。"})
 
@@ -109,7 +113,11 @@ def test_general_qna_agent_calls_llm_and_writes_explanation_artifact() -> None:
 
 
 def test_stock_analyst_agent_writes_portfolio_adjustment_artifact() -> None:
-    """StockAnalystAgent can remove risky quant candidates and persist adjustments."""
+    """StockAnalystAgent can remove risky quant candidates and persist adjustments.
+
+    Returns:
+        None: .
+    """
     context_store = MemoryAgentContextStore()
 
     result = StockAnalystAgent(
@@ -150,7 +158,11 @@ def test_stock_analyst_agent_writes_portfolio_adjustment_artifact() -> None:
 
 
 def test_stock_analyst_agent_publishes_adjusted_dashboard_projection() -> None:
-    """StockAnalystAgent makes adjusted weights visible to dashboard/Q&A readers."""
+    """StockAnalystAgent makes adjusted weights visible to dashboard/Q&A readers.
+
+    Returns:
+        None: .
+    """
     context_store = MemoryAgentContextStore()
     repository = MemoryDashboardRepository()
     source_run = ResearchRun(
@@ -244,9 +256,7 @@ def test_stock_analyst_agent_publishes_adjusted_dashboard_projection() -> None:
     artifact = context_store.get_artifact("ctx_ar_sched_1_portfolio_adjustment")
     assert artifact is not None
     assert artifact.payload_json["dashboard_run_id"] == "dr_agent_ar_sched_1"
-    projection_event = context_store.get_artifact(
-        "ctx_ar_sched_1_dashboard_projection_event"
-    )
+    projection_event = context_store.get_artifact("ctx_ar_sched_1_dashboard_projection_event")
     assert projection_event is not None
     assert projection_event.artifact_type == "dashboard_projection_event"
     assert projection_event.payload_json["dashboard_run_id"] == "dr_agent_ar_sched_1"

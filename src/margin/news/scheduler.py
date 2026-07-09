@@ -12,13 +12,7 @@ from margin.news.repository import NewsRepository
 
 @dataclass(frozen=True)
 class AcquisitionRunResult:
-    """Summary of one incremental acquisition run.
-
-    Attributes:
-        discovered: Number of documents discovered by the connector.
-        published: Number of documents successfully acquired and published.
-        failed: Number of documents that failed acquisition or publishing.
-    """
+    """Summary of one incremental acquisition run.."""
 
     discovered: int
     published: int
@@ -26,7 +20,7 @@ class AcquisitionRunResult:
 
 
 class IncrementalAcquisitionRunner:
-    """Run discovery, acquisition, publishing, and cursor advancement."""
+    """Run discovery, acquisition, publishing, and cursor advancement.."""
 
     def __init__(
         self,
@@ -39,10 +33,13 @@ class IncrementalAcquisitionRunner:
         """Initialize the incremental acquisition runner.
 
         Args:
-            repository: Repository used to read and update source cursors and publish events.
-            acquirer: Acquirer object with an ``acquire`` method that returns a DocumentEvent.
-            publisher: Publisher used to persist acquired events atomically.
-            cursor_key: Cursor key used to resume incremental discovery.
+            repository: NewsRepository: .
+            acquirer: Any: .
+            publisher: DocumentEventPublisher: .
+            cursor_key: str: .
+
+        Returns:
+            None: .
         """
         self._repository = repository
         self._acquirer = acquirer
@@ -59,12 +56,12 @@ class IncrementalAcquisitionRunner:
         """Run one restart-safe incremental acquisition pass.
 
         Args:
-            source_name: Identifier of the registered source.
-            connector: Discovery connector used to list documents incrementally.
-            limit: Maximum number of documents to discover and acquire.
+            source_name: str: .
+            connector: DiscoveryConnector: .
+            limit: int: .
 
         Returns:
-            An ``AcquisitionRunResult`` summarizing discovered, published, and failed counts.
+            AcquisitionRunResult: .
         """
         cursor = self._repository.get_cursor(source_name, self._cursor_key)
         discovered = connector.discover(cursor=cursor, limit=limit)

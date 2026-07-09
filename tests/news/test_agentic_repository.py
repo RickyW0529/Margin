@@ -25,7 +25,14 @@ from margin.storage.database import (
 
 @pytest.fixture
 def news_repository(database_url: str) -> Iterator[NewsRepository]:
-    """Create a clean news repository for agentic artifact tests."""
+    """Create a clean news repository for agentic artifact tests.
+
+    Args:
+        database_url: str: .
+
+    Yields:
+        Any: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -38,7 +45,14 @@ def news_repository(database_url: str) -> Iterator[NewsRepository]:
 def test_agentic_run_plan_finding_and_brief_roundtrip(
     news_repository: NewsRepository,
 ) -> None:
-    """Agentic run artifacts round-trip through the news repository."""
+    """Agentic run artifacts round-trip through the news repository.
+
+    Args:
+        news_repository: NewsRepository: .
+
+    Returns:
+        None: .
+    """
     run = NewsAgentRun(
         run_id="nar_test",
         scope_version_id="scope_v1",

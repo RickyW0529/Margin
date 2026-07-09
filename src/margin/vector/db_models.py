@@ -28,36 +28,7 @@ from margin.storage.base import Base
 
 
 class ChunkRow(Base):
-    """Persisted immutable chunk metadata.
-
-    A ``ChunkRow`` stores the content, provenance, and structural locators for a
-    single document chunk. It is the authoritative source for chunk metadata and
-    is referenced by ``ChunkEmbeddingRow``.
-
-    Attributes:
-        chunk_id: Stable primary key of the chunk.
-        document_id: Identifier of the parent document.
-        content: Plain-text chunk content.
-        content_hash: Hash of the content used for integrity checks.
-        symbol: Optional ticker/security symbol associated with the source.
-        source_level: Numeric source reliability level.
-        doc_type: Document category (e.g. ``annual_report``, ``news``).
-        published_at: Original publication timestamp in UTC.
-        available_at: Timestamp when the content became available in UTC.
-        source_url: Optional URL to the original source.
-        source_name: Optional human-readable source name.
-        snapshot_id: Optional identifier of the captured web snapshot.
-        snapshot_hash: Optional hash of the captured snapshot.
-        page: Optional page number in the source document.
-        section: Optional section or chapter name.
-        paragraph_index: Optional paragraph sequence number.
-        table_id: Optional table identifier.
-        row_id: Optional table row identifier.
-        quote_span: Optional [start, end] character span stored as JSONB.
-        keywords: List of extracted keyword/BM25 terms stored as JSONB.
-        chunk_index: Zero-based position of this chunk within the document.
-        total_chunks: Total number of chunks produced for the document.
-    """
+    """Persisted immutable chunk metadata.."""
 
     __tablename__ = "chunks"
     __table_args__ = (
@@ -98,7 +69,7 @@ class ChunkRow(Base):
 
 
 class ChunkSecurityLinkRow(Base):
-    """Many-to-many security relation for a chunk."""
+    """Many-to-many security relation for a chunk.."""
 
     __tablename__ = "chunk_security_links"
     __table_args__ = (
@@ -121,7 +92,7 @@ class ChunkSecurityLinkRow(Base):
 
 
 class IndexedDocumentRow(Base):
-    """Audit row for a parsed/chunked/indexed document."""
+    """Audit row for a parsed/chunked/indexed document.."""
 
     __tablename__ = "indexed_documents"
 
@@ -135,20 +106,7 @@ class IndexedDocumentRow(Base):
 
 
 class ChunkEmbeddingRow(Base):
-    """Model-versioned dense vector embedding for a chunk.
-
-    Each row links a ``ChunkRow`` to an embedding produced by a specific provider,
-    model, and model version. The combination of ``chunk_id``, ``provider_name``,
-    ``model_name``, and ``model_version`` forms the composite primary key.
-
-    Attributes:
-        chunk_id: Foreign key referencing ``chunks.chunk_id``.
-        provider_name: Name of the embedding provider.
-        model_name: Name of the embedding model.
-        model_version: Version of the embedding model.
-        embedding: Dense vector stored as a pgvector ``Vector``.
-        created_at: Timestamp when the embedding was persisted in UTC.
-    """
+    """Model-versioned dense vector embedding for a chunk.."""
 
     __tablename__ = "chunk_embeddings"
 
@@ -164,25 +122,7 @@ class ChunkEmbeddingRow(Base):
 
 
 class IndexAuditRecordRow(Base):
-    """Persistent indexing audit record.
-
-    Captures the outcome of an indexing operation, including counts of chunks,
-    vectors, and keyword entries, as well as whether the operation degraded or
-    failed.
-
-    Attributes:
-        audit_id: Auto-incrementing primary key.
-        operation: Operation name (e.g. ``index``, ``reindex``).
-        provider_name: Name of the embedding provider used.
-        model_name: Name of the embedding model used.
-        model_version: Version of the embedding model used.
-        chunk_count: Number of chunks touched by the operation.
-        vector_count: Number of vectors written by the operation.
-        keyword_count: Number of keyword entries written by the operation.
-        degraded: Whether the operation completed in a degraded state.
-        error: Optional error message if the operation failed.
-        created_at: Timestamp when the audit record was created in UTC.
-    """
+    """Persistent indexing audit record.."""
 
     __tablename__ = "index_audit_records"
 
@@ -200,20 +140,7 @@ class IndexAuditRecordRow(Base):
 
 
 class RetrievalAuditRecordRow(Base):
-    """Persistent retrieval audit and replay record.
-
-    Stores the query, constraints, and scored candidate list produced by a
-    retrieval operation. The recorded data can be replayed later to reconstruct
-    the exact result set for evaluation or debugging.
-
-    Attributes:
-        audit_id: Auto-incrementing primary key.
-        query: Original plain-text query.
-        constraints: Query constraints such as symbol or doc type, stored as JSONB.
-        results: Ordered list of scored retrieval candidates, stored as JSONB.
-        result_hash: SHA-256 hash of the query, constraints, and results.
-        created_at: Timestamp when the retrieval was recorded in UTC.
-    """
+    """Persistent retrieval audit and replay record.."""
 
     __tablename__ = "retrieval_audit_records"
 

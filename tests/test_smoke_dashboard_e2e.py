@@ -13,36 +13,67 @@ from scripts import smoke_dashboard_e2e
 
 
 class _OkHandler(BaseHTTPRequestHandler):
-    """HTTP handler that always returns a 200 HTML response."""
+    """HTTP handler that always returns a 200 HTML response.."""
 
     def do_GET(self) -> None:  # noqa: N802 - stdlib callback name
-        """Return a 200 response with a minimal HTML body."""
+        """Return a 200 response with a minimal HTML body.
+
+        Returns:
+            None: .
+        """
         self.send_response(200)
         self.send_header("content-type", "text/html; charset=utf-8")
         self.end_headers()
         self.wfile.write(b"<html><body>Scope \xe8\xae\xbe\xe7\xbd\xae</body></html>")
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002
-        """Suppress default request logging."""
+        """Suppress default request logging.
+
+        Args:
+            format: str: .
+            *args: object: .
+
+        Returns:
+            None: .
+        """
         return
 
 
 class _ProxyFailHandler(BaseHTTPRequestHandler):
-    """HTTP handler that always returns a 502 response to detect proxy usage."""
+    """HTTP handler that always returns a 502 response to detect proxy usage.."""
 
     def do_GET(self) -> None:  # noqa: N802 - stdlib callback name
-        """Return a 502 response indicating the proxy should not be used."""
+        """Return a 502 response indicating the proxy should not be used.
+
+        Returns:
+            None: .
+        """
         self.send_response(502)
         self.end_headers()
         self.wfile.write(b"proxy should not be used")
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002
-        """Suppress default request logging."""
+        """Suppress default request logging.
+
+        Args:
+            format: str: .
+            *args: object: .
+
+        Returns:
+            None: .
+        """
         return
 
 
 def _serve(handler: type[BaseHTTPRequestHandler]) -> tuple[ThreadingHTTPServer, int]:
-    """Start a local threaded HTTP server with the given handler and return it with its port."""
+    """Start a local threaded HTTP server with the given handler and return it with its port.
+
+    Args:
+        handler: type[BaseHTTPRequestHandler]: .
+
+    Returns:
+        tuple[ThreadingHTTPServer, int]: .
+    """
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -53,7 +84,10 @@ def test_fetch_bypasses_proxy_for_local_dashboard(monkeypatch) -> None:
     """Test that fetch bypasses proxy settings when fetching a local dashboard page.
 
     Args:
-        monkeypatch: Pytest fixture for modifying environment variables.
+        monkeypatch: Any: .
+
+    Returns:
+        None: .
     """
     target_server, target_port = _serve(_OkHandler)
     proxy_server, proxy_port = _serve(_ProxyFailHandler)

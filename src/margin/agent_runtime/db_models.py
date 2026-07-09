@@ -12,12 +12,10 @@ from margin.storage.base import Base
 
 
 class AgentRuntimeRunRow(Base):
-    """One durable agent runtime run."""
+    """One durable agent runtime run.."""
 
     __tablename__ = "agent_runtime_runs"
-    __table_args__ = (
-        Index("ix_agent_runtime_runs_type_started", "run_type", "started_at"),
-    )
+    __table_args__ = (Index("ix_agent_runtime_runs_type_started", "run_type", "started_at"),)
 
     run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     run_type: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -31,12 +29,10 @@ class AgentRuntimeRunRow(Base):
 
 
 class AgentRuntimeStepRow(Base):
-    """One planned or executed expert step."""
+    """One planned or executed expert step.."""
 
     __tablename__ = "agent_runtime_steps"
-    __table_args__ = (
-        Index("ix_agent_runtime_steps_run_created", "run_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_agent_runtime_steps_run_created", "run_id", "created_at"),)
 
     run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     step_id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -48,7 +44,7 @@ class AgentRuntimeStepRow(Base):
 
 
 class AgentRuntimeArtifactRow(Base):
-    """Immutable artifact stored in the Shared Context Store."""
+    """Immutable artifact stored in the Shared Context Store.."""
 
     __tablename__ = "agent_runtime_artifacts"
     __table_args__ = (
@@ -69,7 +65,7 @@ class AgentRuntimeArtifactRow(Base):
 
 
 class AgentRuntimeGuardrailDecisionRow(Base):
-    """Audited guardrail decision."""
+    """Audited guardrail decision.."""
 
     __tablename__ = "agent_runtime_guardrail_decisions"
     __table_args__ = (
@@ -87,12 +83,10 @@ class AgentRuntimeGuardrailDecisionRow(Base):
 
 
 class AgentRuntimeScheduleRow(Base):
-    """One persisted user-facing agent schedule."""
+    """One persisted user-facing agent schedule.."""
 
     __tablename__ = "agent_runtime_schedules"
-    __table_args__ = (
-        Index("ix_agent_runtime_schedules_enabled_next", "enabled", "next_run_at"),
-    )
+    __table_args__ = (Index("ix_agent_runtime_schedules_enabled_next", "enabled", "next_run_at"),)
 
     schedule_id: Mapped[str] = mapped_column(String(96), primary_key=True)
     run_type: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -110,12 +104,10 @@ class AgentRuntimeScheduleRow(Base):
 
 
 class AgentChatSessionRow(Base):
-    """One persisted user-facing chat session."""
+    """One persisted user-facing chat session.."""
 
     __tablename__ = "agent_chat_sessions"
-    __table_args__ = (
-        Index("ix_agent_chat_sessions_updated", "updated_at"),
-    )
+    __table_args__ = (Index("ix_agent_chat_sessions_updated", "updated_at"),)
 
     session_id: Mapped[str] = mapped_column(String(96), primary_key=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -127,7 +119,7 @@ class AgentChatSessionRow(Base):
 
 
 class AgentChatMessageRow(Base):
-    """One persisted user or assistant chat message."""
+    """One persisted user or assistant chat message.."""
 
     __tablename__ = "agent_chat_messages"
     __table_args__ = (

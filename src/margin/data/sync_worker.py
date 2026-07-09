@@ -17,7 +17,7 @@ INDEX_CODES = {
 
 
 class DataSyncWorker:
-    """Claim and execute data-sync items with retry-safe run reconciliation."""
+    """Claim and execute data-sync items with retry-safe run reconciliation.."""
 
     def __init__(
         self,
@@ -33,13 +33,16 @@ class DataSyncWorker:
         """Initialize the worker with configured provider instances.
 
         Args:
-            stack: The production data warehouse ingestion stack.
-            providers: Mapping of provider code to adapter instance.
-            provider_config_version_ids: Optional provider config lineage.
-            worker_id: The unique worker identifier for lease claims.
-            lease_seconds: Lease duration before an item can be reclaimed.
-            retry_delay_seconds: Delay before a retryable item becomes eligible.
-            max_attempts: Maximum execution attempts before final failure.
+            stack: DataWarehouseIngestionStack: .
+            providers: dict[str, Any]: .
+            provider_config_version_ids: dict[str, str] | None: .
+            worker_id: str: .
+            lease_seconds: int: .
+            retry_delay_seconds: int: .
+            max_attempts: int: .
+
+        Returns:
+            None: .
         """
         self._stack = stack
         self._providers = {name.lower(): provider for name, provider in providers.items()}
@@ -57,7 +60,7 @@ class DataSyncWorker:
         """Return a copy of configured executable Provider adapters.
 
         Returns:
-            A copy of the provider dictionary keyed by lowercased name.
+            dict[str, Any]: .
         """
         return dict(self._providers)
 
@@ -66,7 +69,7 @@ class DataSyncWorker:
         """Return frozen Provider config lineage by provider code.
 
         Returns:
-            A copy of the config version ID dictionary.
+            dict[str, str]: .
         """
         return dict(self._provider_config_version_ids)
 
@@ -80,12 +83,12 @@ class DataSyncWorker:
         """Process up to ``max_items`` currently executable work items.
 
         Args:
-            max_items: Maximum number of items to process in this call.
-            now: Optional override for the observation timestamp.
-            run_id: Optional sync run to restrict claiming to.
+            max_items: int: .
+            now: datetime | None: .
+            run_id: str | None: .
 
         Returns:
-            The number of items actually processed.
+            int: .
         """
         processed = 0
         observed_at = ensure_utc(now or utc_now())
@@ -111,18 +114,22 @@ class DataSyncWorker:
         return processed
 
     def _execute(self, item: EndpointWorkItem, now: datetime) -> None:
-        """Execute one claimed work item and persist its terminal/retry state."""
+        """Execute one claimed work item and persist its terminal/retry state.
+
+        Args:
+            item: EndpointWorkItem: .
+            now: datetime: .
+
+        Returns:
+            None: .
+        """
         try:
             result = self._dispatch(item, now)
         except Exception as exc:  # noqa: BLE001 - converted to durable safe state.
             error_code = (
-                exc.error_code
-                if isinstance(exc, ProviderSyncError)
-                else type(exc).__name__
+                exc.error_code if isinstance(exc, ProviderSyncError) else type(exc).__name__
             )
-            error_message = (
-                exc.message if isinstance(exc, ProviderSyncError) else str(exc)
-            )
+            error_message = exc.message if isinstance(exc, ProviderSyncError) else str(exc)
             if item.attempt_count >= self._max_attempts:
                 self._stack.sync_repository.mark_final_failure(
                     item.work_item_id,
@@ -149,7 +156,15 @@ class DataSyncWorker:
         item: EndpointWorkItem,
         now: datetime,
     ) -> EndpointSyncResult:
-        """Call the configured provider and persist the endpoint payload."""
+        """Call the configured provider and persist the endpoint payload.
+
+        Args:
+            item: EndpointWorkItem: .
+            now: datetime: .
+
+        Returns:
+            EndpointSyncResult: .
+        """
         provider = self._providers.get(item.provider)
         if provider is None:
             raise ProviderSyncError(

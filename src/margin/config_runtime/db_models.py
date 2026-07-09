@@ -12,7 +12,7 @@ from margin.storage.base import Base
 
 
 class AgentFlowVersionRow(Base):
-    """Versioned Agent flow DAG configuration."""
+    """Versioned Agent flow DAG configuration.."""
 
     __tablename__ = "agent_flow_versions"
     __table_args__ = (
@@ -58,7 +58,7 @@ class AgentFlowVersionRow(Base):
 
 
 class QuantAgentProfileVersionRow(Base):
-    """Versioned QuantAgent strategy profile configuration."""
+    """Versioned QuantAgent strategy profile configuration.."""
 
     __tablename__ = "quant_agent_profile_versions"
     __table_args__ = (
@@ -114,7 +114,7 @@ class QuantAgentProfileVersionRow(Base):
 
 
 class ConfigResolutionSnapshotRow(Base):
-    """Run-level resolved config lineage snapshot."""
+    """Run-level resolved config lineage snapshot.."""
 
     __tablename__ = "config_resolution_snapshots"
 
@@ -127,7 +127,7 @@ class ConfigResolutionSnapshotRow(Base):
 
 
 class ConfigResolutionSnapshotEntryRow(Base):
-    """One version reference within a config resolution snapshot."""
+    """One version reference within a config resolution snapshot.."""
 
     __tablename__ = "config_resolution_snapshot_entries"
     __table_args__ = (

@@ -18,7 +18,11 @@ from margin.dashboard.models import (
 
 
 def test_research_run_defaults_and_utc_normalization():
-    """Test that a research run gets default ID, status, and UTC-normalized decision_at."""
+    """Test that a research run gets default ID, status, and UTC-normalized decision_at.
+
+    Returns:
+        Any: .
+    """
     run = ResearchRun(
         decision_at=datetime(2026, 6, 19, 9, 30, tzinfo=UTC),
         strategy_id="st_demo",
@@ -33,7 +37,11 @@ def test_research_run_defaults_and_utc_normalization():
 
 
 def test_research_item_validates_confidence_range():
-    """Test that a research item rejects confidence values outside [0, 1]."""
+    """Test that a research item rejects confidence values outside [0, 1].
+
+    Returns:
+        Any: .
+    """
     with pytest.raises(ValueError, match="confidence"):
         ResearchItem(
             run_id="dr_1",

@@ -28,14 +28,14 @@ def call_with_fallback(
     """Call ``fn``; on failure execute ``fallback`` and mark result as degraded.
 
     Args:
-        fn: Primary function to call.
-        fallback: Optional fallback function.
-        trace_id: Trace identifier for observability.
-        metrics_label: Label used for metrics.
-        **kwargs: Arguments passed to both functions.
+        fn: Callable[..., CallResult]: .
+        fallback: Callable[..., CallResult] | None: .
+        trace_id: str: .
+        metrics_label: str: .
+        **kwargs: Any: .
 
     Returns:
-        CallResult with ``from_fallback=True`` if fallback was used.
+        CallResult: .
     """
     try:
         result = fn(**kwargs)

@@ -13,7 +13,7 @@ def test_value_quality_template_has_universe():
     """Verify the value_quality template includes a default universe member.
 
     Returns:
-        None.
+        Any: .
     """
     template = BUILTIN_TEMPLATES["value_quality"]
     assert "000001.SZ" in template.config.universe
@@ -23,7 +23,7 @@ def test_custom_template_is_minimal():
     """Verify the custom template has a minimal but valid horizon configuration.
 
     Returns:
-        None.
+        Any: .
     """
     template = BUILTIN_TEMPLATES["custom"]
     assert template.config.horizon >= 1
@@ -33,7 +33,7 @@ def test_list_templates_returns_six_entries():
     """Verify list_templates returns six entries including value_quality and custom.
 
     Returns:
-        None.
+        Any: .
     """
     metas = list_templates()
     assert len(metas) == 6

@@ -54,22 +54,31 @@ MARKET_DATE_MIN_COVERAGE_RATIO = 0.8
 
 
 class ScopeBindingProvider(Protocol):
-    """Resolve a frozen ``ScopeBinding`` from a scope version ID."""
+    """Resolve a frozen ``ScopeBinding`` from a scope version ID.."""
 
     def get_scope_binding(self, scope_version_id: str) -> ScopeBinding:
-        """Return the scope binding for the supplied version ID."""
+        """Return the scope binding for the supplied version ID.
+
+        Args:
+            scope_version_id: str: .
+
+        Returns:
+            ScopeBinding: .
+        """
 
 
 class WarehouseFactAdapter:
-    """Adapt ``SQLAlchemyWarehouseRepository`` to ``QuantWarehouseRepository``.
-
-    The quant input builder expects ``get_latest_fact`` to return
-    ``CanonicalFactRef`` objects. The warehouse repository returns
-    ``CanonicalValue`` objects which we convert on the fly.
-    """
+    """Adapt ``SQLAlchemyWarehouseRepository`` to ``QuantWarehouseRepository``.."""
 
     def __init__(self, warehouse: SQLAlchemyWarehouseRepository) -> None:
-        """Initialize the adapter with a SQLAlchemy warehouse repository."""
+        """Initialize the adapter with a SQLAlchemy warehouse repository.
+
+        Args:
+            warehouse: SQLAlchemyWarehouseRepository: .
+
+        Returns:
+            None: .
+        """
         self._warehouse = warehouse
 
     def get_latest_fact(
@@ -79,7 +88,16 @@ class WarehouseFactAdapter:
         indicator_id: str,
         known_at: datetime,
     ) -> CanonicalFactRef | None:
-        """Return the latest canonical fact available at ``known_at``."""
+        """Return the latest canonical fact available at ``known_at``.
+
+        Args:
+            security_id: str: .
+            indicator_id: str: .
+            known_at: datetime: .
+
+        Returns:
+            CanonicalFactRef | None: .
+        """
         values = self._warehouse.canonical_values(
             CanonicalQuery(
                 security_ids=(security_id,),
@@ -99,7 +117,16 @@ class WarehouseFactAdapter:
         indicator_ids: tuple[str, ...],
         known_at: datetime,
     ) -> tuple[CanonicalFactRef, ...]:
-        """Batch-load canonical fact references for a full quant universe."""
+        """Batch-load canonical fact references for a full quant universe.
+
+        Args:
+            security_ids: tuple[str, ...]: .
+            indicator_ids: tuple[str, ...]: .
+            known_at: datetime: .
+
+        Returns:
+            tuple[CanonicalFactRef, ...]: .
+        """
         values = self._warehouse.canonical_values(
             CanonicalQuery(
                 security_ids=security_ids,
@@ -111,7 +138,14 @@ class WarehouseFactAdapter:
 
 
 def _canonical_value_to_fact_ref(value: CanonicalValue) -> CanonicalFactRef:
-    """Convert a ``CanonicalValue`` to a ``CanonicalFactRef``."""
+    """Convert a ``CanonicalValue`` to a ``CanonicalFactRef``.
+
+    Args:
+        value: CanonicalValue: .
+
+    Returns:
+        CanonicalFactRef: .
+    """
     return CanonicalFactRef(
         fact_id=value.selected_fact_id or value.canonical_id,
         security_id=value.security_id,
@@ -122,12 +156,7 @@ def _canonical_value_to_fact_ref(value: CanonicalValue) -> CanonicalFactRef:
 
 
 class SQLAlchemyScopeBindingProvider:
-    """Load a ``ScopeBinding`` from strategy and warehouse repositories.
-
-    Resolves a ``ResearchScopeVersion`` by version ID, then loads the
-    referenced child versions (universe, feature set, indicator view) and
-    converts them into the frozen valuation-discovery domain models.
-    """
+    """Load a ``ScopeBinding`` from strategy and warehouse repositories.."""
 
     def __init__(
         self,
@@ -137,14 +166,24 @@ class SQLAlchemyScopeBindingProvider:
         """Initialize the provider with strategy and optional company pool repos.
 
         Args:
-            strategy_repository: Strategy repository for scope version loading.
-            company_pool_repository: Optional company pool repository for ALL_A.
+            strategy_repository: SQLAlchemyStrategyRepository: .
+            company_pool_repository: Any | None: .
+
+        Returns:
+            None: .
         """
         self._strategy = strategy_repository
         self._company_pool = company_pool_repository
 
     def get_scope_binding(self, scope_version_id: str) -> ScopeBinding:
-        """Return the scope binding for the supplied version ID."""
+        """Return the scope binding for the supplied version ID.
+
+        Args:
+            scope_version_id: str: .
+
+        Returns:
+            ScopeBinding: .
+        """
         scope = self._strategy.get_research_scope(scope_version_id)
         if scope is None:
             raise KeyError(f"research scope not found: {scope_version_id}")
@@ -153,32 +192,18 @@ class SQLAlchemyScopeBindingProvider:
             scope.quant_feature_set_version_id
         )
         if feature_set_version is None:
-            raise KeyError(
-                f"quant feature set not found: {scope.quant_feature_set_version_id}"
-            )
-        quant_strategy_version = self._strategy.get_quant_strategy(
-            scope.quant_strategy_version_id
-        )
+            raise KeyError(f"quant feature set not found: {scope.quant_feature_set_version_id}")
+        quant_strategy_version = self._strategy.get_quant_strategy(scope.quant_strategy_version_id)
         if quant_strategy_version is None:
-            raise KeyError(
-                f"quant strategy not found: {scope.quant_strategy_version_id}"
-            )
+            raise KeyError(f"quant strategy not found: {scope.quant_strategy_version_id}")
 
-        indicator_view_version = self._strategy.get_indicator_view(
-            scope.indicator_view_version_id
-        )
+        indicator_view_version = self._strategy.get_indicator_view(scope.indicator_view_version_id)
         if indicator_view_version is None:
-            raise KeyError(
-                f"indicator view not found: {scope.indicator_view_version_id}"
-            )
+            raise KeyError(f"indicator view not found: {scope.indicator_view_version_id}")
 
-        universe_version = self._strategy.get_universe_definition(
-            scope.universe_version_id
-        )
+        universe_version = self._strategy.get_universe_definition(scope.universe_version_id)
         if universe_version is None:
-            raise KeyError(
-                f"universe definition not found: {scope.universe_version_id}"
-            )
+            raise KeyError(f"universe definition not found: {scope.universe_version_id}")
 
         quant_feature_set = QuantFeatureSet(
             version_id=feature_set_version.version_id,
@@ -237,7 +262,14 @@ class SQLAlchemyScopeBindingProvider:
 
 
 def _build_user_indicator_view(indicator_view_version: Any) -> UserIndicatorView:
-    """Build a ``UserIndicatorView`` from an ``IndicatorViewVersion``."""
+    """Build a ``UserIndicatorView`` from an ``IndicatorViewVersion``.
+
+    Args:
+        indicator_view_version: Any: .
+
+    Returns:
+        UserIndicatorView: .
+    """
     from margin.strategy.models import IndicatorSelectionMode
 
     mode = indicator_view_version.mode
@@ -262,24 +294,30 @@ def build_cross_section_loader(
 ) -> Callable[[QuantInputSnapshot], pd.DataFrame]:
     """Return a cross-section loader backed by the PIT warehouse.
 
-    The loader combines current canonical indicators with PIT-safe security
-    metadata, industry membership, and historical market facts. Market-derived
-    features are calculated from adjusted close and amount histories rather
-    than fabricated defaults.
+    Args:
+        warehouse: SQLAlchemyWarehouseRepository: .
+
+    Returns:
+        Callable[[QuantInputSnapshot], pd.DataFrame]: .
     """
 
     def loader(snapshot: QuantInputSnapshot) -> pd.DataFrame:
-        """Load a PIT-safe cross-section from canonical warehouse values."""
+        """Load a PIT-safe cross-section from canonical warehouse values.
+
+        Args:
+            snapshot: QuantInputSnapshot: .
+
+        Returns:
+            pd.DataFrame: .
+        """
         if not snapshot.security_ids:
-            return pd.DataFrame(
-                {"security_id": list(snapshot.security_ids)}
-            ).set_index("security_id", drop=False)
+            return pd.DataFrame({"security_id": list(snapshot.security_ids)}).set_index(
+                "security_id", drop=False
+            )
 
         indicator_ids = tuple(
             dict.fromkeys(
-                snapshot.required_indicators
-                + snapshot.optional_indicators
-                + HARD_FILTER_INDICATORS
+                snapshot.required_indicators + snapshot.optional_indicators + HARD_FILTER_INDICATORS
             )
         )
         values = (
@@ -336,19 +374,25 @@ def build_cross_section_loader(
 
     return loader
 
+
 def _pivot_canonical_values(
     values: list[CanonicalValue],
     security_ids: tuple[str, ...],
 ) -> pd.DataFrame:
-    """Pivot canonical values into a wide DataFrame indexed by security_id."""
+    """Pivot canonical values into a wide DataFrame indexed by security_id.
+
+    Args:
+        values: list[CanonicalValue]: .
+        security_ids: tuple[str, ...]: .
+
+    Returns:
+        pd.DataFrame: .
+    """
     records: dict[str, dict[str, Any]] = {
-        security_id: {"security_id": security_id}
-        for security_id in security_ids
+        security_id: {"security_id": security_id} for security_id in security_ids
     }
     for value in values:
-        row = records.setdefault(
-            value.security_id, {"security_id": value.security_id}
-        )
+        row = records.setdefault(value.security_id, {"security_id": value.security_id})
         numeric = value.numeric_value
         if numeric is not None:
             row[value.indicator_id] = float(numeric)
@@ -373,13 +417,23 @@ def _build_quant_cross_section(
     security_ids: tuple[str, ...],
     decision_at: datetime,
 ) -> pd.DataFrame:
-    """Build the production quant frame from current and historical facts."""
+    """Build the production quant frame from current and historical facts.
+
+    Args:
+        values: list[CanonicalValue]: .
+        profiles: list[SecurityProfileValue]: .
+        industries: list[Any]: .
+        history: list[IndicatorHistoryValue]: .
+        security_ids: tuple[str, ...]: .
+        decision_at: datetime: .
+
+    Returns:
+        pd.DataFrame: .
+    """
     frame = _pivot_canonical_values(values, security_ids)
     frame["decision_at"] = decision_at
     profile_by_security = {profile.security_id: profile for profile in profiles}
-    industry_by_security = {
-        membership.security_id: membership for membership in industries
-    }
+    industry_by_security = {membership.security_id: membership for membership in industries}
     for security_id in security_ids:
         profile = profile_by_security.get(security_id)
         if profile is not None:
@@ -392,15 +446,11 @@ def _build_quant_cross_section(
             )
             frame.loc[security_id, "is_st"] = profile.is_st
         membership = industry_by_security.get(security_id)
-        industry_name = (
-            membership.industry_name if membership is not None else "unknown"
-        )
+        industry_name = membership.industry_name if membership is not None else "unknown"
         frame.loc[security_id, "industry_id"] = (
             membership.industry_code if membership is not None else "unknown"
         )
-        frame.loc[security_id, "industry_family"] = _industry_family(
-            industry_name
-        )
+        frame.loc[security_id, "industry_family"] = _industry_family(industry_name)
     if "is_suspended" in frame.columns:
         frame["is_suspended"] = frame["is_suspended"].astype("object")
 
@@ -409,9 +459,9 @@ def _build_quant_cross_section(
         dict[date, dict[str, float]],
     ] = defaultdict(lambda: defaultdict(dict))
     for value in history:
-        history_by_security[value.security_id][value.event_at.date()][
-            value.indicator_id
-        ] = float(value.numeric_value)
+        history_by_security[value.security_id][value.event_at.date()][value.indicator_id] = float(
+            value.numeric_value
+        )
     latest_market_date = _latest_covered_market_date(
         history_by_security,
         security_ids,
@@ -428,10 +478,7 @@ def _build_quant_cross_section(
         else:
             frame.loc[security_id, "is_suspended"] = bool(
                 latest_market_date is not None
-                and (
-                    latest_security_date is None
-                    or latest_security_date < latest_market_date
-                )
+                and (latest_security_date is None or latest_security_date < latest_market_date)
             )
         annual_profits = sorted(
             (
@@ -442,9 +489,7 @@ def _build_quant_cross_section(
                 security_id,
                 {},
             ).items()
-            if event_date.month == 12
-            and event_date.day == 31
-            and "n_income_attr_p" in fields
+            if event_date.month == 12 and event_date.day == 31 and "n_income_attr_p" in fields
         )
         if annual_profits:
             frame.loc[security_id, "net_profit_y1"] = annual_profits[-1][1]
@@ -458,9 +503,7 @@ def _build_quant_cross_section(
         ),
         errors="coerce",
     )
-    frame["index_relative_momentum"] = return_6m - return_6m.median(
-        skipna=True
-    )
+    frame["index_relative_momentum"] = return_6m - return_6m.median(skipna=True)
     frame["industry_relative_momentum"] = return_6m - return_6m.groupby(
         frame["industry_id"]
     ).transform("median")
@@ -468,9 +511,7 @@ def _build_quant_cross_section(
         frame["is_st"] = False
     if "is_suspended" not in frame.columns:
         frame["is_suspended"] = False
-    frame["is_st"] = frame["is_st"].map(
-        lambda value: False if pd.isna(value) else bool(value)
-    )
+    frame["is_st"] = frame["is_st"].map(lambda value: False if pd.isna(value) else bool(value))
     frame["is_suspended"] = frame["is_suspended"].map(
         lambda value: False if pd.isna(value) else bool(value)
     )
@@ -481,7 +522,15 @@ def _latest_covered_market_date(
     history_by_security: dict[str, dict[date, dict[str, float]]],
     security_ids: tuple[str, ...],
 ) -> date | None:
-    """Return the latest market date with broad close coverage."""
+    """Return the latest market date with broad close coverage.
+
+    Args:
+        history_by_security: dict[str, dict[date, dict[str, float]]]: .
+        security_ids: tuple[str, ...]: .
+
+    Returns:
+        date | None: .
+    """
     if not security_ids:
         return None
     securities_by_date: dict[date, set[str]] = defaultdict(set)
@@ -490,9 +539,7 @@ def _latest_covered_market_date(
             close = fields.get("close")
             if close is not None and close > 0:
                 securities_by_date[event_date].add(security_id)
-    required_coverage = math.ceil(
-        len(set(security_ids)) * MARKET_DATE_MIN_COVERAGE_RATIO
-    )
+    required_coverage = math.ceil(len(set(security_ids)) * MARKET_DATE_MIN_COVERAGE_RATIO)
     for event_date in sorted(securities_by_date, reverse=True):
         if len(securities_by_date[event_date]) >= required_coverage:
             return event_date
@@ -502,7 +549,14 @@ def _latest_covered_market_date(
 def _market_features(
     points: dict[date, dict[str, float]],
 ) -> tuple[dict[str, float], date | None]:
-    """Derive liquidity, momentum, trend, and risk features."""
+    """Derive liquidity, momentum, trend, and risk features.
+
+    Args:
+        points: dict[date, dict[str, float]]: .
+
+    Returns:
+        tuple[dict[str, float], date | None]: .
+    """
     if not points:
         return {}, None
     rows: list[tuple[date, float, float | None]] = []
@@ -528,21 +582,15 @@ def _market_features(
     if len(prices) >= 21:
         features["return_20d"] = float(prices.iloc[-1] / prices.iloc[-21] - 1)
     if len(prices) >= 126:
-        features["return_6m_ex_1m"] = float(
-            prices.iloc[-21] / prices.iloc[-126] - 1
-        )
+        features["return_6m_ex_1m"] = float(prices.iloc[-21] / prices.iloc[-126] - 1)
     if len(prices) >= 252:
-        features["return_12m_ex_1m"] = float(
-            prices.iloc[-21] / prices.iloc[-252] - 1
-        )
+        features["return_12m_ex_1m"] = float(prices.iloc[-21] / prices.iloc[-252] - 1)
     recent_amount = amounts.dropna().tail(20)
     if not recent_amount.empty:
         features["avg_amount_20d"] = float(recent_amount.mean())
     daily_returns = prices.pct_change(fill_method=None).dropna()
     if len(daily_returns) >= 20:
-        features["volatility_120d"] = float(
-            daily_returns.tail(120).std(ddof=1) * math.sqrt(252)
-        )
+        features["volatility_120d"] = float(daily_returns.tail(120).std(ddof=1) * math.sqrt(252))
     drawdown_prices = prices.tail(250)
     if len(drawdown_prices) >= 2:
         drawdowns = drawdown_prices / drawdown_prices.cummax() - 1
@@ -558,7 +606,14 @@ def _market_features(
 
 
 def _optional_bool(value: Any) -> bool | None:
-    """Convert a warehouse boolean-like value to bool while preserving missing."""
+    """Convert a warehouse boolean-like value to bool while preserving missing.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        bool | None: .
+    """
     if value is None or bool(pd.isna(value)):
         return None
     if isinstance(value, str):
@@ -571,7 +626,14 @@ def _optional_bool(value: Any) -> bool | None:
 
 
 def _industry_family(industry_name: str) -> str:
-    """Map provider industry labels to broad hard-filter families."""
+    """Map provider industry labels to broad hard-filter families.
+
+    Args:
+        industry_name: str: .
+
+    Returns:
+        str: .
+    """
     normalized = industry_name.strip().lower()
     if any(
         marker in normalized
@@ -583,25 +645,14 @@ def _industry_family(industry_name: str) -> str:
 
 @dataclass(frozen=True)
 class QuantAdapterResult:
-    """Result returned by ``QuantAdapter.run``.
-
-    Attributes:
-        quant_run_id: The persisted quant run identifier.
-        results: Tuple of ``QuantResult`` for the run.
-    """
+    """Result returned by ``QuantAdapter.run``.."""
 
     quant_run_id: str
     results: tuple[QuantResult, ...]
 
 
 class QuantAdapter:
-    """Adapt the orchestrator's ``run(scope_version_id=..., decision_at=...)``
-    call to ``QuantService.run(snapshot, decision_at=...)``.
-
-    The adapter resolves the scope binding, builds a frozen
-    ``QuantInputSnapshot``, runs the quant screen, loads the persisted
-    results, and returns a ``QuantAdapterResult``.
-    """
+    """Adapt the orchestrator's ``run(scope_version_id=..., decision_at=...)``."""
 
     def __init__(
         self,
@@ -618,12 +669,17 @@ class QuantAdapter:
         """Initialize the adapter with quant service and supporting dependencies.
 
         Args:
-            quant_service: The quant screening service.
-            snapshot_builder: Builder for frozen quant input snapshots.
-            scope_provider: Provider for frozen scope bindings.
-            quant_repository: Repository for quant run and result persistence.
-            feature_mart_pipeline: Optional feature mart ETL pipeline.
-            market_window_days: Number of calendar days for the market window.
+        quant_service: QuantService: .
+        snapshot_builder: QuantInputSnapshotBuilder: .
+        scope_provider: ScopeBindingProvider: .
+        quant_repository: QuantRepository: .
+        feature_mart_pipeline: QuantFeatureMartETLPipeline
+            | SQLAlchemyQuantFeatureMartETLPipeline
+            | None: .
+            market_window_days: int: .
+
+        Returns:
+            None: .
         """
         self._quant_service = quant_service
         self._snapshot_builder = snapshot_builder
@@ -641,11 +697,11 @@ class QuantAdapter:
         """Resolve the scope and persist its frozen PIT quant input.
 
         Args:
-            scope_version_id: The frozen scope version to resolve.
-            decision_at: Timezone-aware decision timestamp.
+            scope_version_id: str: .
+            decision_at: datetime: .
 
         Returns:
-            A frozen ``QuantInputSnapshot`` bound to its feature snapshot.
+            QuantInputSnapshot: .
         """
         scope = self._scope_provider.get_scope_binding(scope_version_id)
         snapshot = self._snapshot_builder.build(
@@ -671,12 +727,12 @@ class QuantAdapter:
         """Build a snapshot, run quant, and return a result with results.
 
         Args:
-            scope_version_id: The frozen scope version to screen.
-            decision_at: Timezone-aware decision timestamp.
-            input_snapshot: Optional pre-built snapshot; built if not supplied.
+            scope_version_id: str: .
+            decision_at: datetime: .
+            input_snapshot: QuantInputSnapshot | None: .
 
         Returns:
-            QuantAdapterResult with the quant run ID and persisted results.
+            QuantAdapterResult: .
         """
         snapshot = input_snapshot or self.build_input(
             scope_version_id=scope_version_id,
@@ -686,9 +742,7 @@ class QuantAdapter:
             snapshot,
             scope_version_id=scope_version_id,
         )
-        quant_run: QuantRun = self._quant_service.run(
-            snapshot, decision_at=decision_at
-        )
+        quant_run: QuantRun = self._quant_service.run(snapshot, decision_at=decision_at)
         results = self._quant_repository.list_results(quant_run.quant_run_id)
         return QuantAdapterResult(
             quant_run_id=quant_run.quant_run_id,
@@ -701,7 +755,15 @@ class QuantAdapter:
         *,
         scope_version_id: str,
     ) -> QuantInputSnapshot:
-        """Attach scope strategy metadata to snapshots reloaded from persistence."""
+        """Attach scope strategy metadata to snapshots reloaded from persistence.
+
+        Args:
+            snapshot: QuantInputSnapshot: .
+            scope_version_id: str: .
+
+        Returns:
+            QuantInputSnapshot: .
+        """
         scope = self._scope_provider.get_scope_binding(scope_version_id)
         if snapshot.scope_version_id != scope.scope_version_id:
             raise ValueError("quant input snapshot scope mismatch")
@@ -716,13 +778,10 @@ class QuantAdapter:
         """Reload a persisted frozen input snapshot by output reference.
 
         Args:
-            snapshot_id: The persisted snapshot ID.
+            snapshot_id: str: .
 
         Returns:
-            The reloaded ``QuantInputSnapshot``.
-
-        Raises:
-            KeyError: If the snapshot is not found.
+            QuantInputSnapshot: .
         """
         snapshot = self._snapshot_builder.get(snapshot_id)
         if snapshot is None:
@@ -733,13 +792,10 @@ class QuantAdapter:
         """Reload a persisted quant run and its complete result set.
 
         Args:
-            quant_run_id: The persisted quant run ID.
+            quant_run_id: str: .
 
         Returns:
-            QuantAdapterResult with the quant run ID and persisted results.
-
-        Raises:
-            KeyError: If the quant run is not found.
+            QuantAdapterResult: .
         """
         quant_run = self._quant_repository.get_run(quant_run_id)
         if quant_run is None:

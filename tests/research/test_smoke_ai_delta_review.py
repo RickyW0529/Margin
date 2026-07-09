@@ -20,10 +20,8 @@ from scripts import smoke_ai_delta_review
 def test_ai_delta_review_smoke_outputs_token_safe_contract_lines() -> None:
     """Verify the smoke script outputs one token-safe contract line per mode.
 
-    Runs the smoke script for each of the ``carry``, ``delta``, and ``full``
-    modes as a subprocess and asserts that the stdout contains the expected
-    contract fields, the correct mode and status, and that no API keys or
-    prompt text leak into the output.
+    Returns:
+        None: .
     """
     for mode in ("carry", "delta", "full"):
         result = subprocess.run(
@@ -63,9 +61,8 @@ def test_ai_delta_review_smoke_outputs_token_safe_contract_lines() -> None:
 def test_ai_delta_review_real_llm_smoke_blocks_without_llm_config() -> None:
     """Verify the required real-LLM smoke fails closed when LLM config is incomplete.
 
-    Runs the smoke script with ``--require-real-llm`` and an incomplete LLM
-    configuration, and asserts that the script exits with code 2, reports the
-    missing config blocker, and does not leak the API key.
+    Returns:
+        None: .
     """
     result = subprocess.run(
         [
@@ -95,9 +92,8 @@ def test_ai_delta_review_real_llm_smoke_blocks_without_llm_config() -> None:
 def test_real_llm_smoke_prompt_contains_deterministic_decision_contract() -> None:
     """Verify the real-LLM smoke prompt contains the deterministic decision contract.
 
-    Builds the real-LLM decision prompt from a simple namespace state and
-    asserts that it includes the material news change flag, the required
-    outcome directive, and the evidence ID.
+    Returns:
+        None: .
     """
     state = SimpleNamespace(
         security_id="000001.SZ",

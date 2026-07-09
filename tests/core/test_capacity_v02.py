@@ -28,28 +28,43 @@ from margin.storage.database import (
 
 
 class MutableClock:
-    """A mutable clock stub that returns a controllable current time."""
+    """A mutable clock stub that returns a controllable current time.."""
 
     def __init__(self, now: datetime) -> None:
         """Initialize the clock with the given starting time.
 
         Args:
-            now: The initial datetime to return from ``__call__``.
+            now: datetime: .
+
+        Returns:
+            None: .
         """
         self.now = now
 
     def __call__(self) -> datetime:
-        """Return the current stored datetime."""
+        """Return the current stored datetime.
+
+        Returns:
+            datetime: .
+        """
         return self.now
 
 
 def _clock() -> MutableClock:
-    """Build a mutable clock fixed at 2026-06-22 12:00 UTC."""
+    """Build a mutable clock fixed at 2026-06-22 12:00 UTC.
+
+    Returns:
+        MutableClock: .
+    """
     return MutableClock(datetime(2026, 6, 22, 12, 0, tzinfo=UTC))
 
 
 def test_provider_rpm_limit_returns_waiting_rate_limit() -> None:
-    """Test that exceeding the RPM limit returns a waiting-rate-limit decision."""
+    """Test that exceeding the RPM limit returns a waiting-rate-limit decision.
+
+    Returns:
+        None: .
+    """
     clock = _clock()
     governor = CapacityGovernor(MemoryCapacityRepository(), clock=clock)
     governor.set_limits(
@@ -70,7 +85,11 @@ def test_provider_rpm_limit_returns_waiting_rate_limit() -> None:
 
 
 def test_llm_daily_cost_limit_returns_waiting_budget() -> None:
-    """Test that exceeding the daily cost budget returns a waiting-budget decision."""
+    """Test that exceeding the daily cost budget returns a waiting-budget decision.
+
+    Returns:
+        None: .
+    """
     clock = _clock()
     governor = CapacityGovernor(MemoryCapacityRepository(), clock=clock)
     governor.set_daily_budget(
@@ -90,7 +109,11 @@ def test_llm_daily_cost_limit_returns_waiting_budget() -> None:
 
 
 def test_rate_window_rollover_allows_new_request() -> None:
-    """Test that rate window rollover allows a new request after expiry."""
+    """Test that rate window rollover allows a new request after expiry.
+
+    Returns:
+        None: .
+    """
     clock = _clock()
     governor = CapacityGovernor(MemoryCapacityRepository(), clock=clock)
     governor.set_limits(
@@ -110,7 +133,11 @@ def test_rate_window_rollover_allows_new_request() -> None:
 
 
 def test_capacity_version_switch_does_not_reuse_prior_counter() -> None:
-    """Test that switching capacity versions does not reuse the prior counter."""
+    """Test that switching capacity versions does not reuse the prior counter.
+
+    Returns:
+        None: .
+    """
     clock = _clock()
     governor = CapacityGovernor(MemoryCapacityRepository(), clock=clock)
     governor.set_limits(
@@ -139,7 +166,11 @@ def test_capacity_version_switch_does_not_reuse_prior_counter() -> None:
 
 
 def test_memory_capacity_acquire_is_atomic_under_concurrency() -> None:
-    """Test that memory capacity acquire is atomic under concurrent access."""
+    """Test that memory capacity acquire is atomic under concurrent access.
+
+    Returns:
+        None: .
+    """
     clock = _clock()
     governor = CapacityGovernor(MemoryCapacityRepository(), clock=clock)
     governor.set_limits(
@@ -166,7 +197,14 @@ def test_memory_capacity_acquire_is_atomic_under_concurrency() -> None:
 def test_postgres_capacity_switches_version_within_same_window(
     database_url: str,
 ) -> None:
-    """Test that PostgreSQL capacity switches version within the same window."""
+    """Test that PostgreSQL capacity switches version within the same window.
+
+    Args:
+        database_url: str: .
+
+    Returns:
+        None: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -178,9 +216,7 @@ def test_postgres_capacity_switches_version_within_same_window(
             )
         )
         session.execute(
-            delete(CapacityLimitVersionRow).where(
-                CapacityLimitVersionRow.limit_key == limit_key
-            )
+            delete(CapacityLimitVersionRow).where(CapacityLimitVersionRow.limit_key == limit_key)
         )
 
     governor = CapacityGovernor(

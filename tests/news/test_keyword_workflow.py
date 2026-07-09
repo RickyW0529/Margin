@@ -12,20 +12,29 @@ from margin.news.query_templates import QueryTemplateFactory
 
 
 class FakeLLMService:
-    """Small fake structured LLM service keyed by prompt node name."""
+    """Small fake structured LLM service keyed by prompt node name.."""
 
     def __init__(self, responses: dict[str, list[dict[str, Any]]]) -> None:
         """Initialize the fake LLM service with queued structured responses.
 
         Args:
-            responses: Mapping from prompt node name to a list of output dicts
-                consumed in order by ``complete_structured``.
+            responses: dict[str, list[dict[str, Any]]]: .
+
+        Returns:
+            None: .
         """
         self.responses = {key: list(value) for key, value in responses.items()}
         self.calls: list[str] = []
 
     def complete_structured(self, **kwargs: Any) -> SimpleNamespace:
-        """Return the next configured response for the prompt node."""
+        """Return the next configured response for the prompt node.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            SimpleNamespace: .
+        """
         prompt = kwargs["prompt"]
         self.calls.append(prompt.node_name)
         output = self.responses[prompt.node_name].pop(0)
@@ -41,7 +50,11 @@ class FakeLLMService:
 
 
 def test_keyword_workflow_returns_approved_plan() -> None:
-    """Approved keyword drafts become a non-fallback search plan."""
+    """Approved keyword drafts become a non-fallback search plan.
+
+    Returns:
+        None: .
+    """
     workflow = KeywordWorkflow(
         llm_service=FakeLLMService(
             {
@@ -65,7 +78,11 @@ def test_keyword_workflow_returns_approved_plan() -> None:
 
 
 def test_keyword_workflow_falls_back_after_repeated_review_rejection() -> None:
-    """Repeated review rejection falls back to deterministic templates."""
+    """Repeated review rejection falls back to deterministic templates.
+
+    Returns:
+        None: .
+    """
     target = _target()
     query_factory = QueryTemplateFactory()
     workflow = KeywordWorkflow(
@@ -93,7 +110,11 @@ def test_keyword_workflow_falls_back_after_repeated_review_rejection() -> None:
 
 
 def test_keyword_workflow_local_guardrail_rejects_wrong_company_and_market_terms() -> None:
-    """Local guardrails override an overly permissive LLM reviewer."""
+    """Local guardrails override an overly permissive LLM reviewer.
+
+    Returns:
+        None: .
+    """
     target = _target(
         security_id="002357.SZ",
         name="富临运业",
@@ -138,14 +159,16 @@ def test_keyword_workflow_local_guardrail_rejects_wrong_company_and_market_terms
 
 
 def test_query_template_factory_prioritizes_official_event_queries() -> None:
-    """Fallback queries should start from official disclosure sources."""
+    """Fallback queries should start from official disclosure sources.
+
+    Returns:
+        None: .
+    """
     target = _target()
     queries = [query.query for query in QueryTemplateFactory().build_queries(target)]
 
     assert queries[0] == "site:cninfo.com.cn 平安银行 000001 年报 年度报告 业绩"
-    assert queries[1] == (
-        "site:cninfo.com.cn 平安银行 000001 季报 一季报 半年报 三季报 业绩"
-    )
+    assert queries[1] == ("site:cninfo.com.cn 平安银行 000001 季报 一季报 半年报 三季报 业绩")
     assert queries[2] == "site:szse.cn 平安银行 000001 业绩预告 业绩快报 公告"
     assert any("业绩说明会 投资者关系 公告 新闻" in query for query in queries)
     assert not any(
@@ -161,7 +184,17 @@ def _target(
     aliases: tuple[str, ...] = ("平安",),
     industry_terms: tuple[str, ...] = ("银行",),
 ) -> NewsTarget:
-    """Return one quant PASS target."""
+    """Return one quant PASS target.
+
+    Args:
+        security_id: str: .
+        name: str: .
+        aliases: tuple[str, ...]: .
+        industry_terms: tuple[str, ...]: .
+
+    Returns:
+        NewsTarget: .
+    """
     return NewsTarget(
         scope_version_id="scope_v1",
         quant_run_id="qr_test",

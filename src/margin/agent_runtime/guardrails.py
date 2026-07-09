@@ -17,7 +17,7 @@ POLICY_VERSION = "agent-guardrails-v0.4.0"
 
 
 class GuardrailDecisionType(StrEnum):
-    """Guardrail decision values."""
+    """Guardrail decision values.."""
 
     ALLOW = "allow"
     DENY = "deny"
@@ -27,7 +27,7 @@ class GuardrailDecisionType(StrEnum):
 
 
 class InputGuardrail:
-    """Fast rule-based input guardrail."""
+    """Fast rule-based input guardrail.."""
 
     _guarantee_terms = (
         "保证收益",
@@ -51,16 +51,22 @@ class InputGuardrail:
     )
 
     def evaluate(self, user_input: str, *, run_id: str = "") -> GuardrailDecision:
-        """Evaluate raw user input."""
+        """Evaluate raw user input.
+
+        Args:
+            user_input: str: .
+            run_id: str: .
+
+        Returns:
+            GuardrailDecision: .
+        """
         normalized = user_input.lower()
         policies: list[str] = []
         if self._has_financial_guarantee(normalized):
             policies.append("financial_guarantee")
         if any(term.lower() in normalized for term in self._injection_terms):
             policies.append("prompt_injection")
-        decision = (
-            GuardrailDecisionType.DENY if policies else GuardrailDecisionType.ALLOW
-        )
+        decision = GuardrailDecisionType.DENY if policies else GuardrailDecisionType.ALLOW
         message = (
             "不能保证收益。系统只能展示研究判断、证据、风险和不确定性。"
             if "financial_guarantee" in policies
@@ -82,7 +88,14 @@ class InputGuardrail:
         )
 
     def _has_financial_guarantee(self, normalized_input: str) -> bool:
-        """Return whether input asks for guaranteed investment outcomes."""
+        """Return whether input asks for guaranteed investment outcomes.
+
+        Args:
+            normalized_input: str: .
+
+        Returns:
+            bool: .
+        """
         if any(term.lower() in normalized_input for term in self._guarantee_terms):
             return True
         return any(term in normalized_input for term in self._guarantee_verbs) and any(
@@ -91,7 +104,7 @@ class InputGuardrail:
 
 
 class PlanGuardrail:
-    """Validate MainAgent plans."""
+    """Validate MainAgent plans.."""
 
     def validate_fixed_flow(
         self,
@@ -102,7 +115,18 @@ class PlanGuardrail:
         fixed_flow: AgentFlowDefinition,
         run_id: str = "",
     ) -> GuardrailDecision:
-        """Validate that a scheduled plan exactly matches the fixed JSON flow."""
+        """Validate that a scheduled plan exactly matches the fixed JSON flow.
+
+        Args:
+            run_type: AgentRunType: .
+            permission_mode: AgentPermissionMode: .
+            planned_step_ids: tuple[str, ...]: .
+            fixed_flow: AgentFlowDefinition: .
+            run_id: str: .
+
+        Returns:
+            GuardrailDecision: .
+        """
         expected = tuple(step.step_id for step in fixed_flow.steps)
         policies: list[str] = []
         if run_type != fixed_flow.run_type:
@@ -129,5 +153,12 @@ class PlanGuardrail:
 
 
 def _hash_text(value: str) -> str:
-    """Return a stable text hash."""
+    """Return a stable text hash.
+
+    Args:
+        value: str: .
+
+    Returns:
+        str: .
+    """
     return f"sha256:{hashlib.sha256(value.encode()).hexdigest()}"

@@ -14,52 +14,64 @@ from margin.research.llm import DeterministicLLMProvider, LLMProvider, ModelRout
 
 
 class _FakeResponse:
-    """Fake HTTP response object for testing the LLM provider.
-
-    Attributes:
-        status_code: The HTTP status code of the response.
-    """
+    """Fake HTTP response object for testing the LLM provider.."""
 
     def __init__(self, payload: dict, status_code: int = 200) -> None:
         """Initialize the fake response with a payload and status code.
 
         Args:
-            payload: The dictionary returned by ``json()``.
-            status_code: The HTTP status code to simulate.
+            payload: dict: .
+            status_code: int: .
+
+        Returns:
+            None: .
         """
         self._payload = payload
         self.status_code = status_code
 
     def raise_for_status(self) -> None:
-        """Raise a ``RuntimeError`` if the status code indicates an error."""
+        """Raise a ``RuntimeError`` if the status code indicates an error.
+
+        Returns:
+            None: .
+        """
         if self.status_code >= 400:
             raise RuntimeError(f"HTTP {self.status_code}")
 
     def json(self) -> dict:
-        """Return the injected payload dictionary."""
+        """Return the injected payload dictionary.
+
+        Returns:
+            dict: .
+        """
         return self._payload
 
 
 class _FakeClient:
-    """Fake HTTP client that records calls and returns a canned response.
-
-    Attributes:
-        response: The response or exception to return on ``post``.
-        calls: List of recorded call arguments.
-    """
+    """Fake HTTP client that records calls and returns a canned response.."""
 
     def __init__(self, response: _FakeResponse | Exception) -> None:
         """Initialize the fake client with a response or exception.
 
         Args:
-            response: A ``_FakeResponse`` to return or an ``Exception`` to
-                raise on the next ``post`` call.
+            response: _FakeResponse | Exception: .
+
+        Returns:
+            None: .
         """
         self.response = response
         self.calls: list[dict] = []
 
     def post(self, *args, **kwargs):
-        """Record the call and return the injected response or raise an exception."""
+        """Record the call and return the injected response or raise an exception.
+
+        Args:
+            *args: Any: .
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
         self.calls.append({"args": args, "kwargs": kwargs})
         if isinstance(self.response, Exception):
             raise self.response
@@ -67,7 +79,11 @@ class _FakeClient:
 
 
 def test_deterministic_provider_returns_injected_output():
-    """Verify the deterministic LLM provider returns the injected output."""
+    """Verify the deterministic LLM provider returns the injected output.
+
+    Returns:
+        Any: .
+    """
     provider = DeterministicLLMProvider(name="mock", response={"answer": "ok"})
     result = provider.complete("hi", response_schema={"answer": {"type": "string"}})
     assert result.output == {"answer": "ok"}
@@ -75,7 +91,11 @@ def test_deterministic_provider_returns_injected_output():
 
 
 def test_deterministic_provider_can_fail():
-    """Verify the deterministic LLM provider can simulate a failure."""
+    """Verify the deterministic LLM provider can simulate a failure.
+
+    Returns:
+        Any: .
+    """
     provider = DeterministicLLMProvider(fail=True, error="injected failure")
     result = provider.complete("hi")
     assert result.success is False
@@ -84,6 +104,9 @@ def test_deterministic_provider_can_fail():
 
 def test_llm_provider_direct_default_model_is_deepseek_pro():
     """Verify the LLM provider defaults to the deepseek-pro model.
+
+    Returns:
+        Any: .
     """
     provider = LLMProvider(api_key=None, base_url=None)
 
@@ -91,20 +114,33 @@ def test_llm_provider_direct_default_model_is_deepseek_pro():
 
 
 def test_model_router_selects_cheap_model_for_extraction():
-    """Verify the model router selects a task-specific model for extraction."""
+    """Verify the model router selects a task-specific model for extraction.
+
+    Returns:
+        Any: .
+    """
     router = ModelRouter({TaskType.EXTRACTION: "cheap-model"})
     model = router.select(TaskType.EXTRACTION)
     assert model == "cheap-model"
 
 
 def test_model_router_falls_back_to_default():
-    """Verify the model router falls back to the default model for unregistered tasks."""
+    """Verify the model router falls back to the default model for unregistered tasks.
+    Returns:.
+
+    Returns:
+        Any: .
+    """
     router = ModelRouter()
     assert router.select(TaskType.REFLECT) == "capable-llm"
 
 
 def test_guardrail_validates_required_fields():
-    """Verify the structured output guardrail rejects missing required fields."""
+    """Verify the structured output guardrail rejects missing required fields.
+
+    Returns:
+        Any: .
+    """
     from margin.research.llm import StructuredOutputGuardrail
 
     guardrail = StructuredOutputGuardrail({"required": ["x"]})
@@ -115,10 +151,10 @@ def test_guardrail_validates_required_fields():
 
 def test_model_router_uses_registered_fallback_provider():
     """Verify the model router uses a registered fallback provider on primary failure.
+    Returns:.
 
-    Configures a primary provider that always fails and a fallback provider
-    that succeeds, then asserts that the router completes the task using the
-    fallback model.
+    Returns:
+        Any: .
     """
     primary = DeterministicLLMProvider(name="primary", fail=True)
     fallback = DeterministicLLMProvider(
@@ -146,9 +182,8 @@ def test_model_router_uses_registered_fallback_provider():
 def test_llm_healthcheck_performs_real_completion_request():
     """Verify the LLM healthcheck performs a real completion request.
 
-    Uses a fake HTTP client returning a valid chat completion response and
-    asserts that the healthcheck reports a healthy status, the provider name
-    is ``openai_llm``, and the request was sent to the correct endpoint.
+    Returns:
+        Any: .
     """
     client = _FakeClient(
         _FakeResponse(
@@ -181,8 +216,8 @@ def test_llm_healthcheck_performs_real_completion_request():
 def test_llm_healthcheck_reports_unhealthy_when_completion_fails():
     """Verify the LLM healthcheck reports unhealthy when the completion fails.
 
-    Uses a fake HTTP client that raises a network error and asserts that the
-    healthcheck reports an unhealthy status with the error message.
+    Returns:
+        Any: .
     """
     provider = LLMProvider(
         api_key="test-key",

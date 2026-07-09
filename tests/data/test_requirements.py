@@ -6,7 +6,11 @@ from margin.data.requirements import QuantDataRequirementCatalog
 
 
 def test_catalog_contains_only_quant_consumed_tushare_endpoints() -> None:
-    """The catalog must not backfill unrelated datasets merely because Pro exposes them."""
+    """The catalog must not backfill unrelated datasets merely because Pro exposes them.
+
+    Returns:
+        None: .
+    """
     catalog = QuantDataRequirementCatalog.default()
 
     enabled = {endpoint.api_name for endpoint in catalog.enabled_endpoints("tushare")}
@@ -47,7 +51,11 @@ def test_catalog_contains_only_quant_consumed_tushare_endpoints() -> None:
 
 
 def test_every_enabled_endpoint_has_an_active_quant_consumer() -> None:
-    """No endpoint may be enabled without a traceable quant requirement."""
+    """No endpoint may be enabled without a traceable quant requirement.
+
+    Returns:
+        None: .
+    """
     catalog = QuantDataRequirementCatalog.default()
 
     for endpoint in catalog.enabled_endpoints("tushare"):
@@ -61,7 +69,11 @@ def test_every_enabled_endpoint_has_an_active_quant_consumer() -> None:
 
 
 def test_ml_lifecycle_baseline_requirements_are_traceable_to_endpoints() -> None:
-    """ML lifecycle serving features must be visible in the data admission catalog."""
+    """ML lifecycle serving features must be visible in the data admission catalog.
+
+    Returns:
+        None: .
+    """
     catalog = QuantDataRequirementCatalog.default()
     ml_requirements = {
         item.code: item
@@ -76,21 +88,14 @@ def test_ml_lifecycle_baseline_requirements_are_traceable_to_endpoints() -> None
         "ml_lifecycle_flow_features",
         "ml_lifecycle_execution_risk",
     }
-    assert "return_6m_ex_1m" in ml_requirements[
-        "ml_lifecycle_market_features"
-    ].warehouse_fields
-    assert "revenue_yoy" in ml_requirements[
-        "ml_lifecycle_fundamental_features"
-    ].warehouse_fields
-    assert "industry_lifecycle_score" in ml_requirements[
-        "ml_lifecycle_industry_stage"
-    ].warehouse_fields
-    assert "mf_lg_net_amount" in ml_requirements[
-        "ml_lifecycle_flow_features"
-    ].warehouse_fields
-    assert "limit_trade_blocked" in ml_requirements[
-        "ml_lifecycle_execution_risk"
-    ].warehouse_fields
+    assert "return_6m_ex_1m" in ml_requirements["ml_lifecycle_market_features"].warehouse_fields
+    assert "revenue_yoy" in ml_requirements["ml_lifecycle_fundamental_features"].warehouse_fields
+    assert (
+        "industry_lifecycle_score"
+        in ml_requirements["ml_lifecycle_industry_stage"].warehouse_fields
+    )
+    assert "mf_lg_net_amount" in ml_requirements["ml_lifecycle_flow_features"].warehouse_fields
+    assert "limit_trade_blocked" in ml_requirements["ml_lifecycle_execution_risk"].warehouse_fields
 
     endpoint_links = {
         endpoint: {
@@ -129,7 +134,11 @@ def test_ml_lifecycle_baseline_requirements_are_traceable_to_endpoints() -> None
 
 
 def test_out_of_scope_endpoint_is_cataloged_without_sync_admission() -> None:
-    """Known but unrelated endpoints remain auditable and cannot create partitions."""
+    """Known but unrelated endpoints remain auditable and cannot create partitions.
+
+    Returns:
+        None: .
+    """
     catalog = QuantDataRequirementCatalog.default()
 
     endpoint = catalog.endpoint("tushare", "top_list")
@@ -139,7 +148,11 @@ def test_out_of_scope_endpoint_is_cataloged_without_sync_admission() -> None:
 
 
 def test_fina_indicator_natural_key_matches_real_response_fields() -> None:
-    """The financial-indicator API does not return report_type."""
+    """The financial-indicator API does not return report_type.
+
+    Returns:
+        None: .
+    """
     endpoint = QuantDataRequirementCatalog.default().endpoint(
         "tushare",
         "fina_indicator",
@@ -149,12 +162,14 @@ def test_fina_indicator_natural_key_matches_real_response_fields() -> None:
 
 
 def test_income_requirement_uses_raw_parent_profit_not_provider_ttm() -> None:
-    """Income sync admits raw profit; y1/y2 are derived later by Feature Mart ETL."""
+    """Income sync admits raw profit; y1/y2 are derived later by Feature Mart ETL.
+
+    Returns:
+        None: .
+    """
     catalog = QuantDataRequirementCatalog.default()
     requirement = next(
-        item
-        for item in catalog.requirements()
-        if item.code == "income_fundamentals"
+        item for item in catalog.requirements() if item.code == "income_fundamentals"
     )
 
     assert "n_income_attr_p" in requirement.warehouse_fields

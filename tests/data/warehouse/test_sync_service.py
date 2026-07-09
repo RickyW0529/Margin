@@ -32,7 +32,14 @@ from margin.storage.database import (
 
 @pytest.fixture
 def sync_repository(database_url: str) -> SQLAlchemyDataSyncRepository:
-    """Provide a clean ``SQLAlchemyDataSyncRepository`` against a test database."""
+    """Provide a clean ``SQLAlchemyDataSyncRepository`` against a test database.
+
+    Args:
+        database_url: str: .
+
+    Yields:
+        Any: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -45,7 +52,14 @@ def sync_repository(database_url: str) -> SQLAlchemyDataSyncRepository:
 
 
 def test_claim_is_exclusive(sync_repository: SQLAlchemyDataSyncRepository) -> None:
-    """Test that only one worker can claim a given endpoint work item."""
+    """Test that only one worker can claim a given endpoint work item.
+
+    Args:
+        sync_repository: SQLAlchemyDataSyncRepository: .
+
+    Returns:
+        None: .
+    """
     run = sync_repository.create_run(
         DataSyncRequest(provider="akshare", endpoint_codes=("daily_bar",)),
         endpoints=(ProviderEndpoint(provider="akshare", code="daily_bar", domain="market"),),
@@ -62,7 +76,14 @@ def test_claim_is_exclusive(sync_repository: SQLAlchemyDataSyncRepository) -> No
 def test_failed_endpoint_does_not_advance_cursor(
     sync_repository: SQLAlchemyDataSyncRepository,
 ) -> None:
-    """Test that a failed endpoint does not advance the sync cursor."""
+    """Test that a failed endpoint does not advance the sync cursor.
+
+    Args:
+        sync_repository: SQLAlchemyDataSyncRepository: .
+
+    Returns:
+        None: .
+    """
     run = sync_repository.create_run(
         DataSyncRequest(provider="akshare", endpoint_codes=("daily_bar",)),
         endpoints=(ProviderEndpoint(provider="akshare", code="daily_bar", domain="market"),),
@@ -71,7 +92,14 @@ def test_failed_endpoint_does_not_advance_cursor(
     assert item is not None
 
     def failing_handler(_item):
-        """Raise a retryable provider sync error."""
+        """Raise a retryable provider sync error.
+
+        Args:
+            _item: Any: .
+
+        Returns:
+            Any: .
+        """
         raise ProviderSyncError("provider_500", "upstream failed")
 
     service = SyncService(
@@ -90,7 +118,14 @@ def test_failed_endpoint_does_not_advance_cursor(
 def test_worker_claims_global_work_in_endpoint_sequence(
     sync_repository: SQLAlchemyDataSyncRepository,
 ) -> None:
-    """Global workers process prerequisites before dependent endpoints."""
+    """Global workers process prerequisites before dependent endpoints.
+
+    Args:
+        sync_repository: SQLAlchemyDataSyncRepository: .
+
+    Returns:
+        None: .
+    """
     run = sync_repository.create_run(
         DataSyncRequest(provider="tushare"),
         endpoints=(
@@ -126,7 +161,14 @@ def test_worker_claims_global_work_in_endpoint_sequence(
 def test_expired_running_work_is_reclaimed(
     sync_repository: SQLAlchemyDataSyncRepository,
 ) -> None:
-    """A crashed worker cannot leave a sync item permanently running."""
+    """A crashed worker cannot leave a sync item permanently running.
+
+    Args:
+        sync_repository: SQLAlchemyDataSyncRepository: .
+
+    Returns:
+        None: .
+    """
     run = sync_repository.create_run(
         DataSyncRequest(provider="tushare", endpoint_codes=("daily_bar",)),
         endpoints=(
@@ -168,7 +210,14 @@ def test_expired_running_work_is_reclaimed(
 def test_run_is_reconciled_after_each_terminal_item(
     sync_repository: SQLAlchemyDataSyncRepository,
 ) -> None:
-    """Run counters and terminal status reflect persisted work-item outcomes."""
+    """Run counters and terminal status reflect persisted work-item outcomes.
+
+    Args:
+        sync_repository: SQLAlchemyDataSyncRepository: .
+
+    Returns:
+        None: .
+    """
     run = sync_repository.create_run(
         DataSyncRequest(provider="tushare"),
         endpoints=(
@@ -207,7 +256,14 @@ def test_run_is_reconciled_after_each_terminal_item(
 def test_latest_run_can_be_recovered_by_orchestration_requester(
     sync_repository: SQLAlchemyDataSyncRepository,
 ) -> None:
-    """Pipeline retries can recover their durable data-sync run after restart."""
+    """Pipeline retries can recover their durable data-sync run after restart.
+
+    Args:
+        sync_repository: SQLAlchemyDataSyncRepository: .
+
+    Returns:
+        None: .
+    """
     first = sync_repository.create_run(
         DataSyncRequest(
             provider="tushare",
@@ -235,9 +291,7 @@ def test_latest_run_can_be_recovered_by_orchestration_requester(
         ),
     )
 
-    recovered = sync_repository.find_latest_run(
-        requested_by="valuation:vdr-1"
-    )
+    recovered = sync_repository.find_latest_run(requested_by="valuation:vdr-1")
 
     assert recovered is not None
     assert recovered.run_id == second.run_id
@@ -247,7 +301,14 @@ def test_latest_run_can_be_recovered_by_orchestration_requester(
 def test_successful_endpoint_records_queryable_freshness(
     sync_repository: SQLAlchemyDataSyncRepository,
 ) -> None:
-    """A successful endpoint updates freshness used by valuation orchestration."""
+    """A successful endpoint updates freshness used by valuation orchestration.
+
+    Args:
+        sync_repository: SQLAlchemyDataSyncRepository: .
+
+    Returns:
+        None: .
+    """
     sync_repository.create_run(
         DataSyncRequest(provider="tushare"),
         endpoints=(
@@ -269,17 +330,25 @@ def test_successful_endpoint_records_queryable_freshness(
     )
 
     with sync_repository._session_factory() as session:
-        row = session.query(DataFreshnessStateRow).filter_by(
-            provider="tushare",
-            endpoint_code="daily_bar",
-            as_of_date=finished_at.date(),
-        ).one()
+        row = (
+            session.query(DataFreshnessStateRow)
+            .filter_by(
+                provider="tushare",
+                endpoint_code="daily_bar",
+                as_of_date=finished_at.date(),
+            )
+            .one()
+        )
     assert row.status == FreshnessStatus.FRESH.value
     assert row.observed_at == finished_at
 
 
 def test_market_expected_as_of_waits_for_provider_availability_time() -> None:
-    """Test that market freshness waits until the provider availability time."""
+    """Test that market freshness waits until the provider availability time.
+
+    Returns:
+        None: .
+    """
     calculator = FreshnessCalculator(
         trading_days={date(2026, 6, 19), date(2026, 6, 22)},
         timezone="Asia/Shanghai",
@@ -296,7 +365,11 @@ def test_market_expected_as_of_waits_for_provider_availability_time() -> None:
 
 
 def test_freshness_state_is_stale_when_latest_observation_lags_expected() -> None:
-    """Test that freshness is stale when the latest observation lags the expected time."""
+    """Test that freshness is stale when the latest observation lags the expected time.
+
+    Returns:
+        None: .
+    """
     calculator = FreshnessCalculator(
         trading_days={date(2026, 6, 19), date(2026, 6, 22)},
         timezone="Asia/Shanghai",

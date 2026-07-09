@@ -18,11 +18,11 @@ from margin.strategy.models import ProviderConfigVersion
 
 
 class ProviderSSRFError(ValueError):
-    """Raised when a provider base URL violates SSRF guardrails."""
+    """Raised when a provider base URL violates SSRF guardrails.."""
 
 
 class ProviderHealth(BaseModel):
-    """Safe provider health result for API responses and audits."""
+    """Safe provider health result for API responses and audits.."""
 
     provider_name: str
     provider_config_version_id: str
@@ -38,7 +38,7 @@ HealthCheckCallable = Callable[[ProviderConfigVersion, str], None]
 
 
 class ProviderConfigHealthService:
-    """Run read-only provider config health checks without leaking secrets."""
+    """Run read-only provider config health checks without leaking secrets.."""
 
     def __init__(
         self,
@@ -50,7 +50,19 @@ class ProviderConfigHealthService:
         allow_local_development: bool = False,
         resolve_dns: bool = False,
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the instance.
+
+        Args:
+            repository: object: .
+            secret_store: SecretStore: .
+            health_adapters: Mapping[str, HealthCheckCallable] | None: .
+            host_allowlists: Mapping[str, set[str]] | None: .
+            allow_local_development: bool: .
+            resolve_dns: bool: .
+
+        Returns:
+            None: .
+        """
         self._repository = repository
         self._secret_store = secret_store
         self._health_adapters = {
@@ -64,14 +76,19 @@ class ProviderConfigHealthService:
         self._resolve_dns = resolve_dns
 
     def test_connection(self, provider_config_version_id: str) -> ProviderHealth:
-        """Test a frozen provider config version using its stored secret version."""
+        """Test a frozen provider config version using its stored secret version.
+
+        Args:
+            provider_config_version_id: str: .
+
+        Returns:
+            ProviderHealth: .
+        """
         started = time.perf_counter()
         checked_at = utc_now()
         config = self._repository.get_provider_config(provider_config_version_id)
         if config is None:
-            raise KeyError(
-                f"provider config '{provider_config_version_id}' not found"
-            )
+            raise KeyError(f"provider config '{provider_config_version_id}' not found")
 
         if config.base_url:
             self.validate_base_url(
@@ -95,9 +112,7 @@ class ProviderConfigHealthService:
                 redacted_error="provider config is disabled",
             )
 
-        secret_required = bool(
-            config.non_sensitive_config.get("secret_required", True)
-        )
+        secret_required = bool(config.non_sensitive_config.get("secret_required", True))
         if secret_required and not config.secret_version_id:
             return self._result(
                 config,
@@ -112,9 +127,7 @@ class ProviderConfigHealthService:
         secret_value = ""
         if config.secret_version_id:
             secret_metadata = self._secret_store.metadata(config.secret_version_id)
-            secret_value = self._secret_store.resolve(
-                secret_metadata.ref
-            ).get_secret_value()
+            secret_value = self._secret_store.resolve(secret_metadata.ref).get_secret_value()
         redactor = SecretRedactor(values=(secret_value,))
         adapter = self._health_adapters.get(config.provider_name.lower())
         if adapter is None:
@@ -125,8 +138,7 @@ class ProviderConfigHealthService:
                 status="failed",
                 error_code="health_adapter_missing",
                 redacted_error=(
-                    f"health adapter is not configured for provider "
-                    f"{config.provider_name}"
+                    f"health adapter is not configured for provider {config.provider_name}"
                 ),
                 secret_metadata=secret_metadata,
             )
@@ -159,7 +171,16 @@ class ProviderConfigHealthService:
         provider_name: str | None = None,
         allow_custom_base_url: bool = False,
     ) -> None:
-        """Validate a provider URL against SSRF guardrails."""
+        """Validate a provider URL against SSRF guardrails.
+
+        Args:
+            base_url: str: .
+            provider_name: str | None: .
+            allow_custom_base_url: bool: .
+
+        Returns:
+            None: .
+        """
         parsed = urlparse(base_url)
         if parsed.scheme not in {"http", "https"}:
             raise ProviderSSRFError("provider base_url must be http or https")
@@ -179,17 +200,11 @@ class ProviderConfigHealthService:
             if _is_forbidden_ip(address):
                 if self._allow_local_development and address.is_loopback:
                     continue
-                raise ProviderSSRFError(
-                    f"provider base_url targets forbidden network: {address}"
-                )
+                raise ProviderSSRFError(f"provider base_url targets forbidden network: {address}")
 
         if provider_name is not None:
             allowed_hosts = self._host_allowlists.get(provider_name.lower())
-            if (
-                allowed_hosts
-                and host not in allowed_hosts
-                and not allow_custom_base_url
-            ):
+            if allowed_hosts and host not in allowed_hosts and not allow_custom_base_url:
                 raise ProviderSSRFError(
                     f"provider base_url host is outside the {provider_name} allowlist"
                 )
@@ -198,7 +213,14 @@ class ProviderConfigHealthService:
         self,
         host: str,
     ) -> tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...]:
-        """parse or resolve host."""
+        """parse or resolve host.
+
+        Args:
+            host: str: .
+
+        Returns:
+            tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...]: .
+        """
         try:
             return (ipaddress.ip_address(host),)
         except ValueError:
@@ -225,7 +247,20 @@ class ProviderConfigHealthService:
         redacted_error: str | None = None,
         secret_metadata: SecretMetadata | None = None,
     ) -> ProviderHealth:
-        """result."""
+        """result.
+
+        Args:
+            config: ProviderConfigVersion: .
+            checked_at: datetime: .
+            started: float: .
+            status: Literal['ok', 'failed', 'not_configured']: .
+            error_code: str | None: .
+            redacted_error: str | None: .
+            secret_metadata: SecretMetadata | None: .
+
+        Returns:
+            ProviderHealth: .
+        """
         latency_ms = int((time.perf_counter() - started) * 1000)
         return ProviderHealth(
             provider_name=config.provider_name,
@@ -242,7 +277,14 @@ class ProviderConfigHealthService:
 def _is_forbidden_ip(
     address: ipaddress.IPv4Address | ipaddress.IPv6Address,
 ) -> bool:
-    """is forbidden ip."""
+    """is forbidden ip.
+
+    Args:
+        address: ipaddress.IPv4Address | ipaddress.IPv6Address: .
+
+    Returns:
+        bool: .
+    """
     return (
         address.is_loopback
         or address.is_link_local

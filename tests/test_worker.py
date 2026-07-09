@@ -20,7 +20,11 @@ from margin.worker import (
 
 
 def test_worker_does_not_register_holdings_monitoring_job():
-    """Test that the v0.2 worker contains only valuation-discovery pipeline jobs."""
+    """Test that the v0.2 worker contains only valuation-discovery pipeline jobs.
+
+    Returns:
+        Any: .
+    """
     scheduler = build_scheduler(
         interval_seconds=300,
         indexing_job=lambda: None,
@@ -34,8 +38,11 @@ def test_worker_builds_data_ingestion_stack(database_url, tmp_path):
     """Test that the worker builds a data ingestion stack with a warehouse.
 
     Args:
-        database_url: Connection string for the PostgreSQL test server.
-        tmp_path: Pytest fixture providing a temporary directory.
+        database_url: Any: .
+        tmp_path: Any: .
+
+    Returns:
+        Any: .
     """
     settings = MarginSettings(
         _env_file=None,
@@ -55,8 +62,11 @@ def test_worker_refuses_hash_embedding_in_production_path(
     """Test that missing real embedding credentials do not create fake searchable data.
 
     Args:
-        database_url: Connection string for the PostgreSQL test server.
-        monkeypatch: Pytest fixture for modifying settings and environment.
+        database_url: str: .
+        monkeypatch: pytest.MonkeyPatch: .
+
+    Returns:
+        None: .
     """
     settings = MarginSettings(
         _env_file=None,
@@ -76,12 +86,16 @@ def test_worker_uses_versioned_provider_runtime_factory(
     """Test that worker adapters come from active config, not direct environment secrets.
 
     Args:
-        database_url: Connection string for the PostgreSQL test server.
-        tmp_path: Pytest fixture providing a temporary directory.
-        monkeypatch: Pytest fixture for patching module attributes.
+        database_url: str: .
+        tmp_path: Any: .
+        monkeypatch: pytest.MonkeyPatch: .
+
+    Returns:
+        None: .
     """
+
     class _Embedding:
-        """Stub embedding provider with a fixed dimension."""
+        """Stub embedding provider with a fixed dimension.."""
 
         dim = 2048
 
@@ -89,26 +103,46 @@ def test_worker_uses_versioned_provider_runtime_factory(
     tushare = object()
 
     class _Runtime:
-        """Stub provider runtime holding an adapter and config version ID."""
+        """Stub provider runtime holding an adapter and config version ID.."""
 
         def __init__(self, adapter, version_id: str) -> None:
-            """Initialize the runtime with an adapter and version ID."""
+            """Initialize the runtime with an adapter and version ID.
+
+            Args:
+                adapter: Any: .
+                version_id: str: .
+
+            Returns:
+                None: .
+            """
             self.adapter = adapter
             self.config_version_id = version_id
 
     class _Factory:
-        """Stub factory that builds embedding and Tushare runtimes."""
+        """Stub factory that builds embedding and Tushare runtimes.."""
 
         def build_embedding(self):
-            """Build a stub embedding runtime."""
+            """Build a stub embedding runtime.
+
+            Returns:
+                Any: .
+            """
             return _Runtime(embedding, "provider-embedding-v1")
 
         def build_tushare(self):
-            """Build a stub Tushare runtime."""
+            """Build a stub Tushare runtime.
+
+            Returns:
+                Any: .
+            """
             return _Runtime(tushare, "provider-tushare-v1")
 
         def build_akshare(self):
-            """Raise LookupError to simulate an inactive AKShare provider."""
+            """Raise LookupError to simulate an inactive AKShare provider.
+
+            Returns:
+                Any: .
+            """
             raise LookupError("not active")
 
     settings = MarginSettings(
@@ -134,6 +168,4 @@ def test_worker_uses_versioned_provider_runtime_factory(
 
     assert indexing["embedding_provider"] is embedding
     assert sync_worker.providers == {"tushare": tushare}
-    assert sync_worker.provider_config_version_ids == {
-        "tushare": "provider-tushare-v1"
-    }
+    assert sync_worker.provider_config_version_ids == {"tushare": "provider-tushare-v1"}

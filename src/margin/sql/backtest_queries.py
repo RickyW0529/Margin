@@ -90,40 +90,72 @@ COMPANY_POOL_MEMBERS = text(
 
 
 def coverage_by_endpoint() -> TextClause:
-    """Return endpoint/indicator coverage summary for the backtest window."""
+    """Return endpoint/indicator coverage summary for the backtest window.
+
+    Returns:
+        TextClause: .
+    """
     return COVERAGE_BY_ENDPOINT
 
 
 def coverage_by_index_code() -> TextClause:
-    """Return index_weight coverage grouped by index code."""
+    """Return index_weight coverage grouped by index code.
+
+    Returns:
+        TextClause: .
+    """
     return COVERAGE_BY_INDEX_CODE
 
 
 def market_panel_facts() -> TextClause:
-    """Return market bar facts (close, amount, adj_factor) for a date range."""
+    """Return market bar facts (close, amount, adj_factor) for a date range.
+
+    Returns:
+        TextClause: .
+    """
     return MARKET_PANEL_FACTS
 
 
 def daily_basic_facts() -> TextClause:
-    """Return daily_basic valuation facts for a date range."""
+    """Return daily_basic valuation facts for a date range.
+
+    Returns:
+        TextClause: .
+    """
     return DAILY_BASIC_FACTS
 
 
 def index_weight_members() -> TextClause:
-    """Return index member security IDs from index_weight facts."""
+    """Return index member security IDs from index_weight facts.
+
+    Returns:
+        TextClause: .
+    """
     return INDEX_WEIGHT_MEMBERS
 
 
 def company_pool_snapshots() -> TextClause:
-    """Return all company pool snapshot headers."""
+    """Return all company pool snapshot headers.
+
+    Returns:
+        TextClause: .
+    """
     return COMPANY_POOL_SNAPSHOTS
 
 
 def company_pool_members() -> TextClause:
-    """Return all included company pool members."""
+    """Return all included company pool members.
+
+    Returns:
+        TextClause: .
+    """
     return COMPANY_POOL_MEMBERS
 
 
 def security_names_active() -> TextClause:
-    """Return active security IDs with names."""
+    """Return active security IDs with names.
+
+    Returns:
+        TextClause: .
+    """
     return SECURITY_NAMES_ACTIVE

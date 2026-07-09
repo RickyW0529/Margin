@@ -18,7 +18,17 @@ def fact(
     available_at: datetime = DECISION,
     event_at: datetime = DECISION,
 ) -> StandardizedIndicatorFact:
-    """Build a ``StandardizedIndicatorFact`` fixture with overridable attributes."""
+    """Build a ``StandardizedIndicatorFact`` fixture with overridable attributes.
+
+    Args:
+        provider_code: str: .
+        quality_score: Decimal: .
+        available_at: datetime: .
+        event_at: datetime: .
+
+    Returns:
+        StandardizedIndicatorFact: .
+    """
     return StandardizedIndicatorFact(
         fact_id=f"fact-{provider_code}-{quality_score}",
         provider_code=provider_code,
@@ -39,7 +49,11 @@ def fact(
 
 
 def test_canonical_keeps_all_provider_candidates() -> None:
-    """Test that the canonical resolver retains all provider candidates and selects the best."""
+    """Test that the canonical resolver retains all provider candidates and selects the best.
+
+    Returns:
+        None: .
+    """
     resolver = CanonicalResolver()
 
     result = resolver.resolve(
@@ -60,7 +74,12 @@ def test_canonical_keeps_all_provider_candidates() -> None:
 
 
 def test_future_fact_is_not_candidate() -> None:
-    """Test that a fact available after the decision time is excluded from candidates."""
+    """Test that a fact available after the decision time is excluded from candidates.
+    Returns:.
+
+    Returns:
+        None: .
+    """
     resolver = CanonicalResolver()
 
     result = resolver.resolve(
@@ -74,7 +93,11 @@ def test_future_fact_is_not_candidate() -> None:
 
 
 def test_canonical_prefers_latest_business_event_before_provider_quality() -> None:
-    """The current canonical value must represent the latest available period."""
+    """The current canonical value must represent the latest available period.
+
+    Returns:
+        None: .
+    """
     resolver = CanonicalResolver()
 
     result = resolver.resolve(

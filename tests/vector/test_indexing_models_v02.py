@@ -21,8 +21,8 @@ from margin.vector.models import (
 def test_stable_chunk_id_uses_document_content_parser_and_index() -> None:
     """Stable chunk ID must be derived from document, content, parser, and index.
 
-    Verifies that ``make_stable_chunk_id`` produces a deterministic hash from the
-    document ID, content hash, parser version, and chunk index.
+    Returns:
+        None: .
     """
     chunk_id = make_stable_chunk_id(
         document_id="doc-1",
@@ -37,8 +37,8 @@ def test_stable_chunk_id_uses_document_content_parser_and_index() -> None:
 def test_indexing_request_requires_available_at_for_pit() -> None:
     """Indexing request must carry ``available_at`` for point-in-time retrieval.
 
-    Verifies that an ``IndexingRequest`` with ``published_at=None`` still stores
-    the ``available_at`` timestamp for PIT filtering.
+    Returns:
+        None: .
     """
     request = IndexingRequest(
         event_id="event-1",
@@ -56,8 +56,8 @@ def test_indexing_request_requires_available_at_for_pit() -> None:
 def test_embedding_key_is_model_versioned() -> None:
     """Embedding key must be versioned by provider, model, and model version.
 
-    Verifies that ``EmbeddingKey`` produces a deterministic hash incorporating the
-    chunk ID, provider name, model name, and model version.
+    Returns:
+        None: .
     """
     key = EmbeddingKey(
         chunk_id="chk-1",
@@ -72,9 +72,8 @@ def test_embedding_key_is_model_versioned() -> None:
 def test_chunk_link_is_separate_from_chunk_identity() -> None:
     """Chunk-security links must be separate from chunk identity and locator anchors.
 
-    Verifies that ``ChunkSecurityLink`` stores the security ID and confidence
-    independently of the chunk, and that ``SourceLocator`` and ``TrustLevel``
-    expose precise-anchor and value semantics correctly.
+    Returns:
+        None: .
     """
     link = ChunkSecurityLink(
         chunk_id="chk-1",

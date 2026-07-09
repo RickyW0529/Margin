@@ -13,7 +13,11 @@ from margin.news.models import (
 
 
 def test_news_target_dedupe_key_is_stable() -> None:
-    """The same scope/quant/security/trigger/date must produce a stable work key."""
+    """The same scope/quant/security/trigger/date must produce a stable work key.
+
+    Returns:
+        None: .
+    """
     target = NewsTarget(
         scope_version_id="scope-1",
         quant_run_id="quant-1",
@@ -25,14 +29,16 @@ def test_news_target_dedupe_key_is_stable() -> None:
         priority=40,
     )
 
-    assert target.dedupe_key == (
-        "73550515d619ea34fa570179881731e0a4316d0251b3250a5c0636b1fc3d5eef"
-    )
+    assert target.dedupe_key == ("73550515d619ea34fa570179881731e0a4316d0251b3250a5c0636b1fc3d5eef")
     assert target.status == NewsTargetStatus.PENDING
 
 
 def test_run_terminal_invariant_requires_all_targets_accounted() -> None:
-    """A refresh run is terminal only when all persisted targets are accounted for."""
+    """A refresh run is terminal only when all persisted targets are accounted for.
+
+    Returns:
+        None: .
+    """
     assert NewsRefreshStatus.is_terminal_counts(
         target_count=3,
         completed_count=2,

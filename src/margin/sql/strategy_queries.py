@@ -21,7 +21,14 @@ from margin.strategy.db_models import (
 
 
 def provider_configs_by_owner(owner_id: str) -> Select:
-    """List provider config versions for an owner."""
+    """List provider config versions for an owner.
+
+    Args:
+        owner_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(ProviderConfigVersionRow)
         .where(ProviderConfigVersionRow.owner_id == owner_id)
@@ -30,7 +37,15 @@ def provider_configs_by_owner(owner_id: str) -> Select:
 
 
 def active_provider_configs_by_owner(owner_id: str, lifecycle_value: str) -> Select:
-    """List enabled active provider config versions for an owner."""
+    """List enabled active provider config versions for an owner.
+
+    Args:
+        owner_id: str: .
+        lifecycle_value: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(ProviderConfigVersionRow)
         .where(ProviderConfigVersionRow.owner_id == owner_id)
@@ -45,7 +60,16 @@ def active_provider_configs_by_owner_and_provider(
     provider_name: str,
     lifecycle_value: str,
 ) -> Select:
-    """List active provider config versions for an owner and provider name."""
+    """List active provider config versions for an owner and provider name.
+
+    Args:
+        owner_id: str: .
+        provider_name: str: .
+        lifecycle_value: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(ProviderConfigVersionRow)
         .where(ProviderConfigVersionRow.owner_id == owner_id)
@@ -55,7 +79,14 @@ def active_provider_configs_by_owner_and_provider(
 
 
 def universe_definitions_by_owner(owner_id: str) -> Select:
-    """List universe definition versions for an owner."""
+    """List universe definition versions for an owner.
+
+    Args:
+        owner_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(UniverseDefinitionVersionRow)
         .where(UniverseDefinitionVersionRow.owner_id == owner_id)
@@ -68,7 +99,16 @@ def active_universe_definitions_by_owner(
     lifecycle_value: str,
     universe_code: str | None = None,
 ) -> Select:
-    """List active universe definitions for an owner, optionally filtered by code."""
+    """List active universe definitions for an owner, optionally filtered by code.
+
+    Args:
+        owner_id: str: .
+        lifecycle_value: str: .
+        universe_code: str | None: .
+
+    Returns:
+        Select: .
+    """
     stmt = (
         select(UniverseDefinitionVersionRow)
         .where(UniverseDefinitionVersionRow.owner_id == owner_id)
@@ -80,7 +120,14 @@ def active_universe_definitions_by_owner(
 
 
 def indicator_views_by_owner(owner_id: str) -> Select:
-    """List indicator view versions for an owner."""
+    """List indicator view versions for an owner.
+
+    Args:
+        owner_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(IndicatorViewVersionRow)
         .where(IndicatorViewVersionRow.owner_id == owner_id)
@@ -89,7 +136,15 @@ def indicator_views_by_owner(owner_id: str) -> Select:
 
 
 def active_indicator_views_by_owner(owner_id: str, lifecycle_value: str) -> Select:
-    """List active indicator view versions for an owner."""
+    """List active indicator view versions for an owner.
+
+    Args:
+        owner_id: str: .
+        lifecycle_value: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(IndicatorViewVersionRow)
         .where(IndicatorViewVersionRow.owner_id == owner_id)
@@ -99,7 +154,14 @@ def active_indicator_views_by_owner(owner_id: str, lifecycle_value: str) -> Sele
 
 
 def quant_feature_sets_by_owner(owner_id: str) -> Select:
-    """List quant feature set versions for an owner."""
+    """List quant feature set versions for an owner.
+
+    Args:
+        owner_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(QuantFeatureSetVersionRow)
         .where(QuantFeatureSetVersionRow.owner_id == owner_id)
@@ -108,7 +170,15 @@ def quant_feature_sets_by_owner(owner_id: str) -> Select:
 
 
 def active_quant_feature_sets_by_owner(owner_id: str, lifecycle_value: str) -> Select:
-    """List active quant feature set versions for an owner."""
+    """List active quant feature set versions for an owner.
+
+    Args:
+        owner_id: str: .
+        lifecycle_value: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(QuantFeatureSetVersionRow)
         .where(QuantFeatureSetVersionRow.owner_id == owner_id)
@@ -118,7 +188,14 @@ def active_quant_feature_sets_by_owner(owner_id: str, lifecycle_value: str) -> S
 
 
 def quant_strategies_by_owner(owner_id: str) -> Select:
-    """List quant strategy versions for an owner."""
+    """List quant strategy versions for an owner.
+
+    Args:
+        owner_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(QuantStrategyVersionRow)
         .where(QuantStrategyVersionRow.owner_id == owner_id)
@@ -131,7 +208,16 @@ def active_quant_strategies_by_owner_and_family(
     strategy_family: str,
     lifecycle_value: str,
 ) -> Select:
-    """List active quant strategy versions for an owner and family."""
+    """List active quant strategy versions for an owner and family.
+
+    Args:
+        owner_id: str: .
+        strategy_family: str: .
+        lifecycle_value: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(QuantStrategyVersionRow)
         .where(QuantStrategyVersionRow.owner_id == owner_id)
@@ -142,7 +228,14 @@ def active_quant_strategies_by_owner_and_family(
 
 
 def user_style_prompts_by_owner(owner_id: str) -> Select:
-    """List user style prompt versions for an owner."""
+    """List user style prompt versions for an owner.
+
+    Args:
+        owner_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(UserStylePromptVersionRow)
         .where(UserStylePromptVersionRow.owner_id == owner_id)
@@ -155,7 +248,16 @@ def active_user_style_prompts_by_owner_and_name(
     prompt_name: str,
     lifecycle_value: str,
 ) -> Select:
-    """List active user style prompt versions for an owner and prompt name."""
+    """List active user style prompt versions for an owner and prompt name.
+
+    Args:
+        owner_id: str: .
+        prompt_name: str: .
+        lifecycle_value: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(UserStylePromptVersionRow)
         .where(UserStylePromptVersionRow.owner_id == owner_id)
@@ -166,7 +268,15 @@ def active_user_style_prompts_by_owner_and_name(
 
 
 def active_tool_policies_by_owner(owner_id: str, lifecycle_value: str) -> Select:
-    """List active tool policy versions for an owner."""
+    """List active tool policy versions for an owner.
+
+    Args:
+        owner_id: str: .
+        lifecycle_value: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(ToolPolicyVersionRow)
         .where(ToolPolicyVersionRow.owner_id == owner_id)
@@ -176,7 +286,14 @@ def active_tool_policies_by_owner(owner_id: str, lifecycle_value: str) -> Select
 
 
 def research_scopes_by_owner(owner_id: str) -> Select:
-    """List research scope versions for an owner."""
+    """List research scope versions for an owner.
+
+    Args:
+        owner_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(ResearchScopeVersionRow)
         .where(ResearchScopeVersionRow.owner_id == owner_id)
@@ -185,7 +302,15 @@ def research_scopes_by_owner(owner_id: str) -> Select:
 
 
 def active_research_scopes_by_owner(owner_id: str, lifecycle_value: str) -> Select:
-    """List active research scope versions for an owner."""
+    """List active research scope versions for an owner.
+
+    Args:
+        owner_id: str: .
+        lifecycle_value: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(ResearchScopeVersionRow)
         .where(ResearchScopeVersionRow.owner_id == owner_id)
@@ -199,7 +324,16 @@ def config_audit_by_replay_key(
     action: str,
     idempotency_key: str,
 ) -> Select:
-    """Return a config audit event by actor, action and idempotency key."""
+    """Return a config audit event by actor, action and idempotency key.
+
+    Args:
+        actor_id: str: .
+        action: str: .
+        idempotency_key: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(StrategyConfigAuditRow)
         .where(StrategyConfigAuditRow.actor_id == actor_id)
@@ -219,7 +353,21 @@ def insert_config_audit(
     details: dict[str, object],
     created_at: Any,
 ) -> Any:
-    """Insert one idempotent config audit event."""
+    """Insert one idempotent config audit event.
+
+    Args:
+        audit_id: str: .
+        actor_id: str: .
+        resource_type: str: .
+        resource_version_id: str: .
+        action: str: .
+        idempotency_key: str: .
+        details: dict[str, object]: .
+        created_at: Any: .
+
+    Returns:
+        Any: .
+    """
     return (
         insert(StrategyConfigAuditRow)
         .values(

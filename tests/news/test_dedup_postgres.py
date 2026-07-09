@@ -29,10 +29,10 @@ def news_repository(database_url):
     """Create a clean repository with dedup tables.
 
     Args:
-        database_url: SQLAlchemy database URL injected by pytest.
+        database_url: Any: .
 
     Yields:
-        A ``NewsRepository`` instance backed by a fresh set of dedup tables.
+        Any: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -49,12 +49,12 @@ def _event(event_id: str, url: str, source_level: SourceLevel = SourceLevel.L4):
     """Build a document event fixture for deduplication tests.
 
     Args:
-        event_id: Unique identifier for the event.
-        url: Source URL for the document.
-        source_level: Authority level assigned to the source.
+        event_id: str: .
+        url: str: .
+        source_level: SourceLevel: .
 
     Returns:
-        A ``DocumentEvent`` with a deterministic document id and content hash.
+        Any: .
     """
     event = make_document_event(
         source_url=url,
@@ -71,10 +71,11 @@ def _event(event_id: str, url: str, source_level: SourceLevel = SourceLevel.L4):
 def test_persistent_processor_uses_vector_similarity_after_restart(news_repository):
     """Vector similarity deduplication survives a process restart.
 
-    Verifies that:
-    - a duplicate event is linked to its canonical event via vector similarity;
-    - the dedup reason is persisted in PostgreSQL;
-    - a second processor instance can continue the repost chain from stored state.
+    Args:
+        news_repository: Any: .
+
+    Returns:
+        Any: .
     """
     canonical = _event("evt_canonical", "https://exchange.example/a", SourceLevel.L1)
     duplicate = _event("evt_duplicate", "https://media.example/a", SourceLevel.L4)

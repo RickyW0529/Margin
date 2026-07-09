@@ -9,13 +9,16 @@ from margin.vector.parsers.base import ParsedBlock
 
 
 class PlainTextParser:
-    """Parse plain text into paragraph blocks with character spans."""
+    """Parse plain text into paragraph blocks with character spans.."""
 
     def __init__(self, parser_version: str = "text-v0.2.0") -> None:
         """Initialize the plain text parser.
 
         Args:
-            parser_version: Version label recorded in parsed block metadata.
+            parser_version: str: .
+
+        Returns:
+            None: .
         """
         self.parser_version = parser_version
 
@@ -28,11 +31,11 @@ class PlainTextParser:
         """Parse plain text into paragraph blocks with character spans.
 
         Args:
-            content: Raw text bytes to parse.
-            source_url: Optional URL of the original source.
+            content: bytes: .
+            source_url: str | None: .
 
         Returns:
-            A list of ``ParsedBlock`` instances with paragraph index and quote span.
+            list[ParsedBlock]: .
         """
         text = content.decode("utf-8", errors="replace")
         blocks: list[ParsedBlock] = []

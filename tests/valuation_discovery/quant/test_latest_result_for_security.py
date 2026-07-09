@@ -20,7 +20,17 @@ def _make_result(
     created_at: datetime,
     quant_run_id: str = "qr_001",
 ) -> QuantResult:
-    """Build a minimal quant result."""
+    """Build a minimal quant result.
+
+    Args:
+        security_id: str: .
+        final_score: float: .
+        created_at: datetime: .
+        quant_run_id: str: .
+
+    Returns:
+        QuantResult: .
+    """
     return QuantResult(
         result_id=f"qres_{security_id}_{int(created_at.timestamp())}_{quant_run_id}",
         quant_run_id=quant_run_id,
@@ -46,13 +56,21 @@ def _make_result(
 
 
 def test_latest_result_for_security_returns_none_when_empty() -> None:
-    """Repository returns None when no results exist."""
+    """Repository returns None when no results exist.
+
+    Returns:
+        None: .
+    """
     repo = MemoryQuantRepository()
     assert repo.latest_result_for_security("sec_001") is None
 
 
 def test_latest_result_for_security_returns_most_recent() -> None:
-    """Repository returns the most recent result for a security."""
+    """Repository returns the most recent result for a security.
+
+    Returns:
+        None: .
+    """
     repo = MemoryQuantRepository()
     earlier = _make_result(
         security_id="sec_001",
@@ -72,7 +90,11 @@ def test_latest_result_for_security_returns_most_recent() -> None:
 
 
 def test_latest_result_for_security_isolates_by_security() -> None:
-    """Repository only returns results for the requested security."""
+    """Repository only returns results for the requested security.
+
+    Returns:
+        None: .
+    """
     repo = MemoryQuantRepository()
     sec_a = _make_result(
         security_id="sec_a",
@@ -93,7 +115,11 @@ def test_latest_result_for_security_isolates_by_security() -> None:
 
 
 def test_latest_result_for_security_across_multiple_runs() -> None:
-    """Repository finds the latest result across multiple runs."""
+    """Repository finds the latest result across multiple runs.
+
+    Returns:
+        None: .
+    """
     repo = MemoryQuantRepository()
     run1 = _make_result(
         security_id="sec_001",

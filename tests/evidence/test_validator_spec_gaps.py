@@ -27,7 +27,23 @@ def _evidence(
     snapshot_id: str | None = None,
     snapshot_hash: str | None = None,
 ) -> Evidence:
-    """Build an evidence fixture with deterministic IDs and locators."""
+    """Build an evidence fixture with deterministic IDs and locators.
+
+    Args:
+        evidence_id: str: .
+        statement_text: str: .
+        source_level: SourceLevel: .
+        doc_type: DocType: .
+        source_url: str | None: .
+        page: int | None: .
+        section: str | None: .
+        paragraph_index: int | None: .
+        snapshot_id: str | None: .
+        snapshot_hash: str | None: .
+
+    Returns:
+        Evidence: .
+    """
     chunk = make_chunk(
         document_id=f"doc_{evidence_id}",
         content=statement_text,
@@ -51,7 +67,16 @@ def _evidence(
 
 
 def _claim(statement: str, evidence: Evidence, confidence: float = 0.9):
-    """Build a cash-flow claim referencing one evidence item."""
+    """Build a cash-flow claim referencing one evidence item.
+
+    Args:
+        statement: str: .
+        evidence: Evidence: .
+        confidence: float: .
+
+    Returns:
+        Any: .
+    """
     return make_claim(
         statement=statement,
         claim_type=ClaimType.CASH_FLOW_IMPROVEMENT,
@@ -63,7 +88,11 @@ def _claim(statement: str, evidence: Evidence, confidence: float = 0.9):
 
 
 def test_batch_validation_detects_cross_claim_conflicts_and_suppresses_high_confidence():
-    """Contradictory claims in the same validation batch must be conflict-capped."""
+    """Contradictory claims in the same validation batch must be conflict-capped.
+
+    Returns:
+        Any: .
+    """
     positive_evidence = _evidence(evidence_id="ev_positive")
     negative_evidence = _evidence(
         evidence_id="ev_negative",
@@ -89,7 +118,11 @@ def test_batch_validation_detects_cross_claim_conflicts_and_suppresses_high_conf
 
 
 def test_invalid_locator_fails_claim_with_specific_reason():
-    """A cited evidence item without original-source location must fail the claim."""
+    """A cited evidence item without original-source location must fail the claim.
+
+    Returns:
+        Any: .
+    """
     evidence = _evidence(evidence_id="ev_no_locator", source_url=None, page=None, section=None)
     claim = _claim("经营现金流改善", evidence)
 
@@ -105,7 +138,11 @@ def test_invalid_locator_fails_claim_with_specific_reason():
 
 
 def test_websearch_snapshot_resolver_rejects_hash_mismatch_and_accepts_matching_snapshot():
-    """WebSearch citations must resolve to a stored original snapshot with matching metadata."""
+    """WebSearch citations must resolve to a stored original snapshot with matching metadata.
+
+    Returns:
+        Any: .
+    """
     snapshot_hash = compute_content_hash("<html>公告原文</html>")
     locator = CitationLocator(
         evidence_id="ev_web",

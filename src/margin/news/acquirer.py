@@ -31,19 +31,19 @@ from margin.news.models import (
 
 
 class DownloadError(Exception):
-    """Raised when a download fails."""
+    """Raised when a download fails.."""
 
 
 class ParseError(Exception):
-    """Raised when parsing a document fails."""
+    """Raised when parsing a document fails.."""
 
 
 class SourceNotFoundError(KeyError):
-    """Raised when a requested source is not registered in the registry."""
+    """Raised when a requested source is not registered in the registry.."""
 
 
 class ComplianceError(Exception):
-    """Raised when a compliance boundary is hit (robots/paywall/copyright restrictions)."""
+    """Raised when a compliance boundary is hit (robots/paywall/copyright restrictions).."""
 
 
 # ---------------------------------------------------------------------------
@@ -52,11 +52,7 @@ class ComplianceError(Exception):
 
 
 class BaseConnector(ABC):
-    """Abstract base class for source connectors (architecture §6.2 Connector).
-
-    Subclasses implement the `fetch` method to return raw content.
-    Supports sources such as APIs, RSS feeds, web pages, and files.
-    """
+    """Abstract base class for source connectors (architecture §6.2 Connector).."""
 
     @property
     @abstractmethod
@@ -64,7 +60,7 @@ class BaseConnector(ABC):
         """Return the human-readable name of the data source.
 
         Returns:
-            Source name string.
+            str: .
         """
 
     @abstractmethod
@@ -72,27 +68,25 @@ class BaseConnector(ABC):
         """Fetch raw content from the given URL.
 
         Args:
-            url: Target URL to fetch.
-            **kwargs: Additional arguments forwarded to the underlying transport.
+            url: str: .
+            **kwargs: Any: .
 
         Returns:
-            A tuple of (raw bytes, content_type, http_status).
+            tuple[bytes, str, int]: .
         """
 
 
 class HTTPConnector(BaseConnector):
-    """Generic HTTP connector.
-
-    In the MVP, uses `requests` or `urllib` to fetch public pages.
-    Does not bypass robots.txt, login walls, paywalls, or anti-scraping
-    mechanisms (architecture §6.2.1).
-    """
+    """Generic HTTP connector.."""
 
     def __init__(self, name: str = "http") -> None:
         """Initialize the HTTP connector.
 
         Args:
-            name: Source name used by the connector.
+            name: str: .
+
+        Returns:
+            None: .
         """
         self._name = name
 
@@ -101,7 +95,7 @@ class HTTPConnector(BaseConnector):
         """Return the connector's source name.
 
         Returns:
-            Source name string.
+            str: .
         """
         return self._name
 
@@ -109,11 +103,11 @@ class HTTPConnector(BaseConnector):
         """Fetch the URL using requests when available, falling back to urllib.
 
         Args:
-            url: Target URL to fetch.
-            **kwargs: Additional arguments passed to the HTTP request.
+            url: str: .
+            **kwargs: Any: .
 
         Returns:
-            A tuple of (raw bytes, content_type, http_status).
+            tuple[bytes, str, int]: .
         """
         try:
             import requests
@@ -130,10 +124,10 @@ class HTTPConnector(BaseConnector):
         """Fetch the URL using urllib as a fallback.
 
         Args:
-            url: Target URL to fetch.
+            url: str: .
 
         Returns:
-            A tuple of (raw bytes, content_type, http_status).
+            tuple[bytes, str, int]: .
         """
         from urllib.request import Request, urlopen
 
@@ -150,13 +144,16 @@ class HTTPConnector(BaseConnector):
 
 
 class SourceRegistry:
-    """Registry for source descriptors and their connectors (architecture §6.2 Source Registry).
-
-    Manages source descriptors and the connectors used to fetch them.
+    """Registry for source descriptors and their connectors (architecture §6.2 Source
+    Registry)..
     """
 
     def __init__(self) -> None:
-        """Initialize an empty source registry."""
+        """Initialize an empty source registry.
+
+        Returns:
+            None: .
+        """
         self._sources: dict[str, SourceDescriptor] = {}
         self._connectors: dict[str, BaseConnector] = {}
 
@@ -168,8 +165,11 @@ class SourceRegistry:
         """Register a source descriptor and an optional connector.
 
         Args:
-            descriptor: Metadata describing the source.
-            connector: Connector used to fetch from the source, if any.
+            descriptor: SourceDescriptor: .
+            connector: BaseConnector | None: .
+
+        Returns:
+            None: .
         """
         self._sources[descriptor.name] = descriptor
         if connector is not None:
@@ -179,13 +179,10 @@ class SourceRegistry:
         """Return the descriptor for the named source.
 
         Args:
-            name: Source identifier.
+            name: str: .
 
         Returns:
-            The registered source descriptor.
-
-        Raises:
-            SourceNotFoundError: If the source is not registered.
+            SourceDescriptor: .
         """
         if name not in self._sources:
             raise SourceNotFoundError(f"Source '{name}' not registered")
@@ -195,10 +192,10 @@ class SourceRegistry:
         """Return the connector registered for the named source, if any.
 
         Args:
-            name: Source identifier.
+            name: str: .
 
         Returns:
-            The connector, or None if no connector was registered.
+            BaseConnector | None: .
         """
         return self._connectors.get(name)
 
@@ -206,7 +203,7 @@ class SourceRegistry:
         """Return a list of all registered source names.
 
         Returns:
-            List of source identifiers.
+            list[str]: .
         """
         return list(self._sources.keys())
 
@@ -214,15 +211,12 @@ class SourceRegistry:
         """Return source names filtered by source type.
 
         Args:
-            source_type: Type of source to filter by.
+            source_type: str: .
 
         Returns:
-            List of source identifiers matching the requested type.
+            list[str]: .
         """
-        return [
-            name for name, s in self._sources.items()
-            if s.source_type == source_type
-        ]
+        return [name for name, s in self._sources.items() if s.source_type == source_type]
 
 
 # ---------------------------------------------------------------------------
@@ -231,18 +225,16 @@ class SourceRegistry:
 
 
 class SnapshotStore:
-    """Storage for immutable raw snapshots (architecture §6.2 Snapshot).
-
-    In the MVP, snapshots are persisted to the local file system.
-    Each snapshot records a content hash and is immutable once stored.
-    """
+    """Storage for immutable raw snapshots (architecture §6.2 Snapshot).."""
 
     def __init__(self, base_dir: Path | None = None) -> None:
         """Initialize the snapshot store.
 
         Args:
-            base_dir: Directory where snapshot files are written. Defaults to
-                ``.margin/snapshots``.
+            base_dir: Path | None: .
+
+        Returns:
+            None: .
         """
         self._base_dir = base_dir or Path(".margin") / "snapshots"
         self._base_dir.mkdir(parents=True, exist_ok=True)
@@ -257,13 +249,13 @@ class SnapshotStore:
         """Persist a raw content snapshot and return its metadata.
 
         Args:
-            source_url: Original URL the content was fetched from.
-            content: Raw byte content to persist.
-            content_type: MIME type or extension hint for the content.
-            http_status: Optional HTTP status code from the download.
+            source_url: str: .
+            content: bytes: .
+            content_type: str: .
+            http_status: int | None: .
 
         Returns:
-            A RawSnapshot describing the persisted snapshot.
+            RawSnapshot: .
         """
         import uuid
 
@@ -289,11 +281,11 @@ class SnapshotStore:
         """Read the raw bytes of a previously saved snapshot.
 
         Args:
-            snapshot_id: Unique snapshot identifier.
-            content_type: File extension used when the snapshot was saved.
+            snapshot_id: str: .
+            content_type: str: .
 
         Returns:
-            The snapshot bytes, or None if the snapshot file does not exist.
+            bytes | None: .
         """
         file_path = self._base_dir / f"{snapshot_id}.{content_type}"
         if file_path.is_file():
@@ -304,10 +296,10 @@ class SnapshotStore:
         """Read a snapshot using its immutable metadata.
 
         Args:
-            snapshot: Snapshot metadata including identifier and content type.
+            snapshot: RawSnapshot: .
 
         Returns:
-            The snapshot bytes, or None if the snapshot file does not exist.
+            bytes | None: .
         """
         return self.read(snapshot.snapshot_id, snapshot.content_type)
 
@@ -315,7 +307,10 @@ class SnapshotStore:
         """Delete a snapshot rejected by compliance checks.
 
         Args:
-            snapshot: Snapshot metadata whose storage path should be removed.
+            snapshot: RawSnapshot: .
+
+        Returns:
+            None: .
         """
         if snapshot.storage_path is None:
             return
@@ -328,10 +323,10 @@ class SnapshotStore:
         """Map a content type string to a canonical file extension.
 
         Args:
-            content_type: Content-Type header value or MIME string.
+            content_type: str: .
 
         Returns:
-            Canonical extension such as pdf, html, json, csv, xml, or txt.
+            str: .
         """
         ct = content_type.lower()
         if "pdf" in ct:
@@ -348,12 +343,7 @@ class SnapshotStore:
 
 
 class Downloader:
-    """Downloader that fetches raw content through a connector and stores snapshots.
-
-    Uses a connector to fetch content and persists it through SnapshotStore.
-    Respects compliance boundaries: does not bypass robots.txt, login walls,
-    or paywalls.
-    """
+    """Downloader that fetches raw content through a connector and stores snapshots.."""
 
     def __init__(
         self,
@@ -363,8 +353,11 @@ class Downloader:
         """Initialize the downloader.
 
         Args:
-            registry: Source registry containing source descriptors and connectors.
-            snapshot_store: Snapshot store used to persist downloaded content.
+            registry: SourceRegistry: .
+            snapshot_store: SnapshotStore: .
+
+        Returns:
+            None: .
         """
         self._registry = registry
         self._snapshot_store = snapshot_store
@@ -378,17 +371,12 @@ class Downloader:
         """Download a URL from a registered source and persist a snapshot.
 
         Args:
-            source_name: Identifier of the registered source.
-            url: Target URL to download.
-            **kwargs: Additional arguments forwarded to the connector.
+            source_name: str: .
+            url: str: .
+            **kwargs: Any: .
 
         Returns:
-            A RawSnapshot describing the persisted content.
-
-        Raises:
-            SourceNotFoundError: If the source is not registered.
-            DownloadError: If the download fails.
-            ComplianceError: If a compliance boundary is triggered.
+            RawSnapshot: .
         """
         self._registry.get(source_name)
         connector = self._registry.get_connector(source_name)
@@ -424,26 +412,18 @@ class Downloader:
 
 
 class DocumentParser:
-    """Document parser (architecture §6.3 format detection -> body/table parsing).
-
-    Supports PDF, HTML, and plain text formats.
-    On parse failures, preserves the raw snapshot and records a note instead of
-    silently dropping the document (architecture §25).
-    """
+    """Document parser (architecture §6.3 format detection -> body/table parsing).."""
 
     @staticmethod
     def parse(snapshot: RawSnapshot, content: bytes | None = None) -> dict[str, Any]:
         """Parse a snapshot's content and return structured fields.
 
         Args:
-            snapshot: Snapshot metadata including content type and storage path.
-            content: Optional raw bytes; if omitted, read from storage_path.
+            snapshot: RawSnapshot: .
+            content: bytes | None: .
 
         Returns:
-            A dictionary containing title, content, and doc_type.
-
-        Raises:
-            ParseError: If parsing fails.
+            dict[str, Any]: .
         """
         ct = snapshot.content_type
 
@@ -460,14 +440,11 @@ class DocumentParser:
         """Parse HTML and extract title and body text.
 
         Args:
-            snapshot: Snapshot metadata including content type and storage path.
-            content: Optional raw bytes; if omitted, read from storage_path.
+            snapshot: RawSnapshot: .
+            content: bytes | None: .
 
         Returns:
-            A dictionary containing title, content, and doc_type.
-
-        Raises:
-            ParseError: If HTML parsing fails.
+            dict[str, Any]: .
         """
         try:
             from html.parser import HTMLParser
@@ -480,31 +457,57 @@ class DocumentParser:
             title = DocumentParser._extract_html_title(text)
 
             class TextExtractor(HTMLParser):
-                """Extract visible body text while ignoring script/style tags."""
+                """Extract visible body text while ignoring script/style tags.."""
 
                 def __init__(self):
-                    """Initialize the instance."""
+                    """Initialize the instance.
+
+                    Returns:
+                        Any: .
+                    """
                     super().__init__()
                     self._in_body = False
                     self._in_script = False
                     self._text_parts: list[str] = []
 
                 def handle_starttag(self, tag, attrs):
-                    """Track when the parser enters body/script/style tags."""
+                    """Track when the parser enters body/script/style tags.
+
+                    Args:
+                        tag: Any: .
+                        attrs: Any: .
+
+                    Returns:
+                        Any: .
+                    """
                     if tag == "body":
                         self._in_body = True
                     if tag in ("script", "style"):
                         self._in_script = True
 
                 def handle_endtag(self, tag):
-                    """Track when the parser exits body/script/style tags."""
+                    """Track when the parser exits body/script/style tags.
+
+                    Args:
+                        tag: Any: .
+
+                    Returns:
+                        Any: .
+                    """
                     if tag == "body":
                         self._in_body = False
                     if tag in ("script", "style"):
                         self._in_script = False
 
                 def handle_data(self, data):
-                    """Collect non-empty text segments inside the body tag."""
+                    """Collect non-empty text segments inside the body tag.
+
+                    Args:
+                        data: Any: .
+
+                    Returns:
+                        Any: .
+                    """
                     if self._in_body and not self._in_script:
                         stripped = data.strip()
                         if stripped:
@@ -527,12 +530,11 @@ class DocumentParser:
         """Parse PDF content, falling back to a placeholder if pymupdf is missing.
 
         Args:
-            snapshot: Snapshot metadata including content type and storage path.
-            content: Optional raw bytes; if omitted, read from storage_path.
+            snapshot: RawSnapshot: .
+            content: bytes | None: .
 
         Returns:
-            A dictionary containing title, content, doc_type, and optionally a
-            parse_note when the PDF library is unavailable.
+            dict[str, Any]: .
         """
         raw = content or b""
         if not raw and snapshot.storage_path:
@@ -565,11 +567,11 @@ class DocumentParser:
         """Parse structured data formats such as JSON, CSV, or XML.
 
         Args:
-            snapshot: Snapshot metadata including content type and storage path.
-            content: Optional raw bytes; if omitted, read from storage_path.
+            snapshot: RawSnapshot: .
+            content: bytes | None: .
 
         Returns:
-            A dictionary containing title, content, and doc_type.
+            dict[str, Any]: .
         """
         import json
 
@@ -599,11 +601,11 @@ class DocumentParser:
         """Parse plain text content.
 
         Args:
-            snapshot: Snapshot metadata including content type and storage path.
-            content: Optional raw bytes; if omitted, read from storage_path.
+            snapshot: RawSnapshot: .
+            content: bytes | None: .
 
         Returns:
-            A dictionary containing title, content, and doc_type.
+            dict[str, Any]: .
         """
         raw = content or b""
         if not raw and snapshot.storage_path:
@@ -621,10 +623,10 @@ class DocumentParser:
         """Extract the content of the HTML <title> tag.
 
         Args:
-            html: HTML source text.
+            html: str: .
 
         Returns:
-            The title string, or an empty string if no title tag is found.
+            str: .
         """
         lower = html.lower()
         start = lower.find("<title>")
@@ -637,11 +639,7 @@ class DocumentParser:
 
 
 class SecurityMapper:
-    """Security entity mapper (architecture §6.3 security entity mapping).
-
-    Identifies security codes in a document title and body, mapping them to
-    standardized symbols.
-    """
+    """Security entity mapper (architecture §6.3 security entity mapping).."""
 
     CODE_PATTERNS = [
         r"\b(\d{6})\.SZ\b",
@@ -656,11 +654,11 @@ class SecurityMapper:
         """Identify security codes in the title and body, returning standardized symbols.
 
         Args:
-            title: Document title.
-            content: Document body text, if available.
+            title: str: .
+            content: str | None: .
 
         Returns:
-            Sorted list of normalized security symbols.
+            list[str]: .
         """
         import re
 
@@ -685,19 +683,7 @@ class SecurityMapper:
 
 
 class FilingAcquirer:
-    """Filing acquirer integrating Source Registry, Downloader, Snapshot, Parser, and Mapper.
-
-    Corresponds to architecture §6.3 document processing pipeline:
-      discover URL/API record -> download raw text -> save raw snapshot -> format detection
-      -> body/table parsing -> deduplication -> security entity mapping -> time and source level
-      -> enqueue for vectorization
-
-    Example:
-        registry = SourceRegistry()
-        registry.register(SourceDescriptor(name="sse", ...))
-        acquirer = FilingAcquirer(registry, snapshot_store)
-        event = acquirer.acquire("sse", "https://...")
-    """
+    """Filing acquirer integrating Source Registry, Downloader, Snapshot, Parser, and Mapper.."""
 
     def __init__(
         self,
@@ -709,10 +695,13 @@ class FilingAcquirer:
         """Initialize the filing acquirer.
 
         Args:
-            registry: Source registry containing source descriptors and connectors.
-            snapshot_store: Snapshot store used to persist downloaded content.
-            parser: Document parser. Defaults to a new ``DocumentParser``.
-            security_mapper: Security symbol mapper. Defaults to a new ``SecurityMapper``.
+            registry: SourceRegistry: .
+            snapshot_store: SnapshotStore: .
+            parser: DocumentParser | None: .
+            security_mapper: SecurityMapper | None: .
+
+        Returns:
+            None: .
         """
         self._registry = registry
         self._downloader = Downloader(registry, snapshot_store)
@@ -729,22 +718,15 @@ class FilingAcquirer:
     ) -> DocumentEvent:
         """Acquire a single URL and return a normalized document event.
 
-        Pipeline: download -> snapshot -> parse -> security mapping -> publish document event.
-
         Args:
-            source_name: Identifier of the registered source.
-            url: Target URL to acquire.
-            title_override: Optional title to override the parsed title.
-            published_at: Optional publication timestamp.
-            **kwargs: Additional arguments forwarded to the downloader.
+            source_name: str: .
+            url: str: .
+            title_override: str | None: .
+            published_at: datetime | None: .
+            **kwargs: Any: .
 
         Returns:
-            A DocumentEvent containing metadata, content, and mapped symbols.
-
-        Raises:
-            DownloadError: If the download fails.
-            ParseError: If parsing fails (the snapshot is still preserved).
-            ComplianceError: If a compliance boundary is triggered.
+            DocumentEvent: .
         """
         descriptor = self._registry.get(source_name)
         snapshot = self._downloader.download(source_name, url, **kwargs)
@@ -800,12 +782,12 @@ class FilingAcquirer:
         """Acquire a batch of URLs, skipping URLs that fail to download.
 
         Args:
-            source_name: Identifier of the registered source.
-            urls: List of target URLs to acquire.
-            **kwargs: Additional arguments forwarded to `acquire`.
+            source_name: str: .
+            urls: list[str]: .
+            **kwargs: Any: .
 
         Returns:
-            List of successfully acquired DocumentEvent objects.
+            list[DocumentEvent]: .
         """
         events: list[DocumentEvent] = []
         for url in urls:

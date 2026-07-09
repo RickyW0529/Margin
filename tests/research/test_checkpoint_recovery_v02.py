@@ -53,15 +53,7 @@ DECISION_AT = datetime(2026, 6, 23, tzinfo=UTC)
 
 
 class RetrievalInput(BaseModel):
-    """Input model for the evidence retrieval tool used in recovery tests.
-
-    Attributes:
-        security_id: The security identifier to retrieve evidence for.
-        decision_at: The point-in-time decision timestamp.
-        questions: Tuple of research questions to answer.
-        evidence_gaps: Tuple of known evidence gaps to fill.
-        supplemental: Whether this is a supplemental retrieval request.
-    """
+    """Input model for the evidence retrieval tool used in recovery tests.."""
 
     security_id: str
     decision_at: datetime
@@ -75,12 +67,11 @@ def test_postgres_checkpointer_round_trips_checkpoint_and_rejects_identity_misma
 ) -> None:
     """Verify the Postgres checkpointer round-trips checkpoints and validates identity.
 
-    Seeds a graph run, writes a checkpoint with pending writes, loads it back,
-    and asserts that channel values, metadata, and pending writes are preserved.
-    Also verifies that a mismatched ``identity_hash`` raises a ``ValueError``.
-
     Args:
-        database_url: Fixture providing the PostgreSQL integration-test URL.
+        database_url: str: .
+
+    Returns:
+        None: .
     """
     session_factory = _session_factory(database_url)
     graph_run_id = "graph-checkpoint-roundtrip"
@@ -118,9 +109,7 @@ def test_postgres_checkpointer_round_trips_checkpoint_and_rejects_identity_misma
     assert loaded.checkpoint["id"] == "cp-1"
     assert loaded.checkpoint["channel_values"]["llm_call_count"] == 1
     assert loaded.metadata["source"] == "unit-test"
-    assert loaded.pending_writes == [
-        ("task-valuation", "llm_call_ids", ["llm-1"])
-    ]
+    assert loaded.pending_writes == [("task-valuation", "llm_call_ids", ["llm-1"])]
 
     with pytest.raises(ValueError, match="identity_hash mismatch"):
         checkpointer.get_tuple(
@@ -140,12 +129,11 @@ def test_graph_resumes_from_checkpoint_without_repeating_completed_llm_branches(
 ) -> None:
     """Verify the graph resumes after an interrupted decision without replaying work.
 
-    Runs the graph with an interrupt after the analysis join, then resumes it
-    and asserts that the four analysis branches are not re-executed while the
-    decision node runs exactly once, producing the expected outcome.
-
     Args:
-        database_url: Fixture providing the PostgreSQL integration-test URL.
+        database_url: str: .
+
+    Returns:
+        None: .
     """
     session_factory = _session_factory(database_url)
     graph_run_id = "graph-checkpoint-resume"
@@ -163,9 +151,7 @@ def test_graph_resumes_from_checkpoint_without_repeating_completed_llm_branches(
             interrupt_after=("analysis_join",),
         )
     )
-    resumed_graph = build_ai_delta_review_graph(
-        fixture.dependencies(checkpointer=checkpointer)
-    )
+    resumed_graph = build_ai_delta_review_graph(fixture.dependencies(checkpointer=checkpointer))
 
     interrupted_graph.invoke(state, config=_config(state))
 
@@ -181,26 +167,25 @@ def test_graph_resumes_from_checkpoint_without_repeating_completed_llm_branches(
 
 
 class _RecoverableGraphFixture:
-    """Graph fixture whose decision node crashes once after analysis branches.
-
-    This fixture provides deterministic analysis and decision handlers along
-    with a scoped tool factory, enabling checkpoint recovery tests to verify
-    that completed LLM branches are not replayed after an interruption.
-
-    Attributes:
-        audit: In-memory tool call audit repository recording tool invocations.
-        analysis_call_count: Number of times analysis handlers have been called.
-    """
+    """Graph fixture whose decision node crashes once after analysis branches.."""
 
     def __init__(self) -> None:
-        """Initialize the fixture with empty audit and call counters."""
+        """Initialize the fixture with empty audit and call counters.
+
+        Returns:
+            None: .
+        """
         self.audit = MemoryToolCallAuditRepository()
         self.analysis_call_count = 0
         self._decision_calls = 0
 
     @property
     def decision_call_count(self) -> int:
-        """int: Number of times the decision handler has been called."""
+        """int: Number of times the decision handler has been called.
+
+        Returns:
+            int: .
+        """
         return self._decision_calls
 
     def dependencies(
@@ -212,12 +197,11 @@ class _RecoverableGraphFixture:
         """Build graph dependencies with scoped tools and deterministic handlers.
 
         Args:
-            checkpointer: The LangGraph checkpointer to attach to the graph.
-            interrupt_after: Optional tuple of node names after which to
-                interrupt execution.
+            checkpointer: Any: .
+            interrupt_after: tuple[str, ...] | None: .
 
         Returns:
-            A ``GraphDependencies`` instance wired with the fixture's handlers.
+            GraphDependencies: .
         """
         registry = ToolDefinitionRegistry()
         registry.register(
@@ -263,11 +247,28 @@ class _RecoverableGraphFixture:
         self,
         node_name: str,
     ):
-        """Create a deterministic analysis handler for the given node name."""
+        """Create a deterministic analysis handler for the given node name.
+
+        Args:
+            node_name: str: .
+
+        Returns:
+            Any: .
+        """
+
         def handler(
             request: AnalysisRequest,
             session: ScopedToolSession,
-) -> dict[str, Any]:
+        ) -> dict[str, Any]:
+            """Process handler.
+
+            Args:
+                request: AnalysisRequest: .
+                session: ScopedToolSession: .
+
+            Returns:
+                dict[str, Any]: .
+            """
             self.analysis_call_count += 1
             return {
                 "node_name": node_name,
@@ -279,7 +280,14 @@ class _RecoverableGraphFixture:
         return handler
 
     def _decision(self, state) -> dict[str, Any]:
-        """Return a deterministic decision result and increment the call counter."""
+        """Return a deterministic decision result and increment the call counter.
+
+        Args:
+            state: Any: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         self._decision_calls += 1
         return {
             "outcome": ReviewOutcome.UPDATE_ASSESSMENT.value,
@@ -291,14 +299,28 @@ class _RecoverableGraphFixture:
 
 
 def _session_factory(database_url: str):
-    """Create a session factory with all tables initialized on the test database."""
+    """Create a session factory with all tables initialized on the test database.
+
+    Args:
+        database_url: str: .
+
+    Returns:
+        Any: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     return create_session_factory(engine)
 
 
 def _state(*, graph_run_id: str):
-    """Build an initial graph state for the given run ID."""
+    """Build an initial graph state for the given run ID.
+
+    Args:
+        graph_run_id: str: .
+
+    Returns:
+        Any: .
+    """
     return create_initial_state(
         graph_run_id=graph_run_id,
         context_snapshot_id=f"ctx-{graph_run_id}",
@@ -310,7 +332,14 @@ def _state(*, graph_run_id: str):
 
 
 def _config(state) -> dict[str, dict[str, str]]:
-    """Build a LangGraph config dict from the given state's identity fields."""
+    """Build a LangGraph config dict from the given state's identity fields.
+
+    Args:
+        state: Any: .
+
+    Returns:
+        dict[str, dict[str, str]]: .
+    """
     return {
         "configurable": {
             "thread_id": state.graph_run_id,
@@ -321,7 +350,15 @@ def _config(state) -> dict[str, dict[str, str]]:
 
 
 def _seed_graph_run(session_factory, state) -> None:
-    """Insert an initial ``AIGraphRunRow`` row for the given state."""
+    """Insert an initial ``AIGraphRunRow`` row for the given state.
+
+    Args:
+        session_factory: Any: .
+        state: Any: .
+
+    Returns:
+        None: .
+    """
     now = datetime.now(UTC)
     with session_factory.begin() as session:
         session.add(
@@ -345,7 +382,15 @@ def _seed_graph_run(session_factory, state) -> None:
 
 
 def _cleanup_graph_rows(session_factory, graph_run_id: str) -> None:
-    """Delete all graph-related rows for the given run ID."""
+    """Delete all graph-related rows for the given run ID.
+
+    Args:
+        session_factory: Any: .
+        graph_run_id: str: .
+
+    Returns:
+        None: .
+    """
     with session_factory.begin() as session:
         for row in (
             ResearchDeltaOutboxRow,

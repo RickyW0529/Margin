@@ -29,7 +29,14 @@ from margin.valuation_discovery.db_models import (
 
 @pytest.fixture
 def target_repository(database_url: str) -> Iterator[SQLAlchemyQuantNewsTargetRepository]:
-    """Create a seeded quant target repository."""
+    """Create a seeded quant target repository.
+
+    Args:
+        database_url: str: .
+
+    Yields:
+        Any: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -84,7 +91,14 @@ def target_repository(database_url: str) -> Iterator[SQLAlchemyQuantNewsTargetRe
 def test_quant_target_loader_defaults_to_pass_only(
     target_repository: SQLAlchemyQuantNewsTargetRepository,
 ) -> None:
-    """Default news target loading includes PASS and excludes near-threshold rows."""
+    """Default news target loading includes PASS and excludes near-threshold rows.
+
+    Args:
+        target_repository: SQLAlchemyQuantNewsTargetRepository: .
+
+    Returns:
+        None: .
+    """
     decision_at = datetime(2026, 6, 29, tzinfo=UTC)
 
     targets = target_repository.list_targets(
@@ -103,7 +117,14 @@ def test_quant_target_loader_defaults_to_pass_only(
 def test_quant_target_loader_can_include_near_threshold(
     target_repository: SQLAlchemyQuantNewsTargetRepository,
 ) -> None:
-    """Explicit near-threshold mode includes PASS and near-threshold rows."""
+    """Explicit near-threshold mode includes PASS and near-threshold rows.
+
+    Args:
+        target_repository: SQLAlchemyQuantNewsTargetRepository: .
+
+    Returns:
+        None: .
+    """
     decision_at = datetime(2026, 6, 29, tzinfo=UTC)
 
     targets = target_repository.list_targets(
@@ -123,7 +144,14 @@ def test_quant_target_loader_can_include_near_threshold(
 def test_quant_target_loader_backfills_name_and_industry_from_company_pool(
     database_url: str,
 ) -> None:
-    """Quant rows without names still produce company-aware news targets."""
+    """Quant rows without names still produce company-aware news targets.
+
+    Args:
+        database_url: str: .
+
+    Returns:
+        None: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)

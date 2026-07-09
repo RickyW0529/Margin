@@ -24,15 +24,7 @@ SessionFactory = sessionmaker[Session]
 
 @dataclass(frozen=True)
 class DatabaseSettings:
-    """Immutable PostgreSQL database connection settings.
-
-    Attributes:
-        url: Fully-qualified SQLAlchemy database URL.
-        echo: Whether SQLAlchemy logs every emitted SQL statement.
-        pool_pre_ping: Whether to verify connections before checking them out from the pool.
-        pool_size: Maximum number of persistent SQLAlchemy pool connections.
-        statement_timeout_ms: PostgreSQL statement timeout in milliseconds.
-    """
+    """Immutable PostgreSQL database connection settings.."""
 
     url: str = DEFAULT_DATABASE_URL
     echo: bool = False
@@ -45,10 +37,10 @@ class DatabaseSettings:
         """Build database settings from centralized application settings.
 
         Args:
-            settings: Parsed Margin application settings.
+            settings: MarginSettings: .
 
         Returns:
-            DatabaseSettings: Engine-ready database settings.
+            DatabaseSettings: .
         """
         return cls(
             url=str(settings.database_url),
@@ -62,19 +54,8 @@ class DatabaseSettings:
     def from_env(cls) -> DatabaseSettings:
         """Load connection settings through :class:`MarginSettings`.
 
-        This compatibility constructor keeps older low-level callers working,
-        but environment parsing remains centralized in ``margin.settings``.
-
-        The following environment variables are recognized by ``MarginSettings``:
-
-        * ``MARGIN_DATABASE_URL``
-        * ``MARGIN_DATABASE_ECHO``
-        * ``MARGIN_DATABASE_POOL_PRE_PING``
-        * ``MARGIN_DATABASE_POOL_SIZE``
-        * ``MARGIN_DATABASE_STATEMENT_TIMEOUT_MS``
-
         Returns:
-            DatabaseSettings: Settings populated from centralized app settings.
+            DatabaseSettings: .
         """
         return cls.from_settings(MarginSettings())
 
@@ -83,11 +64,10 @@ def create_database_engine(settings: DatabaseSettings | None = None) -> Engine:
     """Create the shared SQLAlchemy engine.
 
     Args:
-        settings: Database connection settings. If ``None``, settings are loaded through
-            :class:`MarginSettings` via :meth:`DatabaseSettings.from_env`.
+        settings: DatabaseSettings | None: .
 
     Returns:
-        Engine: Configured SQLAlchemy engine bound to the resolved settings.
+        Engine: .
     """
     resolved = settings or DatabaseSettings.from_env()
     engine_options: dict[str, object] = {
@@ -106,14 +86,21 @@ def create_session_factory(engine: Engine) -> SessionFactory:
     """Create a typed session factory bound to the given engine.
 
     Args:
-        engine: SQLAlchemy engine that the produced sessions will use.
+        engine: Engine: .
 
     Returns:
-        SessionFactory: A ``sessionmaker`` factory configured with ``expire_on_commit=False``.
+        SessionFactory: .
     """
     return sessionmaker(bind=engine, expire_on_commit=False)
 
 
 def _is_postgresql_url(url: str) -> bool:
-    """Return whether a SQLAlchemy URL targets PostgreSQL."""
+    """Return whether a SQLAlchemy URL targets PostgreSQL.
+
+    Args:
+        url: str: .
+
+    Returns:
+        bool: .
+    """
     return make_url(url).get_backend_name() == "postgresql"

@@ -8,6 +8,7 @@
 - 保存原始拉取结果、参数、抓取时间和来源信息。
 - 做字段标准化、schema 校验、主键重复校验、日期校验和质量筛选。
 - 发布行情、财务、估值、指数成分、停牌等数据到仓库层。
+- 提供 20 年数据回补控制面：campaign、endpoint plan、partition、dry-run executor、quality report 和 publish guard。
 
 ## 它怎么跑
 
@@ -22,6 +23,12 @@ Provider 配置
 
 量化、Agent、Dashboard 不应该直接调 Tushare / AKShare，而是读这个模块发布后的数据。
 
+20 年回补默认从 `2006-01-01` 开始，使用完整年度边界。CLI 入口是：
+
+```bash
+python -m margin.cli.backfill init --years 20 --start-date 2006-01-01 --end-date auto
+```
+
 ## 主要入口
 
 - `src/margin/data/providers/`：Provider adapter。
@@ -29,6 +36,8 @@ Provider 配置
 - `src/margin/data/tushare_quality.py`：质量检查。
 - `src/margin/data/tushare_warehouse.py`：仓库发布。
 - `src/margin/data/requirements.py`：量化所需数据目录和采集策略。
+- `src/margin/data/backfill/`：20 年回补 campaign、分区、质量和发布控制面。
+- `src/margin/cli/backfill.py`：回补 CLI。
 - `scripts/run_tushare_backfill.py`：数据回填入口。
 
 ## 输出给谁

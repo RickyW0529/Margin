@@ -18,10 +18,14 @@ from margin.research.models import (
 
 
 class ResearchSnapshotBuilder:
-    """Build an immutable research audit snapshot."""
+    """Build an immutable research audit snapshot.."""
 
     def __init__(self) -> None:
-        """Initialize the builder with default empty values."""
+        """Initialize the builder with default empty values.
+
+        Returns:
+            None: .
+        """
         self._run_id: str = ""
         self._state: WorkflowState = WorkflowState.INITIALIZED
         self._decision_at: datetime = utc_now()
@@ -43,10 +47,10 @@ class ResearchSnapshotBuilder:
         """Set the workflow run identifier.
 
         Args:
-            run_id: Unique run identifier.
+            run_id: str: .
 
         Returns:
-            The builder for chaining.
+            ResearchSnapshotBuilder: .
         """
         self._run_id = run_id
         return self
@@ -55,10 +59,10 @@ class ResearchSnapshotBuilder:
         """Set the terminal workflow state.
 
         Args:
-            state: Terminal workflow state.
+            state: WorkflowState: .
 
         Returns:
-            The builder for chaining.
+            ResearchSnapshotBuilder: .
         """
         self._state = state
         return self
@@ -67,10 +71,10 @@ class ResearchSnapshotBuilder:
         """Set the research decision timestamp.
 
         Args:
-            decision_at: Decision timestamp.
+            decision_at: datetime: .
 
         Returns:
-            The builder for chaining.
+            ResearchSnapshotBuilder: .
         """
         self._decision_at = decision_at
         return self
@@ -79,10 +83,10 @@ class ResearchSnapshotBuilder:
         """Set the symbols covered by the snapshot.
 
         Args:
-            symbols: List of symbols.
+            symbols: list[str]: .
 
         Returns:
-            The builder for chaining.
+            ResearchSnapshotBuilder: .
         """
         self._symbols = symbols
         return self
@@ -91,10 +95,10 @@ class ResearchSnapshotBuilder:
         """Set the strategy version.
 
         Args:
-            version: Strategy version string.
+            version: str: .
 
         Returns:
-            The builder for chaining.
+            ResearchSnapshotBuilder: .
         """
         self._strategy_version = version
         return self
@@ -103,10 +107,10 @@ class ResearchSnapshotBuilder:
         """Set the prompt version.
 
         Args:
-            version: Prompt version string.
+            version: str: .
 
         Returns:
-            The builder for chaining.
+            ResearchSnapshotBuilder: .
         """
         self._prompt_version = version
         return self
@@ -115,10 +119,10 @@ class ResearchSnapshotBuilder:
         """Set the tool version map.
 
         Args:
-            versions: Mapping from tool name to version string.
+            versions: dict[str, str]: .
 
         Returns:
-            The builder for chaining.
+            ResearchSnapshotBuilder: .
         """
         self._tool_versions = versions
         return self
@@ -127,10 +131,10 @@ class ResearchSnapshotBuilder:
         """Set the model version map.
 
         Args:
-            versions: Mapping from model identifier to version string.
+            versions: dict[str, str]: .
 
         Returns:
-            The builder for chaining.
+            ResearchSnapshotBuilder: .
         """
         self._model_versions = versions
         return self
@@ -139,10 +143,10 @@ class ResearchSnapshotBuilder:
         """Set the evidence identifiers.
 
         Args:
-            ids: List of evidence identifiers.
+            ids: list[str]: .
 
         Returns:
-            The builder for chaining.
+            ResearchSnapshotBuilder: .
         """
         self._evidence_ids = ids
         return self
@@ -151,10 +155,10 @@ class ResearchSnapshotBuilder:
         """Set the claim identifiers.
 
         Args:
-            ids: List of claim identifiers.
+            ids: list[str]: .
 
         Returns:
-            The builder for chaining.
+            ResearchSnapshotBuilder: .
         """
         self._claim_ids = ids
         return self
@@ -163,10 +167,10 @@ class ResearchSnapshotBuilder:
         """Set the research signals.
 
         Args:
-            signals: List of ``ResearchSignal`` instances.
+            signals: list[ResearchSignal]: .
 
         Returns:
-            The builder for chaining.
+            ResearchSnapshotBuilder: .
         """
         self._signals = signals
         return self
@@ -175,10 +179,10 @@ class ResearchSnapshotBuilder:
         """Set the agent traces.
 
         Args:
-            traces: List of ``AgentTrace`` instances.
+            traces: list[AgentTrace]: .
 
         Returns:
-            The builder for chaining.
+            ResearchSnapshotBuilder: .
         """
         self._traces = traces
         return self
@@ -187,10 +191,10 @@ class ResearchSnapshotBuilder:
         """Set the prior agent outputs.
 
         Args:
-            outputs: Mapping from agent node name to raw output data.
+            outputs: dict[str, Any]: .
 
         Returns:
-            The builder for chaining.
+            ResearchSnapshotBuilder: .
         """
         self._prior_outputs = outputs
         return self
@@ -199,10 +203,10 @@ class ResearchSnapshotBuilder:
         """Set the tool call identifiers.
 
         Args:
-            call_ids: List of tool call identifiers.
+            call_ids: list[str]: .
 
         Returns:
-            The builder for chaining.
+            ResearchSnapshotBuilder: .
         """
         self._tool_call_ids = call_ids
         return self
@@ -214,10 +218,10 @@ class ResearchSnapshotBuilder:
         """Set the serialized tool call records.
 
         Args:
-            tool_calls: List of serialized tool call records.
+            tool_calls: list[dict[str, Any]]: .
 
         Returns:
-            The builder for chaining.
+            ResearchSnapshotBuilder: .
         """
         self._tool_calls = tool_calls
         return self
@@ -226,24 +230,31 @@ class ResearchSnapshotBuilder:
         """Set the error or abstention reason.
 
         Args:
-            error: Error message, or ``None`` on success.
+            error: str | None: .
 
         Returns:
-            The builder for chaining.
+            ResearchSnapshotBuilder: .
         """
         self._error = error
         return self
 
     @staticmethod
     def _hash(data: Any) -> str:
-        """Return a deterministic SHA-256 hash for the supplied data."""
+        """Return a deterministic SHA-256 hash for the supplied data.
+
+        Args:
+            data: Any: .
+
+        Returns:
+            str: .
+        """
         return hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()
 
     def build(self) -> ResearchSnapshot:
         """Build and return the immutable ``ResearchSnapshot``.
 
         Returns:
-            A fully populated ``ResearchSnapshot`` with hashes.
+            ResearchSnapshot: .
         """
         input_payload = {
             "run_id": self._run_id,

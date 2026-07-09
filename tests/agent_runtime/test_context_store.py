@@ -34,6 +34,14 @@ from margin.storage.database import (
 
 
 def _run(run_id: str = "ar_test") -> AgentRun:
+    """Helper run.
+
+    Args:
+        run_id: str: .
+
+    Returns:
+        AgentRun: .
+    """
     return AgentRun(
         run_id=run_id,
         run_type=AgentRunType.SCHEDULED_STOCK_ANALYSIS,
@@ -45,6 +53,11 @@ def _run(run_id: str = "ar_test") -> AgentRun:
 
 
 def test_memory_context_store_hashes_and_filters_artifacts() -> None:
+    """Test memory_context_store_hashes_and_filters_artifacts.
+
+    Returns:
+        None: .
+    """
     store = MemoryAgentContextStore()
     run = _run()
     store.add_run(run)
@@ -68,6 +81,11 @@ def test_memory_context_store_hashes_and_filters_artifacts() -> None:
 
 
 def test_memory_context_store_rejects_artifact_mutation() -> None:
+    """Test memory_context_store_rejects_artifact_mutation.
+
+    Returns:
+        None: .
+    """
     store = MemoryAgentContextStore()
     artifact = make_context_artifact(
         artifact_id="ctx_immutable",
@@ -90,6 +108,14 @@ def test_memory_context_store_rejects_artifact_mutation() -> None:
 
 
 def test_postgres_context_store_round_trips_runtime_records(database_url: str) -> None:
+    """Test postgres_context_store_round_trips_runtime_records.
+
+    Args:
+        database_url: str: .
+
+    Returns:
+        None: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)

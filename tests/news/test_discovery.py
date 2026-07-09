@@ -8,44 +8,47 @@ from margin.news.connectors import SSEAnnouncementConnector, SZSEAnnouncementCon
 
 
 class FakeResponse:
-    """Fake HTTP response that returns a preconfigured JSON payload.
+    """Fake HTTP response that returns a preconfigured JSON payload.."""
 
-    Attributes:
-        _payload: The JSON payload returned by ``json()``.
-    """
     def __init__(self, payload: dict):
         """Initialize the fake response with a JSON payload.
 
         Args:
-            payload: The JSON payload to return from ``json()``.
+            payload: dict: .
+
+        Returns:
+            Any: .
         """
         self._payload = payload
 
     def raise_for_status(self):
-        """No-op stub that never raises an HTTP error."""
+        """No-op stub that never raises an HTTP error.
+
+        Returns:
+            Any: .
+        """
         return None
 
     def json(self):
         """Return the preconfigured JSON payload.
 
         Returns:
-            The payload dictionary passed at construction.
+            Any: .
         """
         return self._payload
 
 
 class FakeClient:
-    """Fake HTTP client that records GET requests and returns a fixed response.
+    """Fake HTTP client that records GET requests and returns a fixed response.."""
 
-    Attributes:
-        payload: The JSON payload returned for every GET request.
-        requests: List of recorded request arguments.
-    """
     def __init__(self, payload: dict):
         """Initialize the fake client with a fixed JSON payload.
 
         Args:
-            payload: The JSON payload to return for all GET requests.
+            payload: dict: .
+
+        Returns:
+            Any: .
         """
         self.payload = payload
         self.requests: list[dict] = []
@@ -54,18 +57,22 @@ class FakeClient:
         """Record a GET request and return a fake response.
 
         Args:
-            url: The request URL.
-            **kwargs: Additional request keyword arguments.
+            url: str: .
+            **kwargs: Any: .
 
         Returns:
-            A ``FakeResponse`` containing the configured payload.
+            Any: .
         """
         self.requests.append({"url": url, **kwargs})
         return FakeResponse(self.payload)
 
 
 def test_sse_connector_maps_announcement_payload():
-    """SSE adapter must map public announcement JSON into discovered documents."""
+    """SSE adapter must map public announcement JSON into discovered documents.
+
+    Returns:
+        Any: .
+    """
     client = FakeClient(
         {
             "result": [
@@ -93,7 +100,11 @@ def test_sse_connector_maps_announcement_payload():
 
 
 def test_szse_connector_maps_relative_attach_path():
-    """SZSE adapter must convert relative attachment paths to absolute URLs."""
+    """SZSE adapter must convert relative attachment paths to absolute URLs.
+
+    Returns:
+        Any: .
+    """
     client = FakeClient(
         {
             "data": [

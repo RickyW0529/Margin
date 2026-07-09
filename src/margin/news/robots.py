@@ -15,20 +15,16 @@ from margin.news.acquirer import ComplianceError
 
 
 class RobotsFetcher(Protocol):
-    """Callable that fetches robots.txt bytes.
-
-    Implementations should return the HTTP status code and raw response body for a robots.txt
-    URL.
-    """
+    """Callable that fetches robots.txt bytes.."""
 
     def __call__(self, url: str) -> tuple[int, bytes]:
         """Fetch robots.txt and return its status and body.
 
         Args:
-            url: Full robots.txt URL.
+            url: str: .
 
         Returns:
-            Tuple of HTTP status code and raw response body bytes.
+            tuple[int, bytes]: .
         """
 
 
@@ -36,10 +32,10 @@ def _default_fetcher(url: str) -> tuple[int, bytes]:
     """Fetch robots.txt using ``httpx`` with redirects enabled.
 
     Args:
-        url: Full robots.txt URL.
+        url: str: .
 
     Returns:
-        Tuple of HTTP status code and response body bytes.
+        tuple[int, bytes]: .
     """
     import httpx
 
@@ -49,12 +45,7 @@ def _default_fetcher(url: str) -> tuple[int, bytes]:
 
 @dataclass
 class RobotsRules:
-    """Parsed robots rules for one origin.
-
-    Attributes:
-        allows: List of Allow path prefixes.
-        disallows: List of Disallow path prefixes.
-    """
+    """Parsed robots rules for one origin.."""
 
     allows: list[str]
     disallows: list[str]
@@ -63,10 +54,10 @@ class RobotsRules:
         """Apply longest-prefix Allow/Disallow semantics.
 
         Args:
-            path: URL path to test.
+            path: str: .
 
         Returns:
-            True if the path is allowed, False otherwise.
+            bool: .
         """
         matches: list[tuple[int, bool]] = []
         for rule in self.allows:
@@ -82,32 +73,27 @@ class RobotsRules:
 
 @dataclass
 class RobotsChecker:
-    """Cached robots.txt checker.
-
-    Fetches and parses robots.txt once per origin, then answers fetch permission queries for
-    arbitrary URLs on that origin.
-
-    Attributes:
-        fetcher: Callable used to retrieve robots.txt.
-        user_agent: User-agent string to match in robots.txt (currently wildcard ``*``).
-        _cache: Internal cache mapping origin strings to parsed ``RobotsRules``.
-    """
+    """Cached robots.txt checker.."""
 
     fetcher: RobotsFetcher = _default_fetcher
     user_agent: str = "MarginBot/0.1"
 
     def __post_init__(self) -> None:
-        """Initialize the per-origin rules cache."""
+        """Initialize the per-origin rules cache.
+
+        Returns:
+            None: .
+        """
         self._cache: dict[str, RobotsRules] = {}
 
     def allowed(self, url: str) -> bool:
         """Return whether ``url`` can be fetched under robots.txt.
 
         Args:
-            url: URL to test.
+            url: str: .
 
         Returns:
-            True if the URL scheme is HTTP/HTTPS and the path is allowed.
+            bool: .
         """
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"}:
@@ -120,10 +106,10 @@ class RobotsChecker:
         """Raise ``ComplianceError`` if the URL is not allowed.
 
         Args:
-            url: URL to validate.
+            url: str: .
 
-        Raises:
-            ComplianceError: If the scheme is unsupported or robots.txt disallows the URL.
+        Returns:
+            None: .
         """
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"}:
@@ -135,11 +121,11 @@ class RobotsChecker:
         """Fetch, parse, and cache robots.txt for an origin.
 
         Args:
-            scheme: URL scheme (http or https).
-            netloc: Network location (host with optional port).
+            scheme: str: .
+            netloc: str: .
 
         Returns:
-            Parsed ``RobotsRules`` for the origin.
+            RobotsRules: .
         """
         origin = f"{scheme}://{netloc}"
         if origin in self._cache:
@@ -164,10 +150,10 @@ class RobotsChecker:
         """Parse a robots.txt body into Allow/Disallow rules for user-agent ``*``.
 
         Args:
-            content: Decoded robots.txt content.
+            content: str: .
 
         Returns:
-            Parsed ``RobotsRules``.
+            RobotsRules: .
         """
         allows: list[str] = []
         disallows: list[str] = []

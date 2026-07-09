@@ -43,17 +43,7 @@ from margin.vector.persistent_pipeline import PersistentEmbeddingPipeline
 
 
 class SearchConstraints(BaseModel):
-    """Constraints applied during retrieval (architecture section 7.4).
-
-    Attributes:
-        symbol: Stock symbol to filter by. Required for all retrieval calls.
-        decision_at: Point in time at which the decision is made. Only chunks with
-            available_at <= decision_at are returned.
-        doc_types: Optional tuple of document types to include.
-        prefer_official: Whether to boost official evidence sources.
-        dedup: Whether to remove duplicate facts based on content hash.
-        require_locator: Whether to drop chunks that lack a page or text locator.
-    """
+    """Constraints applied during retrieval (architecture section 7.4).."""
 
     symbol: str | None = None
     security_ids: tuple[str, ...] | None = None
@@ -71,10 +61,10 @@ class SearchConstraints(BaseModel):
         """Normalize the point-in-time constraint to UTC.
 
         Args:
-            value: A datetime or None.
+            value: datetime | None: .
 
         Returns:
-            The input datetime normalized to UTC, or None if no value was provided.
+            datetime | None: .
         """
         return ensure_utc(value) if value is not None else None
 
@@ -85,15 +75,7 @@ class SearchConstraints(BaseModel):
 
 
 class HybridWeights(BaseModel):
-    """Fusion weights for hybrid retrieval (architecture section 7.3).
-
-    Attributes:
-        vector: Weight for the dense vector similarity score.
-        keyword: Weight for the sparse BM25 keyword score.
-        time_decay: Weight for the recency-based time decay score.
-        source_quality: Weight for the source authority score.
-        entity_match: Weight for the symbol/entity match score.
-    """
+    """Fusion weights for hybrid retrieval (architecture section 7.3).."""
 
     vector: float = 0.35
     keyword: float = 0.25
@@ -108,14 +90,10 @@ class HybridWeights(BaseModel):
         """Return the sum of all component weights.
 
         Returns:
-            The total weight value.
+            float: .
         """
         return (
-            self.vector
-            + self.keyword
-            + self.time_decay
-            + self.source_quality
-            + self.entity_match
+            self.vector + self.keyword + self.time_decay + self.source_quality + self.entity_match
         )
 
 
@@ -125,25 +103,7 @@ class HybridWeights(BaseModel):
 
 
 class HybridRetriever:
-    """Hybrid retriever that fuses vector search with keyword search.
-
-    Scoring formula (architecture section 7.3):
-      Score = w_v * VectorScore + w_k * BM25 + w_t * TimeDecay
-            + w_s * SourceQuality + w_e * EntityMatch
-
-    Retrieval constraints (architecture section 7.4):
-      - Filter by stock symbol.
-      - Require available_at <= decision_at.
-      - Optionally filter by document type.
-      - Prefer official evidence.
-      - Deduplicate identical facts.
-      - Require output locators.
-
-    Attributes:
-        _pipeline: Embedding pipeline providing vector and keyword search.
-        _weights: Component weights for score fusion.
-        _time_decay_days: Exponential decay scale in days.
-    """
+    """Hybrid retriever that fuses vector search with keyword search.."""
 
     def __init__(
         self,
@@ -155,9 +115,13 @@ class HybridRetriever:
         """Initialize the hybrid retriever.
 
         Args:
-            pipeline: Embedding pipeline used for vector and keyword retrieval.
-            weights: Optional fusion weights. Defaults to HybridWeights() when omitted.
-            time_decay_days: Scale for the exponential time decay. Defaults to 90 days.
+            pipeline: EmbeddingPipeline: .
+            embedding_provider: Any | None: .
+            weights: HybridWeights | None: .
+            time_decay_days: float: .
+
+        Returns:
+            None: .
         """
         if embedding_provider is not None and hasattr(pipeline, "search_vector"):
             self._pipeline = PersistentEmbeddingPipeline(
@@ -180,23 +144,19 @@ class HybridRetriever:
         """Execute hybrid retrieval and return a fused, ranked result list.
 
         Args:
-            query: Query text.
-            top_k: Number of top results to return.
-            constraints: Retrieval constraints. A symbol and decision_at are required.
+            query: str: .
+            top_k: int: .
+            constraints: SearchConstraints | None: .
+            security_ids: tuple[str, ...] | None: .
+            decision_at: datetime | None: .
 
         Returns:
-            A list of RetrievalResult objects sorted by fused score in descending order.
-
-        Raises:
-            ValueError: If constraints.symbol is missing or empty.
-            ValueError: If constraints.decision_at is None.
+            list[RetrievalResult]: .
         """
         constraints = constraints or SearchConstraints()
         if security_ids is not None or decision_at is not None:
             resolved_security_ids = security_ids or constraints.security_ids
-            resolved_symbol = (
-                resolved_security_ids or (constraints.symbol,)
-            )[0]
+            resolved_symbol = (resolved_security_ids or (constraints.symbol,))[0]
             constraints = constraints.model_copy(
                 update={
                     "security_ids": resolved_security_ids,
@@ -218,9 +178,7 @@ class HybridRetriever:
             vector_results = []
         keyword_results = self._pipeline.keyword_search(query, fetch_k, filters)
 
-        merged = self._merge_and_score(
-            query, vector_results, keyword_results, constraints
-        )
+        merged = self._merge_and_score(query, vector_results, keyword_results, constraints)
 
         if constraints.prefer_official:
             merged = self._boost_official(merged)
@@ -237,10 +195,10 @@ class HybridRetriever:
         """Build metadata filters for the underlying search pipeline.
 
         Args:
-            constraints: Retrieval constraints containing symbol and document types.
+            constraints: SearchConstraints: .
 
         Returns:
-            A dictionary of metadata filters.
+            dict[str, Any]: .
         """
         filters: dict[str, Any] = {}
         if constraints.symbol:
@@ -263,13 +221,13 @@ class HybridRetriever:
         """Merge vector and keyword results and compute fused retrieval scores.
 
         Args:
-            query: Original query text.
-            vector_results: List of (chunk, vector_score) tuples from dense retrieval.
-            keyword_results: List of (chunk, keyword_score) tuples from BM25 retrieval.
-            constraints: Active retrieval constraints.
+            query: str: .
+            vector_results: list[tuple[Chunk, float]]: .
+            keyword_results: list[tuple[Chunk, float]]: .
+            constraints: SearchConstraints: .
 
         Returns:
-            A ranked list of RetrievalResult objects.
+            list[RetrievalResult]: .
         """
         chunk_map: dict[str, tuple[Chunk, float, float]] = {}
 
@@ -322,14 +280,12 @@ class HybridRetriever:
     def _time_decay(self, chunk: Chunk, decision_at: datetime) -> float:
         """Compute the exponential time decay score.
 
-        The score decreases as the age of the chunk relative to the decision point increases.
-
         Args:
-            chunk: Candidate chunk containing published_at.
-            decision_at: Decision point used as the reference time.
+            chunk: Chunk: .
+            decision_at: datetime: .
 
         Returns:
-            A float in [0, 1] representing the recency score.
+            float: .
         """
         age_days = (
             ensure_utc(decision_at) - ensure_utc(chunk.published_at)
@@ -342,11 +298,10 @@ class HybridRetriever:
         """Compute the source authority score based on the chunk's source level.
 
         Args:
-            chunk: Candidate chunk containing source_level.
+            chunk: Chunk: .
 
         Returns:
-            Authority score where L1=1.0, L2=0.8, L3=0.6, L4=0.4, L5=0.2.
-            Unknown levels default to 0.3.
+            float: .
         """
         scores = {
             SourceLevel.L1: 1.0,
@@ -361,12 +316,11 @@ class HybridRetriever:
         """Compute the entity match score for the requested symbol.
 
         Args:
-            chunk: Candidate chunk containing symbol.
-            constraints: Retrieval constraints containing the target symbol.
+            chunk: Chunk: .
+            constraints: SearchConstraints: .
 
         Returns:
-            1.0 if the chunk symbol matches the constraint symbol, 0.0 otherwise.
-            Returns 0.5 when no symbol constraint is provided.
+            float: .
         """
         if not constraints.symbol:
             return 0.5
@@ -376,17 +330,15 @@ class HybridRetriever:
         """Boost official evidence sources (L1-L3) and re-rank by score.
 
         Args:
-            results: List of retrieval results to boost.
+            results: list[RetrievalResult]: .
 
         Returns:
-            The result list with official sources boosted and re-sorted.
+            list[RetrievalResult]: .
         """
         boosted: list[RetrievalResult] = []
         for result in results:
             if result.chunk.source_level <= SourceLevel.L3:
-                boosted.append(
-                    result.model_copy(update={"score": result.score + 0.05})
-                )
+                boosted.append(result.model_copy(update={"score": result.score + 0.05}))
             else:
                 boosted.append(result)
         boosted.sort(key=lambda r: r.score, reverse=True)
@@ -396,10 +348,10 @@ class HybridRetriever:
         """Remove duplicate facts based on normalized content hash.
 
         Args:
-            results: List of retrieval results to deduplicate.
+            results: list[RetrievalResult]: .
 
         Returns:
-            The deduplicated result list preserving the original ranking order.
+            list[RetrievalResult]: .
         """
         seen_hashes: set[str] = set()
         unique: list[RetrievalResult] = []
@@ -419,14 +371,7 @@ class HybridRetriever:
 
 
 class Reranker:
-    """Result reranker using an optional reranking provider (architecture section 7.1).
-
-    The MVP ships with a simple cross-encoder-style fallback based on term coverage.
-    Production deployments should inject a real model via set_rerank_func.
-
-    Attributes:
-        _rerank_func: Callable that scores (query, content) relevance.
-    """
+    """Result reranker using an optional reranking provider (architecture section 7.1).."""
 
     def __init__(
         self,
@@ -435,8 +380,10 @@ class Reranker:
         """Initialize the reranker.
 
         Args:
-            rerank_func: Optional function accepting (query, content) and returning a float.
-                Defaults to the built-in simple reranker when omitted.
+            rerank_func: Callable[[str, str], float] | None: .
+
+        Returns:
+            None: .
         """
         self._rerank_func = rerank_func or self._simple_rerank
 
@@ -444,7 +391,10 @@ class Reranker:
         """Inject a real reranking model function.
 
         Args:
-            func: Callable that takes (query, content) and returns a relevance score.
+            func: Callable[[str, str], float]: .
+
+        Returns:
+            None: .
         """
         self._rerank_func = func
 
@@ -457,12 +407,12 @@ class Reranker:
         """Rerank retrieval results.
 
         Args:
-            query: Original query text.
-            results: Retrieval results to rerank.
-            top_k: Number of results to return. Defaults to all results when None.
+            query: str: .
+            results: list[RetrievalResult]: .
+            top_k: int | None: .
 
         Returns:
-            A list of RetrievalResult objects reranked by fused score in descending order.
+            list[RetrievalResult]: .
         """
         scored: list[tuple[RetrievalResult, float]] = []
         for result in results:
@@ -494,11 +444,11 @@ class Reranker:
         """Simple fallback reranker based on query term coverage in content.
 
         Args:
-            query: Query text.
-            content: Document content to score.
+            query: str: .
+            content: str: .
 
         Returns:
-            The fraction of query terms found in the content, in [0, 1].
+            float: .
         """
         import re
 
@@ -516,26 +466,7 @@ class Reranker:
 
 
 class RetrievalTool:
-    """Unified retrieval interface exposed to multi-agent research workflows.
-
-    Implements architecture section 11.1 RetrievalTool. It wraps hybrid retrieval,
-    optional reranking, and constraint enforcement behind a simple search method.
-
-    Example:
-        tool = RetrievalTool(pipeline)
-        results = tool.search(
-            query="平安银行经营现金流",
-            symbol="000001.SZ",
-            decision_at=datetime(2026, 6, 18),
-            top_k=5,
-        )
-
-    Attributes:
-        _pipeline: Embedding pipeline used by the retriever.
-        _retriever: HybridRetriever instance.
-        _reranker: Reranker instance.
-        _use_rerank: Whether to rerank results before returning them.
-    """
+    """Unified retrieval interface exposed to multi-agent research workflows.."""
 
     def __init__(
         self,
@@ -547,10 +478,13 @@ class RetrievalTool:
         """Initialize the retrieval tool.
 
         Args:
-            pipeline: Embedding pipeline for vector and keyword search.
-            retriever: Optional HybridRetriever instance.
-            reranker: Optional Reranker instance.
-            use_rerank: Whether to apply reranking. Defaults to True.
+            pipeline: EmbeddingPipeline: .
+            retriever: HybridRetriever | None: .
+            reranker: Reranker | None: .
+            use_rerank: bool: .
+
+        Returns:
+            None: .
         """
         self._pipeline = pipeline
         self._retriever = retriever or HybridRetriever(pipeline)
@@ -568,28 +502,16 @@ class RetrievalTool:
     ) -> list[RetrievalResult]:
         """Execute retrieval and return evidence chunks with locators.
 
-        All retrieval constraints are enforced:
-        - Filter by stock symbol.
-        - Require available_at <= decision_at.
-        - Optionally filter by document type.
-        - Prefer official evidence.
-        - Deduplicate identical facts.
-        - Require output locators.
-
         Args:
-            query: Query text.
-            symbol: Stock symbol. Required.
-            decision_at: Decision point for point-in-time filtering. Required.
-            doc_types: Optional list of document types to include.
-            top_k: Number of top results to return.
-            prefer_official: Whether to boost official evidence sources.
+            query: str: .
+            symbol: str | None: .
+            decision_at: datetime | None: .
+            doc_types: list[str] | None: .
+            top_k: int: .
+            prefer_official: bool: .
 
         Returns:
-            A list of RetrievalResult objects ranked by relevance.
-
-        Raises:
-            ValueError: If symbol is missing or empty.
-            ValueError: If decision_at is None.
+            list[RetrievalResult]: .
         """
         if not symbol:
             raise ValueError("symbol is required for retrieval")
@@ -625,13 +547,13 @@ class RetrievalTool:
         """Retrieve results filtered by stock symbol (architecture section 7.4).
 
         Args:
-            symbol: Stock symbol. Required.
-            query: Query text. Defaults to an empty string.
-            decision_at: Decision point for point-in-time filtering. Required.
-            top_k: Number of top results to return.
+            symbol: str: .
+            query: str: .
+            decision_at: datetime | None: .
+            top_k: int: .
 
         Returns:
-            A list of RetrievalResult objects filtered by symbol.
+            list[RetrievalResult]: .
         """
         return self.search(
             query=query,
@@ -650,10 +572,10 @@ def _normalize(score: float) -> float:
     """Clamp a score to the [0, 1] range.
 
     Args:
-        score: Raw score value.
+        score: float: .
 
     Returns:
-        The score clamped between 0.0 and 1.0.
+        float: .
     """
     if score <= 0:
         return 0.0

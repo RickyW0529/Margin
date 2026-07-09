@@ -12,14 +12,28 @@ from margin.documents.pipeline import (
 
 
 class FakeMarkdownConverter:
-    """Fake converter returning deterministic Markdown conversion output."""
+    """Fake converter returning deterministic Markdown conversion output.."""
 
     def __init__(self, result: MarkdownConversionResult) -> None:
-        """Initialize the fake converter with one result."""
+        """Initialize the fake converter with one result.
+
+        Args:
+            result: MarkdownConversionResult: .
+
+        Returns:
+            None: .
+        """
         self.result = result
 
     def convert(self, **kwargs):  # noqa: ANN003, ANN201
-        """Return the configured conversion result."""
+        """Return the configured conversion result.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
         return self.result.model_copy(
             update={
                 "document_id": str(kwargs["document_id"]),
@@ -30,22 +44,40 @@ class FakeMarkdownConverter:
 
 
 class MultimodalVerifier:
-    """Verifier stub that records visual verification calls."""
+    """Verifier stub that records visual verification calls.."""
 
     supports_multimodal = True
 
     def __init__(self) -> None:
-        """Initialize an empty call list."""
+        """Initialize an empty call list.
+
+        Returns:
+            None: .
+        """
         self.visual_calls: list[tuple[str, ...]] = []
 
     def verify_text(self, **kwargs):  # noqa: ANN003, ANN201
-        """Accept text verification."""
+        """Accept text verification.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
         from margin.documents.pipeline import TextVerificationResult
 
         return TextVerificationResult(passed=True, notes=("text_ok",))
 
     def verify_visual(self, **kwargs):  # noqa: ANN003, ANN201
-        """Record visual verification and accept it."""
+        """Record visual verification and accept it.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
         from margin.documents.pipeline import VisualVerificationResult
 
         page_images = tuple(kwargs["page_images"])
@@ -57,7 +89,11 @@ class MultimodalVerifier:
 
 
 def test_text_only_verifier_skips_visual_verification() -> None:
-    """Text-only providers such as DeepSeek must not block the document flow."""
+    """Text-only providers such as DeepSeek must not block the document flow.
+
+    Returns:
+        None: .
+    """
     converter = FakeMarkdownConverter(
         MarkdownConversionResult(
             document_id="ignored",
@@ -87,7 +123,12 @@ def test_text_only_verifier_skips_visual_verification() -> None:
 
 
 def test_multimodal_verifier_runs_visual_verification_when_page_images_exist() -> None:
-    """A multimodal verifier should receive Docling page images for screenshot checks."""
+    """A multimodal verifier should receive Docling page images for screenshot checks.
+    Returns:.
+
+    Returns:
+        None: .
+    """
     converter = FakeMarkdownConverter(
         MarkdownConversionResult(
             document_id="ignored",
@@ -115,7 +156,11 @@ def test_multimodal_verifier_runs_visual_verification_when_page_images_exist() -
 
 
 def test_review_repair_only_changes_problem_spans() -> None:
-    """Repair should remove only reviewed problem spans before final chunking."""
+    """Repair should remove only reviewed problem spans before final chunking.
+
+    Returns:
+        None: .
+    """
     converter = FakeMarkdownConverter(
         MarkdownConversionResult(
             document_id="ignored",
@@ -141,11 +186,12 @@ def test_review_repair_only_changes_problem_spans() -> None:
 
 
 def test_rag_chunking_splits_single_oversized_block() -> None:
-    """A single long Docling block must not exceed the embedding chunk budget."""
-    long_table = "\n".join(
-        f"| 指标 {index} | {index} | {index + 1} |"
-        for index in range(20)
-    )
+    """A single long Docling block must not exceed the embedding chunk budget.
+
+    Returns:
+        None: .
+    """
+    long_table = "\n".join(f"| 指标 {index} | {index} | {index + 1} |" for index in range(20))
     converter = FakeMarkdownConverter(
         MarkdownConversionResult(
             document_id="ignored",

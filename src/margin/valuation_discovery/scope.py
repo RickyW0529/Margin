@@ -10,7 +10,7 @@ from margin.valuation_discovery.models import FrozenModel, UniverseSnapshot
 
 
 class QuantFeatureSet(FrozenModel):
-    """Quant feature requirements frozen by a strategy/scope version."""
+    """Quant feature requirements frozen by a strategy/scope version.."""
 
     version_id: str
     required_indicators: tuple[str, ...]
@@ -20,11 +20,7 @@ class QuantFeatureSet(FrozenModel):
 
 
 class UserIndicatorView(FrozenModel):
-    """User-facing indicator visibility settings.
-
-    This view affects dashboard/AI presentation but must not remove indicators
-    required by quant feature computation.
-    """
+    """User-facing indicator visibility settings.."""
 
     version_id: str
     visible_indicator_ids: tuple[str, ...]
@@ -33,7 +29,7 @@ class UserIndicatorView(FrozenModel):
 
 
 class ScopeBinding(FrozenModel):
-    """Frozen scope inputs required to build a QuantInputSnapshot."""
+    """Frozen scope inputs required to build a QuantInputSnapshot.."""
 
     scope_version_id: str
     universe_snapshot: UniverseSnapshot

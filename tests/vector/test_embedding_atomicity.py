@@ -25,10 +25,10 @@ def vector_repository(database_url: str) -> Iterator[VectorRepository]:
     """Yield a clean ``VectorRepository`` backed by a temporary PostgreSQL database.
 
     Args:
-        database_url: pytest fixture providing the connection URL for the test database.
+        database_url: str: .
 
     Yields:
-        VectorRepository: repository instance with dimension 2 and empty vector tables.
+        Any: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     with engine.begin() as connection:
@@ -44,12 +44,8 @@ def vector_repository(database_url: str) -> Iterator[VectorRepository]:
 
 
 class FakeEmbeddingProvider:
-    """Fake embedding provider returning pre-configured vectors for testing.
+    """Fake embedding provider returning pre-configured vectors for testing.."""
 
-    Attributes:
-        name: provider name used in audit records.
-        version: provider version string.
-    """
     name = "fake"
     version = "v1"
 
@@ -57,12 +53,22 @@ class FakeEmbeddingProvider:
         """Initialize the fake provider with a list of pre-configured vectors.
 
         Args:
-            vectors: vectors returned by ``embed_batch``, sliced to the request length.
+            vectors: list[list[float]]: .
+
+        Returns:
+            None: .
         """
         self.vectors = vectors
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        """Return pre-configured vectors sliced to the number of input texts."""
+        """Return pre-configured vectors sliced to the number of input texts.
+
+        Args:
+            texts: list[str]: .
+
+        Returns:
+            list[list[float]]: .
+        """
         return self.vectors[: len(texts)]
 
 
@@ -70,10 +76,10 @@ def chunk(chunk_id: str):
     """Build a test chunk with a specific chunk ID.
 
     Args:
-        chunk_id: identifier assigned to the generated chunk.
+        chunk_id: str: .
 
     Returns:
-        Chunk: a chunk with the given ID and default content.
+        Any: .
     """
     return make_chunk(document_id="doc-1", content=f"{chunk_id} content").model_copy(
         update={"chunk_id": chunk_id}
@@ -85,12 +91,11 @@ def test_embedding_dimension_mismatch_writes_no_vectors(
 ) -> None:
     """Embedding dimension mismatch must leave no partial vectors in the database.
 
-    When the provider returns vectors whose length differs from the configured
-    dimension, the pipeline must raise ``ValueError`` and no embedding rows should
-    be persisted.
-
     Args:
-        vector_repository: pytest fixture providing a clean repository.
+        vector_repository: VectorRepository: .
+
+    Returns:
+        None: .
     """
     provider = FakeEmbeddingProvider(vectors=[[0.1, 0.2], [0.3, 0.4, 0.5]])
     pipeline = PersistentIndexingPipeline(
@@ -113,11 +118,11 @@ def test_indexed_document_audit_tracks_chunk_and_embedding_keys(
 ) -> None:
     """Indexed-document audit must track chunk IDs and embedding keys after persistence.
 
-    After embedding and persisting chunks, the stored ``IndexedDocument`` should
-    contain the original chunk IDs and the embedding keys produced by the pipeline.
-
     Args:
-        vector_repository: pytest fixture providing a clean repository.
+        vector_repository: VectorRepository: .
+
+    Returns:
+        None: .
     """
     provider = FakeEmbeddingProvider(vectors=[[0.1, 0.2]])
     pipeline = PersistentIndexingPipeline(

@@ -28,7 +28,7 @@ DetailContextLoader = Callable[[ResearchItem, ResearchRun], dict[str, Any] | Non
 
 
 class DashboardQueryService:
-    """Read-only dashboard query service for v0.2 candidate data."""
+    """Read-only dashboard query service for v0.2 candidate data.."""
 
     def __init__(
         self,
@@ -39,9 +39,12 @@ class DashboardQueryService:
         """Initialize the query service.
 
         Args:
-            repository: Dashboard repository for runs, items, and feedback.
-            quant_profile_loader: Optional callable that returns a quant
-                profile dict (with five factor scores) for a security id.
+            repository: DashboardRepository: .
+            quant_profile_loader: QuantProfileLoader | None: .
+            detail_context_loader: DetailContextLoader | None: .
+
+        Returns:
+            None: .
         """
         self._repository = repository
         self._quant_profile_loader = quant_profile_loader
@@ -51,13 +54,10 @@ class DashboardQueryService:
         """Fetch a research run by identifier.
 
         Args:
-            run_id: Unique identifier of the run.
+            run_id: str: .
 
         Returns:
-            The requested research run.
-
-        Raises:
-            KeyError: If the run does not exist.
+            ResearchRun: .
         """
         run = self._repository.get_run(run_id)
         if run is None:
@@ -74,7 +74,19 @@ class DashboardQueryService:
         cursor: str | None,
         limit: int,
     ) -> ResearchCandidateListResponse:
-        """Return one v0.2 paged candidate list."""
+        """Return one v0.2 paged candidate list.
+
+        Args:
+            scope_version_id: str: .
+            universe_code: str: .
+            filters: DashboardFilters: .
+            sort: DashboardSort: .
+            cursor: str | None: .
+            limit: int: .
+
+        Returns:
+            ResearchCandidateListResponse: .
+        """
         page = self._repository.list_research_candidates_v2(
             scope_version_id=scope_version_id,
             universe_code=universe_code,
@@ -86,7 +98,14 @@ class DashboardQueryService:
         return self._enrich_candidate_page(page)
 
     def get_item_detail_v2(self, item_id: str) -> ResearchItemDetailV2:
-        """Return the v0.2 company detail aggregate for a research item."""
+        """Return the v0.2 company detail aggregate for a research item.
+
+        Args:
+            item_id: str: .
+
+        Returns:
+            ResearchItemDetailV2: .
+        """
         item = self.get_item(item_id)
         run = self.get_run(item.run_id)
         profile = self._load_quant_profile(item.symbol)
@@ -101,9 +120,7 @@ class DashboardQueryService:
         current_review = _merge_dicts(
             {
                 "outcome": (
-                    "update_assessment"
-                    if item.status == ItemStatus.PUBLISHED
-                    else "abstain"
+                    "update_assessment" if item.status == ItemStatus.PUBLISHED else "abstain"
                 ),
                 "reason": item.abstain_reason,
                 "run_id": item.run_id,
@@ -114,9 +131,7 @@ class DashboardQueryService:
         effective_assessment = _merge_dicts(
             {
                 "assessment_id": item.snapshot_id,
-                "freshness": (
-                    "current" if item.status == ItemStatus.PUBLISHED else "stale"
-                ),
+                "freshness": ("current" if item.status == ItemStatus.PUBLISHED else "stale"),
                 "stale_reason": item.abstain_reason,
             },
             _dict_value(context, "effective_assessment"),
@@ -170,13 +185,10 @@ class DashboardQueryService:
         """Fetch a research item by identifier.
 
         Args:
-            item_id: Unique identifier of the item.
+            item_id: str: .
 
         Returns:
-            The requested research item.
-
-        Raises:
-            KeyError: If the item does not exist.
+            ResearchItem: .
         """
         item = self._repository.get_item(item_id)
         if item is None:
@@ -186,13 +198,23 @@ class DashboardQueryService:
     def _load_quant_factors(self, symbol: str) -> dict[str, Any]:
         """Load five-factor scores for a symbol via the optional loader.
 
-        Returns an empty dict when no loader is configured or no quant result
-        exists, so the detail page degrades gracefully without erroring.
+        Args:
+            symbol: str: .
+
+        Returns:
+            dict[str, Any]: .
         """
         return self._quant_factors_from_profile(self._load_quant_profile(symbol))
 
     def _load_quant_profile(self, symbol: str) -> dict[str, Any]:
-        """Load the optional quant profile, swallowing provider gaps."""
+        """Load the optional quant profile, swallowing provider gaps.
+
+        Args:
+            symbol: str: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         if self._quant_profile_loader is None:
             return {}
         try:
@@ -204,7 +226,14 @@ class DashboardQueryService:
         return dict(profile)
 
     def _quant_factors_from_profile(self, profile: dict[str, Any]) -> dict[str, Any]:
-        """Extract numeric factor values from a quant profile dict."""
+        """Extract numeric factor values from a quant profile dict.
+
+        Args:
+            profile: dict[str, Any]: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         factor_scores = profile.get("factor_scores") or []
         result: dict[str, Any] = {}
         for item in factor_scores:
@@ -229,7 +258,15 @@ class DashboardQueryService:
         item: ResearchItem,
         run: ResearchRun,
     ) -> dict[str, Any]:
-        """Load optional context data for one detail page."""
+        """Load optional context data for one detail page.
+
+        Args:
+            item: ResearchItem: .
+            run: ResearchRun: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         if self._detail_context_loader is None:
             return {}
         try:
@@ -242,7 +279,14 @@ class DashboardQueryService:
         self,
         page: ResearchCandidateListResponse,
     ) -> ResearchCandidateListResponse:
-        """Apply profile-driven display fields to one candidate page."""
+        """Apply profile-driven display fields to one candidate page.
+
+        Args:
+            page: ResearchCandidateListResponse: .
+
+        Returns:
+            ResearchCandidateListResponse: .
+        """
         if self._quant_profile_loader is None:
             return page
         items = tuple(
@@ -268,7 +312,16 @@ class DashboardQueryService:
         profile: dict[str, Any],
         context: dict[str, Any],
     ) -> ResearchCandidateListItemV2:
-        """Return a candidate with display name and valuation overrides."""
+        """Return a candidate with display name and valuation overrides.
+
+        Args:
+            item: ResearchCandidateListItemV2: .
+            profile: dict[str, Any]: .
+            context: dict[str, Any]: .
+
+        Returns:
+            ResearchCandidateListItemV2: .
+        """
         display_name = (
             _string_value(context, "display_name")
             or _string_value(profile, "display_name")
@@ -289,13 +342,16 @@ class DashboardQueryService:
 
 
 class FeedbackService:
-    """Append feedback without mutating immutable research items."""
+    """Append feedback without mutating immutable research items.."""
 
     def __init__(self, repository: DashboardRepository) -> None:
         """Initialize the feedback service.
 
         Args:
-            repository: Dashboard repository used to store feedback records.
+            repository: DashboardRepository: .
+
+        Returns:
+            None: .
         """
         self._repository = repository
 
@@ -308,15 +364,12 @@ class FeedbackService:
         """Record feedback for a research item.
 
         Args:
-            item_id: Identifier of the research item.
-            feedback_type: Type of feedback action.
-            comment: Optional textual comment.
+            item_id: str: .
+            feedback_type: FeedbackType: .
+            comment: str: .
 
         Returns:
-            The persisted feedback record.
-
-        Raises:
-            KeyError: If the item does not exist.
+            FeedbackRecord: .
         """
         _must_get_item(self._repository, item_id)
         feedback = FeedbackRecord(
@@ -329,13 +382,16 @@ class FeedbackService:
 
 
 class ProviderStatusService:
-    """Provider health service for the dashboard BFF."""
+    """Provider health service for the dashboard BFF.."""
 
     def __init__(self, providers: list[Any] | None = None) -> None:
         """Initialize the provider status service.
 
         Args:
-            providers: Optional list of providers exposing a healthcheck method.
+            providers: list[Any] | None: .
+
+        Returns:
+            None: .
         """
         self._providers = list(providers or [])
 
@@ -343,8 +399,7 @@ class ProviderStatusService:
         """List the health status of configured providers.
 
         Returns:
-            A list of provider statuses. Falls back to a healthy dashboard status
-            when no providers are configured.
+            list[ProviderStatus]: .
         """
         if self._providers:
             statuses: list[ProviderStatus] = []
@@ -378,20 +433,24 @@ class ProviderStatusService:
 
 
 class JobService:
-    """Synchronous job registry for v0.1 nightly run endpoints."""
+    """Synchronous job registry for v0.1 nightly run endpoints.."""
 
     def __init__(self) -> None:
-        """Initialize an empty job registry."""
+        """Initialize an empty job registry.
+
+        Returns:
+            None: .
+        """
         self._jobs: dict[str, JobRun] = {}
 
     def record_completed_job(self, run_id: str) -> JobRun:
         """Record a completed nightly job for a research run.
 
         Args:
-            run_id: Identifier of the research run associated with the job.
+            run_id: str: .
 
         Returns:
-            The recorded job run.
+            JobRun: .
         """
         job = JobRun(run_id=run_id, payload_json=json.dumps({"run_id": run_id}))
         self._jobs[job.job_run_id] = job
@@ -401,13 +460,10 @@ class JobService:
         """Fetch a job run by identifier.
 
         Args:
-            job_run_id: Unique identifier of the job run.
+            job_run_id: str: .
 
         Returns:
-            The requested job run.
-
-        Raises:
-            KeyError: If the job run does not exist.
+            JobRun: .
         """
         job = self._jobs.get(job_run_id)
         if job is None:
@@ -417,7 +473,7 @@ class JobService:
 
 @dataclass(frozen=True)
 class DashboardServiceBundle:
-    """Container for FastAPI dependency injection."""
+    """Container for FastAPI dependency injection.."""
 
     query: DashboardQueryService
     feedback: FeedbackService
@@ -433,10 +489,10 @@ class DashboardServiceBundle:
         """Create a service bundle backed by in-memory repositories.
 
         Args:
-            dashboard_repository: Optional dashboard repository instance.
+            dashboard_repository: MemoryDashboardRepository | None: .
 
         Returns:
-            A fully wired in-memory service bundle.
+            DashboardServiceBundle: .
         """
         dashboard_repository = dashboard_repository or MemoryDashboardRepository()
         return cls.from_repositories(
@@ -455,15 +511,13 @@ class DashboardServiceBundle:
         """Create a service bundle from existing repositories.
 
         Args:
-            dashboard_repository: Dashboard repository implementation.
-            providers: Optional list of providers to health-check.
-            quant_profile_loader: Optional callable returning a quant profile
-                dict (with five factor scores) for a security id.
-            detail_context_loader: Optional callable returning AI/news/valuation
-                context for a detail item.
+            dashboard_repository: DashboardRepository: .
+            providers: list[Any] | None: .
+            quant_profile_loader: QuantProfileLoader | None: .
+            detail_context_loader: DetailContextLoader | None: .
 
         Returns:
-            A fully wired service bundle.
+            DashboardServiceBundle: .
         """
         return cls(
             query=DashboardQueryService(
@@ -481,7 +535,15 @@ def _must_get_item(
     repository: DashboardRepository,
     item_id: str,
 ) -> ResearchItem:
-    """must get item."""
+    """must get item.
+
+    Args:
+        repository: DashboardRepository: .
+        item_id: str: .
+
+    Returns:
+        ResearchItem: .
+    """
     item = repository.get_item(item_id)
     if item is None:
         raise KeyError(f"research item '{item_id}' not found")
@@ -492,7 +554,15 @@ def _candidate_item_from_research_item(
     item: ResearchItem,
     run: ResearchRun,
 ) -> ResearchCandidateListItemV2:
-    """Build the list/detail item DTO without exposing internal prompts."""
+    """Build the list/detail item DTO without exposing internal prompts.
+
+    Args:
+        item: ResearchItem: .
+        run: ResearchRun: .
+
+    Returns:
+        ResearchCandidateListItemV2: .
+    """
     screening_status = _screening_status_from_item(item)
     return ResearchCandidateListItemV2(
         item_id=item.item_id,
@@ -505,17 +575,13 @@ def _candidate_item_from_research_item(
         risk_flags=tuple(item.rejection_reasons),
         review_required=item.status != ItemStatus.PUBLISHED,
         research_guardrail=(
-            "allow_research"
-            if item.status == ItemStatus.PUBLISHED
-            else "review_required"
+            "allow_research" if item.status == ItemStatus.PUBLISHED else "review_required"
         ),
         current_review_outcome=(
             "update_assessment" if item.status == ItemStatus.PUBLISHED else "abstain"
         ),
         effective_assessment_id=item.snapshot_id,
-        assessment_freshness=(
-            "current" if item.status == ItemStatus.PUBLISHED else "stale"
-        ),
+        assessment_freshness=("current" if item.status == ItemStatus.PUBLISHED else "stale"),
         stale_reason=item.abstain_reason,
         final_score=round(item.confidence * 100, 4),
         target_weight=item.target_weight,
@@ -528,7 +594,14 @@ def _candidate_item_from_research_item(
 
 
 def _screening_status_from_item(item: ResearchItem) -> str:
-    """Return the quant screening status carried by a dashboard item."""
+    """Return the quant screening status carried by a dashboard item.
+
+    Args:
+        item: ResearchItem: .
+
+    Returns:
+        str: .
+    """
     prefix = "quant_screen:"
     if item.signal_type.startswith(prefix):
         return item.signal_type.removeprefix(prefix)
@@ -536,7 +609,15 @@ def _screening_status_from_item(item: ResearchItem) -> str:
 
 
 def _merge_dicts(base: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:
-    """Shallow merge two dicts while preserving base when update is empty."""
+    """Shallow merge two dicts while preserving base when update is empty.
+
+    Args:
+        base: dict[str, Any]: .
+        update: dict[str, Any]: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     if not update:
         return base
     merged = dict(base)
@@ -545,13 +626,29 @@ def _merge_dicts(base: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]
 
 
 def _dict_value(value: Any, key: str | None = None) -> dict[str, Any]:
-    """Return a nested dict or an empty dict."""
+    """Return a nested dict or an empty dict.
+
+    Args:
+        value: Any: .
+        key: str | None: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     candidate = value.get(key) if key is not None and isinstance(value, dict) else value
     return dict(candidate) if isinstance(candidate, dict) else {}
 
 
 def _string_value(value: Any, key: str | None = None) -> str | None:
-    """Return a non-empty string from a dict or raw value."""
+    """Return a non-empty string from a dict or raw value.
+
+    Args:
+        value: Any: .
+        key: str | None: .
+
+    Returns:
+        str | None: .
+    """
     candidate = value.get(key) if key is not None and isinstance(value, dict) else value
     if isinstance(candidate, str) and candidate.strip():
         return candidate.strip()
@@ -559,7 +656,15 @@ def _string_value(value: Any, key: str | None = None) -> str | None:
 
 
 def _optional_float(value: Any, fallback: float | None = None) -> float | None:
-    """Return a float when conversion is possible."""
+    """Return a float when conversion is possible.
+
+    Args:
+        value: Any: .
+        fallback: float | None: .
+
+    Returns:
+        float | None: .
+    """
     if value is None:
         return fallback
     try:

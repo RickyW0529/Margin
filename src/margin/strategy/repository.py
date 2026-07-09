@@ -65,54 +65,58 @@ T = TypeVar("T")
 
 
 class StrategyRepository(Protocol):
-    """Persistence contract consumed by :class:`StrategyService`."""
+    """Persistence contract consumed by :class:`StrategyService`.."""
 
     def add_profile(self, profile: StrategyProfile) -> None:
         """Persist a new strategy profile.
 
         Args:
-            profile: The strategy profile to persist.
+            profile: StrategyProfile: .
 
-        Raises:
-            ValueError: If a profile with the same ``strategy_id`` already exists.
+        Returns:
+            None: .
         """
 
     def get_profile(self, strategy_id: str) -> StrategyProfile | None:
         """Return a profile by identifier.
 
         Args:
-            strategy_id: The unique strategy identifier.
+            strategy_id: str: .
 
         Returns:
-            The matching :class:`StrategyProfile` or ``None`` if not found.
+            StrategyProfile | None: .
         """
 
     def list_profiles(self, owner_id: str) -> list[StrategyProfile]:
         """Return all profiles owned by the given user.
 
         Args:
-            owner_id: The identifier of the profile owner.
+            owner_id: str: .
 
         Returns:
-            A list of :class:`StrategyProfile` objects belonging to ``owner_id``.
+            list[StrategyProfile]: .
         """
 
     def update_profile(self, profile: StrategyProfile) -> None:
         """Persist an updated profile, replacing the existing one.
 
         Args:
-            profile: The strategy profile with updated data.
+            profile: StrategyProfile: .
 
-        Raises:
-            KeyError: If no profile with ``profile.strategy_id`` exists.
+        Returns:
+            None: .
         """
 
 
 class MemoryStrategyRepository:
-    """In-memory strategy repository for tests and local usage."""
+    """In-memory strategy repository for tests and local usage.."""
 
     def __init__(self) -> None:
-        """Initialize an empty in-memory profile store."""
+        """Initialize an empty in-memory profile store.
+
+        Returns:
+            None: .
+        """
         self._profiles: dict[str, StrategyProfile] = {}
         self._provider_configs: dict[str, ProviderConfigVersion] = {}
         self._universes: dict[str, UniverseDefinitionVersion] = {}
@@ -131,10 +135,10 @@ class MemoryStrategyRepository:
         """Persist a new strategy profile in memory.
 
         Args:
-            profile: The strategy profile to persist.
+            profile: StrategyProfile: .
 
-        Raises:
-            ValueError: If a profile with the same ``strategy_id`` already exists.
+        Returns:
+            None: .
         """
         if profile.strategy_id in self._profiles:
             raise ValueError(f"strategy '{profile.strategy_id}' already exists")
@@ -144,10 +148,10 @@ class MemoryStrategyRepository:
         """Return a profile by identifier.
 
         Args:
-            strategy_id: The unique strategy identifier.
+            strategy_id: str: .
 
         Returns:
-            The matching :class:`StrategyProfile` or ``None`` if not found.
+            StrategyProfile | None: .
         """
         return self._profiles.get(strategy_id)
 
@@ -155,49 +159,71 @@ class MemoryStrategyRepository:
         """Return all profiles owned by the given user.
 
         Args:
-            owner_id: The identifier of the profile owner.
+            owner_id: str: .
 
         Returns:
-            A list of :class:`StrategyProfile` objects belonging to ``owner_id``.
+            list[StrategyProfile]: .
         """
-        return [
-            profile
-            for profile in self._profiles.values()
-            if profile.owner_id == owner_id
-        ]
+        return [profile for profile in self._profiles.values() if profile.owner_id == owner_id]
 
     def update_profile(self, profile: StrategyProfile) -> None:
         """Persist an updated profile, replacing the existing one.
 
         Args:
-            profile: The strategy profile with updated data.
+            profile: StrategyProfile: .
 
-        Raises:
-            KeyError: If no profile with ``profile.strategy_id`` exists.
+        Returns:
+            None: .
         """
         if profile.strategy_id not in self._profiles:
             raise KeyError(f"strategy '{profile.strategy_id}' not found")
         self._profiles[profile.strategy_id] = profile
 
     def save_provider_config(self, version: ProviderConfigVersion) -> None:
-        """Append a provider configuration version."""
+        """Append a provider configuration version.
+
+        Args:
+            version: ProviderConfigVersion: .
+
+        Returns:
+            None: .
+        """
         _ensure_new(self._provider_configs, version.version_id, "provider config")
         self._provider_configs[version.version_id] = version
 
     def get_provider_config(self, version_id: str) -> ProviderConfigVersion | None:
-        """Return a provider configuration version."""
+        """Return a provider configuration version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            ProviderConfigVersion | None: .
+        """
         return self._provider_configs.get(version_id)
 
     def list_provider_configs(self, owner_id: str) -> list[ProviderConfigVersion]:
-        """List provider configuration versions for an owner."""
+        """List provider configuration versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[ProviderConfigVersion]: .
+        """
         return _sorted_versions(
-            version
-            for version in self._provider_configs.values()
-            if version.owner_id == owner_id
+            version for version in self._provider_configs.values() if version.owner_id == owner_id
         )
 
     def list_active_provider_configs(self, owner_id: str) -> list[ProviderConfigVersion]:
-        """List enabled active provider configuration versions for an owner."""
+        """List enabled active provider configuration versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[ProviderConfigVersion]: .
+        """
         return [
             version
             for version in self.list_provider_configs(owner_id)
@@ -209,18 +235,31 @@ class MemoryStrategyRepository:
         version_id: str,
         secret_version_id: str,
     ) -> ProviderConfigVersion:
-        """Bind a secret version to a non-active provider config."""
+        """Bind a secret version to a non-active provider config.
+
+        Args:
+            version_id: str: .
+            secret_version_id: str: .
+
+        Returns:
+            ProviderConfigVersion: .
+        """
         version = self._must_get(self._provider_configs, version_id, "provider config")
         if version.lifecycle is ConfigLifecycle.ACTIVE:
-            raise ValueError(
-                "active provider config is immutable; create a new config version"
-            )
+            raise ValueError("active provider config is immutable; create a new config version")
         updated = version.model_copy(update={"secret_version_id": secret_version_id})
         self._provider_configs[version_id] = updated
         return updated
 
     def activate_provider_config(self, version_id: str) -> ProviderConfigVersion:
-        """Activate a provider config and deprecate older active sibling versions."""
+        """Activate a provider config and deprecate older active sibling versions.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            ProviderConfigVersion: .
+        """
         version = self._must_get(self._provider_configs, version_id, "provider config")
         self._deprecate_provider_configs(version)
         activated = version.model_copy(update={"lifecycle": ConfigLifecycle.ACTIVE})
@@ -228,12 +267,26 @@ class MemoryStrategyRepository:
         return activated
 
     def save_universe_definition(self, version: UniverseDefinitionVersion) -> None:
-        """Append a universe definition version."""
+        """Append a universe definition version.
+
+        Args:
+            version: UniverseDefinitionVersion: .
+
+        Returns:
+            None: .
+        """
         _ensure_new(self._universes, version.version_id, "universe")
         self._universes[version.version_id] = version
 
     def get_universe_definition(self, version_id: str) -> UniverseDefinitionVersion | None:
-        """Return a universe definition version."""
+        """Return a universe definition version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            UniverseDefinitionVersion | None: .
+        """
         return self._universes.get(version_id)
 
     def list_active_universe_definitions(
@@ -242,31 +295,49 @@ class MemoryStrategyRepository:
         *,
         universe_code: str | None = None,
     ) -> list[UniverseDefinitionVersion]:
-        """List active universe definitions for an owner."""
+        """List active universe definitions for an owner.
+
+        Args:
+            owner_id: str: .
+            universe_code: str | None: .
+
+        Returns:
+            list[UniverseDefinitionVersion]: .
+        """
         versions = [
             version
             for version in self._universes.values()
             if version.owner_id == owner_id and version.lifecycle is ConfigLifecycle.ACTIVE
         ]
         if universe_code is not None:
-            versions = [
-                version for version in versions if version.universe_code == universe_code
-            ]
+            versions = [version for version in versions if version.universe_code == universe_code]
         return _sorted_versions(versions)
 
     def list_universe_definitions(self, owner_id: str) -> list[UniverseDefinitionVersion]:
-        """List all universe definition versions for an owner."""
+        """List all universe definition versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[UniverseDefinitionVersion]: .
+        """
         return _sorted_versions(
-            version
-            for version in self._universes.values()
-            if version.owner_id == owner_id
+            version for version in self._universes.values() if version.owner_id == owner_id
         )
 
     def activate_universe_definition(
         self,
         version_id: str,
     ) -> UniverseDefinitionVersion:
-        """Activate a universe and deprecate the prior active family version."""
+        """Activate a universe and deprecate the prior active family version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            UniverseDefinitionVersion: .
+        """
         version = self._must_get(self._universes, version_id, "universe")
         for candidate in list(self._universes.values()):
             if (
@@ -282,16 +353,37 @@ class MemoryStrategyRepository:
         return activated
 
     def save_indicator_view(self, version: IndicatorViewVersion) -> None:
-        """Append an indicator view version."""
+        """Append an indicator view version.
+
+        Args:
+            version: IndicatorViewVersion: .
+
+        Returns:
+            None: .
+        """
         _ensure_new(self._indicator_views, version.version_id, "indicator view")
         self._indicator_views[version.version_id] = version
 
     def get_indicator_view(self, version_id: str) -> IndicatorViewVersion | None:
-        """Return an indicator view version."""
+        """Return an indicator view version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            IndicatorViewVersion | None: .
+        """
         return self._indicator_views.get(version_id)
 
     def get_active_indicator_view(self, owner_id: str) -> IndicatorViewVersion | None:
-        """Return the active indicator view for an owner."""
+        """Return the active indicator view for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            IndicatorViewVersion | None: .
+        """
         return _single_or_none(
             version
             for version in self._indicator_views.values()
@@ -299,15 +391,27 @@ class MemoryStrategyRepository:
         )
 
     def list_indicator_views(self, owner_id: str) -> list[IndicatorViewVersion]:
-        """List all indicator view versions for an owner."""
+        """List all indicator view versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[IndicatorViewVersion]: .
+        """
         return _sorted_versions(
-            version
-            for version in self._indicator_views.values()
-            if version.owner_id == owner_id
+            version for version in self._indicator_views.values() if version.owner_id == owner_id
         )
 
     def activate_indicator_view(self, version_id: str) -> IndicatorViewVersion:
-        """Activate an indicator view and deprecate the prior active version."""
+        """Activate an indicator view and deprecate the prior active version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            IndicatorViewVersion: .
+        """
         version = self._must_get(self._indicator_views, version_id, "indicator view")
         for candidate in list(self._indicator_views.values()):
             if (
@@ -322,16 +426,37 @@ class MemoryStrategyRepository:
         return activated
 
     def save_quant_feature_set(self, version: QuantFeatureSetVersion) -> None:
-        """Append a quant feature set version."""
+        """Append a quant feature set version.
+
+        Args:
+            version: QuantFeatureSetVersion: .
+
+        Returns:
+            None: .
+        """
         _ensure_new(self._quant_feature_sets, version.version_id, "quant feature set")
         self._quant_feature_sets[version.version_id] = version
 
     def get_quant_feature_set(self, version_id: str) -> QuantFeatureSetVersion | None:
-        """Return a quant feature set version."""
+        """Return a quant feature set version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            QuantFeatureSetVersion | None: .
+        """
         return self._quant_feature_sets.get(version_id)
 
     def get_active_quant_feature_set(self, owner_id: str) -> QuantFeatureSetVersion | None:
-        """Return the active quant feature set for an owner."""
+        """Return the active quant feature set for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            QuantFeatureSetVersion | None: .
+        """
         return _single_or_none(
             version
             for version in self._quant_feature_sets.values()
@@ -339,18 +464,30 @@ class MemoryStrategyRepository:
         )
 
     def list_quant_feature_sets(self, owner_id: str) -> list[QuantFeatureSetVersion]:
-        """List all quant feature set versions for an owner."""
+        """List all quant feature set versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[QuantFeatureSetVersion]: .
+        """
         return _sorted_versions(
-            version
-            for version in self._quant_feature_sets.values()
-            if version.owner_id == owner_id
+            version for version in self._quant_feature_sets.values() if version.owner_id == owner_id
         )
 
     def activate_quant_feature_set(
         self,
         version_id: str,
     ) -> QuantFeatureSetVersion:
-        """Activate a quant feature set and deprecate the prior active version."""
+        """Activate a quant feature set and deprecate the prior active version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            QuantFeatureSetVersion: .
+        """
         version = self._must_get(
             self._quant_feature_sets,
             version_id,
@@ -369,12 +506,26 @@ class MemoryStrategyRepository:
         return activated
 
     def save_quant_strategy(self, version: QuantStrategyVersion) -> None:
-        """Append a quant strategy version."""
+        """Append a quant strategy version.
+
+        Args:
+            version: QuantStrategyVersion: .
+
+        Returns:
+            None: .
+        """
         _ensure_new(self._quant_strategies, version.version_id, "quant strategy")
         self._quant_strategies[version.version_id] = version
 
     def get_quant_strategy(self, version_id: str) -> QuantStrategyVersion | None:
-        """Return a quant strategy version."""
+        """Return a quant strategy version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            QuantStrategyVersion | None: .
+        """
         return self._quant_strategies.get(version_id)
 
     def get_active_quant_strategy(
@@ -383,7 +534,15 @@ class MemoryStrategyRepository:
         *,
         strategy_family: str = "default",
     ) -> QuantStrategyVersion | None:
-        """Return the active quant strategy for an owner and family."""
+        """Return the active quant strategy for an owner and family.
+
+        Args:
+            owner_id: str: .
+            strategy_family: str: .
+
+        Returns:
+            QuantStrategyVersion | None: .
+        """
         return _single_or_none(
             version
             for version in self._quant_strategies.values()
@@ -393,15 +552,27 @@ class MemoryStrategyRepository:
         )
 
     def list_quant_strategies(self, owner_id: str) -> list[QuantStrategyVersion]:
-        """List all quant strategy versions for an owner."""
+        """List all quant strategy versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[QuantStrategyVersion]: .
+        """
         return _sorted_versions(
-            version
-            for version in self._quant_strategies.values()
-            if version.owner_id == owner_id
+            version for version in self._quant_strategies.values() if version.owner_id == owner_id
         )
 
     def activate_quant_strategy(self, version_id: str) -> QuantStrategyVersion:
-        """Activate a quant strategy and deprecate older active sibling versions."""
+        """Activate a quant strategy and deprecate older active sibling versions.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            QuantStrategyVersion: .
+        """
         version = self._must_get(self._quant_strategies, version_id, "quant strategy")
         for candidate in list(self._quant_strategies.values()):
             if (
@@ -417,12 +588,26 @@ class MemoryStrategyRepository:
         return activated
 
     def save_user_style_prompt(self, version: UserStylePromptVersion) -> None:
-        """Append a user style prompt version."""
+        """Append a user style prompt version.
+
+        Args:
+            version: UserStylePromptVersion: .
+
+        Returns:
+            None: .
+        """
         _ensure_new(self._style_prompts, version.version_id, "style prompt")
         self._style_prompts[version.version_id] = version
 
     def get_user_style_prompt(self, version_id: str) -> UserStylePromptVersion | None:
-        """Return a user style prompt version."""
+        """Return a user style prompt version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            UserStylePromptVersion | None: .
+        """
         return self._style_prompts.get(version_id)
 
     def get_active_user_style_prompt(
@@ -431,7 +616,15 @@ class MemoryStrategyRepository:
         *,
         prompt_name: str = "default",
     ) -> UserStylePromptVersion | None:
-        """Return the active user style prompt for an owner and prompt name."""
+        """Return the active user style prompt for an owner and prompt name.
+
+        Args:
+            owner_id: str: .
+            prompt_name: str: .
+
+        Returns:
+            UserStylePromptVersion | None: .
+        """
         return _single_or_none(
             version
             for version in self._style_prompts.values()
@@ -441,18 +634,30 @@ class MemoryStrategyRepository:
         )
 
     def list_user_style_prompts(self, owner_id: str) -> list[UserStylePromptVersion]:
-        """List all user style prompt versions for an owner."""
+        """List all user style prompt versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[UserStylePromptVersion]: .
+        """
         return _sorted_versions(
-            version
-            for version in self._style_prompts.values()
-            if version.owner_id == owner_id
+            version for version in self._style_prompts.values() if version.owner_id == owner_id
         )
 
     def activate_user_style_prompt(
         self,
         version_id: str,
     ) -> UserStylePromptVersion:
-        """Activate a style prompt and deprecate its prior active sibling."""
+        """Activate a style prompt and deprecate its prior active sibling.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            UserStylePromptVersion: .
+        """
         version = self._must_get(self._style_prompts, version_id, "style prompt")
         for candidate in list(self._style_prompts.values()):
             if (
@@ -468,16 +673,37 @@ class MemoryStrategyRepository:
         return activated
 
     def save_tool_policy(self, version: ToolPolicyVersionRef) -> None:
-        """Append a tool policy version."""
+        """Append a tool policy version.
+
+        Args:
+            version: ToolPolicyVersionRef: .
+
+        Returns:
+            None: .
+        """
         _ensure_new(self._tool_policies, version.version_id, "tool policy")
         self._tool_policies[version.version_id] = version
 
     def get_tool_policy(self, version_id: str) -> ToolPolicyVersionRef | None:
-        """Return a tool policy version."""
+        """Return a tool policy version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            ToolPolicyVersionRef | None: .
+        """
         return self._tool_policies.get(version_id)
 
     def get_active_tool_policy(self, owner_id: str) -> ToolPolicyVersionRef | None:
-        """Return the active tool policy for an owner."""
+        """Return the active tool policy for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            ToolPolicyVersionRef | None: .
+        """
         return _single_or_none(
             version
             for version in self._tool_policies.values()
@@ -485,7 +711,14 @@ class MemoryStrategyRepository:
         )
 
     def activate_tool_policy(self, version_id: str) -> ToolPolicyVersionRef:
-        """Activate a tool policy and deprecate the prior active version."""
+        """Activate a tool policy and deprecate the prior active version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            ToolPolicyVersionRef: .
+        """
         version = self._must_get(self._tool_policies, version_id, "tool policy")
         for candidate in list(self._tool_policies.values()):
             if (
@@ -500,16 +733,37 @@ class MemoryStrategyRepository:
         return activated
 
     def save_research_scope(self, version: ResearchScopeVersion) -> None:
-        """Append a research scope version."""
+        """Append a research scope version.
+
+        Args:
+            version: ResearchScopeVersion: .
+
+        Returns:
+            None: .
+        """
         _ensure_new(self._research_scopes, version.version_id, "research scope")
         self._research_scopes[version.version_id] = version
 
     def get_research_scope(self, version_id: str) -> ResearchScopeVersion | None:
-        """Return a research scope version."""
+        """Return a research scope version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            ResearchScopeVersion | None: .
+        """
         return self._research_scopes.get(version_id)
 
     def get_active_research_scope(self, owner_id: str) -> ResearchScopeVersion | None:
-        """Return the active research scope for an owner."""
+        """Return the active research scope for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            ResearchScopeVersion | None: .
+        """
         return _single_or_none(
             version
             for version in self._research_scopes.values()
@@ -517,15 +771,27 @@ class MemoryStrategyRepository:
         )
 
     def list_research_scopes(self, owner_id: str) -> list[ResearchScopeVersion]:
-        """List all research scope versions for an owner."""
+        """List all research scope versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[ResearchScopeVersion]: .
+        """
         return _sorted_versions(
-            version
-            for version in self._research_scopes.values()
-            if version.owner_id == owner_id
+            version for version in self._research_scopes.values() if version.owner_id == owner_id
         )
 
     def activate_research_scope(self, version_id: str) -> ResearchScopeVersion:
-        """Activate a research scope and deprecate older active scopes."""
+        """Activate a research scope and deprecate older active scopes.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            ResearchScopeVersion: .
+        """
         version = self._must_get(self._research_scopes, version_id, "research scope")
         for candidate in list(self._research_scopes.values()):
             if (
@@ -549,7 +815,19 @@ class MemoryStrategyRepository:
         idempotency_key: str,
         details: dict[str, object],
     ) -> dict[str, object]:
-        """Append one idempotent config audit event."""
+        """Append one idempotent config audit event.
+
+        Args:
+            actor_id: str: .
+            resource_type: str: .
+            resource_version_id: str: .
+            action: str: .
+            idempotency_key: str: .
+            details: dict[str, object]: .
+
+        Returns:
+            dict[str, object]: .
+        """
         key = (actor_id, action, idempotency_key)
         existing = self._config_audits.get(key)
         if existing is not None:
@@ -574,11 +852,27 @@ class MemoryStrategyRepository:
         action: str,
         idempotency_key: str,
     ) -> dict[str, object] | None:
-        """Return a prior config mutation audit by replay key."""
+        """Return a prior config mutation audit by replay key.
+
+        Args:
+            actor_id: str: .
+            action: str: .
+            idempotency_key: str: .
+
+        Returns:
+            dict[str, object] | None: .
+        """
         return self._config_audits.get((actor_id, action, idempotency_key))
 
     def _deprecate_provider_configs(self, version: ProviderConfigVersion) -> None:
-        """deprecate provider configs."""
+        """deprecate provider configs.
+
+        Args:
+            version: ProviderConfigVersion: .
+
+        Returns:
+            None: .
+        """
         category = provider_category_for_config(
             version.provider_type,
             version.provider_name,
@@ -605,7 +899,16 @@ class MemoryStrategyRepository:
         version_id: str,
         resource_type: str,
     ) -> object:
-        """must get."""
+        """must get.
+
+        Args:
+            mapping: dict[str, object]: .
+            version_id: str: .
+            resource_type: str: .
+
+        Returns:
+            object: .
+        """
         version = mapping.get(version_id)
         if version is None:
             raise KeyError(f"{resource_type} '{version_id}' not found")
@@ -613,13 +916,16 @@ class MemoryStrategyRepository:
 
 
 class SQLAlchemyStrategyRepository:
-    """PostgreSQL-backed strategy repository."""
+    """PostgreSQL-backed strategy repository.."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
         """Initialize the repository with a SQLAlchemy session factory.
 
         Args:
-            session_factory: A callable that returns a new SQLAlchemy session.
+            session_factory: Callable[[], Session]: .
+
+        Returns:
+            None: .
         """
         self._session_factory = session_factory
 
@@ -627,10 +933,10 @@ class SQLAlchemyStrategyRepository:
         """Persist a new strategy profile and all its versions to PostgreSQL.
 
         Args:
-            profile: The strategy profile to persist.
+            profile: StrategyProfile: .
 
-        Raises:
-            ValueError: If a profile with the same ``strategy_id`` already exists.
+        Returns:
+            None: .
         """
         with self._session_factory.begin() as session:
             if session.get(StrategyProfileRow, profile.strategy_id) is not None:
@@ -654,8 +960,7 @@ class SQLAlchemyStrategyRepository:
                         description=version.description,
                         config=version.config.model_dump(mode="json"),
                         prompt_layers=[
-                            layer.model_dump(mode="json")
-                            for layer in version.prompt_layers
+                            layer.model_dump(mode="json") for layer in version.prompt_layers
                         ],
                         state=version.state.value,
                         prompt_version=version.prompt_version,
@@ -672,10 +977,10 @@ class SQLAlchemyStrategyRepository:
         """Return a profile by identifier, reconstructing domain models from rows.
 
         Args:
-            strategy_id: The unique strategy identifier.
+            strategy_id: str: .
 
         Returns:
-            The matching :class:`StrategyProfile` or ``None`` if not found.
+            StrategyProfile | None: .
         """
         with self._session_factory() as session:
             row = session.get(StrategyProfileRow, strategy_id)
@@ -689,8 +994,7 @@ class SQLAlchemyStrategyRepository:
                     description=v.description,
                     config=StrategyConfig.model_validate(v.config),
                     prompt_layers=tuple(
-                        PromptLayer.model_validate(layer)
-                        for layer in v.prompt_layers
+                        PromptLayer.model_validate(layer) for layer in v.prompt_layers
                     ),
                     state=StrategyState(v.state),
                     prompt_version=v.prompt_version,
@@ -717,10 +1021,10 @@ class SQLAlchemyStrategyRepository:
         """Return all profiles owned by the given user.
 
         Args:
-            owner_id: The identifier of the profile owner.
+            owner_id: str: .
 
         Returns:
-            A list of :class:`StrategyProfile` objects belonging to ``owner_id``.
+            list[StrategyProfile]: .
         """
         with self._session_factory() as session:
             rows = session.query(StrategyProfileRow).filter_by(owner_id=owner_id).all()
@@ -731,10 +1035,10 @@ class SQLAlchemyStrategyRepository:
         """Persist an updated profile and any new versions to PostgreSQL.
 
         Args:
-            profile: The strategy profile with updated data.
+            profile: StrategyProfile: .
 
-        Raises:
-            KeyError: If no profile with ``profile.strategy_id`` exists.
+        Returns:
+            None: .
         """
         with self._session_factory.begin() as session:
             row = session.get(StrategyProfileRow, profile.strategy_id)
@@ -763,8 +1067,7 @@ class SQLAlchemyStrategyRepository:
                         description=version.description,
                         config=version.config.model_dump(mode="json"),
                         prompt_layers=[
-                            layer.model_dump(mode="json")
-                            for layer in version.prompt_layers
+                            layer.model_dump(mode="json") for layer in version.prompt_layers
                         ],
                         state=version.state.value,
                         prompt_version=version.prompt_version,
@@ -778,33 +1081,57 @@ class SQLAlchemyStrategyRepository:
                 )
 
     def save_provider_config(self, version: ProviderConfigVersion) -> None:
-        """Append a provider configuration version."""
+        """Append a provider configuration version.
+
+        Args:
+            version: ProviderConfigVersion: .
+
+        Returns:
+            None: .
+        """
         with self._session_factory.begin() as session:
             if session.get(ProviderConfigVersionRow, version.version_id) is not None:
                 raise ValueError(f"provider config '{version.version_id}' already exists")
             session.add(_provider_config_to_row(version))
 
     def get_provider_config(self, version_id: str) -> ProviderConfigVersion | None:
-        """Return a provider configuration version."""
+        """Return a provider configuration version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            ProviderConfigVersion | None: .
+        """
         with self._session_factory() as session:
             row = session.get(ProviderConfigVersionRow, version_id)
             return _provider_config_from_row(row) if row is not None else None
 
     def list_provider_configs(self, owner_id: str) -> list[ProviderConfigVersion]:
-        """List provider configuration versions for an owner."""
+        """List provider configuration versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[ProviderConfigVersion]: .
+        """
         with self._session_factory() as session:
-            rows = session.scalars(
-                provider_configs_by_owner(owner_id)
-            ).all()
+            rows = session.scalars(provider_configs_by_owner(owner_id)).all()
             return [_provider_config_from_row(row) for row in rows]
 
     def list_active_provider_configs(self, owner_id: str) -> list[ProviderConfigVersion]:
-        """List enabled active provider configuration versions for an owner."""
+        """List enabled active provider configuration versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[ProviderConfigVersion]: .
+        """
         with self._session_factory() as session:
             rows = session.scalars(
-                active_provider_configs_by_owner(
-                    owner_id, ConfigLifecycle.ACTIVE.value
-                )
+                active_provider_configs_by_owner(owner_id, ConfigLifecycle.ACTIVE.value)
             ).all()
             return [_provider_config_from_row(row) for row in rows]
 
@@ -813,20 +1140,33 @@ class SQLAlchemyStrategyRepository:
         version_id: str,
         secret_version_id: str,
     ) -> ProviderConfigVersion:
-        """Bind a secret version to a non-active provider config."""
+        """Bind a secret version to a non-active provider config.
+
+        Args:
+            version_id: str: .
+            secret_version_id: str: .
+
+        Returns:
+            ProviderConfigVersion: .
+        """
         with self._session_factory.begin() as session:
             row = session.get(ProviderConfigVersionRow, version_id)
             if row is None:
                 raise KeyError(f"provider config '{version_id}' not found")
             if row.lifecycle == ConfigLifecycle.ACTIVE.value:
-                raise ValueError(
-                    "active provider config is immutable; create a new config version"
-                )
+                raise ValueError("active provider config is immutable; create a new config version")
             row.secret_version_id = secret_version_id
             return _provider_config_from_row(row)
 
     def activate_provider_config(self, version_id: str) -> ProviderConfigVersion:
-        """Activate a provider config and deprecate older active sibling versions."""
+        """Activate a provider config and deprecate older active sibling versions.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            ProviderConfigVersion: .
+        """
         with self._session_factory.begin() as session:
             row = session.get(ProviderConfigVersionRow, version_id)
             if row is None:
@@ -851,14 +1191,28 @@ class SQLAlchemyStrategyRepository:
             return _provider_config_from_row(row)
 
     def save_universe_definition(self, version: UniverseDefinitionVersion) -> None:
-        """Append a universe definition version."""
+        """Append a universe definition version.
+
+        Args:
+            version: UniverseDefinitionVersion: .
+
+        Returns:
+            None: .
+        """
         with self._session_factory.begin() as session:
             if session.get(UniverseDefinitionVersionRow, version.version_id) is not None:
                 raise ValueError(f"universe '{version.version_id}' already exists")
             session.add(_universe_to_row(version))
 
     def get_universe_definition(self, version_id: str) -> UniverseDefinitionVersion | None:
-        """Return a universe definition version."""
+        """Return a universe definition version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            UniverseDefinitionVersion | None: .
+        """
         with self._session_factory() as session:
             row = session.get(UniverseDefinitionVersionRow, version_id)
             return _universe_from_row(row) if row is not None else None
@@ -869,7 +1223,15 @@ class SQLAlchemyStrategyRepository:
         *,
         universe_code: str | None = None,
     ) -> list[UniverseDefinitionVersion]:
-        """List active universe definitions for an owner."""
+        """List active universe definitions for an owner.
+
+        Args:
+            owner_id: str: .
+            universe_code: str | None: .
+
+        Returns:
+            list[UniverseDefinitionVersion]: .
+        """
         with self._session_factory() as session:
             rows = session.scalars(
                 active_universe_definitions_by_owner(
@@ -881,18 +1243,30 @@ class SQLAlchemyStrategyRepository:
             return [_universe_from_row(row) for row in rows]
 
     def list_universe_definitions(self, owner_id: str) -> list[UniverseDefinitionVersion]:
-        """List all universe definition versions for an owner."""
+        """List all universe definition versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[UniverseDefinitionVersion]: .
+        """
         with self._session_factory() as session:
-            rows = session.scalars(
-                universe_definitions_by_owner(owner_id)
-            ).all()
+            rows = session.scalars(universe_definitions_by_owner(owner_id)).all()
             return [_universe_from_row(row) for row in rows]
 
     def activate_universe_definition(
         self,
         version_id: str,
     ) -> UniverseDefinitionVersion:
-        """Activate a universe and deprecate the prior active family version."""
+        """Activate a universe and deprecate the prior active family version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            UniverseDefinitionVersion: .
+        """
         with self._session_factory.begin() as session:
             row = session.get(UniverseDefinitionVersionRow, version_id)
             if row is None:
@@ -911,20 +1285,41 @@ class SQLAlchemyStrategyRepository:
             return _universe_from_row(row)
 
     def save_indicator_view(self, version: IndicatorViewVersion) -> None:
-        """Append an indicator view version."""
+        """Append an indicator view version.
+
+        Args:
+            version: IndicatorViewVersion: .
+
+        Returns:
+            None: .
+        """
         with self._session_factory.begin() as session:
             if session.get(IndicatorViewVersionRow, version.version_id) is not None:
                 raise ValueError(f"indicator view '{version.version_id}' already exists")
             session.add(_indicator_view_to_row(version))
 
     def get_indicator_view(self, version_id: str) -> IndicatorViewVersion | None:
-        """Return an indicator view version."""
+        """Return an indicator view version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            IndicatorViewVersion | None: .
+        """
         with self._session_factory() as session:
             row = session.get(IndicatorViewVersionRow, version_id)
             return _indicator_view_from_row(row) if row is not None else None
 
     def get_active_indicator_view(self, owner_id: str) -> IndicatorViewVersion | None:
-        """Return the active indicator view for an owner."""
+        """Return the active indicator view for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            IndicatorViewVersion | None: .
+        """
         with self._session_factory() as session:
             rows = session.scalars(
                 active_indicator_views_by_owner(owner_id, ConfigLifecycle.ACTIVE.value)
@@ -932,23 +1327,33 @@ class SQLAlchemyStrategyRepository:
             return _single_or_none(_indicator_view_from_row(row) for row in rows)
 
     def list_indicator_views(self, owner_id: str) -> list[IndicatorViewVersion]:
-        """List all indicator view versions for an owner."""
+        """List all indicator view versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[IndicatorViewVersion]: .
+        """
         with self._session_factory() as session:
-            rows = session.scalars(
-                indicator_views_by_owner(owner_id)
-            ).all()
+            rows = session.scalars(indicator_views_by_owner(owner_id)).all()
             return [_indicator_view_from_row(row) for row in rows]
 
     def activate_indicator_view(self, version_id: str) -> IndicatorViewVersion:
-        """Activate an indicator view and deprecate the prior active version."""
+        """Activate an indicator view and deprecate the prior active version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            IndicatorViewVersion: .
+        """
         with self._session_factory.begin() as session:
             row = session.get(IndicatorViewVersionRow, version_id)
             if row is None:
                 raise KeyError(f"indicator view '{version_id}' not found")
             active_rows = session.scalars(
-                active_indicator_views_by_owner(
-                    row.owner_id, ConfigLifecycle.ACTIVE.value
-                )
+                active_indicator_views_by_owner(row.owner_id, ConfigLifecycle.ACTIVE.value)
             ).all()
             for active in active_rows:
                 if active.version_id != version_id:
@@ -957,49 +1362,78 @@ class SQLAlchemyStrategyRepository:
             return _indicator_view_from_row(row)
 
     def save_quant_feature_set(self, version: QuantFeatureSetVersion) -> None:
-        """Append a quant feature set version."""
+        """Append a quant feature set version.
+
+        Args:
+            version: QuantFeatureSetVersion: .
+
+        Returns:
+            None: .
+        """
         with self._session_factory.begin() as session:
             if session.get(QuantFeatureSetVersionRow, version.version_id) is not None:
                 raise ValueError(f"quant feature set '{version.version_id}' already exists")
             session.add(_quant_feature_set_to_row(version))
 
     def get_quant_feature_set(self, version_id: str) -> QuantFeatureSetVersion | None:
-        """Return a quant feature set version."""
+        """Return a quant feature set version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            QuantFeatureSetVersion | None: .
+        """
         with self._session_factory() as session:
             row = session.get(QuantFeatureSetVersionRow, version_id)
             return _quant_feature_set_from_row(row) if row is not None else None
 
     def get_active_quant_feature_set(self, owner_id: str) -> QuantFeatureSetVersion | None:
-        """Return the active quant feature set for an owner."""
+        """Return the active quant feature set for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            QuantFeatureSetVersion | None: .
+        """
         with self._session_factory() as session:
             rows = session.scalars(
-                active_quant_feature_sets_by_owner(
-                    owner_id, ConfigLifecycle.ACTIVE.value
-                )
+                active_quant_feature_sets_by_owner(owner_id, ConfigLifecycle.ACTIVE.value)
             ).all()
             return _single_or_none(_quant_feature_set_from_row(row) for row in rows)
 
     def list_quant_feature_sets(self, owner_id: str) -> list[QuantFeatureSetVersion]:
-        """List all quant feature set versions for an owner."""
+        """List all quant feature set versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[QuantFeatureSetVersion]: .
+        """
         with self._session_factory() as session:
-            rows = session.scalars(
-                quant_feature_sets_by_owner(owner_id)
-            ).all()
+            rows = session.scalars(quant_feature_sets_by_owner(owner_id)).all()
             return [_quant_feature_set_from_row(row) for row in rows]
 
     def activate_quant_feature_set(
         self,
         version_id: str,
     ) -> QuantFeatureSetVersion:
-        """Activate a quant feature set and deprecate the prior active version."""
+        """Activate a quant feature set and deprecate the prior active version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            QuantFeatureSetVersion: .
+        """
         with self._session_factory.begin() as session:
             row = session.get(QuantFeatureSetVersionRow, version_id)
             if row is None:
                 raise KeyError(f"quant feature set '{version_id}' not found")
             active_rows = session.scalars(
-                active_quant_feature_sets_by_owner(
-                    row.owner_id, ConfigLifecycle.ACTIVE.value
-                )
+                active_quant_feature_sets_by_owner(row.owner_id, ConfigLifecycle.ACTIVE.value)
             ).all()
             deprecated_existing = False
             for active in active_rows:
@@ -1012,14 +1446,28 @@ class SQLAlchemyStrategyRepository:
             return _quant_feature_set_from_row(row)
 
     def save_quant_strategy(self, version: QuantStrategyVersion) -> None:
-        """Append a quant strategy version."""
+        """Append a quant strategy version.
+
+        Args:
+            version: QuantStrategyVersion: .
+
+        Returns:
+            None: .
+        """
         with self._session_factory.begin() as session:
             if session.get(QuantStrategyVersionRow, version.version_id) is not None:
                 raise ValueError(f"quant strategy '{version.version_id}' already exists")
             session.add(_quant_strategy_to_row(version))
 
     def get_quant_strategy(self, version_id: str) -> QuantStrategyVersion | None:
-        """Return a quant strategy version."""
+        """Return a quant strategy version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            QuantStrategyVersion | None: .
+        """
         with self._session_factory() as session:
             row = session.get(QuantStrategyVersionRow, version_id)
             return _quant_strategy_from_row(row) if row is not None else None
@@ -1030,7 +1478,15 @@ class SQLAlchemyStrategyRepository:
         *,
         strategy_family: str = "default",
     ) -> QuantStrategyVersion | None:
-        """Return the active quant strategy for an owner and family."""
+        """Return the active quant strategy for an owner and family.
+
+        Args:
+            owner_id: str: .
+            strategy_family: str: .
+
+        Returns:
+            QuantStrategyVersion | None: .
+        """
         with self._session_factory() as session:
             rows = session.scalars(
                 active_quant_strategies_by_owner_and_family(
@@ -1042,15 +1498,27 @@ class SQLAlchemyStrategyRepository:
             return _single_or_none(_quant_strategy_from_row(row) for row in rows)
 
     def list_quant_strategies(self, owner_id: str) -> list[QuantStrategyVersion]:
-        """List all quant strategy versions for an owner."""
+        """List all quant strategy versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[QuantStrategyVersion]: .
+        """
         with self._session_factory() as session:
-            rows = session.scalars(
-                quant_strategies_by_owner(owner_id)
-            ).all()
+            rows = session.scalars(quant_strategies_by_owner(owner_id)).all()
             return [_quant_strategy_from_row(row) for row in rows]
 
     def activate_quant_strategy(self, version_id: str) -> QuantStrategyVersion:
-        """Activate a quant strategy and deprecate older active sibling versions."""
+        """Activate a quant strategy and deprecate older active sibling versions.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            QuantStrategyVersion: .
+        """
         with self._session_factory.begin() as session:
             row = session.get(QuantStrategyVersionRow, version_id)
             if row is None:
@@ -1073,14 +1541,28 @@ class SQLAlchemyStrategyRepository:
             return _quant_strategy_from_row(row)
 
     def save_user_style_prompt(self, version: UserStylePromptVersion) -> None:
-        """Append a user style prompt version."""
+        """Append a user style prompt version.
+
+        Args:
+            version: UserStylePromptVersion: .
+
+        Returns:
+            None: .
+        """
         with self._session_factory.begin() as session:
             if session.get(UserStylePromptVersionRow, version.version_id) is not None:
                 raise ValueError(f"style prompt '{version.version_id}' already exists")
             session.add(_user_style_prompt_to_row(version))
 
     def get_user_style_prompt(self, version_id: str) -> UserStylePromptVersion | None:
-        """Return a user style prompt version."""
+        """Return a user style prompt version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            UserStylePromptVersion | None: .
+        """
         with self._session_factory() as session:
             row = session.get(UserStylePromptVersionRow, version_id)
             return _user_style_prompt_from_row(row) if row is not None else None
@@ -1091,7 +1573,15 @@ class SQLAlchemyStrategyRepository:
         *,
         prompt_name: str = "default",
     ) -> UserStylePromptVersion | None:
-        """Return the active user style prompt for an owner and prompt name."""
+        """Return the active user style prompt for an owner and prompt name.
+
+        Args:
+            owner_id: str: .
+            prompt_name: str: .
+
+        Returns:
+            UserStylePromptVersion | None: .
+        """
         with self._session_factory() as session:
             rows = session.scalars(
                 active_user_style_prompts_by_owner_and_name(
@@ -1103,18 +1593,30 @@ class SQLAlchemyStrategyRepository:
             return _single_or_none(_user_style_prompt_from_row(row) for row in rows)
 
     def list_user_style_prompts(self, owner_id: str) -> list[UserStylePromptVersion]:
-        """List all user style prompt versions for an owner."""
+        """List all user style prompt versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[UserStylePromptVersion]: .
+        """
         with self._session_factory() as session:
-            rows = session.scalars(
-                user_style_prompts_by_owner(owner_id)
-            ).all()
+            rows = session.scalars(user_style_prompts_by_owner(owner_id)).all()
             return [_user_style_prompt_from_row(row) for row in rows]
 
     def activate_user_style_prompt(
         self,
         version_id: str,
     ) -> UserStylePromptVersion:
-        """Activate a style prompt and deprecate its prior active sibling."""
+        """Activate a style prompt and deprecate its prior active sibling.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            UserStylePromptVersion: .
+        """
         with self._session_factory.begin() as session:
             row = session.get(UserStylePromptVersionRow, version_id)
             if row is None:
@@ -1133,20 +1635,41 @@ class SQLAlchemyStrategyRepository:
             return _user_style_prompt_from_row(row)
 
     def save_tool_policy(self, version: ToolPolicyVersionRef) -> None:
-        """Append a tool policy version."""
+        """Append a tool policy version.
+
+        Args:
+            version: ToolPolicyVersionRef: .
+
+        Returns:
+            None: .
+        """
         with self._session_factory.begin() as session:
             if session.get(ToolPolicyVersionRow, version.version_id) is not None:
                 raise ValueError(f"tool policy '{version.version_id}' already exists")
             session.add(_tool_policy_to_row(version))
 
     def get_tool_policy(self, version_id: str) -> ToolPolicyVersionRef | None:
-        """Return a tool policy version."""
+        """Return a tool policy version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            ToolPolicyVersionRef | None: .
+        """
         with self._session_factory() as session:
             row = session.get(ToolPolicyVersionRow, version_id)
             return _tool_policy_from_row(row) if row is not None else None
 
     def get_active_tool_policy(self, owner_id: str) -> ToolPolicyVersionRef | None:
-        """Return the active tool policy for an owner."""
+        """Return the active tool policy for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            ToolPolicyVersionRef | None: .
+        """
         with self._session_factory() as session:
             rows = session.scalars(
                 active_tool_policies_by_owner(owner_id, ConfigLifecycle.ACTIVE.value)
@@ -1154,15 +1677,20 @@ class SQLAlchemyStrategyRepository:
             return _single_or_none(_tool_policy_from_row(row) for row in rows)
 
     def activate_tool_policy(self, version_id: str) -> ToolPolicyVersionRef:
-        """Activate a tool policy and deprecate the prior active version."""
+        """Activate a tool policy and deprecate the prior active version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            ToolPolicyVersionRef: .
+        """
         with self._session_factory.begin() as session:
             row = session.get(ToolPolicyVersionRow, version_id)
             if row is None:
                 raise KeyError(f"tool policy '{version_id}' not found")
             active_rows = session.scalars(
-                active_tool_policies_by_owner(
-                    row.owner_id, ConfigLifecycle.ACTIVE.value
-                )
+                active_tool_policies_by_owner(row.owner_id, ConfigLifecycle.ACTIVE.value)
             ).all()
             for active in active_rows:
                 if active.version_id != version_id:
@@ -1171,46 +1699,75 @@ class SQLAlchemyStrategyRepository:
             return _tool_policy_from_row(row)
 
     def save_research_scope(self, version: ResearchScopeVersion) -> None:
-        """Append a research scope version."""
+        """Append a research scope version.
+
+        Args:
+            version: ResearchScopeVersion: .
+
+        Returns:
+            None: .
+        """
         with self._session_factory.begin() as session:
             if session.get(ResearchScopeVersionRow, version.version_id) is not None:
                 raise ValueError(f"research scope '{version.version_id}' already exists")
             session.add(_research_scope_to_row(version))
 
     def get_research_scope(self, version_id: str) -> ResearchScopeVersion | None:
-        """Return a research scope version."""
+        """Return a research scope version.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            ResearchScopeVersion | None: .
+        """
         with self._session_factory() as session:
             row = session.get(ResearchScopeVersionRow, version_id)
             return _research_scope_from_row(row) if row is not None else None
 
     def get_active_research_scope(self, owner_id: str) -> ResearchScopeVersion | None:
-        """Return the active research scope for an owner."""
+        """Return the active research scope for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            ResearchScopeVersion | None: .
+        """
         with self._session_factory() as session:
             rows = session.scalars(
-                active_research_scopes_by_owner(
-                    owner_id, ConfigLifecycle.ACTIVE.value
-                )
+                active_research_scopes_by_owner(owner_id, ConfigLifecycle.ACTIVE.value)
             ).all()
             return _single_or_none(_research_scope_from_row(row) for row in rows)
 
     def list_research_scopes(self, owner_id: str) -> list[ResearchScopeVersion]:
-        """List all research scope versions for an owner."""
+        """List all research scope versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[ResearchScopeVersion]: .
+        """
         with self._session_factory() as session:
-            rows = session.scalars(
-                research_scopes_by_owner(owner_id)
-            ).all()
+            rows = session.scalars(research_scopes_by_owner(owner_id)).all()
             return [_research_scope_from_row(row) for row in rows]
 
     def activate_research_scope(self, version_id: str) -> ResearchScopeVersion:
-        """Activate a research scope and deprecate older active scopes."""
+        """Activate a research scope and deprecate older active scopes.
+
+        Args:
+            version_id: str: .
+
+        Returns:
+            ResearchScopeVersion: .
+        """
         with self._session_factory.begin() as session:
             row = session.get(ResearchScopeVersionRow, version_id)
             if row is None:
                 raise KeyError(f"research scope '{version_id}' not found")
             active_rows = session.scalars(
-                active_research_scopes_by_owner(
-                    row.owner_id, ConfigLifecycle.ACTIVE.value
-                )
+                active_research_scopes_by_owner(row.owner_id, ConfigLifecycle.ACTIVE.value)
             ).all()
             deprecated_existing = False
             for active in active_rows:
@@ -1233,7 +1790,19 @@ class SQLAlchemyStrategyRepository:
         idempotency_key: str,
         details: dict[str, object],
     ) -> StrategyConfigAuditRow:
-        """Append one idempotent config audit event."""
+        """Append one idempotent config audit event.
+
+        Args:
+            actor_id: str: .
+            resource_type: str: .
+            resource_version_id: str: .
+            action: str: .
+            idempotency_key: str: .
+            details: dict[str, object]: .
+
+        Returns:
+            StrategyConfigAuditRow: .
+        """
         with self._session_factory.begin() as session:
             statement = insert_config_audit(
                 audit_id=f"audit_{uuid.uuid4().hex[:12]}",
@@ -1246,9 +1815,7 @@ class SQLAlchemyStrategyRepository:
                 created_at=utc_now(),
             )
             session.execute(statement)
-            row = session.scalar(
-                config_audit_by_replay_key(actor_id, action, idempotency_key)
-            )
+            row = session.scalar(config_audit_by_replay_key(actor_id, action, idempotency_key))
             if row is None:
                 raise RuntimeError("failed to persist strategy config audit")
             return row
@@ -1260,26 +1827,56 @@ class SQLAlchemyStrategyRepository:
         action: str,
         idempotency_key: str,
     ) -> StrategyConfigAuditRow | None:
-        """Return a prior config mutation audit by replay key."""
+        """Return a prior config mutation audit by replay key.
+
+        Args:
+            actor_id: str: .
+            action: str: .
+            idempotency_key: str: .
+
+        Returns:
+            StrategyConfigAuditRow | None: .
+        """
         with self._session_factory() as session:
-            return session.scalar(
-                config_audit_by_replay_key(actor_id, action, idempotency_key)
-            )
+            return session.scalar(config_audit_by_replay_key(actor_id, action, idempotency_key))
 
 
 def _ensure_new(mapping: dict[str, object], version_id: str, resource_type: str) -> None:
-    """ensure new."""
+    """ensure new.
+
+    Args:
+        mapping: dict[str, object]: .
+        version_id: str: .
+        resource_type: str: .
+
+    Returns:
+        None: .
+    """
     if version_id in mapping:
         raise ValueError(f"{resource_type} '{version_id}' already exists")
 
 
 def _sorted_versions(versions: Iterable[T]) -> list[T]:
-    """sorted versions."""
+    """sorted versions.
+
+    Args:
+        versions: Iterable[T]: .
+
+    Returns:
+        list[T]: .
+    """
     return sorted(versions, key=lambda item: getattr(item, "version_id"))
 
 
 def _single_or_none(versions: Iterable[T]) -> T | None:
-    """single or none."""
+    """single or none.
+
+    Args:
+        versions: Iterable[T]: .
+
+    Returns:
+        T | None: .
+    """
     items = list(versions)
     if not items:
         return None
@@ -1290,7 +1887,14 @@ def _single_or_none(versions: Iterable[T]) -> T | None:
 
 
 def _provider_config_to_row(version: ProviderConfigVersion) -> ProviderConfigVersionRow:
-    """provider config to row."""
+    """provider config to row.
+
+    Args:
+        version: ProviderConfigVersion: .
+
+    Returns:
+        ProviderConfigVersionRow: .
+    """
     return ProviderConfigVersionRow(
         version_id=version.version_id,
         owner_id=version.owner_id,
@@ -1307,7 +1911,14 @@ def _provider_config_to_row(version: ProviderConfigVersion) -> ProviderConfigVer
 
 
 def _provider_config_from_row(row: ProviderConfigVersionRow) -> ProviderConfigVersion:
-    """provider config from row."""
+    """provider config from row.
+
+    Args:
+        row: ProviderConfigVersionRow: .
+
+    Returns:
+        ProviderConfigVersion: .
+    """
     return ProviderConfigVersion(
         version_id=row.version_id,
         owner_id=row.owner_id,
@@ -1324,7 +1935,14 @@ def _provider_config_from_row(row: ProviderConfigVersionRow) -> ProviderConfigVe
 
 
 def _universe_to_row(version: UniverseDefinitionVersion) -> UniverseDefinitionVersionRow:
-    """universe to row."""
+    """universe to row.
+
+    Args:
+        version: UniverseDefinitionVersion: .
+
+    Returns:
+        UniverseDefinitionVersionRow: .
+    """
     return UniverseDefinitionVersionRow(
         version_id=version.version_id,
         owner_id=version.owner_id,
@@ -1338,7 +1956,14 @@ def _universe_to_row(version: UniverseDefinitionVersion) -> UniverseDefinitionVe
 
 
 def _universe_from_row(row: UniverseDefinitionVersionRow) -> UniverseDefinitionVersion:
-    """universe from row."""
+    """universe from row.
+
+    Args:
+        row: UniverseDefinitionVersionRow: .
+
+    Returns:
+        UniverseDefinitionVersion: .
+    """
     return UniverseDefinitionVersion(
         version_id=row.version_id,
         owner_id=row.owner_id,
@@ -1352,7 +1977,14 @@ def _universe_from_row(row: UniverseDefinitionVersionRow) -> UniverseDefinitionV
 
 
 def _indicator_view_to_row(version: IndicatorViewVersion) -> IndicatorViewVersionRow:
-    """indicator view to row."""
+    """indicator view to row.
+
+    Args:
+        version: IndicatorViewVersion: .
+
+    Returns:
+        IndicatorViewVersionRow: .
+    """
     return IndicatorViewVersionRow(
         version_id=version.version_id,
         owner_id=version.owner_id,
@@ -1365,7 +1997,14 @@ def _indicator_view_to_row(version: IndicatorViewVersion) -> IndicatorViewVersio
 
 
 def _indicator_view_from_row(row: IndicatorViewVersionRow) -> IndicatorViewVersion:
-    """indicator view from row."""
+    """indicator view from row.
+
+    Args:
+        row: IndicatorViewVersionRow: .
+
+    Returns:
+        IndicatorViewVersion: .
+    """
     return IndicatorViewVersion(
         version_id=row.version_id,
         owner_id=row.owner_id,
@@ -1380,7 +2019,14 @@ def _indicator_view_from_row(row: IndicatorViewVersionRow) -> IndicatorViewVersi
 def _quant_feature_set_to_row(
     version: QuantFeatureSetVersion,
 ) -> QuantFeatureSetVersionRow:
-    """quant feature set to row."""
+    """quant feature set to row.
+
+    Args:
+        version: QuantFeatureSetVersion: .
+
+    Returns:
+        QuantFeatureSetVersionRow: .
+    """
     return QuantFeatureSetVersionRow(
         version_id=version.version_id,
         owner_id=version.owner_id,
@@ -1396,7 +2042,14 @@ def _quant_feature_set_to_row(
 def _quant_feature_set_from_row(
     row: QuantFeatureSetVersionRow,
 ) -> QuantFeatureSetVersion:
-    """quant feature set from row."""
+    """quant feature set from row.
+
+    Args:
+        row: QuantFeatureSetVersionRow: .
+
+    Returns:
+        QuantFeatureSetVersion: .
+    """
     return QuantFeatureSetVersion(
         version_id=row.version_id,
         owner_id=row.owner_id,
@@ -1410,7 +2063,14 @@ def _quant_feature_set_from_row(
 
 
 def _quant_strategy_to_row(version: QuantStrategyVersion) -> QuantStrategyVersionRow:
-    """quant strategy to row."""
+    """quant strategy to row.
+
+    Args:
+        version: QuantStrategyVersion: .
+
+    Returns:
+        QuantStrategyVersionRow: .
+    """
     return QuantStrategyVersionRow(
         version_id=version.version_id,
         owner_id=version.owner_id,
@@ -1424,7 +2084,14 @@ def _quant_strategy_to_row(version: QuantStrategyVersion) -> QuantStrategyVersio
 
 
 def _quant_strategy_from_row(row: QuantStrategyVersionRow) -> QuantStrategyVersion:
-    """quant strategy from row."""
+    """quant strategy from row.
+
+    Args:
+        row: QuantStrategyVersionRow: .
+
+    Returns:
+        QuantStrategyVersion: .
+    """
     return QuantStrategyVersion(
         version_id=row.version_id,
         owner_id=row.owner_id,
@@ -1440,7 +2107,14 @@ def _quant_strategy_from_row(row: QuantStrategyVersionRow) -> QuantStrategyVersi
 def _user_style_prompt_to_row(
     version: UserStylePromptVersion,
 ) -> UserStylePromptVersionRow:
-    """user style prompt to row."""
+    """user style prompt to row.
+
+    Args:
+        version: UserStylePromptVersion: .
+
+    Returns:
+        UserStylePromptVersionRow: .
+    """
     return UserStylePromptVersionRow(
         version_id=version.version_id,
         owner_id=version.owner_id,
@@ -1454,7 +2128,14 @@ def _user_style_prompt_to_row(
 def _user_style_prompt_from_row(
     row: UserStylePromptVersionRow,
 ) -> UserStylePromptVersion:
-    """user style prompt from row."""
+    """user style prompt from row.
+
+    Args:
+        row: UserStylePromptVersionRow: .
+
+    Returns:
+        UserStylePromptVersion: .
+    """
     return UserStylePromptVersion(
         version_id=row.version_id,
         owner_id=row.owner_id,
@@ -1466,7 +2147,14 @@ def _user_style_prompt_from_row(
 
 
 def _tool_policy_to_row(version: ToolPolicyVersionRef) -> ToolPolicyVersionRow:
-    """tool policy to row."""
+    """tool policy to row.
+
+    Args:
+        version: ToolPolicyVersionRef: .
+
+    Returns:
+        ToolPolicyVersionRow: .
+    """
     return ToolPolicyVersionRow(
         version_id=version.version_id,
         owner_id=version.owner_id,
@@ -1478,7 +2166,14 @@ def _tool_policy_to_row(version: ToolPolicyVersionRef) -> ToolPolicyVersionRow:
 
 
 def _tool_policy_from_row(row: ToolPolicyVersionRow) -> ToolPolicyVersionRef:
-    """tool policy from row."""
+    """tool policy from row.
+
+    Args:
+        row: ToolPolicyVersionRow: .
+
+    Returns:
+        ToolPolicyVersionRef: .
+    """
     return ToolPolicyVersionRef(
         version_id=row.version_id,
         owner_id=row.owner_id,
@@ -1490,7 +2185,14 @@ def _tool_policy_from_row(row: ToolPolicyVersionRow) -> ToolPolicyVersionRef:
 
 
 def _research_scope_to_row(version: ResearchScopeVersion) -> ResearchScopeVersionRow:
-    """research scope to row."""
+    """research scope to row.
+
+    Args:
+        version: ResearchScopeVersion: .
+
+    Returns:
+        ResearchScopeVersionRow: .
+    """
     return ResearchScopeVersionRow(
         version_id=version.version_id,
         owner_id=version.owner_id,
@@ -1509,7 +2211,14 @@ def _research_scope_to_row(version: ResearchScopeVersion) -> ResearchScopeVersio
 
 
 def _research_scope_from_row(row: ResearchScopeVersionRow) -> ResearchScopeVersion:
-    """research scope from row."""
+    """research scope from row.
+
+    Args:
+        row: ResearchScopeVersionRow: .
+
+    Returns:
+        ResearchScopeVersion: .
+    """
     return ResearchScopeVersion(
         version_id=row.version_id,
         owner_id=row.owner_id,

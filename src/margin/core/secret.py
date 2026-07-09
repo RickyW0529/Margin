@@ -14,25 +14,11 @@ from pydantic import BaseModel
 
 
 class SecretNotFoundError(KeyError):
-    """Raised when a Secret reference cannot be resolved."""
+    """Raised when a Secret reference cannot be resolved.."""
 
 
 class SecretManager:
-    """Reference-based Secret manager.
-
-    Supports two sources in priority order:
-        1. Environment variables (``MARGIN_SECRET_<REF>``).
-        2. Local Secret files (``.margin/secrets/<ref>`` or a custom directory).
-
-    Each reference name in a ``ProviderDescriptor.secret_refs`` list is resolved
-    to the real credential value via ``resolve()``. Only reference names live in
-    configuration files; plain text credentials do not.
-
-    Attributes:
-        _secrets_dir: Directory used for local Secret files.
-        _env_prefix: Prefix for environment variable lookups.
-        _cache: In-memory cache of resolved Secret values.
-    """
+    """Reference-based Secret manager.."""
 
     def __init__(
         self,
@@ -42,10 +28,11 @@ class SecretManager:
         """Initialize the Secret manager.
 
         Args:
-            secrets_dir: Directory containing local Secret files. Defaults to
-                ``.margin/secrets``.
-            env_prefix: Prefix for environment variables. Defaults to
-                ``MARGIN_SECRET_``.
+            secrets_dir: Path | None: .
+            env_prefix: str: .
+
+        Returns:
+            None: .
         """
         self._secrets_dir = secrets_dir or Path(".margin") / "secrets"
         self._env_prefix = env_prefix
@@ -55,14 +42,10 @@ class SecretManager:
         """Resolve a Secret value by its reference name.
 
         Args:
-            ref: Secret reference name (e.g. ``tushare_token``).
+            ref: str: .
 
         Returns:
-            The Secret value as a string.
-
-        Raises:
-            SecretNotFoundError: When the reference is not found in either the
-                environment variables or the local secrets directory.
+            str: .
         """
         if ref in self._cache:
             return self._cache[ref]
@@ -87,11 +70,11 @@ class SecretManager:
         """Resolve a versioned Secret Store reference through a trusted store.
 
         Args:
-            ref: Secret version reference to resolve.
-            store: Trusted SecretStore instance used for decryption.
+            ref: Any: .
+            store: Any: .
 
         Returns:
-            The decrypted secret value as a string.
+            str: .
         """
         return store.resolve(ref).get_secret_value()
 
@@ -99,10 +82,10 @@ class SecretManager:
         """Check whether a Secret reference can be resolved.
 
         Args:
-            ref: Secret reference name.
+            ref: str: .
 
         Returns:
-            ``True`` if the reference resolves to a value, otherwise ``False``.
+            bool: .
         """
         try:
             self.resolve(ref)
@@ -114,8 +97,7 @@ class SecretManager:
         """List all resolvable Secret reference names without exposing values.
 
         Returns:
-            Sorted list of reference names found in environment variables and
-            local Secret files.
+            list[str]: .
         """
         refs: set[str] = set()
 
@@ -133,12 +115,7 @@ class SecretManager:
 
 
 class SecretRefInfo(BaseModel):
-    """Secret reference metadata for display (does not contain the value).
-
-    Attributes:
-        ref: Secret reference name.
-        resolvable: Whether the reference can be resolved to a value.
-    """
+    """Secret reference metadata for display (does not contain the value).."""
 
     ref: str
     resolvable: bool

@@ -17,20 +17,27 @@ from margin.valuation_discovery.quant.models import (
 
 
 class HardFilterEngine:
-    """Apply configurable hard filters while preserving structured reasons."""
+    """Apply configurable hard filters while preserving structured reasons.."""
 
     def __init__(self, config: QuantConfig) -> None:
-        """Initialize the filter engine with configurable thresholds."""
+        """Initialize the filter engine with configurable thresholds.
+
+        Args:
+            config: QuantConfig: .
+
+        Returns:
+            None: .
+        """
         self._config = config
 
     def apply(self, frame: pd.DataFrame) -> HardFilterResult:
         """Apply hard filters to a quant cross-section.
 
         Args:
-            frame: DataFrame indexed by security_id with quant feature columns.
+            frame: pd.DataFrame: .
 
         Returns:
-            HardFilterResult with per-security filter reasons and data status.
+            HardFilterResult: .
         """
         results: dict[str, SecurityFilterResult] = {}
         for security_id, row in frame.iterrows():
@@ -51,7 +58,14 @@ class HardFilterEngine:
         return HardFilterResult(by_security=results)
 
     def _reasons_for(self, row: pd.Series) -> list[FilterReason]:
-        """Collect all structured filter reasons for one security row."""
+        """Collect all structured filter reasons for one security row.
+
+        Args:
+            row: pd.Series: .
+
+        Returns:
+            list[FilterReason]: .
+        """
         reasons: list[FilterReason] = []
         if bool(row.get("is_st", False)):
             reasons.append(
@@ -83,16 +97,21 @@ class HardFilterEngine:
         return reasons
 
     def _listing_reasons(self, row: pd.Series) -> list[FilterReason]:
-        """Return filter reasons related to listing history duration."""
+        """Return filter reasons related to listing history duration.
+
+        Args:
+            row: pd.Series: .
+
+        Returns:
+            list[FilterReason]: .
+        """
         listing_date = row.get("listing_date")
         decision_at = _coerce_datetime(row.get("decision_at")) or datetime.now(UTC)
         listed_at = _coerce_datetime(listing_date)
         if listed_at is None:
             return []
         listed_months = (
-            (decision_at.year - listed_at.year) * 12
-            + decision_at.month
-            - listed_at.month
+            (decision_at.year - listed_at.year) * 12 + decision_at.month - listed_at.month
         )
         if listed_months < self._config.min_listing_months:
             return [
@@ -108,7 +127,14 @@ class HardFilterEngine:
         return []
 
     def _liquidity_reasons(self, row: pd.Series) -> list[FilterReason]:
-        """Return filter reasons related to average trading liquidity."""
+        """Return filter reasons related to average trading liquidity.
+
+        Args:
+            row: pd.Series: .
+
+        Returns:
+            list[FilterReason]: .
+        """
         observed = _number_or_none(row.get("avg_amount_20d"))
         if observed is not None and observed < self._config.min_avg_amount_20d:
             return [
@@ -124,11 +150,16 @@ class HardFilterEngine:
         return []
 
     def _financial_completeness_reasons(self, row: pd.Series) -> list[FilterReason]:
-        """Return filter reasons for missing critical financial fields."""
+        """Return filter reasons for missing critical financial fields.
+
+        Args:
+            row: pd.Series: .
+
+        Returns:
+            list[FilterReason]: .
+        """
         missing = [
-            field
-            for field in self._config.critical_financial_fields
-            if _is_missing(row.get(field))
+            field for field in self._config.critical_financial_fields if _is_missing(row.get(field))
         ]
         return [
             FilterReason(
@@ -143,7 +174,14 @@ class HardFilterEngine:
         ]
 
     def _profitability_reasons(self, row: pd.Series) -> list[FilterReason]:
-        """Return filter reasons for consecutive-year profitability failures."""
+        """Return filter reasons for consecutive-year profitability failures.
+
+        Args:
+            row: pd.Series: .
+
+        Returns:
+            list[FilterReason]: .
+        """
         y1 = _number_or_none(row.get("net_profit_y1"))
         y2 = _number_or_none(row.get("net_profit_y2"))
         if y1 is not None and y2 is not None and y1 < 0 and y2 < 0:
@@ -160,7 +198,14 @@ class HardFilterEngine:
         return []
 
     def _balance_sheet_reasons(self, row: pd.Series) -> list[FilterReason]:
-        """Return filter reasons for balance sheet and goodwill risk."""
+        """Return filter reasons for balance sheet and goodwill risk.
+
+        Args:
+            row: pd.Series: .
+
+        Returns:
+            list[FilterReason]: .
+        """
         reasons: list[FilterReason] = []
         industry_family = str(row.get("industry_family") or "").lower()
         liability_threshold = (
@@ -198,7 +243,14 @@ class HardFilterEngine:
         return reasons
 
     def _cashflow_reasons(self, row: pd.Series) -> list[FilterReason]:
-        """Return filter reasons for weak operating cashflow quality."""
+        """Return filter reasons for weak operating cashflow quality.
+
+        Args:
+            row: pd.Series: .
+
+        Returns:
+            list[FilterReason]: .
+        """
         observed = _number_or_none(row.get("ocf_to_net_profit"))
         if observed is not None and observed < self._config.min_ocf_to_net_profit:
             return [
@@ -214,7 +266,14 @@ class HardFilterEngine:
         return []
 
     def _audit_reasons(self, row: pd.Series) -> list[FilterReason]:
-        """Return filter reasons for abnormal audit opinions."""
+        """Return filter reasons for abnormal audit opinions.
+
+        Args:
+            row: pd.Series: .
+
+        Returns:
+            list[FilterReason]: .
+        """
         opinion = str(row.get("audit_opinion") or "").lower()
         if opinion and opinion in self._config.abnormal_audit_opinions:
             return [
@@ -231,19 +290,40 @@ class HardFilterEngine:
 
 
 def _number_or_none(value: Any) -> float | None:
-    """Convert a value to float or return None if missing."""
+    """Convert a value to float or return None if missing.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        float | None: .
+    """
     if _is_missing(value):
         return None
     return float(value)
 
 
 def _is_missing(value: Any) -> bool:
-    """Return whether a value is None or pandas NaN."""
+    """Return whether a value is None or pandas NaN.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        bool: .
+    """
     return value is None or bool(pd.isna(value))
 
 
 def _coerce_datetime(value: Any) -> datetime | None:
-    """Coerce a value to a timezone-aware datetime or return None."""
+    """Coerce a value to a timezone-aware datetime or return None.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        datetime | None: .
+    """
     if _is_missing(value):
         return None
     if isinstance(value, datetime):

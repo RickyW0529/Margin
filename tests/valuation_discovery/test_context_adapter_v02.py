@@ -55,10 +55,10 @@ def test_context_builder_freezes_quant_news_evidence_and_previous_state(
     """Verify context snapshots contain only durable inputs required by AI review.
 
     Args:
-        database_url: PostgreSQL connection URL for the isolated test database.
+        database_url: str: .
 
     Returns:
-        None.
+        None: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -144,10 +144,18 @@ def test_context_builder_freezes_quant_news_evidence_and_previous_state(
 
 
 class FakeNewsBundleBuilder:
-    """Return a complete durable news context."""
+    """Return a complete durable news context.."""
 
     def build_for_run(self, *, run_id: str, security_id: str) -> NewsContextBundle:
-        """Build and return a deterministic news context bundle for the given run."""
+        """Build and return a deterministic news context bundle for the given run.
+
+        Args:
+            run_id: str: .
+            security_id: str: .
+
+        Returns:
+            NewsContextBundle: .
+        """
         assert run_id == "news-run-1"
         return NewsContextBundle(
             bundle_id="bundle-1",
@@ -169,20 +177,34 @@ class FakeNewsBundleBuilder:
 
 
 class FakeRetrievalTool:
-    """Record the PIT-constrained evidence retrieval call."""
+    """Record the PIT-constrained evidence retrieval call.."""
 
     def search(self, **kwargs):
-        """Return a deterministic retrieval result after asserting PIT constraints."""
+        """Return a deterministic retrieval result after asserting PIT constraints.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
         assert kwargs["symbol"] == "000001.SZ"
         assert kwargs["decision_at"] == DECISION_AT
         return ["retrieval-result"]
 
 
 class FakeEvidencePackageBuilder:
-    """Freeze one evidence package from retrieval output."""
+    """Freeze one evidence package from retrieval output.."""
 
     def build(self, **kwargs) -> EvidencePackage:
-        """Build and return a deterministic evidence package from retrieval results."""
+        """Build and return a deterministic evidence package from retrieval results.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            EvidencePackage: .
+        """
         assert kwargs["retrieval_results"] == ["retrieval-result"]
         assert kwargs["news_bundle_id"] == "bundle-1"
         return EvidencePackage(
@@ -203,7 +225,14 @@ class FakeEvidencePackageBuilder:
 
 
 def _clean(session_factory) -> None:
-    """Remove rows owned by this test."""
+    """Remove rows owned by this test.
+
+    Args:
+        session_factory: Any: .
+
+    Returns:
+        None: .
+    """
     with session_factory.begin() as session:
         for model in (
             ResearchContextSnapshotRow,
@@ -220,7 +249,14 @@ def _clean(session_factory) -> None:
 
 
 def _seed_quant_state(session_factory) -> None:
-    """Seed current/previous quant lineage and the prior effective conclusion."""
+    """Seed current/previous quant lineage and the prior effective conclusion.
+
+    Args:
+        session_factory: Any: .
+
+    Returns:
+        None: .
+    """
     with session_factory.begin() as session:
         session.add(
             QuantInputSnapshotRow(

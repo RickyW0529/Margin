@@ -15,7 +15,10 @@ def test_migration_sequence_from_clean_database(database_url: str) -> None:
     """Test that the full migration sequence runs from a clean database.
 
     Args:
-        database_url: Connection string for the PostgreSQL test server.
+        database_url: str: .
+
+    Returns:
+        None: .
     """
     url = make_url(database_url)
     clean_database_name = f"{url.database}_migration_v02"

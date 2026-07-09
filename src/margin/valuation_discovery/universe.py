@@ -16,7 +16,14 @@ from margin.valuation_discovery.repository import ValuationDiscoveryRepository
 
 
 def _normalize_datetime(value: datetime) -> datetime:
-    """Normalize a datetime to timezone-aware UTC."""
+    """Normalize a datetime to timezone-aware UTC.
+
+    Args:
+        value: datetime: .
+
+    Returns:
+        datetime: .
+    """
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
@@ -24,7 +31,7 @@ def _normalize_datetime(value: datetime) -> datetime:
 
 @dataclass(frozen=True)
 class SecurityListing:
-    """Bitemporal listed-security record used to derive ALL_A."""
+    """Bitemporal listed-security record used to derive ALL_A.."""
 
     security_id: str
     listed_at: datetime
@@ -33,7 +40,15 @@ class SecurityListing:
     known_to: datetime | None
 
     def is_visible_at(self, *, business_at: datetime, known_at: datetime) -> bool:
-        """Return whether the security is listed and known at the supplied times."""
+        """Return whether the security is listed and known at the supplied times.
+
+        Args:
+            business_at: datetime: .
+            known_at: datetime: .
+
+        Returns:
+            bool: .
+        """
         business = _normalize_datetime(business_at)
         known = _normalize_datetime(known_at)
         listed_at = _normalize_datetime(self.listed_at)
@@ -52,7 +67,7 @@ class SecurityListing:
 
 
 class SecurityListingSource(Protocol):
-    """PIT source for ALL_A security listings."""
+    """PIT source for ALL_A security listings.."""
 
     def list_listed_securities(
         self,
@@ -60,11 +75,19 @@ class SecurityListingSource(Protocol):
         business_at: datetime,
         known_at: datetime,
     ) -> Iterable[SecurityListing]:
-        """Return securities listed at business time and known at system time."""
+        """Return securities listed at business time and known at system time.
+
+        Args:
+            business_at: datetime: .
+            known_at: datetime: .
+
+        Returns:
+            Iterable[SecurityListing]: .
+        """
 
 
 class UniverseResolver:
-    """Resolve built-in and custom company pools into frozen universe snapshots."""
+    """Resolve built-in and custom company pools into frozen universe snapshots.."""
 
     def __init__(
         self,
@@ -75,14 +98,21 @@ class UniverseResolver:
         """Initialize the resolver with a repository and optional security source.
 
         Args:
-            repository: Persistence boundary for universe snapshots and memberships.
-            security_source: Optional PIT source for ALL_A security listings.
+            repository: ValuationDiscoveryRepository: .
+            security_source: SecurityListingSource | None: .
+
+        Returns:
+            None: .
         """
         self._repository = repository
         self._security_source = security_source
 
     def seed_default_definitions(self) -> None:
-        """Create default data-driven definitions for CSI300, CSI500, and ALL_A."""
+        """Create default data-driven definitions for CSI300, CSI500, and ALL_A.
+
+        Returns:
+            None: .
+        """
         add_definition = getattr(self._repository, "add_universe_definition", None)
         if add_definition is None:
             return
@@ -107,7 +137,16 @@ class UniverseResolver:
         business_at: datetime,
         known_at: datetime,
     ) -> UniverseSnapshot:
-        """Resolve and persist a frozen universe snapshot."""
+        """Resolve and persist a frozen universe snapshot.
+
+        Args:
+            universe_code: UniverseCode | str: .
+            business_at: datetime: .
+            known_at: datetime: .
+
+        Returns:
+            UniverseSnapshot: .
+        """
         if str(universe_code) == UniverseCode.ALL_A.value:
             snapshot = self._snapshot_all_a(
                 universe_code=universe_code,
@@ -130,7 +169,16 @@ class UniverseResolver:
         business_at: datetime,
         known_at: datetime,
     ) -> UniverseSnapshot:
-        """Build a universe snapshot from visible index memberships."""
+        """Build a universe snapshot from visible index memberships.
+
+        Args:
+            universe_code: UniverseCode | str: .
+            business_at: datetime: .
+            known_at: datetime: .
+
+        Returns:
+            UniverseSnapshot: .
+        """
         memberships = [
             membership
             for membership in self._repository.list_universe_memberships(
@@ -158,7 +206,16 @@ class UniverseResolver:
         business_at: datetime,
         known_at: datetime,
     ) -> UniverseSnapshot:
-        """Build a universe snapshot from listed securities for ALL_A."""
+        """Build a universe snapshot from listed securities for ALL_A.
+
+        Args:
+            universe_code: UniverseCode | str: .
+            business_at: datetime: .
+            known_at: datetime: .
+
+        Returns:
+            UniverseSnapshot: .
+        """
         if self._security_source is None:
             listings: tuple[SecurityListing, ...] = ()
         else:

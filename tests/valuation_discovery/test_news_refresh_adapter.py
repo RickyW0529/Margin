@@ -12,7 +12,11 @@ from margin.valuation_discovery.orchestrator import RetryableStepError
 
 
 def test_news_refresh_adapter_waits_when_refresh_run_is_still_running() -> None:
-    """A non-terminal news refresh must not release downstream context building."""
+    """A non-terminal news refresh must not release downstream context building.
+
+    Returns:
+        None: .
+    """
     adapter = NewsRefreshAdapter(
         _FakeNewsRefreshService(
             status=NewsRefreshStatus.RUNNING,
@@ -33,14 +37,30 @@ def test_news_refresh_adapter_waits_when_refresh_run_is_still_running() -> None:
 
 
 class _FakeNewsRefreshService:
-    """Return a deterministic news refresh run."""
+    """Return a deterministic news refresh run.."""
 
     def __init__(self, *, status: NewsRefreshStatus, run_id: str) -> None:
+        """Helper _init__.
+
+        Args:
+            status: NewsRefreshStatus: .
+            run_id: str: .
+
+        Returns:
+            None: .
+        """
         self._status = status
         self._run_id = run_id
 
     def refresh_for_targets(self, **kwargs: object) -> NewsRefreshRun:
-        """Return a refresh run with the configured status."""
+        """Return a refresh run with the configured status.
+
+        Args:
+            **kwargs: object: .
+
+        Returns:
+            NewsRefreshRun: .
+        """
         decision_at = kwargs["decision_at"]
         assert isinstance(decision_at, datetime)
         return NewsRefreshRun(

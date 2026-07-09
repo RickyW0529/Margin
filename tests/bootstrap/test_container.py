@@ -9,6 +9,11 @@ from margin.strategy.repository import SQLAlchemyStrategyRepository
 
 
 def _settings() -> MarginSettings:
+    """Helper settings.
+
+    Returns:
+        MarginSettings: .
+    """
     return MarginSettings(
         _env_file=None,
         database_url="postgresql+psycopg://margin:margin@localhost:5432/margin_test",
@@ -17,7 +22,11 @@ def _settings() -> MarginSettings:
 
 
 def test_app_container_exposes_shared_runtime_services() -> None:
-    """Verify bootstrap wiring lives outside the FastAPI dependency layer."""
+    """Verify bootstrap wiring lives outside the FastAPI dependency layer.
+
+    Returns:
+        None: .
+    """
     container = AppContainer(_settings())
     try:
         assert container.engine is container.engine
@@ -29,9 +38,25 @@ def test_app_container_exposes_shared_runtime_services() -> None:
 
 
 def test_app_container_dispose_does_not_create_unused_engine(monkeypatch) -> None:
-    """Shutdown should not initialize database resources that were never used."""
+    """Shutdown should not initialize database resources that were never used.
+
+    Args:
+        monkeypatch: Any: .
+
+    Returns:
+        None: .
+    """
 
     def fail_if_called(*_args, **_kwargs):
+        """Process fail_if_called.
+
+        Args:
+            *_args: Any: .
+            **_kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
         raise AssertionError("dispose() created an unused engine")
 
     monkeypatch.setattr(

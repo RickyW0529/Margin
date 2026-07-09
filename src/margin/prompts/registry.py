@@ -8,20 +8,20 @@ from margin.prompts.models import PromptTemplate
 
 
 class PromptNotFoundError(KeyError):
-    """Raised when a prompt template is missing."""
+    """Raised when a prompt template is missing.."""
 
 
 class PromptRegistry:
-    """In-memory registry of versioned prompt templates."""
+    """In-memory registry of versioned prompt templates.."""
 
     def __init__(self, templates: Iterable[PromptTemplate]) -> None:
         """Initialize registry.
 
         Args:
-            templates: Prompt templates to register.
+            templates: Iterable[PromptTemplate]: .
 
-        Raises:
-            ValueError: If a prompt id is duplicated.
+        Returns:
+            None: .
         """
         self._templates: dict[str, PromptTemplate] = {}
         for template in templates:
@@ -31,12 +31,23 @@ class PromptRegistry:
             self._templates[template.prompt_id] = template
 
     def get(self, prompt_id: str) -> PromptTemplate:
-        """Return a prompt template by stable prompt id."""
+        """Return a prompt template by stable prompt id.
+
+        Args:
+            prompt_id: str: .
+
+        Returns:
+            PromptTemplate: .
+        """
         try:
             return self._templates[prompt_id]
         except KeyError as exc:
             raise PromptNotFoundError(prompt_id) from exc
 
     def list_ids(self) -> tuple[str, ...]:
-        """Return registered prompt ids in stable order."""
+        """Return registered prompt ids in stable order.
+
+        Returns:
+            tuple[str, ...]: .
+        """
         return tuple(sorted(self._templates))

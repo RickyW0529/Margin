@@ -15,27 +15,16 @@ T = TypeVar("T")
 
 
 class RateLimitError(Exception):
-    """Raised when a rate limiter has no available tokens."""
+    """Raised when a rate limiter has no available tokens.."""
 
 
 class ProviderError(Exception):
-    """Raised when a Provider call fails."""
+    """Raised when a Provider call fails.."""
 
 
 @dataclass
 class RateLimiter:
-    """Token-bucket rate limiter.
-
-    Controls call frequency using ``max_calls`` per ``per_seconds``. This
-    implementation is not thread-safe, which is acceptable for the MVP single-
-    threaded worker use case.
-
-    Attributes:
-        max_calls: Maximum number of tokens (calls) in the bucket.
-        per_seconds: Time window over which ``max_calls`` tokens are allocated.
-        _tokens: Current number of available tokens.
-        _last_refill: Timestamp of the last token refill.
-    """
+    """Token-bucket rate limiter.."""
 
     max_calls: int = 60
     per_seconds: float = 60.0
@@ -43,12 +32,20 @@ class RateLimiter:
     _last_refill: float = field(init=False)
 
     def __post_init__(self) -> None:
-        """Initialize the token bucket to full capacity."""
+        """Initialize the token bucket to full capacity.
+
+        Returns:
+            None: .
+        """
         self._tokens = float(self.max_calls)
         self._last_refill = time.monotonic()
 
     def _refill(self) -> None:
-        """Refill tokens based on elapsed time since the last refill."""
+        """Refill tokens based on elapsed time since the last refill.
+
+        Returns:
+            None: .
+        """
         now = time.monotonic()
         elapsed = now - self._last_refill
         new_tokens = elapsed * (self.max_calls / self.per_seconds)
@@ -58,21 +55,19 @@ class RateLimiter:
     def acquire(self) -> None:
         """Acquire one token, raising if the bucket is empty.
 
-        Raises:
-            RateLimitError: When no tokens are available.
+        Returns:
+            None: .
         """
         self._refill()
         if self._tokens < 1.0:
-            raise RateLimitError(
-                f"Rate limit exceeded: {self.max_calls}/{self.per_seconds}s"
-            )
+            raise RateLimitError(f"Rate limit exceeded: {self.max_calls}/{self.per_seconds}s")
         self._tokens -= 1.0
 
     def try_acquire(self) -> bool:
         """Try to acquire one token without raising.
 
         Returns:
-            ``True`` if a token was acquired, otherwise ``False``.
+            bool: .
         """
         try:
             self.acquire()
@@ -83,15 +78,7 @@ class RateLimiter:
 
 @dataclass
 class RetryConfig:
-    """Configuration for retry behavior.
-
-    Attributes:
-        max_retries: Maximum number of retry attempts.
-        base_delay: Initial delay between retries in seconds.
-        max_delay: Maximum delay between retries in seconds.
-        backoff_factor: Multiplier applied to the delay on each retry.
-        retry_on: Tuple of exception types that should trigger a retry.
-    """
+    """Configuration for retry behavior.."""
 
     max_retries: int = 3
     base_delay: float = 1.0
@@ -103,10 +90,10 @@ class RetryConfig:
         """Compute the delay before retry ``attempt`` using exponential backoff.
 
         Args:
-            attempt: The retry attempt number (1-based).
+            attempt: int: .
 
         Returns:
-            Delay in seconds, capped at ``max_delay``.
+            float: .
         """
         delay = self.base_delay * (self.backoff_factor ** (attempt - 1))
         return min(delay, self.max_delay)
@@ -123,19 +110,15 @@ def with_retry(
     """Call a function with retry, backoff, and optional rate limiting.
 
     Args:
-        func: The callable to invoke.
-        args: Positional arguments passed to ``func``.
-        kwargs: Keyword arguments passed to ``func``.
-        config: Retry configuration. Defaults to ``RetryConfig()``.
-        rate_limiter: Optional rate limiter to acquire before each attempt.
-        sleep: Sleep function used between retries. Injectable for testing.
+        func: Callable[..., T]: .
+        args: tuple: .
+        kwargs: dict[str, Any] | None: .
+        config: RetryConfig | None: .
+        rate_limiter: RateLimiter | None: .
+        sleep: Callable[[float], None]: .
 
     Returns:
-        A tuple of (``func`` return value, number of attempts made).
-
-    Raises:
-        Exception: The last exception encountered when all retries are exhausted.
-            Non-retryable exceptions propagate immediately.
+        tuple[T, int]: .
     """
     config = config or RetryConfig()
     kwargs = kwargs or {}

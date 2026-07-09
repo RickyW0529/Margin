@@ -10,7 +10,7 @@ from margin.vector.repository import VectorRepository
 
 
 class DocumentIndexingRunner:
-    """Connect module 03 document events to module 04 chunks/embeddings."""
+    """Connect module 03 document events to module 04 chunks/embeddings.."""
 
     def __init__(
         self,
@@ -23,14 +23,13 @@ class DocumentIndexingRunner:
         """Initialize the indexing runner.
 
         Args:
-            news_repository: Repository used to claim document outbox messages and
-                load document events.
-            vector_repository: Repository used to persist chunks, embeddings, and
-                audit records.
-            embedding_provider: Provider used to generate chunk embeddings. Must
-                expose an ``embed_batch`` method.
-            chunker: Chunker used to split document events into chunks. Defaults to
-                a new ``Chunker`` instance.
+            news_repository: NewsRepository: .
+            vector_repository: VectorRepository: .
+            embedding_provider: Any: .
+            chunker: Chunker | None: .
+
+        Returns:
+            None: .
         """
         self._news = news_repository
         self._vectors = vector_repository
@@ -40,15 +39,11 @@ class DocumentIndexingRunner:
     def run_once(self, *, limit: int = 50) -> int:
         """Consume one batch of vector-index outbox messages.
 
-        For each claimed outbox message, the corresponding document event is loaded,
-        chunked, embedded, and persisted. Successfully processed messages are marked
-        as delivered; failures are marked with an error message.
-
         Args:
-            limit: Maximum number of outbox messages to process in this batch.
+            limit: int: .
 
         Returns:
-            The total number of chunks indexed across all processed messages.
+            int: .
         """
         indexed = 0
         for message in self._news.claim_outbox("vector_index", limit):
@@ -57,9 +52,7 @@ class DocumentIndexingRunner:
                 if event is None:
                     raise KeyError(f"document event '{message.event_id}' not found")
                 chunks = self._chunker.chunk(event)
-                vectors = self._embedding.embed_batch(
-                    [chunk.content for chunk in chunks]
-                )
+                vectors = self._embedding.embed_batch([chunk.content for chunk in chunks])
                 provider_name = _provider_name(self._embedding)
                 model_version = _provider_version(self._embedding)
                 self._vectors.upsert_chunks(chunks)
@@ -93,7 +86,7 @@ class DocumentIndexingRunner:
 
 
 class IndexingRunner:
-    """Lease-aware v0.2 runner for durable vector-index outbox recovery."""
+    """Lease-aware v0.2 runner for durable vector-index outbox recovery.."""
 
     def __init__(
         self,
@@ -105,9 +98,12 @@ class IndexingRunner:
         """Initialize the lease-aware indexing runner.
 
         Args:
-            news_repository: Repository used to claim outbox rows with a lease.
-            pipeline: Indexing pipeline exposing an ``index_event`` method.
-            lease_seconds: Lease duration for claimed outbox rows.
+            news_repository: NewsRepository: .
+            pipeline: Any: .
+            lease_seconds: int: .
+
+        Returns:
+            None: .
         """
         self._news = news_repository
         self._pipeline = pipeline
@@ -117,10 +113,10 @@ class IndexingRunner:
         """Claim one eligible outbox row.
 
         Args:
-            now: Optional current timestamp override for lease calculation.
+            now: Any: .
 
         Returns:
-            The claimed outbox row, or ``None`` if no eligible row is available.
+            Any: .
         """
         claimed = self._news.claim_outbox_with_lease(
             "vector_index",
@@ -133,12 +129,11 @@ class IndexingRunner:
     def process_one(self, *, event_id: str) -> None:
         """Process one document event and preserve retryability on provider failure.
 
-        If the outbox row is not already in ``processing`` state, an attempt is
-        made to claim it first. On success the outbox row is marked as
-        succeeded; on failure it is marked as retryable.
-
         Args:
-            event_id: Identifier of the document event to process.
+            event_id: str: .
+
+        Returns:
+            None: .
         """
         row = self._news.get_outbox_by_event(event_id, "vector_index")
         if row is None:
@@ -165,10 +160,10 @@ def _provider_name(provider: Any) -> str:
     """Return the provider's canonical name.
 
     Args:
-        provider: An embedding provider instance.
+        provider: Any: .
 
     Returns:
-        The provider name, falling back to the descriptor name when necessary.
+        str: .
     """
     value = getattr(provider, "name", None)
     if value:
@@ -180,10 +175,10 @@ def _provider_version(provider: Any) -> str:
     """Return the provider's version string.
 
     Args:
-        provider: An embedding provider instance.
+        provider: Any: .
 
     Returns:
-        The provider version, falling back to the descriptor version when necessary.
+        str: .
     """
     value = getattr(provider, "version", None)
     if value:

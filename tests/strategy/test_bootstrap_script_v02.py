@@ -13,11 +13,8 @@ from scripts.bootstrap_config import build_provider_specs
 def test_bootstrap_provider_specs_contain_no_plaintext_secrets() -> None:
     """Verify non-sensitive bootstrap definitions never copy API keys into config JSON.
 
-    The rendered provider specs must include all expected providers while
-    ensuring that secret values do not appear in any string representation.
-
     Returns:
-        None.
+        None: .
     """
     settings = MarginSettings(_env_file=None)
 

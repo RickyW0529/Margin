@@ -18,10 +18,14 @@ from margin.data.providers import AKShareProvider, TushareProvider
 
 
 class TestAKShareProvider:
-    """Unit tests for ``AKShareProvider`` covering descriptors, mapping, and health checks."""
+    """Unit tests for ``AKShareProvider`` covering descriptors, mapping, and health checks.."""
 
     def test_descriptor(self):
-        """The provider descriptor exposes the expected name, type and capabilities."""
+        """The provider descriptor exposes the expected name, type and capabilities.
+
+        Returns:
+            Any: .
+        """
         p = AKShareProvider()
         assert p.descriptor.name == "akshare"
         assert p.descriptor.provider_type.value == "market_data"
@@ -29,12 +33,20 @@ class TestAKShareProvider:
         assert p.descriptor.secret_refs == []
 
     def test_implements_market_data_protocol(self):
-        """The provider implements the ``MarketDataProvider`` protocol."""
+        """The provider implements the ``MarketDataProvider`` protocol.
+
+        Returns:
+            Any: .
+        """
         p = AKShareProvider()
         assert isinstance(p, MarketDataProvider)
 
     def test_get_bars_field_mapping(self):
-        """``get_bars`` maps Chinese column names to canonical fields and PIT timestamps."""
+        """``get_bars`` maps Chinese column names to canonical fields and PIT timestamps.
+
+        Returns:
+            Any: .
+        """
         p = AKShareProvider()
 
         mock_df = MagicMock()
@@ -73,7 +85,11 @@ class TestAKShareProvider:
         assert bar["available_at"] == datetime(2026, 6, 17, 15, 0)
 
     def test_get_bars_accepts_date_objects_from_current_akshare(self):
-        """Current AKShare date objects map to a market-close availability time."""
+        """Current AKShare date objects map to a market-close availability time.
+
+        Returns:
+            Any: .
+        """
         p = AKShareProvider()
         mock_df = MagicMock()
         mock_df.iterrows.return_value = [
@@ -101,7 +117,11 @@ class TestAKShareProvider:
         assert bars[0]["available_at"] == datetime(2026, 6, 17, 15, 0)
 
     def test_get_securities_field_mapping(self):
-        """``get_securities`` maps raw security rows to canonical symbols and names."""
+        """``get_securities`` maps raw security rows to canonical symbols and names.
+
+        Returns:
+            Any: .
+        """
         p = AKShareProvider()
         mock_df = MagicMock()
         mock_df.iterrows.return_value = [
@@ -119,7 +139,11 @@ class TestAKShareProvider:
         assert securities[0]["source"] == "akshare"
 
     def test_get_index_members(self):
-        """``get_index_members`` maps raw constituent rows to canonical symbols."""
+        """``get_index_members`` maps raw constituent rows to canonical symbols.
+
+        Returns:
+            Any: .
+        """
         p = AKShareProvider()
         mock_df = MagicMock()
         mock_df.iterrows.return_value = [
@@ -135,7 +159,11 @@ class TestAKShareProvider:
         assert members[0]["source"] == "akshare"
 
     def test_get_valuations(self):
-        """``get_valuations`` maps Legulegu valuation history to canonical fields."""
+        """``get_valuations`` maps Legulegu valuation history to canonical fields.
+
+        Returns:
+            Any: .
+        """
         p = AKShareProvider()
         mock_df = MagicMock()
         mock_df.iterrows.return_value = [
@@ -163,7 +191,11 @@ class TestAKShareProvider:
         assert values[0]["source"] == "akshare"
 
     def test_healthcheck_healthy(self):
-        """A successful SDK call returns a healthy status."""
+        """A successful SDK call returns a healthy status.
+
+        Returns:
+            Any: .
+        """
         p = AKShareProvider()
         with patch("akshare.stock_zh_a_spot_em", return_value=MagicMock()):
             result = p.healthcheck()
@@ -171,7 +203,11 @@ class TestAKShareProvider:
         assert result.provider_name == "akshare"
 
     def test_healthcheck_unhealthy(self):
-        """An SDK exception returns an unhealthy status containing the error."""
+        """An SDK exception returns an unhealthy status containing the error.
+
+        Returns:
+            Any: .
+        """
         p = AKShareProvider()
         with patch("akshare.stock_zh_a_spot_em", side_effect=Exception("network error")):
             result = p.healthcheck()
@@ -180,22 +216,34 @@ class TestAKShareProvider:
 
 
 class TestTushareProvider:
-    """Unit tests for ``TushareProvider`` covering token handling, mapping, and health checks."""
+    """Unit tests for ``TushareProvider`` covering token handling, mapping, and health checks.."""
 
     def test_descriptor(self):
-        """The provider descriptor exposes the expected name, type and token secret ref."""
+        """The provider descriptor exposes the expected name, type and token secret ref.
+
+        Returns:
+            Any: .
+        """
         p = TushareProvider(token="fake")
         assert p.descriptor.name == "tushare"
         assert p.descriptor.provider_type.value == "market_data"
         assert "tushare_token" in p.descriptor.secret_refs
 
     def test_implements_market_data_protocol(self):
-        """The provider implements the ``MarketDataProvider`` protocol."""
+        """The provider implements the ``MarketDataProvider`` protocol.
+
+        Returns:
+            Any: .
+        """
         p = TushareProvider(token="fake")
         assert isinstance(p, MarketDataProvider)
 
     def test_set_token_resets_pro(self):
-        """Setting a new token clears the cached ``pro`` client."""
+        """Setting a new token clears the cached ``pro`` client.
+
+        Returns:
+            Any: .
+        """
         p = TushareProvider(token="old")
         p._pro = MagicMock()
         p.set_token("new")
@@ -203,7 +251,11 @@ class TestTushareProvider:
         assert p._pro is None
 
     def test_custom_http_url_is_applied_to_pro_client(self):
-        """A custom Tushare-compatible endpoint is applied to the SDK client."""
+        """A custom Tushare-compatible endpoint is applied to the SDK client.
+
+        Returns:
+            Any: .
+        """
         p = TushareProvider(token="fake", http_url="https://example.test/api")
         mock_pro = MagicMock()
 
@@ -213,7 +265,11 @@ class TestTushareProvider:
         assert mock_pro._DataApi__http_url == "https://example.test/api"
 
     def test_get_bars_field_mapping(self):
-        """``get_bars`` maps tushare daily fields to canonical fields and PIT timestamps."""
+        """``get_bars`` maps tushare daily fields to canonical fields and PIT timestamps.
+
+        Returns:
+            Any: .
+        """
         p = TushareProvider(token="fake")
         mock_pro = MagicMock()
         mock_df = MagicMock()
@@ -256,7 +312,11 @@ class TestTushareProvider:
         )
 
     def test_get_securities_field_mapping(self):
-        """``get_securities`` maps stock_basic rows to canonical security metadata."""
+        """``get_securities`` maps stock_basic rows to canonical security metadata.
+
+        Returns:
+            Any: .
+        """
         p = TushareProvider(token="fake")
         mock_pro = MagicMock()
         mock_df = MagicMock()
@@ -283,7 +343,11 @@ class TestTushareProvider:
         assert securities[0]["source"] == "tushare"
 
     def test_get_adjustment_factors(self):
-        """``get_adjustment_factors`` returns mapped adjustment factor records."""
+        """``get_adjustment_factors`` returns mapped adjustment factor records.
+
+        Returns:
+            Any: .
+        """
         p = TushareProvider(token="fake")
         mock_pro = MagicMock()
         mock_df = MagicMock()
@@ -301,7 +365,11 @@ class TestTushareProvider:
         assert factors[0]["source"] == "tushare"
 
     def test_large_universe_bars_use_trade_date_cross_sections(self):
-        """Full-A sync scales by trading date instead of one request per symbol."""
+        """Full-A sync scales by trading date instead of one request per symbol.
+
+        Returns:
+            Any: .
+        """
         p = TushareProvider(token="fake")
         mock_pro = MagicMock()
         mock_pro.daily.return_value = pd.DataFrame(
@@ -330,7 +398,11 @@ class TestTushareProvider:
         assert bars[0]["symbol"] == "000001.SZ"
 
     def test_large_universe_adjustments_use_trade_date_cross_sections(self):
-        """Full-A adjustment sync scales by trading date."""
+        """Full-A adjustment sync scales by trading date.
+
+        Returns:
+            Any: .
+        """
         p = TushareProvider(token="fake")
         mock_pro = MagicMock()
         mock_pro.adj_factor.return_value = pd.DataFrame(
@@ -354,7 +426,11 @@ class TestTushareProvider:
         assert factors[0]["symbol"] == "000001.SZ"
 
     def test_get_financials(self):
-        """``get_financials`` maps fina_indicator rows to canonical financial fields."""
+        """``get_financials`` maps fina_indicator rows to canonical financial fields.
+
+        Returns:
+            Any: .
+        """
         p = TushareProvider(token="fake")
         mock_pro = MagicMock()
         mock_df = MagicMock()
@@ -364,16 +440,18 @@ class TestTushareProvider:
         mock_pro.fina_indicator.return_value = mock_df
         p._pro = mock_pro
 
-        financials = p.get_financials(
-            ["000001.SZ"], datetime(2026, 1, 1), datetime(2026, 6, 18)
-        )
+        financials = p.get_financials(["000001.SZ"], datetime(2026, 1, 1), datetime(2026, 6, 18))
         assert len(financials) == 1
         assert financials[0]["roe"] == 0.12
         assert financials[0]["source"] == "tushare"
         assert financials[0]["roe_ttm"] == 0.12
 
     def test_get_financials_lands_raw_income_profit_from_pit_income_rows(self):
-        """Raw parent-company profit is landed without provider-time derivation."""
+        """Raw parent-company profit is landed without provider-time derivation.
+
+        Returns:
+            Any: .
+        """
         p = TushareProvider(token="fake")
         mock_pro = MagicMock()
         mock_pro.fina_indicator.return_value = pd.DataFrame(
@@ -428,7 +506,11 @@ class TestTushareProvider:
         assert "net_profit_y2" not in financials[0]
 
     def test_large_universe_financials_use_paginated_cross_section(self):
-        """Financial sync uses paginated market-wide calls for a large universe."""
+        """Financial sync uses paginated market-wide calls for a large universe.
+
+        Returns:
+            Any: .
+        """
         p = TushareProvider(token="fake")
         mock_pro = MagicMock()
         mock_pro.fina_indicator.return_value = pd.DataFrame(
@@ -473,7 +555,11 @@ class TestTushareProvider:
         assert financials[0]["n_income_attr_p"] == 100.0
 
     def test_get_valuations(self):
-        """``get_valuations`` maps daily_basic rows to canonical valuation fields."""
+        """``get_valuations`` maps daily_basic rows to canonical valuation fields.
+
+        Returns:
+            Any: .
+        """
         p = TushareProvider(token="fake")
         mock_pro = MagicMock()
         mock_df = MagicMock()
@@ -505,7 +591,11 @@ class TestTushareProvider:
         assert values[0]["source"] == "tushare"
 
     def test_large_universe_valuations_use_trade_date_cross_sections(self):
-        """Full-A valuation sync scales by trading date."""
+        """Full-A valuation sync scales by trading date.
+
+        Returns:
+            Any: .
+        """
         p = TushareProvider(token="fake")
         mock_pro = MagicMock()
         mock_pro.daily_basic.return_value = pd.DataFrame(
@@ -535,7 +625,11 @@ class TestTushareProvider:
         assert values[0]["symbol"] == "000001.SZ"
 
     def test_healthcheck_healthy(self):
-        """A configured pro client returns a healthy status."""
+        """A configured pro client returns a healthy status.
+
+        Returns:
+            Any: .
+        """
         p = TushareProvider(token="fake")
         mock_pro = MagicMock()
         p._pro = mock_pro
@@ -544,7 +638,11 @@ class TestTushareProvider:
         mock_pro.stock_basic.assert_called_once()
 
     def test_healthcheck_unhealthy(self):
-        """An invalid token yields an unhealthy status."""
+        """An invalid token yields an unhealthy status.
+
+        Returns:
+            Any: .
+        """
         p = TushareProvider(token="bad")
         with patch("tushare.pro_api", side_effect=Exception("invalid token")):
             result = p.healthcheck()
@@ -552,12 +650,17 @@ class TestTushareProvider:
 
 
 class TestProviderRegistryIntegration:
-    """Integration tests for provider registration and invocation via ``ProviderRegistry``."""
+    """Integration tests for provider registration and invocation via ``ProviderRegistry``.."""
 
     def test_register_and_call_akshare(self, tmp_path, monkeypatch):
         """Registers ``AKShareProvider`` and calls ``get_bars`` through the registry.
 
-        Verifies success tracking, response hashing, and audit logging.
+        Args:
+            tmp_path: Any: .
+            monkeypatch: Any: .
+
+        Returns:
+            Any: .
         """
         from margin.core.audit import AuditLogger
         from margin.core.registry import ProviderRegistry
@@ -590,7 +693,8 @@ class TestProviderRegistryIntegration:
 
         with patch("akshare.stock_zh_a_hist", return_value=mock_df):
             data, result = registry.call(
-                "akshare", "get_bars",
+                "akshare",
+                "get_bars",
                 args=(["000001.SZ"], datetime(2026, 6, 1), datetime(2026, 6, 18)),
             )
 

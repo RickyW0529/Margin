@@ -22,20 +22,16 @@ from margin.sql.core_queries import (
 
 
 def _utc_now() -> datetime:
-    """Return the current UTC timestamp."""
+    """Return the current UTC timestamp.
+
+    Returns:
+        datetime: .
+    """
     return datetime.now(UTC)
 
 
 class OutboxState(StrEnum):
-    """States of a transactional outbox message.
-
-    Attributes:
-        PENDING: Message is waiting to be claimed.
-        CLAIMED: Message has been claimed by a worker for delivery.
-        DELIVERED: Message has been successfully delivered.
-        FAILED_RETRYABLE: Message failed but can be retried.
-        FAILED_FINAL: Message failed permanently and will not be retried.
-    """
+    """States of a transactional outbox message.."""
 
     PENDING = "pending"
     CLAIMED = "claimed"
@@ -45,22 +41,7 @@ class OutboxState(StrEnum):
 
 
 class OutboxMessage(BaseModel):
-    """Sanitized outbox message and current delivery state.
-
-    Attributes:
-        outbox_id: Unique identifier of the outbox message.
-        topic: Message topic used for routing.
-        idempotency_key: Key for deduplicating repeated enqueue requests.
-        payload: The message payload dictionary.
-        state: Current delivery state of the message.
-        available_at: Timestamp when the message becomes claimable.
-        lease_owner: Identifier of the worker holding the lease, if claimed.
-        lease_expires_at: When the current lease expires, if claimed.
-        attempt_count: Number of delivery attempts made so far.
-        last_error_code: Error code from the last failed attempt.
-        created_at: UTC timestamp when the message was created.
-        delivered_at: UTC timestamp when the message was delivered, if done.
-    """
+    """Sanitized outbox message and current delivery state.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -79,12 +60,7 @@ class OutboxMessage(BaseModel):
 
 
 class OutboxRepository(Protocol):
-    """Persistence contract for durable outbox messages.
-
-    Defines the enqueue, claim, deliver, and fail contract for
-    transactional outbox messages. Implementations must enforce idempotency
-    on enqueue and serialize concurrent claims per topic.
-    """
+    """Persistence contract for durable outbox messages.."""
 
     def enqueue_once(
         self,
@@ -97,13 +73,13 @@ class OutboxRepository(Protocol):
         """Enqueue a message with idempotency checking.
 
         Args:
-            topic: Message topic.
-            idempotency_key: Key for deduplication.
-            payload: The message payload.
-            now: Current timestamp.
+            topic: str: .
+            idempotency_key: str: .
+            payload: dict[str, Any]: .
+            now: datetime: .
 
         Returns:
-            The existing or newly created OutboxMessage.
+            OutboxMessage: .
         """
         ...
 
@@ -119,14 +95,14 @@ class OutboxRepository(Protocol):
         """Claim a batch of due messages for delivery.
 
         Args:
-            topic: Message topic.
-            worker_id: Identifier of the claiming worker.
-            now: Current timestamp.
-            lease_expires_at: When the lease expires.
-            limit: Maximum number of messages to claim.
+            topic: str: .
+            worker_id: str: .
+            now: datetime: .
+            lease_expires_at: datetime: .
+            limit: int: .
 
         Returns:
-            List of claimed OutboxMessages.
+            list[OutboxMessage]: .
         """
         ...
 
@@ -134,12 +110,12 @@ class OutboxRepository(Protocol):
         """Mark a claimed message as delivered.
 
         Args:
-            outbox_id: Identifier of the message.
-            worker_id: Identifier of the claiming worker.
-            now: Current timestamp.
+            outbox_id: str: .
+            worker_id: str: .
+            now: datetime: .
 
         Returns:
-            True if the message was marked delivered, False otherwise.
+            bool: .
         """
         ...
 
@@ -154,13 +130,13 @@ class OutboxRepository(Protocol):
         """Mark a claimed message as failed, optionally retryable.
 
         Args:
-            outbox_id: Identifier of the message.
-            worker_id: Identifier of the claiming worker.
-            error_code: Reason for the failure.
-            retry_after: Optional retry time for retryable failures.
+            outbox_id: str: .
+            worker_id: str: .
+            error_code: str: .
+            retry_after: datetime | None: .
 
         Returns:
-            True if the message was marked failed, False otherwise.
+            bool: .
         """
         ...
 
@@ -168,10 +144,10 @@ class OutboxRepository(Protocol):
         """Retrieve an outbox message by its identifier.
 
         Args:
-            outbox_id: The message identifier.
+            outbox_id: str: .
 
         Returns:
-            The OutboxMessage, or None if not found.
+            OutboxMessage | None: .
         """
         ...
 
@@ -179,23 +155,23 @@ class OutboxRepository(Protocol):
         """Return the total number of messages for a topic.
 
         Args:
-            topic: The topic to count.
+            topic: str: .
 
         Returns:
-            Message count for the topic.
+            int: .
         """
         ...
 
 
 class MemoryOutboxRepository:
-    """Thread-safe in-memory implementation of the outbox contract.
-
-    Uses an ``RLock`` to serialize concurrent operations. Intended for
-    tests and single-process deployments.
-    """
+    """Thread-safe in-memory implementation of the outbox contract.."""
 
     def __init__(self) -> None:
-        """Initialize an empty in-memory outbox."""
+        """Initialize an empty in-memory outbox.
+
+        Returns:
+            None: .
+        """
         self._lock = RLock()
         self._rows: dict[str, OutboxMessage] = {}
         self._keys: dict[tuple[str, str], str] = {}
@@ -211,16 +187,13 @@ class MemoryOutboxRepository:
         """Enqueue a message with idempotency checking.
 
         Args:
-            topic: Message topic.
-            idempotency_key: Key for deduplication.
-            payload: The message payload.
-            now: Current timestamp.
+            topic: str: .
+            idempotency_key: str: .
+            payload: dict[str, Any]: .
+            now: datetime: .
 
         Returns:
-            The existing or newly created OutboxMessage.
-
-        Raises:
-            ValueError: If the idempotency key exists with a conflicting payload.
+            OutboxMessage: .
         """
         with self._lock:
             key = (topic, idempotency_key)
@@ -256,14 +229,14 @@ class MemoryOutboxRepository:
         """Claim a batch of due messages with lease assignment.
 
         Args:
-            topic: Message topic.
-            worker_id: Identifier of the claiming worker.
-            now: Current timestamp.
-            lease_expires_at: When the lease expires.
-            limit: Maximum number of messages to claim.
+            topic: str: .
+            worker_id: str: .
+            now: datetime: .
+            lease_expires_at: datetime: .
+            limit: int: .
 
         Returns:
-            List of claimed OutboxMessages.
+            list[OutboxMessage]: .
         """
         with self._lock:
             candidates = sorted(
@@ -292,20 +265,16 @@ class MemoryOutboxRepository:
         """Mark a claimed message as delivered.
 
         Args:
-            outbox_id: Identifier of the message.
-            worker_id: Identifier of the claiming worker.
-            now: Current timestamp.
+            outbox_id: str: .
+            worker_id: str: .
+            now: datetime: .
 
         Returns:
-            True if the message was marked delivered, False otherwise.
+            bool: .
         """
         with self._lock:
             row = self._rows.get(outbox_id)
-            if (
-                row is None
-                or row.state != OutboxState.CLAIMED
-                or row.lease_owner != worker_id
-            ):
+            if row is None or row.state != OutboxState.CLAIMED or row.lease_owner != worker_id:
                 return False
             self._rows[outbox_id] = row.model_copy(
                 update={
@@ -328,21 +297,17 @@ class MemoryOutboxRepository:
         """Mark a claimed message as failed.
 
         Args:
-            outbox_id: Identifier of the message.
-            worker_id: Identifier of the claiming worker.
-            error_code: Reason for the failure.
-            retry_after: Optional retry time for retryable failures.
+            outbox_id: str: .
+            worker_id: str: .
+            error_code: str: .
+            retry_after: datetime | None: .
 
         Returns:
-            True if the message was marked failed, False otherwise.
+            bool: .
         """
         with self._lock:
             row = self._rows.get(outbox_id)
-            if (
-                row is None
-                or row.state != OutboxState.CLAIMED
-                or row.lease_owner != worker_id
-            ):
+            if row is None or row.state != OutboxState.CLAIMED or row.lease_owner != worker_id:
                 return False
             state = (
                 OutboxState.FAILED_RETRYABLE
@@ -364,10 +329,10 @@ class MemoryOutboxRepository:
         """Retrieve an outbox message by identifier.
 
         Args:
-            outbox_id: The message identifier.
+            outbox_id: str: .
 
         Returns:
-            The OutboxMessage, or None if not found.
+            OutboxMessage | None: .
         """
         with self._lock:
             return self._rows.get(outbox_id)
@@ -376,28 +341,26 @@ class MemoryOutboxRepository:
         """Return the total number of messages for a topic.
 
         Args:
-            topic: The topic to count.
+            topic: str: .
 
         Returns:
-            Message count for the topic.
+            int: .
         """
         with self._lock:
             return sum(row.topic == topic for row in self._rows.values())
 
 
 class SQLAlchemyOutboxRepository:
-    """PostgreSQL outbox repository using unique keys and ``SKIP LOCKED``.
-
-    Enforces idempotency via a unique constraint on ``(topic,
-    idempotency_key)`` and claims batches using ``SKIP LOCKED`` to allow
-    concurrent workers without contention.
-    """
+    """PostgreSQL outbox repository using unique keys and ``SKIP LOCKED``.."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
         """Initialize the repository.
 
         Args:
-            session_factory: Callable that returns a new SQLAlchemy session.
+            session_factory: Callable[[], Session]: .
+
+        Returns:
+            None: .
         """
         self._session_factory = session_factory
 
@@ -412,13 +375,13 @@ class SQLAlchemyOutboxRepository:
         """Enqueue a message with idempotency checking.
 
         Args:
-            topic: Message topic.
-            idempotency_key: Key for deduplication.
-            payload: The message payload.
-            now: Current timestamp.
+            topic: str: .
+            idempotency_key: str: .
+            payload: dict[str, Any]: .
+            now: datetime: .
 
         Returns:
-            The existing or newly created OutboxMessage.
+            OutboxMessage: .
         """
         with self._session_factory.begin() as session:
             return self.enqueue_once_in_session(
@@ -441,18 +404,14 @@ class SQLAlchemyOutboxRepository:
         """Enqueue using the caller's business transaction.
 
         Args:
-            session: SQLAlchemy session owned by the caller's transaction.
-            topic: Message topic.
-            idempotency_key: Key for deduplication.
-            payload: The message payload.
-            now: Current timestamp.
+            session: Session: .
+            topic: str: .
+            idempotency_key: str: .
+            payload: dict[str, Any]: .
+            now: datetime: .
 
         Returns:
-            The newly created OutboxMessage.
-
-        Raises:
-            RuntimeError: If the outbox row could not be created.
-            ValueError: If the idempotency key exists with a conflicting payload.
+            OutboxMessage: .
         """
         outbox_id = f"outbox_{uuid4().hex}"
         session.execute(
@@ -466,9 +425,7 @@ class SQLAlchemyOutboxRepository:
                 now=now,
             )
         )
-        row = session.scalar(
-            outbox_row_by_topic_and_key(topic, idempotency_key)
-        )
+        row = session.scalar(outbox_row_by_topic_and_key(topic, idempotency_key))
         if row is None:
             raise RuntimeError("outbox row could not be created")
         if dict(row.payload) != payload:
@@ -487,14 +444,14 @@ class SQLAlchemyOutboxRepository:
         """Claim a batch of due messages using SKIP LOCKED.
 
         Args:
-            topic: Message topic.
-            worker_id: Identifier of the claiming worker.
-            now: Current timestamp.
-            lease_expires_at: When the lease expires.
-            limit: Maximum number of messages to claim.
+            topic: str: .
+            worker_id: str: .
+            now: datetime: .
+            lease_expires_at: datetime: .
+            limit: int: .
 
         Returns:
-            List of claimed OutboxMessages.
+            list[OutboxMessage]: .
         """
         claimable_statement = outbox_claim_batch(topic, now, limit)
         with self._session_factory.begin() as session:
@@ -512,12 +469,12 @@ class SQLAlchemyOutboxRepository:
         """Mark a claimed message as delivered.
 
         Args:
-            outbox_id: Identifier of the message.
-            worker_id: Identifier of the claiming worker.
-            now: Current timestamp.
+            outbox_id: str: .
+            worker_id: str: .
+            now: datetime: .
 
         Returns:
-            True if the message was marked delivered, False otherwise.
+            bool: .
         """
         with self._session_factory.begin() as session:
             row = session.get(TransactionalOutboxRow, outbox_id)
@@ -544,13 +501,13 @@ class SQLAlchemyOutboxRepository:
         """Mark a claimed message as failed.
 
         Args:
-            outbox_id: Identifier of the message.
-            worker_id: Identifier of the claiming worker.
-            error_code: Reason for the failure.
-            retry_after: Optional retry time for retryable failures.
+            outbox_id: str: .
+            worker_id: str: .
+            error_code: str: .
+            retry_after: datetime | None: .
 
         Returns:
-            True if the message was marked failed, False otherwise.
+            bool: .
         """
         with self._session_factory.begin() as session:
             row = session.get(TransactionalOutboxRow, outbox_id)
@@ -576,10 +533,10 @@ class SQLAlchemyOutboxRepository:
         """Retrieve an outbox message by identifier.
 
         Args:
-            outbox_id: The message identifier.
+            outbox_id: str: .
 
         Returns:
-            The OutboxMessage, or None if not found.
+            OutboxMessage | None: .
         """
         with self._session_factory() as session:
             row = session.get(TransactionalOutboxRow, outbox_id)
@@ -589,23 +546,17 @@ class SQLAlchemyOutboxRepository:
         """Return the total number of messages for a topic.
 
         Args:
-            topic: The topic to count.
+            topic: str: .
 
         Returns:
-            Message count for the topic.
+            int: .
         """
         with self._session_factory() as session:
-            return int(
-                session.scalar(outbox_count_by_topic(topic)) or 0
-            )
+            return int(session.scalar(outbox_count_by_topic(topic)) or 0)
 
 
 class TransactionalOutbox:
-    """Validated facade over a durable outbox repository.
-
-    Provides input validation (non-empty topic and idempotency key) and
-    lease duration computation on top of a raw OutboxRepository.
-    """
+    """Validated facade over a durable outbox repository.."""
 
     def __init__(
         self,
@@ -616,8 +567,11 @@ class TransactionalOutbox:
         """Initialize the outbox facade.
 
         Args:
-            repository: The outbox repository.
-            clock: Callable returning current UTC time.
+            repository: OutboxRepository: .
+            clock: Callable[[], datetime]: .
+
+        Returns:
+            None: .
         """
         self._repository = repository
         self._clock = clock
@@ -632,15 +586,12 @@ class TransactionalOutbox:
         """Enqueue a message with validation and idempotency.
 
         Args:
-            topic: Message topic.
-            idempotency_key: Key for deduplication.
-            payload: The message payload.
+            topic: str: .
+            idempotency_key: str: .
+            payload: dict[str, Any]: .
 
         Returns:
-            The existing or newly created OutboxMessage.
-
-        Raises:
-            ValueError: If topic or idempotency_key is empty.
+            OutboxMessage: .
         """
         if not topic.strip() or not idempotency_key.strip():
             raise ValueError("topic and idempotency_key are required")
@@ -663,17 +614,14 @@ class TransactionalOutbox:
         """Claim a batch of due messages.
 
         Args:
-            topic: Message topic.
-            worker_id: Identifier of the claiming worker.
-            lease_seconds: Lease duration in seconds.
-            limit: Maximum number of messages to claim.
-            now: Current timestamp (uses clock if not provided).
+            topic: str: .
+            worker_id: str: .
+            lease_seconds: int: .
+            limit: int: .
+            now: datetime | None: .
 
         Returns:
-            List of claimed OutboxMessages.
-
-        Raises:
-            ValueError: If lease_seconds or limit is not positive.
+            list[OutboxMessage]: .
         """
         claimed_at = now or self._clock()
         if lease_seconds <= 0 or limit <= 0:
@@ -690,11 +638,11 @@ class TransactionalOutbox:
         """Mark a message as delivered.
 
         Args:
-            outbox_id: Identifier of the message.
-            worker_id: Identifier of the claiming worker.
+            outbox_id: str: .
+            worker_id: str: .
 
         Returns:
-            True if the message was marked delivered.
+            bool: .
         """
         return self._repository.mark_delivered(
             outbox_id,
@@ -713,13 +661,13 @@ class TransactionalOutbox:
         """Mark a message as failed.
 
         Args:
-            outbox_id: Identifier of the message.
-            worker_id: Identifier of the claiming worker.
-            error_code: Reason for the failure.
-            retry_after: Optional retry time for retryable failures.
+            outbox_id: str: .
+            worker_id: str: .
+            error_code: str: .
+            retry_after: datetime | None: .
 
         Returns:
-            True if the message was marked failed.
+            bool: .
         """
         return self._repository.mark_failed(
             outbox_id,
@@ -732,15 +680,12 @@ class TransactionalOutbox:
 def _outbox_claimable(row: OutboxMessage, now: datetime) -> bool:
     """Determine whether an outbox message is eligible for claiming.
 
-    A message is claimable if it is pending or failed-retryable and past its
-    available_at, or if it is claimed but its lease has expired.
-
     Args:
-        row: The outbox message to check.
-        now: Current timestamp.
+        row: OutboxMessage: .
+        now: datetime: .
 
     Returns:
-        True if the message can be claimed.
+        bool: .
     """
     if row.state in {OutboxState.PENDING, OutboxState.FAILED_RETRYABLE}:
         return row.available_at <= now
@@ -755,10 +700,10 @@ def _outbox_from_row(row: TransactionalOutboxRow) -> OutboxMessage:
     """Map a transactional outbox ORM row to a domain model.
 
     Args:
-        row: The outbox ORM row.
+        row: TransactionalOutboxRow: .
 
     Returns:
-        The corresponding domain OutboxMessage.
+        OutboxMessage: .
     """
     return OutboxMessage(
         outbox_id=row.outbox_id,

@@ -11,20 +11,7 @@ from margin.core.run_states import StepAttempt
 
 
 class StepClaim(BaseModel):
-    """Lease-bearing claim returned to a step handler.
-
-    Attributes:
-        event_id: Unique identifier of the claimed step event.
-        previous_event_id: Optional id of the preceding step event.
-        run_id: Identifier of the parent orchestration run.
-        step_id: Identifier of the orchestration step.
-        attempt_no: Execution attempt number (1-based).
-        input_hash: SHA-256 hash of the step input payload.
-        input_ref: Optional reference to the input snapshot.
-        trace_id: Request trace identifier.
-        lease_owner: Identifier of the worker holding the lease.
-        lease_expires_at: When the current lease expires.
-    """
+    """Lease-bearing claim returned to a step handler.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -41,13 +28,7 @@ class StepClaim(BaseModel):
 
 
 class DBStepWorker:
-    """Claims one due step atomically and appends a running state event.
-
-    This worker leases a single due step from the orchestration repository,
-    appends a RUNNING state event, and returns a StepClaim to the caller.
-    The lease prevents concurrent workers from claiming the same step until
-    it expires.
-    """
+    """Claims one due step atomically and appends a running state event.."""
 
     def __init__(
         self,
@@ -60,13 +41,13 @@ class DBStepWorker:
         """Initialize the worker.
 
         Args:
-            repository: The orchestration repository.
-            worker_id: Unique identifier for this worker.
-            lease_seconds: Lease duration in seconds.
-            allowed_step_ids: Optional set of step ids this worker may claim.
+            repository: OrchestrationRepository: .
+            worker_id: str: .
+            lease_seconds: int: .
+            allowed_step_ids: frozenset[str] | None: .
 
-        Raises:
-            ValueError: If worker_id is empty or lease_seconds is not positive.
+        Returns:
+            None: .
         """
         if not worker_id.strip():
             raise ValueError("worker_id is required")
@@ -81,13 +62,10 @@ class DBStepWorker:
         """Claim one due step from the repository, if available.
 
         Args:
-            now: Current UTC timestamp.
+            now: datetime: .
 
         Returns:
-            A step claim, or None if nothing is due.
-
-        Raises:
-            ValueError: If now is not timezone-aware.
+            StepClaim | None: .
         """
         if now.utcoffset() is None:
             raise ValueError("now must be timezone-aware")
@@ -104,13 +82,10 @@ def _claim_from_event(event: StepAttempt) -> StepClaim:
     """Convert a step attempt event into a lease-bearing claim.
 
     Args:
-        event: The step attempt event.
+        event: StepAttempt: .
 
     Returns:
-        A StepClaim with lease fields populated.
-
-    Raises:
-        ValueError: If the event is missing input_hash or lease fields.
+        StepClaim: .
     """
     if event.input_hash is None:
         raise ValueError("claimed step is missing input_hash")

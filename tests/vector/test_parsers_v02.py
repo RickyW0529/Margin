@@ -14,8 +14,8 @@ from margin.vector.parsers.text import PlainTextParser
 def test_html_parser_emits_heading_and_dom_locator() -> None:
     """HTML parser must emit heading text and a DOM-path locator.
 
-    Verifies that ``HtmlParser`` produces blocks with heading text, a DOM path
-    ending in the heading tag, and a section attribute matching the heading.
+    Returns:
+        None: .
     """
     parser = HtmlParser(parser_version="html-v0.2.0")
 
@@ -32,8 +32,8 @@ def test_html_parser_emits_heading_and_dom_locator() -> None:
 def test_csv_parser_emits_table_row_and_column_locator() -> None:
     """CSV parser must emit table-row blocks with row and column locators.
 
-    Verifies that ``CsvParser`` assigns table and row IDs and formats row content
-    as ``column=value`` pairs.
+    Returns:
+        None: .
     """
     parser = CsvParser(parser_version="csv-v0.2.0")
 
@@ -47,8 +47,8 @@ def test_csv_parser_emits_table_row_and_column_locator() -> None:
 def test_json_parser_flattens_scalar_fields() -> None:
     """JSON parser must flatten nested scalar fields into key-path blocks.
 
-    Verifies that ``JsonParser`` produces one block per scalar field with
-    dot-separated key paths and matching row IDs.
+    Returns:
+        None: .
     """
     parser = JsonParser(parser_version="json-v0.2.0")
 
@@ -61,8 +61,8 @@ def test_json_parser_flattens_scalar_fields() -> None:
 def test_text_parser_keeps_paragraph_quote_span() -> None:
     """Plain-text parser must preserve paragraph index and quote span.
 
-    Verifies that ``PlainTextParser`` assigns sequential paragraph indices and
-    computes quote spans covering the full paragraph text.
+    Returns:
+        None: .
     """
     parser = PlainTextParser(parser_version="text-v0.2.0")
 

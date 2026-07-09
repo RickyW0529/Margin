@@ -15,10 +15,17 @@ from margin.valuation_discovery.quant_adapter import SQLAlchemyScopeBindingProvi
 
 
 class _Strategy:
-    """Fake strategy repository exposing active v0.2 scope and config entities."""
+    """Fake strategy repository exposing active v0.2 scope and config entities.."""
 
     def get_research_scope(self, _version_id: str):
-        """Return a frozen research scope namespace."""
+        """Return a frozen research scope namespace.
+
+        Args:
+            _version_id: str: .
+
+        Returns:
+            Any: .
+        """
         return SimpleNamespace(
             version_id="scope-v1",
             quant_feature_set_version_id="features-v1",
@@ -29,7 +36,14 @@ class _Strategy:
         )
 
     def get_quant_feature_set(self, _version_id: str):
-        """Return a frozen quant feature set namespace."""
+        """Return a frozen quant feature set namespace.
+
+        Args:
+            _version_id: str: .
+
+        Returns:
+            Any: .
+        """
         return SimpleNamespace(
             version_id="features-v1",
             required_indicators=("n_income_attr_p", "roe_ttm", "pe_ttm"),
@@ -38,7 +52,14 @@ class _Strategy:
         )
 
     def get_quant_strategy(self, _version_id: str):
-        """Return a frozen quant strategy namespace."""
+        """Return a frozen quant strategy namespace.
+
+        Args:
+            _version_id: str: .
+
+        Returns:
+            Any: .
+        """
         return SimpleNamespace(
             version_id="strategy-v1",
             strategy_family="default",
@@ -48,7 +69,14 @@ class _Strategy:
         )
 
     def get_indicator_view(self, _version_id: str):
-        """Return a frozen indicator view namespace."""
+        """Return a frozen indicator view namespace.
+
+        Args:
+            _version_id: str: .
+
+        Returns:
+            Any: .
+        """
         return SimpleNamespace(
             version_id="view-v1",
             mode=IndicatorSelectionMode.ALL,
@@ -57,7 +85,14 @@ class _Strategy:
         )
 
     def get_universe_definition(self, _version_id: str):
-        """Return a stale universe definition with a static member."""
+        """Return a stale universe definition with a static member.
+
+        Args:
+            _version_id: str: .
+
+        Returns:
+            Any: .
+        """
         return SimpleNamespace(
             version_id="universe-v1",
             universe_code="ALL_A",
@@ -66,10 +101,14 @@ class _Strategy:
 
 
 class _CompanyPool:
-    """Fake company-pool repository returning a single non-ST member."""
+    """Fake company-pool repository returning a single non-ST member.."""
 
     def latest(self):
-        """Return the latest company-pool snapshot with one non-ST security."""
+        """Return the latest company-pool snapshot with one non-ST security.
+
+        Returns:
+            Any: .
+        """
         now = datetime(2026, 6, 23, tzinfo=UTC)
         return build_company_pool_snapshot(
             [
@@ -89,7 +128,7 @@ def test_all_a_scope_uses_latest_non_st_company_pool_snapshot() -> None:
     """Verify quant snapshots consume the frozen company-pool view, not stale config members.
 
     Returns:
-        None.
+        None: .
     """
     provider = SQLAlchemyScopeBindingProvider(
         _Strategy(),
@@ -102,8 +141,6 @@ def test_all_a_scope_uses_latest_non_st_company_pool_snapshot() -> None:
     assert binding.universe_snapshot.snapshot_id.startswith("cps_")
     assert binding.universe_snapshot.universe_code == "ALL_A_NON_ST"
     assert (
-        binding.quant_feature_set.metadata["quant_strategy"][
-            "quant_strategy_version_id"
-        ]
+        binding.quant_feature_set.metadata["quant_strategy"]["quant_strategy_version_id"]
         == "strategy-v1"
     )

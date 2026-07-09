@@ -18,7 +18,7 @@ from margin.core.run_states import OrchestrationRun, RunState, StepAttempt, Step
 
 
 class ValuationDiscoveryStep(StrEnum):
-    """Stable ordered step IDs for one valuation-discovery refresh."""
+    """Stable ordered step IDs for one valuation-discovery refresh.."""
 
     DATA_FRESHNESS_CHECK = "DATA_FRESHNESS_CHECK"
     DATA_SYNC = "DATA_SYNC"
@@ -38,7 +38,7 @@ STEP_ORDER: tuple[ValuationDiscoveryStep, ...] = tuple(ValuationDiscoveryStep)
 
 
 class RetryableStepError(RuntimeError):
-    """A stage is incomplete but can be retried without skipping downstream."""
+    """A stage is incomplete but can be retried without skipping downstream.."""
 
     def __init__(
         self,
@@ -47,7 +47,16 @@ class RetryableStepError(RuntimeError):
         retry_after: datetime,
         output_ref: str | None = None,
     ) -> None:
-        """Initialize a token-safe retry state."""
+        """Initialize a token-safe retry state.
+
+        Args:
+            code: str: .
+            retry_after: datetime: .
+            output_ref: str | None: .
+
+        Returns:
+            None: .
+        """
         self.code = code
         self.retry_after = retry_after
         self.output_ref = output_ref
@@ -55,80 +64,164 @@ class RetryableStepError(RuntimeError):
 
 
 class DataReadinessService(Protocol):
-    """Check warehouse freshness and create or poll required sync work."""
+    """Check warehouse freshness and create or poll required sync work.."""
 
     def check(self, **kwargs: Any) -> Any:
-        """Return a persisted freshness decision."""
+        """Return a persisted freshness decision.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
 
     def ensure_sync(self, **kwargs: Any) -> Any:
-        """Return a durable sync decision or run reference."""
+        """Return a durable sync decision or run reference.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
 
 
 class ScopeResolutionService(Protocol):
-    """Validate and resolve one frozen research scope."""
+    """Validate and resolve one frozen research scope.."""
 
     def resolve(self, **kwargs: Any) -> Any:
-        """Return a stable scope resolution reference."""
+        """Return a stable scope resolution reference.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
 
 
 class QuantRefreshService(Protocol):
-    """Build quant input and execute one provider-free quant screen."""
+    """Build quant input and execute one provider-free quant screen.."""
 
     def build_input(self, **kwargs: Any) -> Any:
-        """Build and persist a frozen quant input snapshot."""
+        """Build and persist a frozen quant input snapshot.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
 
     def run(self, **kwargs: Any) -> Any:
-        """Run quant and return an object with quant_run_id and results."""
+        """Run quant and return an object with quant_run_id and results.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
 
 
 class NewsTargetSelectionService(Protocol):
-    """Select target companies from deterministic quant results."""
+    """Select target companies from deterministic quant results.."""
 
     def select(self, **kwargs: Any) -> Any:
-        """Return NewsTarget records."""
+        """Return NewsTarget records.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
 
 
 class NewsRefreshService(Protocol):
-    """Acquire news for a complete target set."""
+    """Acquire news for a complete target set.."""
 
     def refresh(self, **kwargs: Any) -> Any:
-        """Return a durable news refresh reference."""
+        """Return a durable news refresh reference.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
 
 
 class IndexingRunner(Protocol):
-    """Consume document outbox records into the persistent index."""
+    """Consume document outbox records into the persistent index.."""
 
     def run_once(self, *, limit: int = ...) -> int:
-        """Index one bounded batch."""
+        """Index one bounded batch.
+
+        Args:
+            limit: int: .
+
+        Returns:
+            int: .
+        """
 
 
 class ResearchContextBuilder(Protocol):
-    """Build frozen research context snapshots."""
+    """Build frozen research context snapshots.."""
 
     def build(self, **kwargs: Any) -> Any:
-        """Return context snapshot IDs."""
+        """Return context snapshot IDs.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
 
 
 class AIReviewService(Protocol):
-    """Execute AI delta reviews from frozen contexts."""
+    """Execute AI delta reviews from frozen contexts.."""
 
     def review(self, **kwargs: Any) -> Any:
-        """Return a review summary."""
+        """Return a review summary.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
 
 
 class ValuationPublisher(Protocol):
-    """Publish effective assessments and refresh dashboard projections."""
+    """Publish effective assessments and refresh dashboard projections.."""
 
     def publish(self, **kwargs: Any) -> Any:
-        """Publish effective assessments."""
+        """Publish effective assessments.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
 
     def refresh_dashboard(self, **kwargs: Any) -> Any:
-        """Refresh or validate the dashboard read projection."""
+        """Refresh or validate the dashboard read projection.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
 
 
 @dataclass
 class ValuationDiscoveryDependencies:
-    """Real stage boundaries required by the durable pipeline."""
+    """Real stage boundaries required by the durable pipeline.."""
 
     repository: ValuationDiscoveryOrchestrationRepository
     data_readiness_service: DataReadinessService | None
@@ -143,32 +236,68 @@ class ValuationDiscoveryDependencies:
 
 
 class ValuationDiscoveryOrchestrationRepository:
-    """Module-specific adapter over the shared append-only run repository."""
+    """Module-specific adapter over the shared append-only run repository.."""
 
     def __init__(self, inner: OrchestrationRepository) -> None:
-        """Initialize the adapter."""
+        """Initialize the adapter.
+
+        Args:
+            inner: OrchestrationRepository: .
+
+        Returns:
+            None: .
+        """
         self._inner = inner
 
     @classmethod
     def memory(cls) -> ValuationDiscoveryOrchestrationRepository:
-        """Return an in-memory adapter for domain tests."""
+        """Return an in-memory adapter for domain tests.
+
+        Returns:
+            ValuationDiscoveryOrchestrationRepository: .
+        """
         return cls(MemoryOrchestrationRepository())
 
     @property
     def inner(self) -> OrchestrationRepository:
-        """Return the shared durable repository."""
+        """Return the shared durable repository.
+
+        Returns:
+            OrchestrationRepository: .
+        """
         return self._inner
 
     def create_run(self, run: OrchestrationRun) -> None:
-        """Persist one immutable run record."""
+        """Persist one immutable run record.
+
+        Args:
+            run: OrchestrationRun: .
+
+        Returns:
+            None: .
+        """
         self._inner.create_run(run)
 
     def get_run(self, run_id: str) -> OrchestrationRun | None:
-        """Return one run by ID."""
+        """Return one run by ID.
+
+        Args:
+            run_id: str: .
+
+        Returns:
+            OrchestrationRun | None: .
+        """
         return self._inner.get_run(run_id)
 
     def append_step_event(self, event: StepAttempt) -> None:
-        """Append one immutable step-state event."""
+        """Append one immutable step-state event.
+
+        Args:
+            event: StepAttempt: .
+
+        Returns:
+            None: .
+        """
         self._inner.append_step_event(event)
 
     def update_run_state(
@@ -178,7 +307,16 @@ class ValuationDiscoveryOrchestrationRepository:
         state: RunState,
         finished_at: datetime | None = None,
     ) -> OrchestrationRun:
-        """Update the derived run summary."""
+        """Update the derived run summary.
+
+        Args:
+            run_id: str: .
+            state: RunState: .
+            finished_at: datetime | None: .
+
+        Returns:
+            OrchestrationRun: .
+        """
         return self._inner.update_run_state(
             run_id,
             state=state,
@@ -186,7 +324,14 @@ class ValuationDiscoveryOrchestrationRepository:
         )
 
     def list_steps(self, run_id: str) -> dict[str, StepAttempt]:
-        """Return the latest event for each known step."""
+        """Return the latest event for each known step.
+
+        Args:
+            run_id: str: .
+
+        Returns:
+            dict[str, StepAttempt]: .
+        """
         latest: dict[str, StepAttempt] = {}
         for step in STEP_ORDER:
             event = self._inner.get_latest_step_event(run_id, step.value)
@@ -196,23 +341,48 @@ class ValuationDiscoveryOrchestrationRepository:
 
 
 class ValuationDiscoveryOrchestrator:
-    """Accept refresh requests by persisting the first pending step only."""
+    """Accept refresh requests by persisting the first pending step only.."""
 
     def __init__(self, dependencies: ValuationDiscoveryDependencies) -> None:
-        """Initialize the request-side coordinator."""
+        """Initialize the request-side coordinator.
+
+        Args:
+            dependencies: ValuationDiscoveryDependencies: .
+
+        Returns:
+            None: .
+        """
         self._dependencies = dependencies
 
     @property
     def dependencies(self) -> ValuationDiscoveryDependencies:
-        """Return the immutable dependency bundle for background workers."""
+        """Return the immutable dependency bundle for background workers.
+
+        Returns:
+            ValuationDiscoveryDependencies: .
+        """
         return self._dependencies
 
     def get_run(self, run_id: str) -> OrchestrationRun | None:
-        """Return a refresh run."""
+        """Return a refresh run.
+
+        Args:
+            run_id: str: .
+
+        Returns:
+            OrchestrationRun | None: .
+        """
         return self._dependencies.repository.get_run(run_id)
 
     def list_steps(self, run_id: str) -> dict[str, StepAttempt]:
-        """Return latest step states for a refresh run."""
+        """Return latest step states for a refresh run.
+
+        Args:
+            run_id: str: .
+
+        Returns:
+            dict[str, StepAttempt]: .
+        """
         return self._dependencies.repository.list_steps(run_id)
 
     def list_runs(
@@ -222,7 +392,16 @@ class ValuationDiscoveryOrchestrator:
         state: str | RunState | None = None,
         limit: int = 50,
     ) -> list[OrchestrationRun]:
-        """Return recent valuation-discovery runs, newest first."""
+        """Return recent valuation-discovery runs, newest first.
+
+        Args:
+            scope_version_id: str | None: .
+            state: str | RunState | None: .
+            limit: int: .
+
+        Returns:
+            list[OrchestrationRun]: .
+        """
         return self._dependencies.repository.inner.list_runs(
             run_type="valuation_discovery",
             scope_version_id=scope_version_id,
@@ -238,7 +417,17 @@ class ValuationDiscoveryOrchestrator:
         idempotency_key: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> OrchestrationRun:
-        """Create an idempotent run and enqueue its first step."""
+        """Create an idempotent run and enqueue its first step.
+
+        Args:
+            scope_version_id: str: .
+            decision_at: datetime: .
+            idempotency_key: str | None: .
+            metadata: dict[str, Any] | None: .
+
+        Returns:
+            OrchestrationRun: .
+        """
         _validate_aware(decision_at)
         lifecycle_started_at = min(_utc_now(), decision_at)
         run = _new_run(
@@ -266,7 +455,7 @@ class ValuationDiscoveryOrchestrator:
 
 
 class ValuationDiscoveryStepWorker:
-    """Lease and execute exactly one durable step per ``run_once`` call."""
+    """Lease and execute exactly one durable step per ``run_once`` call.."""
 
     def __init__(
         self,
@@ -275,7 +464,16 @@ class ValuationDiscoveryStepWorker:
         worker_id: str,
         lease_seconds: int = 300,
     ) -> None:
-        """Initialize the step worker."""
+        """Initialize the step worker.
+
+        Args:
+            dependencies: ValuationDiscoveryDependencies: .
+            worker_id: str: .
+            lease_seconds: int: .
+
+        Returns:
+            None: .
+        """
         self._dependencies = dependencies
         self._worker = DBStepWorker(
             dependencies.repository.inner,
@@ -288,7 +486,14 @@ class ValuationDiscoveryStepWorker:
         self._artifacts: dict[str, dict[str, Any]] = {}
 
     def run_once(self, *, now: datetime) -> bool:
-        """Claim and execute one due step."""
+        """Claim and execute one due step.
+
+        Args:
+            now: datetime: .
+
+        Returns:
+            bool: .
+        """
         claim = self._worker.claim_next(now=now)
         if claim is None:
             return False
@@ -373,9 +578,7 @@ class ValuationDiscoveryStepWorker:
         )
         next_step = _next_step(step)
         if next_step is not None:
-            self._dependencies.repository.append_step_event(
-                _pending_event(run, next_step, now)
-            )
+            self._dependencies.repository.append_step_event(_pending_event(run, next_step, now))
             self._dependencies.repository.update_run_state(
                 run.run_id,
                 state=RunState.RUNNING,
@@ -395,7 +598,16 @@ class ValuationDiscoveryStepWorker:
         step: ValuationDiscoveryStep,
         decision_at: datetime,
     ) -> str:
-        """Dispatch one real stage and return a compact output reference."""
+        """Dispatch one real stage and return a compact output reference.
+
+        Args:
+            run: OrchestrationRun: .
+            step: ValuationDiscoveryStep: .
+            decision_at: datetime: .
+
+        Returns:
+            str: .
+        """
         scope_version_id = run.scope_version_id or ""
         artifacts = self._artifacts.setdefault(run.run_id, {})
 
@@ -597,7 +809,15 @@ class ValuationDiscoveryStepWorker:
         run: OrchestrationRun,
         artifacts: dict[str, Any],
     ) -> Any:
-        """Return or reload the persisted quant input snapshot."""
+        """Return or reload the persisted quant input snapshot.
+
+        Args:
+            run: OrchestrationRun: .
+            artifacts: dict[str, Any]: .
+
+        Returns:
+            Any: .
+        """
         if "quant_input" in artifacts:
             return artifacts["quant_input"]
         snapshot_id = self._prior_output_id(
@@ -616,7 +836,15 @@ class ValuationDiscoveryStepWorker:
         run: OrchestrationRun,
         artifacts: dict[str, Any],
     ) -> Any:
-        """Return or reload a complete quant run and result set."""
+        """Return or reload a complete quant run and result set.
+
+        Args:
+            run: OrchestrationRun: .
+            artifacts: dict[str, Any]: .
+
+        Returns:
+            Any: .
+        """
         if "quant_run" in artifacts:
             return artifacts["quant_run"]
         quant_run_id = self._prior_output_id(
@@ -635,7 +863,15 @@ class ValuationDiscoveryStepWorker:
         run: OrchestrationRun,
         artifacts: dict[str, Any],
     ) -> str:
-        """Return the durable news refresh run identifier."""
+        """Return the durable news refresh run identifier.
+
+        Args:
+            run: OrchestrationRun: .
+            artifacts: dict[str, Any]: .
+
+        Returns:
+            str: .
+        """
         cached = artifacts.get("news_refresh")
         if cached is not None and getattr(cached, "run_id", None):
             return str(cached.run_id)
@@ -652,7 +888,16 @@ class ValuationDiscoveryStepWorker:
         quant_run: Any,
         decision_at: datetime,
     ) -> tuple[Any, ...]:
-        """Deterministically reconstruct targets from persisted quant results."""
+        """Deterministically reconstruct targets from persisted quant results.
+
+        Args:
+            scope_version_id: str: .
+            quant_run: Any: .
+            decision_at: datetime: .
+
+        Returns:
+            tuple[Any, ...]: .
+        """
         return tuple(
             self._dependencies.news_target_selector.select(
                 scope_version_id=scope_version_id,
@@ -671,7 +916,18 @@ class ValuationDiscoveryStepWorker:
         quant_run: Any,
         decision_at: datetime,
     ) -> tuple[Any, ...]:
-        """Return or deterministically rebuild the selected target set."""
+        """Return or deterministically rebuild the selected target set.
+
+        Args:
+            run: OrchestrationRun: .
+            artifacts: dict[str, Any]: .
+            scope_version_id: str: .
+            quant_run: Any: .
+            decision_at: datetime: .
+
+        Returns:
+            tuple[Any, ...]: .
+        """
         del run
         if "targets" not in artifacts:
             artifacts["targets"] = self._select_targets(
@@ -688,7 +944,16 @@ class ValuationDiscoveryStepWorker:
         *,
         scope_version_id: str,
     ) -> tuple[str, ...]:
-        """Return or reload context IDs created for the persisted quant run."""
+        """Return or reload context IDs created for the persisted quant run.
+
+        Args:
+            run: OrchestrationRun: .
+            artifacts: dict[str, Any]: .
+            scope_version_id: str: .
+
+        Returns:
+            tuple[str, ...]: .
+        """
         if "context_snapshot_ids" in artifacts:
             return tuple(artifacts["context_snapshot_ids"])
         builder = _require_dependency(
@@ -714,7 +979,16 @@ class ValuationDiscoveryStepWorker:
         *,
         scope_version_id: str,
     ) -> Any:
-        """Return or reload terminal reviews for all frozen contexts."""
+        """Return or reload terminal reviews for all frozen contexts.
+
+        Args:
+            run: OrchestrationRun: .
+            artifacts: dict[str, Any]: .
+            scope_version_id: str: .
+
+        Returns:
+            Any: .
+        """
         if "review_summary" in artifacts:
             return artifacts["review_summary"]
         reviewer = _require_dependency(
@@ -739,16 +1013,21 @@ class ValuationDiscoveryStepWorker:
         step: ValuationDiscoveryStep,
         prefix: str,
     ) -> str:
-        """Resolve a required durable entity ID from a succeeded step."""
+        """Resolve a required durable entity ID from a succeeded step.
+
+        Args:
+            run_id: str: .
+            step: ValuationDiscoveryStep: .
+            prefix: str: .
+
+        Returns:
+            str: .
+        """
         event = self._dependencies.repository.inner.get_latest_step_event(
             run_id,
             step.value,
         )
-        if (
-            event is None
-            or event.state is not StepState.SUCCEEDED
-            or not event.output_ref
-        ):
+        if event is None or event.state is not StepState.SUCCEEDED or not event.output_ref:
             raise RuntimeError(f"required step output missing: {step.value}")
         expected = f"{prefix}:"
         if not event.output_ref.startswith(expected):
@@ -766,7 +1045,17 @@ class ValuationDiscoveryStepWorker:
         after: ValuationDiscoveryStep,
         reason: str,
     ) -> None:
-        """Append explicit skipped events for every downstream step."""
+        """Append explicit skipped events for every downstream step.
+
+        Args:
+            run: OrchestrationRun: .
+            now: datetime: .
+            after: ValuationDiscoveryStep: .
+            reason: str: .
+
+        Returns:
+            None: .
+        """
         for step in STEP_ORDER[STEP_ORDER.index(after) + 1 :]:
             pending = _pending_event(run, step, now)
             self._dependencies.repository.append_step_event(pending)
@@ -783,21 +1072,45 @@ T = TypeVar("T")
 
 
 def _require_dependency(value: T | None, name: str) -> T:
-    """Return a required stage dependency or fail closed."""
+    """Return a required stage dependency or fail closed.
+
+    Args:
+        value: T | None: .
+        name: str: .
+
+    Returns:
+        T: .
+    """
     if value is None:
         raise RuntimeError(f"{name} is not configured")
     return value
 
 
 def _required_artifact(artifacts: dict[str, Any], name: str) -> Any:
-    """Return a prior step artifact or fail instead of fabricating output."""
+    """Return a prior step artifact or fail instead of fabricating output.
+
+    Args:
+        artifacts: dict[str, Any]: .
+        name: str: .
+
+    Returns:
+        Any: .
+    """
     if name not in artifacts:
         raise RuntimeError(f"required orchestration artifact missing: {name}")
     return artifacts[name]
 
 
 def _reference(prefix: str, value: Any) -> str:
-    """Build a bounded non-secret output reference."""
+    """Build a bounded non-secret output reference.
+
+    Args:
+        prefix: str: .
+        value: Any: .
+
+    Returns:
+        str: .
+    """
     for attribute in (
         "version_id",
         "snapshot_id",
@@ -814,7 +1127,14 @@ def _reference(prefix: str, value: Any) -> str:
 
 
 def _next_step(step: ValuationDiscoveryStep) -> ValuationDiscoveryStep | None:
-    """Return the next ordered step."""
+    """Return the next ordered step.
+
+    Args:
+        step: ValuationDiscoveryStep: .
+
+    Returns:
+        ValuationDiscoveryStep | None: .
+    """
     index = STEP_ORDER.index(step)
     return STEP_ORDER[index + 1] if index + 1 < len(STEP_ORDER) else None
 
@@ -824,7 +1144,16 @@ def _pending_event(
     step: ValuationDiscoveryStep,
     now: datetime,
 ) -> StepAttempt:
-    """Build the first append-only event for one step."""
+    """Build the first append-only event for one step.
+
+    Args:
+        run: OrchestrationRun: .
+        step: ValuationDiscoveryStep: .
+        now: datetime: .
+
+    Returns:
+        StepAttempt: .
+    """
     return StepAttempt(
         run_id=run.run_id,
         step_id=step.value,
@@ -850,7 +1179,18 @@ def _new_run(
     idempotency_key: str | None,
     metadata: dict[str, Any] | None = None,
 ) -> OrchestrationRun:
-    """Build a deterministic run when an idempotency key is supplied."""
+    """Build a deterministic run when an idempotency key is supplied.
+
+    Args:
+        scope_version_id: str: .
+        decision_at: datetime: .
+        started_at: datetime: .
+        idempotency_key: str | None: .
+        metadata: dict[str, Any] | None: .
+
+    Returns:
+        OrchestrationRun: .
+    """
     key_hash = _hash_optional(idempotency_key)
     run_id = (
         "vdr_"
@@ -879,7 +1219,14 @@ def _new_run(
 
 
 def _decision_at_from_run(run: OrchestrationRun) -> datetime:
-    """Return the business PIT timestamp carried by a valuation run."""
+    """Return the business PIT timestamp carried by a valuation run.
+
+    Args:
+        run: OrchestrationRun: .
+
+    Returns:
+        datetime: .
+    """
     raw_value = run.metadata_json.get("decision_at")
     if isinstance(raw_value, str):
         normalized = raw_value.replace("Z", "+00:00")
@@ -890,7 +1237,14 @@ def _decision_at_from_run(run: OrchestrationRun) -> datetime:
 
 
 def _agent_run_id_from_run(run: OrchestrationRun) -> str | None:
-    """Return the MainAgent run ID associated with a valuation run, if any."""
+    """Return the MainAgent run ID associated with a valuation run, if any.
+
+    Args:
+        run: OrchestrationRun: .
+
+    Returns:
+        str | None: .
+    """
     value = run.metadata_json.get("agent_run_id")
     if isinstance(value, str) and value.strip():
         return value.strip()
@@ -898,23 +1252,48 @@ def _agent_run_id_from_run(run: OrchestrationRun) -> str | None:
 
 
 def _utc_now() -> datetime:
-    """Return the current UTC lifecycle timestamp."""
+    """Return the current UTC lifecycle timestamp.
+
+    Returns:
+        datetime: .
+    """
     return datetime.now(UTC)
 
 
 def _hash_optional(value: str | None) -> str | None:
-    """Hash an optional idempotency key."""
+    """Hash an optional idempotency key.
+
+    Args:
+        value: str | None: .
+
+    Returns:
+        str | None: .
+    """
     return None if value is None else "sha256:" + _hash_material(value)
 
 
 def _hash_material(*parts: str | None) -> str:
-    """Hash canonical string material."""
+    """Hash canonical string material.
+
+    Args:
+        *parts: str | None: .
+
+    Returns:
+        str: .
+    """
     material = "|".join("" if part is None else part for part in parts)
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
 def _error_code(exc: Exception) -> str:
-    """Return a bounded, non-secret failure code."""
+    """Return a bounded, non-secret failure code.
+
+    Args:
+        exc: Exception: .
+
+    Returns:
+        str: .
+    """
     explicit = getattr(exc, "code", None)
     if explicit is not None:
         return str(explicit)[:96]
@@ -926,7 +1305,15 @@ def _provider_wait_state(
     *,
     now: datetime,
 ) -> tuple[StepState, datetime] | None:
-    """Map stable Provider errors to explicit wait states."""
+    """Map stable Provider errors to explicit wait states.
+
+    Args:
+        exc: Exception: .
+        now: datetime: .
+
+    Returns:
+        tuple[StepState, datetime] | None: .
+    """
     code = str(getattr(exc, "code", ""))
     if code in {"provider_budget_exceeded", "provider_paygo_limit_exceeded"}:
         return StepState.WAITING_BUDGET, now + timedelta(hours=1)
@@ -937,6 +1324,13 @@ def _provider_wait_state(
 
 
 def _validate_aware(value: datetime) -> None:
-    """Require timezone-aware decision timestamps."""
+    """Require timezone-aware decision timestamps.
+
+    Args:
+        value: datetime: .
+
+    Returns:
+        None: .
+    """
     if value.utcoffset() is None:
         raise ValueError("decision_at must be timezone-aware")

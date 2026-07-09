@@ -12,7 +12,7 @@ from margin.news.models import ensure_utc, utc_now
 
 
 class SignalType(StrEnum):
-    """Classification of research signal output."""
+    """Classification of research signal output.."""
 
     RESEARCH_CANDIDATE = "research_candidate"
     WATCH = "watch"
@@ -20,7 +20,7 @@ class SignalType(StrEnum):
 
 
 class WorkflowState(StrEnum):
-    """Lifecycle states of a research workflow run."""
+    """Lifecycle states of a research workflow run.."""
 
     INITIALIZED = "initialized"
     DATA_READY = "data_ready"
@@ -33,7 +33,7 @@ class WorkflowState(StrEnum):
 
 
 class AgentTrace(BaseModel):
-    """Single agent invocation trace."""
+    """Single agent invocation trace.."""
 
     trace_id: str
     agent_node: str
@@ -50,12 +50,19 @@ class AgentTrace(BaseModel):
     @field_validator("timestamp")
     @classmethod
     def normalize_timestamp(cls, value: datetime) -> datetime:
-        """Ensure the timestamp is UTC."""
+        """Ensure the timestamp is UTC.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)
 
 
 class ResearchSignal(BaseModel):
-    """Structured research signal emitted by the workflow."""
+    """Structured research signal emitted by the workflow.."""
 
     signal_id: str = Field(default_factory=lambda: f"sig_{uuid.uuid4().hex[:12]}")
     symbol: str
@@ -73,7 +80,14 @@ class ResearchSignal(BaseModel):
     @field_validator("generated_at")
     @classmethod
     def normalize_generated_at(cls, value: datetime) -> datetime:
-        """Ensure the generated timestamp is UTC."""
+        """Ensure the generated timestamp is UTC.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)
 
     @field_validator("confidence")
@@ -82,13 +96,10 @@ class ResearchSignal(BaseModel):
         """Validate that confidence is within [0, 1].
 
         Args:
-            value: Confidence value to validate.
+            value: float: .
 
         Returns:
-            The validated confidence value.
-
-        Raises:
-            ValueError: If confidence is outside [0, 1].
+            float: .
         """
         if not 0.0 <= value <= 1.0:
             raise ValueError(f"confidence must be in [0, 1], got {value}")
@@ -96,7 +107,7 @@ class ResearchSignal(BaseModel):
 
 
 class VersionRef(BaseModel):
-    """Immutable component version captured in a research snapshot."""
+    """Immutable component version captured in a research snapshot.."""
 
     name: str
     version: str
@@ -105,7 +116,7 @@ class VersionRef(BaseModel):
 
 
 class ResearchSnapshot(BaseModel):
-    """Immutable audit snapshot of a research run."""
+    """Immutable audit snapshot of a research run.."""
 
     snapshot_id: str = Field(default_factory=lambda: f"snap_{uuid.uuid4().hex[:12]}")
     run_id: str
@@ -133,5 +144,12 @@ class ResearchSnapshot(BaseModel):
     @field_validator("decision_at", "created_at")
     @classmethod
     def normalize_created_at(cls, value: datetime) -> datetime:
-        """Ensure decision and created timestamps are UTC."""
+        """Ensure decision and created timestamps are UTC.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)

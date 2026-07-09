@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class PromptKind(StrEnum):
-    """Supported prompt categories."""
+    """Supported prompt categories.."""
 
     MAIN_AGENT = "main_agent"
     EXPERT_AGENT = "expert_agent"
@@ -20,7 +20,7 @@ class PromptKind(StrEnum):
 
 
 class PromptSection(BaseModel):
-    """One named prompt section."""
+    """One named prompt section.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -30,7 +30,14 @@ class PromptSection(BaseModel):
     @field_validator("title")
     @classmethod
     def normalize_title(cls, value: str) -> str:
-        """Normalize section titles for stable prompt hashes."""
+        """Normalize section titles for stable prompt hashes.
+
+        Args:
+            value: str: .
+
+        Returns:
+            str: .
+        """
         normalized = value.strip().upper()
         if not normalized:
             raise ValueError("section title cannot be empty")
@@ -38,7 +45,7 @@ class PromptSection(BaseModel):
 
 
 class PromptTemplate(BaseModel):
-    """A versioned prompt template."""
+    """A versioned prompt template.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -53,7 +60,11 @@ class PromptTemplate(BaseModel):
 
     @property
     def required_variables(self) -> tuple[str, ...]:
-        """Return unique template variables referenced by section content."""
+        """Return unique template variables referenced by section content.
+
+        Returns:
+            tuple[str, ...]: .
+        """
         variables: list[str] = []
         for section in self.sections:
             start = 0
@@ -72,14 +83,18 @@ class PromptTemplate(BaseModel):
 
     @property
     def template_hash(self) -> str:
-        """Return a stable hash of template content and metadata."""
+        """Return a stable hash of template content and metadata.
+
+        Returns:
+            str: .
+        """
         payload = self.model_dump(mode="json")
         raw = json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()
         return f"sha256:{hashlib.sha256(raw).hexdigest()}"
 
 
 class RenderedPrompt(BaseModel):
-    """Rendered prompt text and audit hashes."""
+    """Rendered prompt text and audit hashes.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

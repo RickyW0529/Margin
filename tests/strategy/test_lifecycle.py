@@ -16,7 +16,7 @@ def test_draft_can_validate():
     """Verify a draft strategy version can transition to validating state.
 
     Returns:
-        None.
+        Any: .
     """
     lifecycle = StrategyLifecycle()
     assert lifecycle.can_transition(StrategyState.DRAFT, StrategyState.VALIDATING)
@@ -26,7 +26,7 @@ def test_active_can_archive():
     """Verify an active strategy version can transition to archived state.
 
     Returns:
-        None.
+        Any: .
     """
     lifecycle = StrategyLifecycle()
     assert lifecycle.can_transition(StrategyState.ACTIVE, StrategyState.ARCHIVED)
@@ -36,7 +36,7 @@ def test_draft_cannot_activate():
     """Verify a draft strategy version cannot skip directly to active state.
 
     Returns:
-        None.
+        Any: .
     """
     lifecycle = StrategyLifecycle()
     assert not lifecycle.can_transition(StrategyState.DRAFT, StrategyState.ACTIVE)
@@ -46,7 +46,7 @@ def test_transition_returns_updated_version():
     """Verify transition returns a new version with the updated state.
 
     Returns:
-        None.
+        Any: .
     """
     lifecycle = StrategyLifecycle()
     version = StrategyVersion(
@@ -64,7 +64,7 @@ def test_invalid_transition_raises():
     """Verify an invalid state transition raises a ValueError.
 
     Returns:
-        None.
+        Any: .
     """
     lifecycle = StrategyLifecycle()
     version = StrategyVersion(

@@ -21,7 +21,7 @@ _UNSAFE_KEYS = {
 
 
 class ContextRouter:
-    """Build bounded ContextPacks from artifact indexes and summaries."""
+    """Build bounded ContextPacks from artifact indexes and summaries.."""
 
     def build_context_pack(
         self,
@@ -35,7 +35,21 @@ class ContextRouter:
         included_capsule_refs: tuple[str, ...] = (),
         included_chat_summary_ref: str | None = None,
     ) -> ContextPack:
-        """Build a compact context pack without raw artifact payloads."""
+        """Build a compact context pack without raw artifact payloads.
+
+        Args:
+            run_id: str: .
+            requester_agent: str: .
+            target_agent: str: .
+            purpose: str: .
+            token_budget: int: .
+            artifacts: Iterable[ContextArtifact]: .
+            included_capsule_refs: tuple[str, ...]: .
+            included_chat_summary_ref: str | None: .
+
+        Returns:
+            ContextPack: .
+        """
         included_artifact_refs: list[str] = []
         facts: list[ContextFact] = []
         evidence_refs: list[str] = []
@@ -98,6 +112,14 @@ class ContextRouter:
 
 
 def _fact_type(artifact_type: str) -> str:
+    """Process _fact_type.
+
+    Args:
+        artifact_type: str: .
+
+    Returns:
+        str: .
+    """
     if "quant" in artifact_type:
         return "quant_signal"
     if "risk" in artifact_type:

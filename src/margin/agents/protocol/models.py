@@ -14,7 +14,7 @@ PROTOCOL_VERSION = "margin-a2a-v1"
 
 
 class AgentExecutionStatus(StrEnum):
-    """Common execution status for the v1 Agent protocol."""
+    """Common execution status for the v1 Agent protocol.."""
 
     PENDING = "pending"
     RUNNING = "running"
@@ -25,7 +25,7 @@ class AgentExecutionStatus(StrEnum):
 
 
 class ContextFact(BaseModel):
-    """One bounded fact carried through a ContextPack or capsule."""
+    """One bounded fact carried through a ContextPack or capsule.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -49,7 +49,7 @@ class ContextFact(BaseModel):
 
 
 class ContextOmission(BaseModel):
-    """A context item deliberately omitted from a bounded pack."""
+    """A context item deliberately omitted from a bounded pack.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -65,7 +65,7 @@ class ContextOmission(BaseModel):
 
 
 class ContextPack(BaseModel):
-    """Bounded context envelope passed between Agent layers."""
+    """Bounded context envelope passed between Agent layers.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -88,7 +88,14 @@ class ContextPack(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def fill_hash(cls, data: object) -> object:
-        """Fill a stable hash when the caller did not provide one."""
+        """Fill a stable hash when the caller did not provide one.
+
+        Args:
+            data: object: .
+
+        Returns:
+            object: .
+        """
         if isinstance(data, dict) and not data.get("payload_hash"):
             payload = dict(data)
             payload.pop("payload_hash", None)
@@ -97,7 +104,7 @@ class ContextPack(BaseModel):
 
 
 class DomainTaskRequest(BaseModel):
-    """L1 to L2 task envelope."""
+    """L1 to L2 task envelope.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -120,7 +127,7 @@ class DomainTaskRequest(BaseModel):
 
 
 class WorkerTaskRequest(BaseModel):
-    """L2 to L3 task envelope."""
+    """L2 to L3 task envelope.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -144,7 +151,7 @@ class WorkerTaskRequest(BaseModel):
 
 
 class WorkerTaskResult(BaseModel):
-    """L3 to L2 task result envelope."""
+    """L3 to L2 task result envelope.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -164,14 +171,18 @@ class WorkerTaskResult(BaseModel):
 
     @model_validator(mode="after")
     def require_artifacts_for_success(self) -> WorkerTaskResult:
-        """Require successful workers to return artifact references."""
+        """Require successful workers to return artifact references.
+
+        Returns:
+            WorkerTaskResult: .
+        """
         if self.status is AgentExecutionStatus.SUCCEEDED and not self.output_artifact_refs:
             raise ValueError("output_artifact_refs are required for succeeded workers")
         return self
 
 
 class RetrySuggestion(BaseModel):
-    """One structured retry suggestion from a domain audit."""
+    """One structured retry suggestion from a domain audit.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -181,7 +192,7 @@ class RetrySuggestion(BaseModel):
 
 
 class DomainTaskResult(BaseModel):
-    """L2 to L1 task result envelope."""
+    """L2 to L1 task result envelope.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -200,7 +211,7 @@ class DomainTaskResult(BaseModel):
 
 
 class RiskFlag(BaseModel):
-    """One risk flag carried by a domain capsule."""
+    """One risk flag carried by a domain capsule.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -213,7 +224,7 @@ class RiskFlag(BaseModel):
 
 
 class DomainContextCapsule(BaseModel):
-    """Structured, auditable domain summary."""
+    """Structured, auditable domain summary.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -237,7 +248,14 @@ class DomainContextCapsule(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def fill_hash(cls, data: object) -> object:
-        """Fill a stable hash when absent."""
+        """Fill a stable hash when absent.
+
+        Args:
+            data: object: .
+
+        Returns:
+            object: .
+        """
         if isinstance(data, dict) and not data.get("payload_hash"):
             payload = dict(data)
             payload.pop("payload_hash", None)
@@ -246,7 +264,7 @@ class DomainContextCapsule(BaseModel):
 
 
 class DomainAuditReport(BaseModel):
-    """L2 domain audit report."""
+    """L2 domain audit report.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -268,7 +286,7 @@ class DomainAuditReport(BaseModel):
 
 
 class FinalAuditReport(BaseModel):
-    """Final L1 audit report."""
+    """Final L1 audit report.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -289,7 +307,7 @@ class FinalAuditReport(BaseModel):
 
 
 class FinalUserAnswerArtifact(BaseModel):
-    """User-visible answer artifact based only on approved context."""
+    """User-visible answer artifact based only on approved context.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -309,7 +327,14 @@ class FinalUserAnswerArtifact(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def fill_hash(cls, data: object) -> object:
-        """Fill a stable hash when absent."""
+        """Fill a stable hash when absent.
+
+        Args:
+            data: object: .
+
+        Returns:
+            object: .
+        """
         if isinstance(data, dict) and not data.get("payload_hash"):
             payload = dict(data)
             payload.pop("payload_hash", None)

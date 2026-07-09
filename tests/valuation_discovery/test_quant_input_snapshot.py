@@ -25,15 +25,20 @@ from margin.valuation_discovery.scope import (
 
 @dataclass
 class FakeWarehouseRepository:
-    """Fake warehouse repository for single-fact lookups.
+    """Fake warehouse repository for single-fact lookups.."""
 
-    Attributes:
-        facts: Mapping of (security_id, indicator_id) to canonical fact refs.
-    """
     facts: dict[tuple[str, str], CanonicalFactRef]
 
     def remove_indicator(self, security_id: str, indicator_id: str) -> None:
-        """Remove a single fact from the fake warehouse."""
+        """Remove a single fact from the fake warehouse.
+
+        Args:
+            security_id: str: .
+            indicator_id: str: .
+
+        Returns:
+            None: .
+        """
         self.facts.pop((security_id, indicator_id), None)
 
     def get_latest_fact(
@@ -43,7 +48,16 @@ class FakeWarehouseRepository:
         indicator_id: str,
         known_at: datetime,
     ) -> CanonicalFactRef | None:
-        """Return the latest fact for a security-indicator pair known at the given time."""
+        """Return the latest fact for a security-indicator pair known at the given time.
+
+        Args:
+            security_id: str: .
+            indicator_id: str: .
+            known_at: datetime: .
+
+        Returns:
+            CanonicalFactRef | None: .
+        """
         fact = self.facts.get((security_id, indicator_id))
         if fact is None or fact.available_at > known_at:
             return None
@@ -52,12 +66,7 @@ class FakeWarehouseRepository:
 
 @dataclass
 class BatchWarehouseRepository:
-    """Batch warehouse double used to verify full-universe snapshot loading.
-
-    Attributes:
-        facts: Tuple of canonical fact refs returned by batched calls.
-        calls: Number of batched get_latest_facts calls made.
-    """
+    """Batch warehouse double used to verify full-universe snapshot loading.."""
 
     facts: tuple[CanonicalFactRef, ...]
     calls: int = 0
@@ -69,7 +78,16 @@ class BatchWarehouseRepository:
         indicator_ids: tuple[str, ...],
         known_at: datetime,
     ) -> tuple[CanonicalFactRef, ...]:
-        """Return all current refs through one batched call, asserting expected inputs."""
+        """Return all current refs through one batched call, asserting expected inputs.
+
+        Args:
+            security_ids: tuple[str, ...]: .
+            indicator_ids: tuple[str, ...]: .
+            known_at: datetime: .
+
+        Returns:
+            tuple[CanonicalFactRef, ...]: .
+        """
         assert security_ids == ("000001.SZ", "000002.SZ")
         assert indicator_ids == ("roe_ttm",)
         assert known_at == datetime(2026, 6, 22, tzinfo=UTC)
@@ -82,7 +100,7 @@ def valuation_repository() -> MemoryValuationDiscoveryRepository:
     """Return a fresh in-memory valuation discovery repository.
 
     Returns:
-        An empty MemoryValuationDiscoveryRepository instance.
+        MemoryValuationDiscoveryRepository: .
     """
     return MemoryValuationDiscoveryRepository()
 
@@ -92,7 +110,7 @@ def universe_snapshot() -> UniverseSnapshot:
     """Return a deterministic CSI300 universe snapshot with one member.
 
     Returns:
-        A UniverseSnapshot with a single security and membership.
+        UniverseSnapshot: .
     """
     return UniverseSnapshot(
         universe_code=UniverseCode.CSI300,
@@ -109,10 +127,10 @@ def active_scope(universe_snapshot: UniverseSnapshot) -> ScopeBinding:
     """Return a scope binding with all indicators visible.
 
     Args:
-        universe_snapshot: Deterministic universe snapshot fixture.
+        universe_snapshot: UniverseSnapshot: .
 
     Returns:
-        A ScopeBinding with roe_ttm, pb, and dividend_yield visible.
+        ScopeBinding: .
     """
     return ScopeBinding(
         scope_version_id="scope-v1",
@@ -136,10 +154,10 @@ def active_scope_with_view_excluding_pb(universe_snapshot: UniverseSnapshot) -> 
     """Return a scope binding where the user indicator view excludes pb.
 
     Args:
-        universe_snapshot: Deterministic universe snapshot fixture.
+        universe_snapshot: UniverseSnapshot: .
 
     Returns:
-        A ScopeBinding with pb excluded from the user indicator view.
+        ScopeBinding: .
     """
     return ScopeBinding(
         scope_version_id="scope-v2",
@@ -163,7 +181,7 @@ def warehouse_repository() -> FakeWarehouseRepository:
     """Return a fake warehouse repository with roe_ttm and pb facts.
 
     Returns:
-        A FakeWarehouseRepository pre-seeded with two canonical fact refs.
+        FakeWarehouseRepository: .
     """
     return FakeWarehouseRepository(
         facts={
@@ -193,12 +211,12 @@ def test_quant_input_snapshot_invalid_when_required_indicator_missing(
     """Verify the snapshot is invalid when a required indicator is missing.
 
     Args:
-        valuation_repository: In-memory valuation discovery repository fixture.
-        warehouse_repository: Fake warehouse repository with seeded facts.
-        active_scope: Scope binding with all indicators visible.
+        valuation_repository: MemoryValuationDiscoveryRepository: .
+        warehouse_repository: FakeWarehouseRepository: .
+        active_scope: ScopeBinding: .
 
     Returns:
-        None.
+        None: .
     """
     warehouse_repository.remove_indicator("000001.SZ", "roe_ttm")
     builder = QuantInputSnapshotBuilder(valuation_repository, warehouse_repository)
@@ -223,12 +241,12 @@ def test_user_indicator_view_does_not_change_quant_features(
     """Verify the user indicator view does not change required quant features.
 
     Args:
-        valuation_repository: In-memory valuation discovery repository fixture.
-        warehouse_repository: Fake warehouse repository with seeded facts.
-        active_scope_with_view_excluding_pb: Scope binding with pb excluded from view.
+        valuation_repository: MemoryValuationDiscoveryRepository: .
+        warehouse_repository: FakeWarehouseRepository: .
+        active_scope_with_view_excluding_pb: ScopeBinding: .
 
     Returns:
-        None.
+        None: .
     """
     builder = QuantInputSnapshotBuilder(valuation_repository, warehouse_repository)
 
@@ -252,10 +270,10 @@ def test_partial_company_missing_data_does_not_abort_entire_universe(
     """Verify per-company missing data is handled by hard filters, not run rejection.
 
     Args:
-        valuation_repository: In-memory valuation discovery repository fixture.
+        valuation_repository: MemoryValuationDiscoveryRepository: .
 
     Returns:
-        None.
+        None: .
     """
     universe = UniverseSnapshot(
         universe_code=UniverseCode.CSI300,

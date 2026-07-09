@@ -12,7 +12,7 @@ from margin.news.models import ensure_utc
 
 
 class StandardizedIndicatorFact(BaseModel):
-    """Append-only canonical-indicator fact from one provider payload."""
+    """Append-only canonical-indicator fact from one provider payload.."""
 
     fact_id: str
     provider_code: str
@@ -40,21 +40,32 @@ class StandardizedIndicatorFact(BaseModel):
     @field_validator("event_at", "available_at", "fetched_at", "published_at", "revised_at")
     @classmethod
     def normalize_timestamp(cls, value: datetime | None) -> datetime | None:
-        """Normalize fact timestamps to UTC."""
+        """Normalize fact timestamps to UTC.
+
+        Args:
+            value: datetime | None: .
+
+        Returns:
+            datetime | None: .
+        """
         return ensure_utc(value) if value is not None else None
 
     @property
     def provider(self) -> str:
-        """Alias matching warehouse row naming."""
+        """Alias matching warehouse row naming.
+
+        Returns:
+            str: .
+        """
         return self.provider_code
 
     def is_available_at(self, decision_at: datetime) -> bool:
         """Return whether the fact is point-in-time legal at ``decision_at``.
 
         Args:
-            decision_at: The point in time at which the decision is made.
+            decision_at: datetime: .
 
         Returns:
-            ``True`` if ``available_at`` is at or before ``decision_at``.
+            bool: .
         """
         return self.available_at <= ensure_utc(decision_at)

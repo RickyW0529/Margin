@@ -16,7 +16,7 @@ from margin.news.models import ensure_utc, utc_now
 
 
 class StrategyState(StrEnum):
-    """Lifecycle states of a strategy version."""
+    """Lifecycle states of a strategy version.."""
 
     DRAFT = "draft"
     VALIDATING = "validating"
@@ -29,7 +29,7 @@ class StrategyState(StrEnum):
 
 
 class ConfigLifecycle(StrEnum):
-    """Lifecycle states for v0.2 versioned configuration resources."""
+    """Lifecycle states for v0.2 versioned configuration resources.."""
 
     DRAFT = "draft"
     REVIEW = "review"
@@ -38,7 +38,7 @@ class ConfigLifecycle(StrEnum):
 
 
 class IndicatorSelectionMode(StrEnum):
-    """How a user-facing indicator view selects visible indicators."""
+    """How a user-facing indicator view selects visible indicators.."""
 
     ALL = "all"
     INCLUDE = "include"
@@ -46,7 +46,7 @@ class IndicatorSelectionMode(StrEnum):
 
 
 class ProviderConfigVersion(BaseModel):
-    """Versioned non-sensitive provider configuration."""
+    """Versioned non-sensitive provider configuration.."""
 
     version_id: str
     provider_name: str
@@ -63,12 +63,19 @@ class ProviderConfigVersion(BaseModel):
     @field_validator("created_at")
     @classmethod
     def normalize_created_at(cls, value: datetime) -> datetime:
-        """Normalize creation time."""
+        """Normalize creation time.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)
 
 
 class UniverseDefinitionVersion(BaseModel):
-    """Versioned stock universe definition."""
+    """Versioned stock universe definition.."""
 
     version_id: str
     owner_id: str = "local-admin"
@@ -81,7 +88,7 @@ class UniverseDefinitionVersion(BaseModel):
 
 
 class IndicatorViewVersion(BaseModel):
-    """User-facing indicator visibility configuration."""
+    """User-facing indicator visibility configuration.."""
 
     version_id: str
     owner_id: str
@@ -92,7 +99,14 @@ class IndicatorViewVersion(BaseModel):
     created_at: datetime = Field(default_factory=utc_now)
 
     def visible_indicator_ids(self, all_indicator_ids: Sequence[str]) -> tuple[str, ...]:
-        """Return indicators visible to the user without changing quant requirements."""
+        """Return indicators visible to the user without changing quant requirements.
+
+        Args:
+            all_indicator_ids: Sequence[str]: .
+
+        Returns:
+            tuple[str, ...]: .
+        """
         if self.mode is IndicatorSelectionMode.ALL:
             return tuple(all_indicator_ids)
         if self.mode is IndicatorSelectionMode.INCLUDE:
@@ -103,7 +117,7 @@ class IndicatorViewVersion(BaseModel):
 
 
 class QuantFeatureSetVersion(BaseModel):
-    """Versioned quant input feature requirements."""
+    """Versioned quant input feature requirements.."""
 
     version_id: str
     owner_id: str = "local-admin"
@@ -116,7 +130,7 @@ class QuantFeatureSetVersion(BaseModel):
 
 
 class QuantStrategyVersion(BaseModel):
-    """Versioned quant strategy configuration."""
+    """Versioned quant strategy configuration.."""
 
     version_id: str
     owner_id: str = "local-admin"
@@ -129,7 +143,7 @@ class QuantStrategyVersion(BaseModel):
 
 
 class UserStylePromptVersion(BaseModel):
-    """Versioned user style prompt overlay."""
+    """Versioned user style prompt overlay.."""
 
     version_id: str
     owner_id: str
@@ -140,7 +154,7 @@ class UserStylePromptVersion(BaseModel):
 
 
 class ToolPolicyVersionRef(BaseModel):
-    """Reference to a versioned tool policy."""
+    """Reference to a versioned tool policy.."""
 
     version_id: str
     owner_id: str = "local-admin"
@@ -151,7 +165,7 @@ class ToolPolicyVersionRef(BaseModel):
 
 
 class ResearchScopeVersion(BaseModel):
-    """Frozen set of config version IDs bound to downstream runs."""
+    """Frozen set of config version IDs bound to downstream runs.."""
 
     version_id: str
     owner_id: str = "local-admin"
@@ -169,7 +183,11 @@ class ResearchScopeVersion(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def scope_hash(self) -> str:
-        """Return deterministic hash over referenced version IDs and canonical rules."""
+        """Return deterministic hash over referenced version IDs and canonical rules.
+
+        Returns:
+            str: .
+        """
         payload = {
             "universe_version_id": self.universe_version_id,
             "indicator_view_version_id": self.indicator_view_version_id,
@@ -185,14 +203,14 @@ class ResearchScopeVersion(BaseModel):
 
 
 class ProhibitedOutput(StrEnum):
-    """Outputs that strategies must never produce."""
+    """Outputs that strategies must never produce.."""
 
     GUARANTEED_RETURN = "GUARANTEED_RETURN"
     DIRECT_BUY_SELL_ORDER = "DIRECT_BUY_SELL_ORDER"
 
 
 class AIConfig(BaseModel):
-    """AI provider and prompt settings for a strategy."""
+    """AI provider and prompt settings for a strategy.."""
 
     provider: str = "openai"
     model: str = "deepseek-v4-pro"
@@ -202,7 +220,7 @@ class AIConfig(BaseModel):
 
 
 class EvidenceConfig(BaseModel):
-    """Evidence requirements for a strategy."""
+    """Evidence requirements for a strategy.."""
 
     required_levels: list[str] = Field(default_factory=lambda: ["L1", "L2", "L3"])
     min_evidence_count: int = 3
@@ -213,13 +231,10 @@ class EvidenceConfig(BaseModel):
         """Ensure the minimum evidence count is non-negative.
 
         Args:
-            value: The requested minimum number of evidence items.
+            value: int: .
 
         Returns:
-            The validated minimum evidence count.
-
-        Raises:
-            ValueError: If ``value`` is negative.
+            int: .
         """
         if value < 0:
             raise ValueError("min_evidence_count must be non-negative")
@@ -227,7 +242,7 @@ class EvidenceConfig(BaseModel):
 
 
 class DecisionConfig(BaseModel):
-    """Decision boundaries and prohibited outputs."""
+    """Decision boundaries and prohibited outputs.."""
 
     research_states: list[str] = Field(
         default_factory=lambda: ["research_candidate", "watch", "abstained"]
@@ -236,7 +251,7 @@ class DecisionConfig(BaseModel):
 
 
 class ValuationConfig(BaseModel):
-    """Valuation method configuration."""
+    """Valuation method configuration.."""
 
     method: str = "pe"
     eps: float = 1.0
@@ -244,21 +259,21 @@ class ValuationConfig(BaseModel):
 
 
 class QualityConfig(BaseModel):
-    """Data quality and source constraints."""
+    """Data quality and source constraints.."""
 
     min_source_level: str = "L3"
     require_primary_source: bool = True
 
 
 class RiskConfig(BaseModel):
-    """Risk limits for a strategy."""
+    """Risk limits for a strategy.."""
 
     max_drawdown: float | None = None
     risk_score_threshold: float = 0.7
 
 
 class StrategyConfig(BaseModel):
-    """Complete user-editable strategy configuration."""
+    """Complete user-editable strategy configuration.."""
 
     universe: list[str] = Field(default_factory=lambda: ["000001.SZ"])
     horizon: int = Field(default=90, ge=1)
@@ -271,7 +286,7 @@ class StrategyConfig(BaseModel):
 
 
 class PromptLayer(BaseModel):
-    """A single layer in the final merged prompt."""
+    """A single layer in the final merged prompt.."""
 
     layer: str
     content: str
@@ -281,7 +296,7 @@ class PromptLayer(BaseModel):
 
 
 class StrategySandboxResult(BaseModel):
-    """Result of running a strategy through the sandbox."""
+    """Result of running a strategy through the sandbox.."""
 
     validation_ok: bool = False
     sample_run_ok: bool = False
@@ -293,7 +308,7 @@ class StrategySandboxResult(BaseModel):
 
 
 class StrategyVersion(BaseModel):
-    """Immutable snapshot of a strategy configuration."""
+    """Immutable snapshot of a strategy configuration.."""
 
     strategy_id: str
     version_id: str = Field(default_factory=lambda: f"sv_{uuid.uuid4().hex[:12]}")
@@ -314,16 +329,16 @@ class StrategyVersion(BaseModel):
         """Normalize the creation timestamp to UTC.
 
         Args:
-            value: The raw creation timestamp.
+            value: datetime: .
 
         Returns:
-            The timestamp normalized to UTC.
+            datetime: .
         """
         return ensure_utc(value)
 
 
 class StrategyProfile(BaseModel):
-    """Mutable profile owning a sequence of immutable strategy versions."""
+    """Mutable profile owning a sequence of immutable strategy versions.."""
 
     strategy_id: str = Field(default_factory=lambda: f"st_{uuid.uuid4().hex[:12]}")
     owner_id: str
@@ -341,10 +356,10 @@ class StrategyProfile(BaseModel):
         """Normalize profile timestamps to UTC.
 
         Args:
-            value: A raw profile timestamp.
+            value: datetime: .
 
         Returns:
-            The timestamp normalized to UTC.
+            datetime: .
         """
         return ensure_utc(value)
 
@@ -352,11 +367,10 @@ class StrategyProfile(BaseModel):
         """Return a new profile with the given version appended.
 
         Args:
-            version: The immutable strategy version to append.
+            version: StrategyVersion: .
 
         Returns:
-            A new :class:`StrategyProfile` with ``version`` added and
-            ``updated_at`` refreshed.
+            StrategyProfile: .
         """
         return self.model_copy(
             update={
@@ -369,11 +383,10 @@ class StrategyProfile(BaseModel):
         """Return a new profile with the active version updated.
 
         Args:
-            version_id: The identifier of the version to mark as active.
+            version_id: str: .
 
         Returns:
-            A new :class:`StrategyProfile` with ``active_version_id`` set to
-            ``version_id`` and ``updated_at`` refreshed.
+            StrategyProfile: .
         """
         return self.model_copy(
             update={
@@ -384,7 +397,7 @@ class StrategyProfile(BaseModel):
 
 
 class StrategyTemplateMeta(BaseModel):
-    """Metadata for a built-in strategy template."""
+    """Metadata for a built-in strategy template.."""
 
     template_id: str
     name: str

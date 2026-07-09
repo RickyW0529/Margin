@@ -67,14 +67,14 @@ from margin.valuation_discovery.repository import ValuationDiscoveryRepository
 
 @dataclass(frozen=True)
 class DataFreshnessDecision:
-    """Persistable decision describing whether a warehouse sync is required."""
+    """Persistable decision describing whether a warehouse sync is required.."""
 
     sync_required: bool
     status_by_endpoint: dict[str, str]
 
 
 class DataReadinessAdapter:
-    """Bridge warehouse freshness and durable data-sync runs into orchestration."""
+    """Bridge warehouse freshness and durable data-sync runs into orchestration.."""
 
     def __init__(
         self,
@@ -84,7 +84,17 @@ class DataReadinessAdapter:
         provider: str,
         retry_delay: timedelta = timedelta(minutes=1),
     ) -> None:
-        """Initialize the adapter."""
+        """Initialize the adapter.
+
+        Args:
+            warehouse: SQLAlchemyWarehouseRepository: .
+            ingestion_stack: DataWarehouseIngestionStack: .
+            provider: str: .
+            retry_delay: timedelta: .
+
+        Returns:
+            None: .
+        """
         self._warehouse = warehouse
         self._stack = ingestion_stack
         self._provider = provider
@@ -96,7 +106,15 @@ class DataReadinessAdapter:
         scope_version_id: str,
         decision_at: datetime,
     ) -> DataFreshnessDecision:
-        """Read persisted endpoint freshness without calling Providers."""
+        """Read persisted endpoint freshness without calling Providers.
+
+        Args:
+            scope_version_id: str: .
+            decision_at: datetime: .
+
+        Returns:
+            DataFreshnessDecision: .
+        """
         del scope_version_id, decision_at
         records = self._warehouse.freshness(
             {
@@ -106,8 +124,7 @@ class DataReadinessAdapter:
             }
         )
         statuses = {
-            f"{record.provider}:{record.endpoint_code}": record.status.value
-            for record in records
+            f"{record.provider}:{record.endpoint_code}": record.status.value for record in records
         }
         sync_required = not records or any(
             record.status is not FreshnessStatus.FRESH for record in records
@@ -125,14 +142,22 @@ class DataReadinessAdapter:
         decision_at: datetime,
         freshness: DataFreshnessDecision | None,
     ) -> str:
-        """Create or poll one durable sync run and wait until terminal success."""
+        """Create or poll one durable sync run and wait until terminal success.
+
+        Args:
+            orchestration_run_id: str: .
+            scope_version_id: str: .
+            decision_at: datetime: .
+            freshness: DataFreshnessDecision | None: .
+
+        Returns:
+            str: .
+        """
         del scope_version_id
         if freshness is not None and not freshness.sync_required:
             return "not_required"
         requested_by = f"valuation:{orchestration_run_id}"
-        sync_run = self._stack.sync_repository.find_latest_run(
-            requested_by=requested_by
-        )
+        sync_run = self._stack.sync_repository.find_latest_run(requested_by=requested_by)
         if sync_run is None:
             sync_run = self._stack.create_sync_run(
                 DataSyncRequest(
@@ -155,10 +180,17 @@ class DataReadinessAdapter:
 
 
 class ScopeResolutionAdapter:
-    """Validate that an explicitly requested frozen scope is executable."""
+    """Validate that an explicitly requested frozen scope is executable.."""
 
     def __init__(self, repository: object) -> None:
-        """Initialize the adapter."""
+        """Initialize the adapter.
+
+        Args:
+            repository: object: .
+
+        Returns:
+            None: .
+        """
         self._repository = repository
         self._validator = StrategyActivationValidator()
 
@@ -168,7 +200,15 @@ class ScopeResolutionAdapter:
         scope_version_id: str,
         decision_at: datetime,
     ) -> object:
-        """Return an active scope after validating all frozen references."""
+        """Return an active scope after validating all frozen references.
+
+        Args:
+            scope_version_id: str: .
+            decision_at: datetime: .
+
+        Returns:
+            object: .
+        """
         del decision_at
         scope = self._repository.get_research_scope(scope_version_id)
         if scope is None:
@@ -184,7 +224,7 @@ class ScopeResolutionAdapter:
 
 @dataclass(frozen=True)
 class NewsRefreshAdapterResult:
-    """Result returned by ``NewsRefreshAdapter.refresh``."""
+    """Result returned by ``NewsRefreshAdapter.refresh``.."""
 
     run_id: str
     status: str
@@ -192,7 +232,7 @@ class NewsRefreshAdapterResult:
 
 
 class ProviderRefreshWaiting(RuntimeError):
-    """Signal a durable provider wait state to the outer orchestrator."""
+    """Signal a durable provider wait state to the outer orchestrator.."""
 
     def __init__(
         self,
@@ -201,7 +241,16 @@ class ProviderRefreshWaiting(RuntimeError):
         run_id: str,
         retry_after_seconds: int,
     ) -> None:
-        """Initialize a token-safe wait signal with durable output lineage."""
+        """Initialize a token-safe wait signal with durable output lineage.
+
+        Args:
+            code: str: .
+            run_id: str: .
+            retry_after_seconds: int: .
+
+        Returns:
+            None: .
+        """
         self.code = code
         self.output_ref = f"news:{run_id}"
         self.retry_after_seconds = retry_after_seconds
@@ -210,15 +259,17 @@ class ProviderRefreshWaiting(RuntimeError):
 
 
 class NewsRefreshAdapter:
-    """Adapt ``NewsRefreshService`` to the orchestrator's ``refresh`` protocol.
-
-    The orchestrator calls ``refresh(scope_version_id=..., quant_run_id=...,
-    decision_at=..., targets=...)``. The underlying ``NewsRefreshService``
-    expects ``refresh_for_targets`` with the same arguments.
-    """
+    """Adapt ``NewsRefreshService`` to the orchestrator's ``refresh`` protocol.."""
 
     def __init__(self, refresh_service: NewsRefreshService) -> None:
-        """Initialize the adapter with a news refresh service."""
+        """Initialize the adapter with a news refresh service.
+
+        Args:
+            refresh_service: NewsRefreshService: .
+
+        Returns:
+            None: .
+        """
         self._refresh_service = refresh_service
 
     def refresh(
@@ -232,13 +283,13 @@ class NewsRefreshAdapter:
         """Run a target-driven news refresh and return a summary.
 
         Args:
-            scope_version_id: The frozen scope version.
-            quant_run_id: The quant run that produced the targets.
-            decision_at: Timezone-aware decision timestamp.
-            targets: Iterable of ``NewsTarget`` objects.
+            scope_version_id: str: .
+            quant_run_id: str: .
+            decision_at: datetime: .
+            targets: Any: .
 
         Returns:
-            NewsRefreshAdapterResult with run ID, status, and target count.
+            NewsRefreshAdapterResult: .
         """
         run: NewsRefreshRun = self._refresh_service.refresh_for_targets(
             scope_version_id=scope_version_id,
@@ -261,9 +312,7 @@ class NewsRefreshAdapter:
             raise ProviderRefreshWaiting(
                 code="provider_429",
                 run_id=run.run_id,
-                retry_after_seconds=int(
-                    run.error_summary.get("retry_after_seconds", 60) or 60
-                ),
+                retry_after_seconds=int(run.error_summary.get("retry_after_seconds", 60) or 60),
             )
         if run.status in {NewsRefreshStatus.PENDING, NewsRefreshStatus.RUNNING}:
             raise RetryableStepError(
@@ -279,12 +328,7 @@ class NewsRefreshAdapter:
 
 
 class ResearchContextBuilderAdapter:
-    """Build frozen research context snapshots from quant results and targets.
-
-    For each quant result that has a corresponding news target, a
-    ``ResearchContextSnapshot`` is created and persisted. The adapter returns
-    the list of context snapshot IDs for downstream AI delta review.
-    """
+    """Build frozen research context snapshots from quant results and targets.."""
 
     def __init__(
         self,
@@ -299,12 +343,15 @@ class ResearchContextBuilderAdapter:
         """Initialize the adapter with session and optional service boundaries.
 
         Args:
-            session_factory: Callable that returns a SQLAlchemy ``Session``.
-            news_bundle_builder: Optional news context bundle builder.
-            retrieval_tool: Optional RAG retrieval tool.
-            evidence_package_builder: Optional evidence package builder.
-            evidence_repository: Optional evidence repository for block loading.
-            analysis_mart_repository: Optional Analysis Mart repository.
+            session_factory: SessionFactory: .
+            news_bundle_builder: NewsContextBundleBuilder | None: .
+            retrieval_tool: Any | None: .
+            evidence_package_builder: EvidencePackageBuilder | None: .
+            evidence_repository: EvidenceRepository | None: .
+            analysis_mart_repository: AnalysisMartRepository | None: .
+
+        Returns:
+            None: .
         """
         self._session_factory = session_factory
         self._news_bundle_builder = news_bundle_builder
@@ -326,20 +373,19 @@ class ResearchContextBuilderAdapter:
         """Build and persist context snapshots for each target.
 
         Args:
-            scope_version_id: The frozen scope version.
-            quant_run_id: The quant run ID.
-            decision_at: Timezone-aware decision timestamp.
-            targets: Iterable of ``NewsTarget`` objects.
-            results: Iterable of ``QuantResult`` objects.
+            scope_version_id: str: .
+            quant_run_id: str: .
+            news_refresh_run_id: str | None: .
+            decision_at: datetime: .
+            targets: Any: .
+            results: Any: .
 
         Returns:
-            Tuple of persisted context snapshot IDs.
+            tuple[str, ...]: .
         """
         target_list = list(targets)
         result_list: list[QuantResult] = list(results)
-        result_by_security = {
-            result.security_id: result for result in result_list
-        }
+        result_by_security = {result.security_id: result for result in result_list}
         context_ids: list[str] = []
         for target in target_list:
             security_id = target.security_id
@@ -349,8 +395,7 @@ class ResearchContextBuilderAdapter:
                     run_id=news_refresh_run_id,
                     security_id=security_id,
                 )
-                if self._news_bundle_builder is not None
-                and news_refresh_run_id is not None
+                if self._news_bundle_builder is not None and news_refresh_run_id is not None
                 else None
             )
             questions = _research_questions()
@@ -360,9 +405,7 @@ class ResearchContextBuilderAdapter:
                 scope_version_id=scope_version_id,
                 quant_run_id=quant_run_id,
                 questions=questions,
-                news_bundle_id=(
-                    news_bundle.bundle_id if news_bundle is not None else None
-                ),
+                news_bundle_id=(news_bundle.bundle_id if news_bundle is not None else None),
             )
             previous_pointer = self._latest_effective_pointer(
                 security_id=security_id,
@@ -386,9 +429,7 @@ class ResearchContextBuilderAdapter:
                 quant_result=result,
                 quant_lineage=quant_lineage,
                 evidence_ids=(
-                    evidence_package.evidence_ids
-                    if evidence_package is not None
-                    else ()
+                    evidence_package.evidence_ids if evidence_package is not None else ()
                 ),
             )
             payload: dict[str, Any] = {
@@ -398,41 +439,30 @@ class ResearchContextBuilderAdapter:
                     and result.data_status is DataStatus.OK
                     and quant_input_snapshot_id is not None
                 ),
-                "pit_valid": self._quant_input_is_pit_valid(
-                    quant_input_snapshot_id
-                ),
+                "pit_valid": self._quant_input_is_pit_valid(quant_input_snapshot_id),
                 "news_target_complete": (
-                    news_bundle is not None
-                    and news_bundle.target_completion_state == "complete"
+                    news_bundle is not None and news_bundle.target_completion_state == "complete"
                 ),
                 "provider_budget_available": (
                     news_bundle is not None
-                    and "provider_budget_exceeded"
-                    not in news_bundle.incomplete_reason_codes
+                    and "provider_budget_exceeded" not in news_bundle.incomplete_reason_codes
                 ),
                 "review_due": (
-                    previous_pointer is None
-                    or (result is not None and result.review_required)
+                    previous_pointer is None or (result is not None and result.review_required)
                 ),
                 "material_quant_change": material_quant_change,
                 "material_valuation_change": False,
-                "material_news_change": bool(
-                    news_bundle is not None and news_bundle.documents
-                ),
+                "material_news_change": bool(news_bundle is not None and news_bundle.documents),
                 "assumption_change": False,
                 "ambiguous_change": False,
                 "quant_input_snapshot_id": quant_input_snapshot_id,
-                "current_quant_result_id": (
-                    result.result_id if result else None
-                ),
+                "current_quant_result_id": (result.result_id if result else None),
                 "previous_effective_assessment_id": (
                     previous_pointer.effective_assessment_id
                     if previous_pointer is not None
                     else None
                 ),
-                "screening_status": (
-                    result.screening_status.value if result else None
-                ),
+                "screening_status": (result.screening_status.value if result else None),
                 "final_score": result.final_score if result else 0.0,
                 "quant_factor_details": quant_factor_details,
                 "quant_ai_profile": quant_factor_details.get(
@@ -457,14 +487,10 @@ class ResearchContextBuilderAdapter:
                     else ()
                 ),
                 "evidence_package_id": (
-                    evidence_package.package_id
-                    if evidence_package is not None
-                    else None
+                    evidence_package.package_id if evidence_package is not None else None
                 ),
                 "evidence_ids": (
-                    evidence_package.evidence_ids
-                    if evidence_package is not None
-                    else ()
+                    evidence_package.evidence_ids if evidence_package is not None else ()
                 ),
                 "evidence_quality_status": (
                     evidence_package.quality_status.value
@@ -493,11 +519,20 @@ class ResearchContextBuilderAdapter:
         questions: tuple[str, ...],
         news_bundle_id: str | None,
     ) -> Any | None:
-        """Retrieve indexed evidence and freeze one auditable package."""
-        if (
-            self._retrieval_tool is None
-            or self._evidence_package_builder is None
-        ):
+        """Retrieve indexed evidence and freeze one auditable package.
+
+        Args:
+            security_id: str: .
+            decision_at: datetime: .
+            scope_version_id: str: .
+            quant_run_id: str: .
+            questions: tuple[str, ...]: .
+            news_bundle_id: str | None: .
+
+        Returns:
+            Any | None: .
+        """
+        if self._retrieval_tool is None or self._evidence_package_builder is None:
             return None
         results = self._retrieval_tool.search(
             query="\n".join(questions),
@@ -525,14 +560,27 @@ class ResearchContextBuilderAdapter:
         security_id: str,
         scope_version_id: str,
     ) -> EffectiveAssessmentPointerRow | None:
-        """Load the latest effective assessment pointer."""
+        """Load the latest effective assessment pointer.
+
+        Args:
+            security_id: str: .
+            scope_version_id: str: .
+
+        Returns:
+            EffectiveAssessmentPointerRow | None: .
+        """
         with self._session_factory() as session:
-            return session.scalar(
-                latest_effective_pointer(security_id, scope_version_id)
-            )
+            return session.scalar(latest_effective_pointer(security_id, scope_version_id))
 
     def _evidence_blocks(self, package: Any | None) -> tuple[dict[str, Any], ...]:
-        """Load immutable evidence text and locator metadata for prompting."""
+        """Load immutable evidence text and locator metadata for prompting.
+
+        Args:
+            package: Any | None: .
+
+        Returns:
+            tuple[dict[str, Any], ...]: .
+        """
         if package is None or self._evidence_repository is None:
             return ()
         blocks: list[dict[str, Any]] = []
@@ -555,14 +603,26 @@ class ResearchContextBuilderAdapter:
         return tuple(blocks)
 
     def _quant_input_snapshot_id(self, quant_run_id: str) -> str | None:
-        """Resolve the frozen input snapshot behind one quant run."""
+        """Resolve the frozen input snapshot behind one quant run.
+
+        Args:
+            quant_run_id: str: .
+
+        Returns:
+            str | None: .
+        """
         with self._session_factory() as session:
-            return session.scalar(
-                quant_input_snapshot_id_for_run(quant_run_id)
-            )
+            return session.scalar(quant_input_snapshot_id_for_run(quant_run_id))
 
     def _quant_lineage(self, quant_run_id: str) -> dict[str, Any]:
-        """Load quant run and input snapshot lineage for Analysis Mart."""
+        """Load quant run and input snapshot lineage for Analysis Mart.
+
+        Args:
+            quant_run_id: str: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         with self._session_factory() as session:
             run = session.get(QuantScreenRunRow, quant_run_id)
             if run is None:
@@ -591,12 +651,21 @@ class ResearchContextBuilderAdapter:
         quant_lineage: dict[str, Any],
         evidence_ids: tuple[str, ...],
     ) -> Any | None:
-        """Publish the fourth-layer analysis snapshot for one quant result."""
+        """Publish the fourth-layer analysis snapshot for one quant result.
+
+        Args:
+            scope_version_id: str: .
+            decision_at: datetime: .
+            quant_result: QuantResult | None: .
+            quant_lineage: dict[str, Any]: .
+            evidence_ids: tuple[str, ...]: .
+
+        Returns:
+            Any | None: .
+        """
         if self._analysis_mart_repository is None or quant_result is None:
             return None
-        return AnalysisResultMartETLPipeline(
-            self._analysis_mart_repository
-        ).publish_quant_result(
+        return AnalysisResultMartETLPipeline(self._analysis_mart_repository).publish_quant_result(
             scope_version_id=scope_version_id,
             decision_at=decision_at,
             trading_date=decision_at.date(),
@@ -612,7 +681,14 @@ class ResearchContextBuilderAdapter:
         self,
         snapshot_id: str | None,
     ) -> bool:
-        """Return whether the persisted quant input passed PIT validation."""
+        """Return whether the persisted quant input passed PIT validation.
+
+        Args:
+            snapshot_id: str | None: .
+
+        Returns:
+            bool: .
+        """
         if snapshot_id is None:
             return False
         with self._session_factory() as session:
@@ -630,7 +706,16 @@ class ResearchContextBuilderAdapter:
         scope_version_id: str,
         current_quant_run_id: str,
     ) -> QuantScreenResultRow | None:
-        """Load the immediately preceding quant result for delta routing."""
+        """Load the immediately preceding quant result for delta routing.
+
+        Args:
+            security_id: str: .
+            scope_version_id: str: .
+            current_quant_run_id: str: .
+
+        Returns:
+            QuantScreenResultRow | None: .
+        """
         with self._session_factory() as session:
             return session.scalar(
                 previous_quant_result(
@@ -640,10 +725,15 @@ class ResearchContextBuilderAdapter:
                 )
             )
 
-    def _persist_context_snapshot(
-        self, snapshot: ResearchContextSnapshot
-    ) -> None:
-        """Persist a frozen context snapshot."""
+    def _persist_context_snapshot(self, snapshot: ResearchContextSnapshot) -> None:
+        """Persist a frozen context snapshot.
+
+        Args:
+            snapshot: ResearchContextSnapshot: .
+
+        Returns:
+            None: .
+        """
         with self._session_factory.begin() as session:
             existing = session.get(
                 ResearchContextSnapshotRow,
@@ -674,11 +764,17 @@ class ResearchContextBuilderAdapter:
         scope_version_id: str,
         quant_run_id: str,
     ) -> tuple[str, ...]:
-        """Reload context IDs for orchestration recovery."""
+        """Reload context IDs for orchestration recovery.
+
+        Args:
+            scope_version_id: str: .
+            quant_run_id: str: .
+
+        Returns:
+            tuple[str, ...]: .
+        """
         with self._session_factory() as session:
-            rows = session.scalars(
-                context_snapshots_by_scope(scope_version_id)
-            ).all()
+            rows = session.scalars(context_snapshots_by_scope(scope_version_id)).all()
         return tuple(
             row.context_snapshot_id
             for row in rows
@@ -693,7 +789,17 @@ def _build_context_snapshot(
     decision_at: datetime,
     payload: dict[str, Any],
 ) -> ResearchContextSnapshot:
-    """Build a frozen ``ResearchContextSnapshot`` with a deterministic ID."""
+    """Build a frozen ``ResearchContextSnapshot`` with a deterministic ID.
+
+    Args:
+        security_id: str: .
+        scope_version_id: str: .
+        decision_at: datetime: .
+        payload: dict[str, Any]: .
+
+    Returns:
+        ResearchContextSnapshot: .
+    """
     payload_hash = _hash_payload(payload)
     context_snapshot_id = "rcs_" + payload_hash.removeprefix("sha256:")[:24]
     return ResearchContextSnapshot(
@@ -708,13 +814,24 @@ def _build_context_snapshot(
 
 
 def _hash_payload(payload: dict[str, Any]) -> str:
-    """Hash a payload dict to a deterministic SHA-256 digest string."""
+    """Hash a payload dict to a deterministic SHA-256 digest string.
+
+    Args:
+        payload: dict[str, Any]: .
+
+    Returns:
+        str: .
+    """
     rendered = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
     return "sha256:" + hashlib.sha256(rendered.encode("utf-8")).hexdigest()
 
 
 def _research_questions() -> tuple[str, ...]:
-    """Return the stable evidence questions for one company review."""
+    """Return the stable evidence questions for one company review.
+
+    Returns:
+        tuple[str, ...]: .
+    """
     return (
         "核心基本面较上一有效结论发生了什么变化？",
         "当前估值假设是否仍然成立？",
@@ -726,7 +843,15 @@ def _is_material_quant_change(
     previous: QuantScreenResultRow | None,
     current: QuantResult | None,
 ) -> bool:
-    """Classify deterministic quant deltas for graph routing."""
+    """Classify deterministic quant deltas for graph routing.
+
+    Args:
+        previous: QuantScreenResultRow | None: .
+        current: QuantResult | None: .
+
+    Returns:
+        bool: .
+    """
     if current is None:
         return False
     if previous is None:
@@ -740,19 +865,14 @@ def _is_material_quant_change(
 
 @dataclass(frozen=True)
 class AIReviewSummary:
-    """Summary returned by ``AIReviewAdapter.review``."""
+    """Summary returned by ``AIReviewAdapter.review``.."""
 
     review_ids: tuple[str, ...]
     context_snapshot_ids: tuple[str, ...]
 
 
 class AIReviewAdapter:
-    """Wrap ``ResearchService`` to review multiple context snapshots.
-
-    The orchestrator calls ``review(context_snapshot_ids=..., decision_at=...)``.
-    The adapter runs ``ResearchService.run_delta_review`` for each context
-    snapshot and collects the review IDs.
-    """
+    """Wrap ``ResearchService`` to review multiple context snapshots.."""
 
     def __init__(
         self,
@@ -763,8 +883,11 @@ class AIReviewAdapter:
         """Initialize the adapter with a research service and optional session.
 
         Args:
-            research_service: The research service for delta reviews.
-            session_factory: Optional session factory for review recovery.
+            research_service: ResearchService: .
+            session_factory: SessionFactory | None: .
+
+        Returns:
+            None: .
         """
         self._research_service = research_service
         self._session_factory = session_factory
@@ -778,11 +901,11 @@ class AIReviewAdapter:
         """Run AI delta reviews for each context snapshot.
 
         Args:
-            context_snapshot_ids: Iterable of context snapshot IDs.
-            decision_at: Timezone-aware decision timestamp.
+            context_snapshot_ids: Any: .
+            decision_at: datetime: .
 
         Returns:
-            AIReviewSummary with review IDs and context snapshot IDs.
+            AIReviewSummary: .
         """
         review_ids: list[str] = []
         snapshot_ids = tuple(context_snapshot_ids)
@@ -803,15 +926,20 @@ class AIReviewAdapter:
         *,
         context_snapshot_ids: Any,
     ) -> AIReviewSummary:
-        """Reload terminal review IDs for all requested contexts."""
+        """Reload terminal review IDs for all requested contexts.
+
+        Args:
+            context_snapshot_ids: Any: .
+
+        Returns:
+            AIReviewSummary: .
+        """
         snapshot_ids = tuple(str(value) for value in context_snapshot_ids)
         review_ids: list[str] = []
         for context_snapshot_id in snapshot_ids:
             review_id = self._existing_review_id(context_snapshot_id)
             if review_id is None:
-                raise KeyError(
-                    f"research delta review not found: {context_snapshot_id}"
-                )
+                raise KeyError(f"research delta review not found: {context_snapshot_id}")
             review_ids.append(review_id)
         return AIReviewSummary(
             review_ids=tuple(review_ids),
@@ -822,18 +950,23 @@ class AIReviewAdapter:
         self,
         context_snapshot_id: str,
     ) -> str | None:
-        """Return a persisted terminal review ID for one context."""
+        """Return a persisted terminal review ID for one context.
+
+        Args:
+            context_snapshot_id: str: .
+
+        Returns:
+            str | None: .
+        """
         if self._session_factory is None:
             return None
         with self._session_factory() as session:
-            return session.scalar(
-                latest_delta_review_id_for_context(context_snapshot_id)
-            )
+            return session.scalar(latest_delta_review_id_for_context(context_snapshot_id))
 
 
 @dataclass(frozen=True)
 class ValuationPublishResult:
-    """Result returned by ``ValuationPublisherAdapter.publish``."""
+    """Result returned by ``ValuationPublisherAdapter.publish``.."""
 
     assessment_count: int
     pointer_count: int
@@ -843,7 +976,7 @@ class ValuationPublishResult:
 
 @dataclass(frozen=True)
 class DashboardProjectionResult:
-    """Persisted effective-assessment projection visible to the dashboard."""
+    """Persisted effective-assessment projection visible to the dashboard.."""
 
     scope_version_id: str
     effective_assessment_count: int
@@ -853,12 +986,7 @@ class DashboardProjectionResult:
 
 
 class ValuationPublisherAdapter:
-    """Publish valuation assessments and refresh dashboards.
-
-    The publisher loads immutable AI reviews by ID, creates assessment records
-    only for outcomes that establish a new conclusion, and atomically persists
-    the assessment, evidence edges, and effective-pointer event.
-    """
+    """Publish valuation assessments and refresh dashboards.."""
 
     def __init__(
         self,
@@ -872,14 +1000,14 @@ class ValuationPublisherAdapter:
         """Initialize the publisher with assessment and repository dependencies.
 
         Args:
-            assessment_service: Service for building effective assessment pointers.
-            review_repository: Repository for loading immutable AI reviews.
-            valuation_repository: Repository for publishing assessment results.
-            dashboard_repository: Optional repository for the user-facing
-                recommendation read projection.
-            stock_analyst_agent: Optional write-capable ExpertAgent that can
-                publish a post-quant portfolio overlay into the same dashboard
-                projection repository.
+            assessment_service: EffectiveAssessmentService: .
+            review_repository: ResearchDeltaRepository: .
+            valuation_repository: ValuationDiscoveryRepository: .
+            dashboard_repository: DashboardRepository | None: .
+            stock_analyst_agent: Any | None: .
+
+        Returns:
+            None: .
         """
         self._assessment_service = assessment_service
         self._review_repository = review_repository
@@ -898,13 +1026,13 @@ class ValuationPublisherAdapter:
         """Apply review outcomes to effective assessment pointers.
 
         Args:
-            scope_version_id: The frozen scope version.
-            decision_at: Timezone-aware decision timestamp.
-            quant_run_id: The quant run ID.
-            review_summary: Optional ``AIReviewSummary`` from the AI review step.
+            scope_version_id: str: .
+            decision_at: datetime: .
+            quant_run_id: str: .
+            review_summary: Any: .
 
         Returns:
-            ValuationPublishResult with the count of published assessments.
+            ValuationPublishResult: .
         """
         assessment_count = 0
         pointer_count = 0
@@ -921,13 +1049,8 @@ class ValuationPublisherAdapter:
                     ReviewOutcome.INVALIDATE,
                 }
                 if creates_assessment and not review.conclusion.strip():
-                    raise ValueError(
-                        f"review conclusion is required: {review.review_id}"
-                    )
-                if (
-                    not creates_assessment
-                    and review.previous_effective_assessment_id is None
-                ):
+                    raise ValueError(f"review conclusion is required: {review.review_id}")
+                if not creates_assessment and review.previous_effective_assessment_id is None:
                     skipped_review_ids.append(review.review_id)
                     continue
                 assessment = (
@@ -967,9 +1090,7 @@ class ValuationPublisherAdapter:
                     previous_effective_assessment_id=review.previous_effective_assessment_id,
                     current_review_outcome=review.outcome.value,
                     new_assessment_id=(
-                        review.effective_assessment_id
-                        if creates_assessment
-                        else None
+                        review.effective_assessment_id if creates_assessment else None
                     ),
                     stale_reason=review.stale_reason,
                     last_successful_data_check_at=decision_at,
@@ -1002,15 +1123,14 @@ class ValuationPublisherAdapter:
         """Persist and read the dashboard projection for the latest refresh.
 
         Args:
-            scope_version_id: The frozen scope version.
-            decision_at: Timezone-aware decision timestamp.
-            quant_run_id: Optional quant run identifier to bind the projection.
-            quant_results: Optional quant result set from the current run.
-            agent_run_id: Optional MainAgent run ID used for ExpertAgent
-                dashboard-overlay artifacts.
+            scope_version_id: str: .
+            decision_at: datetime: .
+            quant_run_id: str | None: .
+            quant_results: Any: .
+            agent_run_id: str | None: .
 
         Returns:
-            A projection summary backed by immutable pointer rows.
+            DashboardProjectionResult: .
         """
         dashboard_run_id: str | None = None
         visible_item_count = 0
@@ -1070,7 +1190,14 @@ class ValuationPublisherAdapter:
 
 
 def _dashboard_visible_quant_results(quant_results: Any) -> tuple[QuantResult, ...]:
-    """Return quant results that should be visible on the user dashboard."""
+    """Return quant results that should be visible on the user dashboard.
+
+    Args:
+        quant_results: Any: .
+
+    Returns:
+        tuple[QuantResult, ...]: .
+    """
     visible_statuses = {
         ScreeningStatus.PASS,
         ScreeningStatus.NEAR_THRESHOLD,
@@ -1102,7 +1229,18 @@ def _dashboard_run_from_quant_results(
     decision_at: datetime,
     results: tuple[QuantResult, ...],
 ) -> ResearchRun:
-    """Build the latest user-facing dashboard run from quant output."""
+    """Build the latest user-facing dashboard run from quant output.
+
+    Args:
+        run_id: str: .
+        scope_version_id: str: .
+        quant_run_id: str: .
+        decision_at: datetime: .
+        results: tuple[QuantResult, ...]: .
+
+    Returns:
+        ResearchRun: .
+    """
     created_at = datetime.now(UTC)
     published_count = sum(
         1 for result in results if _dashboard_item_status(result) is ItemStatus.PUBLISHED
@@ -1138,7 +1276,17 @@ def _dashboard_item_from_quant_result(
     result: QuantResult,
     decision_at: datetime,
 ) -> ResearchItem:
-    """Build one dashboard item from a quant result without exposing internals."""
+    """Build one dashboard item from a quant result without exposing internals.
+
+    Args:
+        run_id: str: .
+        quant_run_id: str: .
+        result: QuantResult: .
+        decision_at: datetime: .
+
+    Returns:
+        ResearchItem: .
+    """
     status = _dashboard_item_status(result)
     return ResearchItem(
         item_id=_dashboard_item_id(run_id, result.security_id),
@@ -1157,9 +1305,7 @@ def _dashboard_item_from_quant_result(
             if status is ItemStatus.PUBLISHED
             else result.screening_status.value
         ),
-        rejection_reasons=list(
-            dict.fromkeys((*result.risk_flags, *result.review_reasons))
-        ),
+        rejection_reasons=list(dict.fromkeys((*result.risk_flags, *result.review_reasons))),
         risk_score=result.risk_score,
         target_weight=_dashboard_target_weight(result),
         adjusted_weight=_dashboard_target_weight(result),
@@ -1174,7 +1320,15 @@ def _dashboard_adjustment_candidates(
     items: tuple[ResearchItem, ...],
     results: tuple[QuantResult, ...],
 ) -> tuple[dict[str, Any], ...]:
-    """Build StockAnalystAgent candidate payloads from persisted dashboard items."""
+    """Build StockAnalystAgent candidate payloads from persisted dashboard items.
+
+    Args:
+        items: tuple[ResearchItem, ...]: .
+        results: tuple[QuantResult, ...]: .
+
+    Returns:
+        tuple[dict[str, Any], ...]: .
+    """
     result_by_security_id = {result.security_id: result for result in results}
     candidates: list[dict[str, Any]] = []
     for item in items:
@@ -1196,17 +1350,28 @@ def _dashboard_adjustment_candidates(
 
 
 def _dashboard_item_status(result: QuantResult) -> ItemStatus:
-    """Map quant status into the dashboard item's current-review state."""
-    if (
-        result.screening_status is ScreeningStatus.PASS
-        and not result.review_required
-    ):
+    """Map quant status into the dashboard item's current-review state.
+
+    Args:
+        result: QuantResult: .
+
+    Returns:
+        ItemStatus: .
+    """
+    if result.screening_status is ScreeningStatus.PASS and not result.review_required:
         return ItemStatus.PUBLISHED
     return ItemStatus.ABSTAINED
 
 
 def _dashboard_target_weight(result: QuantResult) -> float | None:
-    """Return ML target weight carried by a quant result, if present."""
+    """Return ML target weight carried by a quant result, if present.
+
+    Args:
+        result: QuantResult: .
+
+    Returns:
+        float | None: .
+    """
     ml_strategy = result.factor_details.get("ml_strategy")
     if not isinstance(ml_strategy, dict):
         return None
@@ -1220,7 +1385,14 @@ def _dashboard_target_weight(result: QuantResult) -> float | None:
 
 
 def _dashboard_agent_adjustment(result: QuantResult) -> dict[str, Any]:
-    """Return default agent-adjustment metadata for dashboard projection."""
+    """Return default agent-adjustment metadata for dashboard projection.
+
+    Args:
+        result: QuantResult: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     target_weight = _dashboard_target_weight(result)
     if target_weight is None:
         return {}
@@ -1233,28 +1405,56 @@ def _dashboard_agent_adjustment(result: QuantResult) -> dict[str, Any]:
 
 
 def _score_to_confidence(score: float) -> float:
-    """Convert a 0-100 quant score into a 0-1 dashboard confidence."""
+    """Convert a 0-100 quant score into a 0-1 dashboard confidence.
+
+    Args:
+        score: float: .
+
+    Returns:
+        float: .
+    """
     return max(0.0, min(float(score) / 100.0, 1.0))
 
 
 def _dashboard_run_id(*, scope_version_id: str, quant_run_id: str) -> str:
-    """Build a stable dashboard run ID for idempotent refresh retries."""
+    """Build a stable dashboard run ID for idempotent refresh retries.
+
+    Args:
+        scope_version_id: str: .
+        quant_run_id: str: .
+
+    Returns:
+        str: .
+    """
     material = f"{scope_version_id}|{quant_run_id}"
     return "dr_" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
 
 
 def _dashboard_item_id(run_id: str, security_id: str) -> str:
-    """Build a stable dashboard item ID for idempotent refresh retries."""
+    """Build a stable dashboard item ID for idempotent refresh retries.
+
+    Args:
+        run_id: str: .
+        security_id: str: .
+
+    Returns:
+        str: .
+    """
     material = f"{run_id}|{security_id}"
     return "di_" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
 
 
 def _required_assessment_id(review: Any) -> str:
-    """Return the graph-generated assessment ID for a new conclusion."""
+    """Return the graph-generated assessment ID for a new conclusion.
+
+    Args:
+        review: Any: .
+
+    Returns:
+        str: .
+    """
     if not review.effective_assessment_id:
-        raise ValueError(
-            f"effective assessment ID is required: {review.review_id}"
-        )
+        raise ValueError(f"effective assessment ID is required: {review.review_id}")
     return str(review.effective_assessment_id)
 
 
@@ -1262,6 +1462,14 @@ def _assessment_evidence_edge_id(
     assessment_id: str,
     evidence_id: str,
 ) -> str:
-    """Build a stable assessment-evidence edge ID."""
+    """Build a stable assessment-evidence edge ID.
+
+    Args:
+        assessment_id: str: .
+        evidence_id: str: .
+
+    Returns:
+        str: .
+    """
     material = f"{assessment_id}|{evidence_id}|supporting"
     return "vae_" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]

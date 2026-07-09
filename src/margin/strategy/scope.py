@@ -12,7 +12,7 @@ T = TypeVar("T")
 
 
 class ScopeResolver:
-    """Resolve the immutable config version set used by downstream runs."""
+    """Resolve the immutable config version set used by downstream runs.."""
 
     def __init__(
         self,
@@ -20,7 +20,15 @@ class ScopeResolver:
         *,
         validator: StrategyActivationValidator | None = None,
     ) -> None:
-        """Initialize the instance."""
+        """Initialize the instance.
+
+        Args:
+            repository: object: .
+            validator: StrategyActivationValidator | None: .
+
+        Returns:
+            None: .
+        """
         self._repository = repository
         self._validator = validator or StrategyActivationValidator()
 
@@ -35,11 +43,15 @@ class ScopeResolver:
     ) -> ResearchScopeVersion:
         """Return a frozen scope from the active versioned configuration.
 
-        If an active ``ResearchScopeVersion`` already exists for the owner, it is
-        returned after reference validation. Otherwise, the resolver composes a
-        new immutable scope from the currently active child versions. The caller
-        can persist that scope and bind its ``version_id``/``scope_hash`` to a
-        run so future executions do not re-resolve moving active versions.
+        Args:
+            owner_id: str: .
+            universe_code: str | None: .
+            strategy_family: str: .
+            prompt_name: str: .
+            canonical_rule_version: str: .
+
+        Returns:
+            ResearchScopeVersion: .
         """
         active_scope = self._repository.get_active_research_scope(owner_id)
         if active_scope is not None:
@@ -104,7 +116,15 @@ class ScopeResolver:
         owner_id: str,
         universe_code: str | None,
     ) -> object:
-        """resolve single active universe."""
+        """resolve single active universe.
+
+        Args:
+            owner_id: str: .
+            universe_code: str | None: .
+
+        Returns:
+            object: .
+        """
         universes = self._repository.list_active_universe_definitions(
             owner_id,
             universe_code=universe_code,
@@ -112,14 +132,20 @@ class ScopeResolver:
         if not universes:
             raise ActivationError("active universe definition not found")
         if len(universes) > 1:
-            raise ActivationError(
-                "multiple active universe definitions found; pass universe_code"
-            )
+            raise ActivationError("multiple active universe definitions found; pass universe_code")
         return universes[0]
 
     @staticmethod
     def _require(value: T | None, resource_name: str) -> T:
-        """require."""
+        """require.
+
+        Args:
+            value: T | None: .
+            resource_name: str: .
+
+        Returns:
+            T: .
+        """
         if value is None:
             raise ActivationError(f"{resource_name} not found")
         return value

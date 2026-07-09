@@ -47,12 +47,11 @@ def _deep_merge_config_delta(
     """Return ``base`` updated by recursively merging nested mapping values.
 
     Args:
-        base: The original configuration dictionary.
-        delta: The changes to merge into ``base``.
+        base: dict[str, Any]: .
+        delta: dict[str, Any]: .
 
     Returns:
-        A new dictionary containing ``base`` values overwritten or merged with
-        ``delta`` values.
+        dict[str, Any]: .
     """
     merged = dict(base)
     for key, value in delta.items():
@@ -69,7 +68,16 @@ def _rolled_scope_version_id(
     field_name: str,
     resource_version_id: str,
 ) -> str:
-    """Return a deterministic scope version ID for an activated child config."""
+    """Return a deterministic scope version ID for an activated child config.
+
+    Args:
+        scope: ResearchScopeVersion: .
+        field_name: str: .
+        resource_version_id: str: .
+
+    Returns:
+        str: .
+    """
     resource_slug = field_name.removesuffix("_version_id").replace("_", "-")
     digest = hashlib.sha256(
         "|".join(
@@ -85,7 +93,7 @@ def _rolled_scope_version_id(
 
 
 class StrategyService:
-    """Entry point for creating, validating, and activating strategies."""
+    """Entry point for creating, validating, and activating strategies.."""
 
     def __init__(
         self,
@@ -99,16 +107,15 @@ class StrategyService:
         """Initialize the service with optional collaborators.
 
         Args:
-            repository: Strategy persistence implementation. Defaults to an
-                in-memory repository.
-            validator: Configuration validator. Defaults to a
-                :class:`StrategyValidator`.
-            lifecycle: Lifecycle state machine. Defaults to a
-                :class:`StrategyLifecycle`.
-            sandbox: Sandbox evaluator. Defaults to a :class:`StrategySandbox`
-                using the service validator.
-            prompt_builder: Prompt layer builder. Defaults to a
-                :class:`PromptLayerBuilder`.
+            repository: StrategyRepository | None: .
+            validator: StrategyValidator | None: .
+            lifecycle: StrategyLifecycle | None: .
+            sandbox: StrategySandbox | None: .
+            prompt_builder: PromptLayerBuilder | None: .
+            activation_validator: StrategyActivationValidator | None: .
+
+        Returns:
+            None: .
         """
         self._repository = repository or MemoryStrategyRepository()
         self._validator = validator or StrategyValidator()
@@ -127,16 +134,13 @@ class StrategyService:
         """Create a new strategy profile from a built-in template.
 
         Args:
-            owner_id: The identifier of the profile owner.
-            template_id: The built-in template identifier.
-            name: Optional profile name. Defaults to the template name.
-            description: Optional profile description.
+            owner_id: str: .
+            template_id: str: .
+            name: str: .
+            description: str: .
 
         Returns:
-            The newly created and persisted :class:`StrategyProfile`.
-
-        Raises:
-            ValueError: If ``template_id`` is not a known built-in template.
+            StrategyProfile: .
         """
         template = BUILTIN_TEMPLATES.get(template_id)
         if template is None:
@@ -160,16 +164,13 @@ class StrategyService:
         """Create a new strategy profile from a user-supplied config.
 
         Args:
-            owner_id: The identifier of the profile owner.
-            config: The user-provided strategy configuration.
-            name: The profile name.
-            description: Optional profile description.
+            owner_id: str: .
+            config: StrategyConfig: .
+            name: str: .
+            description: str: .
 
         Returns:
-            The newly created and persisted :class:`StrategyProfile`.
-
-        Raises:
-            ValueError: If ``config`` fails guardrail validation.
+            StrategyProfile: .
         """
         ok, errors = self._validator.validate(config)
         if not ok:
@@ -193,18 +194,13 @@ class StrategyService:
         """Create a new version of an existing strategy.
 
         Args:
-            strategy_id: The identifier of the strategy to update.
-            config_delta: Optional nested dictionary of configuration changes
-                merged into the latest version's config.
-            name: Optional new profile/version name.
-            description: Optional new version description.
+            strategy_id: str: .
+            config_delta: dict[str, Any] | None: .
+            name: str | None: .
+            description: str | None: .
 
         Returns:
-            The updated :class:`StrategyProfile` with a new immutable version.
-
-        Raises:
-            KeyError: If ``strategy_id`` does not exist.
-            ValueError: If the merged configuration fails guardrail validation.
+            StrategyProfile: .
         """
         profile = self._must_get_profile(strategy_id)
         latest = profile.versions[-1] if profile.versions else None
@@ -232,23 +228,17 @@ class StrategyService:
         """Run validation and sandbox on a version, advancing to backtesting.
 
         Args:
-            strategy_id: The identifier of the strategy containing the version.
-            version_id: The identifier of the version to validate.
+            strategy_id: str: .
+            version_id: str: .
 
         Returns:
-            The updated :class:`StrategyProfile` with the version state moved
-            to ``BACKTESTING`` on success or ``INVALID`` on failure.
-
-        Raises:
-            KeyError: If the strategy or version is not found.
+            StrategyProfile: .
         """
         profile = self._must_get_profile(strategy_id)
         version = self._must_get_version(profile, version_id)
         ok, errors = self._validator.validate(version.config)
         sandbox_result = self._sandbox.evaluate(version.config)
-        sandbox_result = sandbox_result.model_copy(
-            update={"validation_ok": ok}
-        )
+        sandbox_result = sandbox_result.model_copy(update={"validation_ok": ok})
         if not ok:
             version = version.model_copy(
                 update={
@@ -269,16 +259,11 @@ class StrategyService:
         """Mark a version as ready for paper trading.
 
         Args:
-            strategy_id: The identifier of the strategy containing the version.
-            version_id: The identifier of the version to advance.
+            strategy_id: str: .
+            version_id: str: .
 
         Returns:
-            The updated :class:`StrategyProfile` with the version state moved
-            to ``PAPER_TRADING``.
-
-        Raises:
-            KeyError: If the strategy or version is not found.
-            ValueError: If the lifecycle transition is not allowed.
+            StrategyProfile: .
         """
         profile = self._must_get_profile(strategy_id)
         version = self._must_get_version(profile, version_id)
@@ -291,26 +276,18 @@ class StrategyService:
         """Record paper-trading readiness without activating the strategy.
 
         Args:
-            strategy_id: The identifier of the strategy containing the version.
-            version_id: The identifier of the version to advance.
+            strategy_id: str: .
+            version_id: str: .
 
         Returns:
-            The updated :class:`StrategyProfile` with the version state moved
-            to ``PAPER_TRADING`` if it was in ``BACKTESTING``.
-
-        Raises:
-            KeyError: If the strategy or version is not found.
-            ValueError: If the version is not in ``BACKTESTING`` or
-                ``PAPER_TRADING`` state.
+            StrategyProfile: .
         """
         profile = self._must_get_profile(strategy_id)
         version = self._must_get_version(profile, version_id)
         if version.state == StrategyState.BACKTESTING:
             version = self._lifecycle.transition(version, StrategyState.PAPER_TRADING)
         elif version.state != StrategyState.PAPER_TRADING:
-            raise ValueError(
-                "paper trading requires a version in backtesting or paper_trading"
-            )
+            raise ValueError("paper trading requires a version in backtesting or paper_trading")
         updated = self._replace_version(profile, version)
         self._repository.update_profile(updated)
         return updated
@@ -319,16 +296,11 @@ class StrategyService:
         """Activate a version for live research runs.
 
         Args:
-            strategy_id: The identifier of the strategy containing the version.
-            version_id: The identifier of the version to activate.
+            strategy_id: str: .
+            version_id: str: .
 
         Returns:
-            The updated :class:`StrategyProfile` with the version state set to
-            ``ACTIVE`` and ``active_version_id`` updated.
-
-        Raises:
-            KeyError: If the strategy or version is not found.
-            ValueError: If the lifecycle transition is not allowed.
+            StrategyProfile: .
         """
         profile = self._must_get_profile(strategy_id)
         version = self._must_get_version(profile, version_id)
@@ -346,7 +318,16 @@ class StrategyService:
         actor_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> QuantStrategyVersion:
-        """Activate a v0.2 quant strategy version after calibration validation."""
+        """Activate a v0.2 quant strategy version after calibration validation.
+
+        Args:
+            version_id: str: .
+            actor_id: str | None: .
+            idempotency_key: str | None: .
+
+        Returns:
+            QuantStrategyVersion: .
+        """
         replay = self._config_mutation_replay(
             actor_id=actor_id,
             action="quant_strategy.activate",
@@ -387,7 +368,17 @@ class StrategyService:
         actor_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> ProviderConfigVersion:
-        """Activate a provider config after schema and secret-reference validation."""
+        """Activate a provider config after schema and secret-reference validation.
+
+        Args:
+            version_id: str: .
+            health_service: ProviderConfigHealthService: .
+            actor_id: str | None: .
+            idempotency_key: str | None: .
+
+        Returns:
+            ProviderConfigVersion: .
+        """
         replay = self._config_mutation_replay(
             actor_id=actor_id,
             action="provider_config.activate",
@@ -400,9 +391,7 @@ class StrategyService:
         if version is None:
             raise KeyError(f"provider config '{version_id}' not found")
         self._activation_validator.validate_provider_config_activation(version)
-        secret_required = bool(
-            version.non_sensitive_config.get("secret_required", True)
-        )
+        secret_required = bool(version.non_sensitive_config.get("secret_required", True))
         if secret_required and not version.secret_version_id:
             raise ValueError("provider config activation requires an active secret")
         try:
@@ -412,9 +401,7 @@ class StrategyService:
                 "provider activation health check failed: secret/config invalid"
             ) from exc
         if health.status != "ok":
-            raise ActivationError(
-                "provider activation health check must succeed before activation"
-            )
+            raise ActivationError("provider activation health check must succeed before activation")
         activated = self._repository.activate_provider_config(version_id)
         self._record_config_mutation(
             actor_id=actor_id,
@@ -437,7 +424,16 @@ class StrategyService:
         actor_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> ResearchScopeVersion:
-        """Activate a v0.2 research scope after validating frozen references."""
+        """Activate a v0.2 research scope after validating frozen references.
+
+        Args:
+            version_id: str: .
+            actor_id: str | None: .
+            idempotency_key: str | None: .
+
+        Returns:
+            ResearchScopeVersion: .
+        """
         replay = self._config_mutation_replay(
             actor_id=actor_id,
             action="research_scope.activate",
@@ -474,7 +470,16 @@ class StrategyService:
         actor_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> UniverseDefinitionVersion:
-        """Activate a universe definition version."""
+        """Activate a universe definition version.
+
+        Args:
+            version_id: str: .
+            actor_id: str | None: .
+            idempotency_key: str | None: .
+
+        Returns:
+            UniverseDefinitionVersion: .
+        """
         replay = self._config_mutation_replay(
             actor_id=actor_id,
             action="universe_definition.activate",
@@ -516,7 +521,16 @@ class StrategyService:
         actor_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> IndicatorViewVersion:
-        """Activate an indicator view version."""
+        """Activate an indicator view version.
+
+        Args:
+            version_id: str: .
+            actor_id: str | None: .
+            idempotency_key: str | None: .
+
+        Returns:
+            IndicatorViewVersion: .
+        """
         replay = self._config_mutation_replay(
             actor_id=actor_id,
             action="indicator_view.activate",
@@ -558,7 +572,16 @@ class StrategyService:
         actor_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> QuantFeatureSetVersion:
-        """Activate a quant feature set version."""
+        """Activate a quant feature set version.
+
+        Args:
+            version_id: str: .
+            actor_id: str | None: .
+            idempotency_key: str | None: .
+
+        Returns:
+            QuantFeatureSetVersion: .
+        """
         replay = self._config_mutation_replay(
             actor_id=actor_id,
             action="quant_feature_set.activate",
@@ -600,7 +623,16 @@ class StrategyService:
         actor_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> UserStylePromptVersion:
-        """Activate a style prompt after protected-boundary validation."""
+        """Activate a style prompt after protected-boundary validation.
+
+        Args:
+            version_id: str: .
+            actor_id: str | None: .
+            idempotency_key: str | None: .
+
+        Returns:
+            UserStylePromptVersion: .
+        """
         replay = self._config_mutation_replay(
             actor_id=actor_id,
             action="style_prompt.activate",
@@ -639,7 +671,16 @@ class StrategyService:
         actor_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> ToolPolicyVersionRef:
-        """Activate a tool policy after allow/deny compatibility validation."""
+        """Activate a tool policy after allow/deny compatibility validation.
+
+        Args:
+            version_id: str: .
+            actor_id: str | None: .
+            idempotency_key: str | None: .
+
+        Returns:
+            ToolPolicyVersionRef: .
+        """
         replay = self._config_mutation_replay(
             actor_id=actor_id,
             action="tool_policy.activate",
@@ -679,7 +720,16 @@ class StrategyService:
         actor_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> ToolPolicyVersionRef:
-        """Persist a new append-only tool-policy version."""
+        """Persist a new append-only tool-policy version.
+
+        Args:
+            version: ToolPolicyVersionRef: .
+            actor_id: str | None: .
+            idempotency_key: str | None: .
+
+        Returns:
+            ToolPolicyVersionRef: .
+        """
         replay = self._config_mutation_replay(
             actor_id=actor_id,
             action="tool_policy.create",
@@ -710,7 +760,16 @@ class StrategyService:
         actor_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> ProviderConfigVersion:
-        """Persist a new provider configuration version."""
+        """Persist a new provider configuration version.
+
+        Args:
+            version: ProviderConfigVersion: .
+            actor_id: str | None: .
+            idempotency_key: str | None: .
+
+        Returns:
+            ProviderConfigVersion: .
+        """
         replay = self._config_mutation_replay(
             actor_id=actor_id,
             action="provider_config.create",
@@ -734,19 +793,22 @@ class StrategyService:
             details={
                 "provider_name": enriched.provider_name,
                 "provider_type": enriched.provider_type,
-                "provider_category": enriched.non_sensitive_config.get(
-                    "provider_category"
-                ),
-                "detected_provider": enriched.non_sensitive_config.get(
-                    "detected_provider"
-                ),
+                "provider_category": enriched.non_sensitive_config.get("provider_category"),
+                "detected_provider": enriched.non_sensitive_config.get("detected_provider"),
                 "lifecycle": enriched.lifecycle.value,
             },
         )
         return enriched
 
     def list_provider_configs(self, owner_id: str) -> list[ProviderConfigVersion]:
-        """List provider configuration versions for an owner."""
+        """List provider configuration versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[ProviderConfigVersion]: .
+        """
         return self._repository.list_provider_configs(owner_id)
 
     def write_provider_secret(
@@ -759,18 +821,26 @@ class StrategyService:
         idempotency_key: str,
         secret_store: SecretStore,
     ) -> SecretMetadata:
-        """Encrypt a provider secret and bind it to a non-active config version."""
+        """Encrypt a provider secret and bind it to a non-active config version.
+
+        Args:
+            provider_config_version_id: str: .
+            secret_name: str: .
+            secret_value: str: .
+            actor_id: str: .
+            idempotency_key: str: .
+            secret_store: SecretStore: .
+
+        Returns:
+            SecretMetadata: .
+        """
         from margin.core.secret_store import WriteSecretCommand
 
         config = self._repository.get_provider_config(provider_config_version_id)
         if config is None:
-            raise KeyError(
-                f"provider config '{provider_config_version_id}' not found"
-            )
+            raise KeyError(f"provider config '{provider_config_version_id}' not found")
         if config.lifecycle is ConfigLifecycle.ACTIVE:
-            raise ValueError(
-                "active provider config is immutable; create a new config version"
-            )
+            raise ValueError("active provider config is immutable; create a new config version")
         metadata = secret_store.create_or_replace(
             WriteSecretCommand(
                 provider_name=provider_config_version_id,
@@ -808,7 +878,16 @@ class StrategyService:
         actor_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> UniverseDefinitionVersion:
-        """Persist a new universe definition version."""
+        """Persist a new universe definition version.
+
+        Args:
+            version: UniverseDefinitionVersion: .
+            actor_id: str | None: .
+            idempotency_key: str | None: .
+
+        Returns:
+            UniverseDefinitionVersion: .
+        """
         replay = self._config_mutation_replay(
             actor_id=actor_id,
             action="universe_definition.create",
@@ -835,7 +914,14 @@ class StrategyService:
         self,
         owner_id: str,
     ) -> list[UniverseDefinitionVersion]:
-        """List universe definition versions for an owner."""
+        """List universe definition versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[UniverseDefinitionVersion]: .
+        """
         return self._repository.list_universe_definitions(owner_id)
 
     def create_indicator_view(
@@ -845,7 +931,16 @@ class StrategyService:
         actor_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> IndicatorViewVersion:
-        """Persist a new indicator view version."""
+        """Persist a new indicator view version.
+
+        Args:
+            version: IndicatorViewVersion: .
+            actor_id: str | None: .
+            idempotency_key: str | None: .
+
+        Returns:
+            IndicatorViewVersion: .
+        """
         replay = self._config_mutation_replay(
             actor_id=actor_id,
             action="indicator_view.create",
@@ -866,7 +961,14 @@ class StrategyService:
         return version
 
     def list_indicator_views(self, owner_id: str) -> list[IndicatorViewVersion]:
-        """List indicator view versions for an owner."""
+        """List indicator view versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[IndicatorViewVersion]: .
+        """
         return self._repository.list_indicator_views(owner_id)
 
     def create_quant_feature_set(
@@ -876,7 +978,16 @@ class StrategyService:
         actor_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> QuantFeatureSetVersion:
-        """Persist a new quant feature set version."""
+        """Persist a new quant feature set version.
+
+        Args:
+            version: QuantFeatureSetVersion: .
+            actor_id: str | None: .
+            idempotency_key: str | None: .
+
+        Returns:
+            QuantFeatureSetVersion: .
+        """
         replay = self._config_mutation_replay(
             actor_id=actor_id,
             action="quant_feature_set.create",
@@ -901,7 +1012,14 @@ class StrategyService:
         return version
 
     def list_quant_feature_sets(self, owner_id: str) -> list[QuantFeatureSetVersion]:
-        """List quant feature set versions for an owner."""
+        """List quant feature set versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[QuantFeatureSetVersion]: .
+        """
         return self._repository.list_quant_feature_sets(owner_id)
 
     def create_quant_strategy(
@@ -911,7 +1029,16 @@ class StrategyService:
         actor_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> QuantStrategyVersion:
-        """Persist a new quant strategy version."""
+        """Persist a new quant strategy version.
+
+        Args:
+            version: QuantStrategyVersion: .
+            actor_id: str | None: .
+            idempotency_key: str | None: .
+
+        Returns:
+            QuantStrategyVersion: .
+        """
         replay = self._config_mutation_replay(
             actor_id=actor_id,
             action="quant_strategy.create",
@@ -936,7 +1063,14 @@ class StrategyService:
         return version
 
     def list_quant_strategies(self, owner_id: str) -> list[QuantStrategyVersion]:
-        """List quant strategy versions for an owner."""
+        """List quant strategy versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[QuantStrategyVersion]: .
+        """
         return self._repository.list_quant_strategies(owner_id)
 
     def create_user_style_prompt(
@@ -946,7 +1080,16 @@ class StrategyService:
         actor_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> UserStylePromptVersion:
-        """Persist a new user style prompt version."""
+        """Persist a new user style prompt version.
+
+        Args:
+            version: UserStylePromptVersion: .
+            actor_id: str | None: .
+            idempotency_key: str | None: .
+
+        Returns:
+            UserStylePromptVersion: .
+        """
         replay = self._config_mutation_replay(
             actor_id=actor_id,
             action="style_prompt.create",
@@ -974,7 +1117,14 @@ class StrategyService:
         self,
         owner_id: str,
     ) -> list[UserStylePromptVersion]:
-        """List user style prompt versions for an owner."""
+        """List user style prompt versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[UserStylePromptVersion]: .
+        """
         return self._repository.list_user_style_prompts(owner_id)
 
     def create_research_scope(
@@ -984,7 +1134,16 @@ class StrategyService:
         actor_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> ResearchScopeVersion:
-        """Persist a new frozen research scope version."""
+        """Persist a new frozen research scope version.
+
+        Args:
+            version: ResearchScopeVersion: .
+            actor_id: str | None: .
+            idempotency_key: str | None: .
+
+        Returns:
+            ResearchScopeVersion: .
+        """
         replay = self._config_mutation_replay(
             actor_id=actor_id,
             action="research_scope.create",
@@ -1009,11 +1168,25 @@ class StrategyService:
         return version
 
     def list_research_scopes(self, owner_id: str) -> list[ResearchScopeVersion]:
-        """List research scope versions for an owner."""
+        """List research scope versions for an owner.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[ResearchScopeVersion]: .
+        """
         return self._repository.list_research_scopes(owner_id)
 
     def ensure_current_research_scope(self, owner_id: str) -> ResearchScopeVersion:
-        """Return the active scope after reconciling stale child config references."""
+        """Return the active scope after reconciling stale child config references.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            ResearchScopeVersion: .
+        """
         scope = self._repository.get_active_research_scope(owner_id)
         if scope is None:
             raise KeyError("active research scope not found")
@@ -1047,13 +1220,9 @@ class StrategyService:
                 resource_version_id=active_feature_set.version_id,
             )
 
-        current_strategy = self._repository.get_quant_strategy(
-            scope.quant_strategy_version_id
-        )
+        current_strategy = self._repository.get_quant_strategy(scope.quant_strategy_version_id)
         strategy_family = (
-            current_strategy.strategy_family
-            if current_strategy is not None
-            else "default"
+            current_strategy.strategy_family if current_strategy is not None else "default"
         )
         active_quant_strategy = self._repository.get_active_quant_strategy(
             owner_id,
@@ -1066,12 +1235,8 @@ class StrategyService:
                 resource_version_id=active_quant_strategy.version_id,
             )
 
-        current_prompt = self._repository.get_user_style_prompt(
-            scope.ai_prompt_version_id
-        )
-        prompt_name = (
-            current_prompt.prompt_name if current_prompt is not None else "default"
-        )
+        current_prompt = self._repository.get_user_style_prompt(scope.ai_prompt_version_id)
+        prompt_name = current_prompt.prompt_name if current_prompt is not None else "default"
         active_prompt = self._repository.get_active_user_style_prompt(
             owner_id,
             prompt_name=prompt_name,
@@ -1102,17 +1267,12 @@ class StrategyService:
         """Suspend an active version due to data or risk anomalies.
 
         Args:
-            strategy_id: The identifier of the strategy containing the version.
-            version_id: The identifier of the version to suspend.
-            reason: Optional human-readable reason for suspension.
+            strategy_id: str: .
+            version_id: str: .
+            reason: str: .
 
         Returns:
-            The updated :class:`StrategyProfile` with the version state moved
-            to ``SUSPENDED``.
-
-        Raises:
-            KeyError: If the strategy or version is not found.
-            ValueError: If the lifecycle transition is not allowed.
+            StrategyProfile: .
         """
         profile = self._must_get_profile(strategy_id)
         version = self._must_get_version(profile, version_id)
@@ -1125,15 +1285,10 @@ class StrategyService:
         """Archive the active version of a strategy.
 
         Args:
-            strategy_id: The identifier of the strategy to archive.
+            strategy_id: str: .
 
         Returns:
-            The updated :class:`StrategyProfile` with the active version moved
-            to ``ARCHIVED``.
-
-        Raises:
-            KeyError: If the strategy or active version is not found.
-            ValueError: If the strategy has no active version.
+            StrategyProfile: .
         """
         profile = self._must_get_profile(strategy_id)
         if not profile.active_version_id:
@@ -1148,13 +1303,10 @@ class StrategyService:
         """Return a profile by identifier.
 
         Args:
-            strategy_id: The unique strategy identifier.
+            strategy_id: str: .
 
         Returns:
-            The matching :class:`StrategyProfile`.
-
-        Raises:
-            KeyError: If ``strategy_id`` does not exist.
+            StrategyProfile: .
         """
         return self._must_get_profile(strategy_id)
 
@@ -1162,10 +1314,10 @@ class StrategyService:
         """Return all profiles for an owner.
 
         Args:
-            owner_id: The identifier of the profile owner.
+            owner_id: str: .
 
         Returns:
-            A list of :class:`StrategyProfile` objects belonging to ``owner_id``.
+            list[StrategyProfile]: .
         """
         return self._repository.list_profiles(owner_id)
 
@@ -1179,16 +1331,13 @@ class StrategyService:
         """Return the merged prompt for a strategy version.
 
         Args:
-            strategy_id: The identifier of the strategy containing the version.
-            version_id: The identifier of the version whose config drives the prompt.
-            task: Optional task description to include in the prompt.
-            evidence_context: Optional retrieved evidence to append to the prompt.
+            strategy_id: str: .
+            version_id: str: .
+            task: str: .
+            evidence_context: str: .
 
         Returns:
-            The merged prompt string for the requested strategy version.
-
-        Raises:
-            KeyError: If the strategy or version is not found.
+            str: .
         """
         profile = self._must_get_profile(strategy_id)
         version = self._must_get_version(profile, version_id)
@@ -1202,8 +1351,7 @@ class StrategyService:
         """Return metadata for built-in strategy templates.
 
         Returns:
-            A list of :class:`StrategyTemplateMeta` objects for all built-in
-            templates.
+            list[StrategyTemplateMeta]: .
         """
         return list_templates()
 
@@ -1214,7 +1362,16 @@ class StrategyService:
         field_name: str,
         resource_version_id: str,
     ) -> ResearchScopeVersion | None:
-        """Create and activate a new scope when an active child config changes."""
+        """Create and activate a new scope when an active child config changes.
+
+        Args:
+            owner_id: str: .
+            field_name: str: .
+            resource_version_id: str: .
+
+        Returns:
+            ResearchScopeVersion | None: .
+        """
         active_scope = self._repository.get_active_research_scope(owner_id)
         if active_scope is None:
             return None
@@ -1251,7 +1408,16 @@ class StrategyService:
         field_name: str,
         resource_version_id: str,
     ) -> ResearchScopeVersion:
-        """Roll from a provided active scope if a referenced version is stale."""
+        """Roll from a provided active scope if a referenced version is stale.
+
+        Args:
+            scope: ResearchScopeVersion: .
+            field_name: str: .
+            resource_version_id: str: .
+
+        Returns:
+            ResearchScopeVersion: .
+        """
         if getattr(scope, field_name) == resource_version_id:
             return scope
         rolled = self._roll_active_research_scope(
@@ -1269,13 +1435,21 @@ class StrategyService:
         idempotency_key: str | None,
         getter: Callable[[str], Any | None],
     ) -> Any | None:
-        """Return a prior mutation resource for the same replay key."""
+        """Return a prior mutation resource for the same replay key.
+
+        Args:
+            actor_id: str | None: .
+            action: str: .
+            idempotency_key: str | None: .
+            getter: Callable[[str], Any | None]: .
+
+        Returns:
+            Any | None: .
+        """
         if actor_id is None and idempotency_key is None:
             return None
         if not actor_id or not idempotency_key:
-            raise ValueError(
-                "actor_id and idempotency_key must be provided together"
-            )
+            raise ValueError("actor_id and idempotency_key must be provided together")
         audit = self._repository.get_config_audit(
             actor_id=actor_id,
             action=action,
@@ -1289,9 +1463,7 @@ class StrategyService:
             resource_version_id = str(audit.resource_version_id)
         resource = getter(resource_version_id)
         if resource is None:
-            raise RuntimeError(
-                "config audit replay references a missing resource version"
-            )
+            raise RuntimeError("config audit replay references a missing resource version")
         return resource
 
     def _record_config_mutation(
@@ -1304,13 +1476,23 @@ class StrategyService:
         resource_version_id: str,
         details: dict[str, object],
     ) -> None:
-        """Append a safe mutation audit when called from an authenticated API."""
+        """Append a safe mutation audit when called from an authenticated API.
+
+        Args:
+            actor_id: str | None: .
+            action: str: .
+            idempotency_key: str | None: .
+            resource_type: str: .
+            resource_version_id: str: .
+            details: dict[str, object]: .
+
+        Returns:
+            None: .
+        """
         if actor_id is None and idempotency_key is None:
             return
         if not actor_id or not idempotency_key:
-            raise ValueError(
-                "actor_id and idempotency_key must be provided together"
-            )
+            raise ValueError("actor_id and idempotency_key must be provided together")
         self._repository.record_config_audit(
             actor_id=actor_id,
             resource_type=resource_type,
@@ -1331,14 +1513,14 @@ class StrategyService:
         """Create and persist a new profile with a single initial version.
 
         Args:
-            owner_id: The identifier of the profile owner.
-            name: The profile and initial version name.
-            description: The initial version description.
-            config: The validated strategy configuration.
-            prompt_layers: The ordered prompt layers for the initial version.
+            owner_id: str: .
+            name: str: .
+            description: str: .
+            config: StrategyConfig: .
+            prompt_layers: tuple: .
 
         Returns:
-            The newly created and persisted :class:`StrategyProfile`.
+            StrategyProfile: .
         """
         version = StrategyVersion(
             strategy_id="",
@@ -1362,13 +1544,10 @@ class StrategyService:
         """Return a profile or raise a ``KeyError``.
 
         Args:
-            strategy_id: The unique strategy identifier.
+            strategy_id: str: .
 
         Returns:
-            The matching :class:`StrategyProfile`.
-
-        Raises:
-            KeyError: If ``strategy_id`` does not exist.
+            StrategyProfile: .
         """
         profile = self._repository.get_profile(strategy_id)
         if profile is None:
@@ -1383,14 +1562,11 @@ class StrategyService:
         """Return a version from a profile or raise a ``KeyError``.
 
         Args:
-            profile: The strategy profile to search.
-            version_id: The unique version identifier.
+            profile: StrategyProfile: .
+            version_id: str: .
 
         Returns:
-            The matching :class:`StrategyVersion`.
-
-        Raises:
-            KeyError: If ``version_id`` is not found in ``profile``.
+            StrategyVersion: .
         """
         for version in profile.versions:
             if version.version_id == version_id:
@@ -1405,15 +1581,13 @@ class StrategyService:
         """Return a profile with ``version`` replacing its earlier copy.
 
         Args:
-            profile: The strategy profile containing the version to replace.
-            version: The updated strategy version.
+            profile: StrategyProfile: .
+            version: StrategyVersion: .
 
         Returns:
-            A new :class:`StrategyProfile` where the version matching
-            ``version.version_id`` has been replaced by ``version``.
+            StrategyProfile: .
         """
         versions = tuple(
-            version if v.version_id == version.version_id else v
-            for v in profile.versions
+            version if v.version_id == version.version_id else v for v in profile.versions
         )
         return profile.model_copy(update={"versions": versions})

@@ -12,7 +12,7 @@ from margin.research.tools.factory import ScopedToolFactory
 
 
 class RetrievedEvidencePackage(BaseModel):
-    """Validated payload returned by the evidence retrieval tool."""
+    """Validated payload returned by the evidence retrieval tool.."""
 
     package_id: str
     summary: dict[str, Any] = Field(default_factory=dict)
@@ -21,10 +21,17 @@ class RetrievedEvidencePackage(BaseModel):
 
 
 class EvidencePlanNode:
-    """Create deterministic questions and scope constraints."""
+    """Create deterministic questions and scope constraints.."""
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Create deterministic research questions and scope constraints."""
+        """Create deterministic research questions and scope constraints.
+
+        Args:
+            state: AIDeltaGraphState: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         questions = [
             "核心基本面较上一有效结论发生了什么变化？",
             "当前估值假设是否仍然成立？",
@@ -44,7 +51,7 @@ class EvidencePlanNode:
 
 
 class RetrieveEvidenceNode:
-    """Only initial node allowed to perform broad evidence retrieval."""
+    """Only initial node allowed to perform broad evidence retrieval.."""
 
     node_name = "retrieve_evidence"
 
@@ -52,12 +59,22 @@ class RetrieveEvidenceNode:
         """Initialize the node.
 
         Args:
-            tool_factory: Scoped tool factory for evidence retrieval.
+            tool_factory: ScopedToolFactory: .
+
+        Returns:
+            None: .
         """
         self._tool_factory = tool_factory
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Retrieve the initial evidence package for the graph."""
+        """Retrieve the initial evidence package for the graph.
+
+        Args:
+            state: AIDeltaGraphState: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         return self._retrieve(state, supplemental=False, node_name=self.node_name)
 
     def _retrieve(
@@ -67,7 +84,16 @@ class RetrieveEvidenceNode:
         supplemental: bool,
         node_name: str,
     ) -> dict[str, Any]:
-        """Retrieve evidence via a scoped tool session with byte limits."""
+        """Retrieve evidence via a scoped tool session with byte limits.
+
+        Args:
+            state: AIDeltaGraphState: .
+            supplemental: bool: .
+            node_name: str: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         session = self._tool_factory.create_session(
             graph_run_id=state.graph_run_id,
             node_name=node_name,
@@ -95,9 +121,7 @@ class RetrieveEvidenceNode:
         if not result.success:
             return {
                 **base_update,
-                "errors": (
-                    f"{node_name}:{result.error_code or 'retrieval_failed'}",
-                ),
+                "errors": (f"{node_name}:{result.error_code or 'retrieval_failed'}",),
             }
         package = RetrievedEvidencePackage.model_validate(result.data)
         return {
@@ -116,12 +140,19 @@ class RetrieveEvidenceNode:
 
 
 class AdditionalEvidenceRetrievalNode(RetrieveEvidenceNode):
-    """Perform the only allowed targeted supplemental retrieval."""
+    """Perform the only allowed targeted supplemental retrieval.."""
 
     node_name = "additional_evidence_retrieval"
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Perform the only allowed targeted supplemental retrieval."""
+        """Perform the only allowed targeted supplemental retrieval.
+
+        Args:
+            state: AIDeltaGraphState: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         if state.retrieval_count != 1 or not state.evidence_gaps:
             return {
                 "errors": ("supplemental_retrieval_not_allowed",),

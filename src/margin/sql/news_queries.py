@@ -23,7 +23,15 @@ from margin.news.db_models import (
 
 
 def outbox_id_by_event_topic(event_id: str, topic: str) -> Select:
-    """Return the outbox id for an event/topic pair, if present."""
+    """Return the outbox id for an event/topic pair, if present.
+
+    Args:
+        event_id: str: .
+        topic: str: .
+
+    Returns:
+        Select: .
+    """
     return select(DocumentOutboxRow.outbox_id).where(
         DocumentOutboxRow.event_id == event_id,
         DocumentOutboxRow.topic == topic,
@@ -31,7 +39,11 @@ def outbox_id_by_event_topic(event_id: str, topic: str) -> Select:
 
 
 def unique_document_events() -> Select:
-    """List events that have not been marked as duplicates."""
+    """List events that have not been marked as duplicates.
+
+    Returns:
+        Select: .
+    """
     duplicate_ids = select(DedupRecordRow.duplicate_event_id)
     return (
         select(DocumentEventRow)
@@ -41,7 +53,15 @@ def unique_document_events() -> Select:
 
 
 def outbox_pending_by_topic(topic: str, limit: int) -> Select:
-    """Claim pending outbox messages with SKIP LOCKED."""
+    """Claim pending outbox messages with SKIP LOCKED.
+
+    Args:
+        topic: str: .
+        limit: int: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(DocumentOutboxRow)
         .where(
@@ -55,7 +75,15 @@ def outbox_pending_by_topic(topic: str, limit: int) -> Select:
 
 
 def outbox_by_event_topic(event_id: str, topic: str) -> Select:
-    """Return one outbox row by event/topic."""
+    """Return one outbox row by event/topic.
+
+    Args:
+        event_id: str: .
+        topic: str: .
+
+    Returns:
+        Select: .
+    """
     return select(DocumentOutboxRow).where(
         DocumentOutboxRow.event_id == event_id,
         DocumentOutboxRow.topic == topic,
@@ -63,7 +91,16 @@ def outbox_by_event_topic(event_id: str, topic: str) -> Select:
 
 
 def outbox_claimable_by_topic(topic: str, cutoff: datetime, limit: int) -> Select:
-    """Claim pending/retryable/expired processing outbox rows with SKIP LOCKED."""
+    """Claim pending/retryable/expired processing outbox rows with SKIP LOCKED.
+
+    Args:
+        topic: str: .
+        cutoff: datetime: .
+        limit: int: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(DocumentOutboxRow)
         .where(
@@ -83,12 +120,26 @@ def outbox_claimable_by_topic(topic: str, cutoff: datetime, limit: int) -> Selec
 
 
 def delete_search_results_by_query(query_id: str) -> Delete:
-    """Delete all search result rows for a query."""
+    """Delete all search result rows for a query.
+
+    Args:
+        query_id: str: .
+
+    Returns:
+        Delete: .
+    """
     return delete(SearchResultRow).where(SearchResultRow.query_id == query_id)
 
 
 def search_results_by_query(query_id: str) -> Select:
-    """Return ordered search result rows for a query."""
+    """Return ordered search result rows for a query.
+
+    Args:
+        query_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(SearchResultRow)
         .where(SearchResultRow.query_id == query_id)
@@ -97,7 +148,14 @@ def search_results_by_query(query_id: str) -> Select:
 
 
 def repost_edges_by_parent(parent_event_id: str) -> Select:
-    """List direct repost edges for a canonical event."""
+    """List direct repost edges for a canonical event.
+
+    Args:
+        parent_event_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(RepostEdgeRow)
         .where(RepostEdgeRow.parent_event_id == parent_event_id)
@@ -106,16 +164,30 @@ def repost_edges_by_parent(parent_event_id: str) -> Select:
 
 
 def news_target_dedupe_keys_by_run(run_id: str) -> Select:
-    """Return dedupe keys already persisted for a refresh run."""
-    return select(NewsRefreshTargetRow.dedupe_key).where(
-        NewsRefreshTargetRow.run_id == run_id
-    )
+    """Return dedupe keys already persisted for a refresh run.
+
+    Args:
+        run_id: str: .
+
+    Returns:
+        Select: .
+    """
+    return select(NewsRefreshTargetRow.dedupe_key).where(NewsRefreshTargetRow.run_id == run_id)
 
 
 def news_target_count_by_run(run_id: str) -> Select:
-    """Count refresh targets for a run."""
-    return select(func.count()).select_from(NewsRefreshTargetRow).where(
-        NewsRefreshTargetRow.run_id == run_id
+    """Count refresh targets for a run.
+
+    Args:
+        run_id: str: .
+
+    Returns:
+        Select: .
+    """
+    return (
+        select(func.count())
+        .select_from(NewsRefreshTargetRow)
+        .where(NewsRefreshTargetRow.run_id == run_id)
     )
 
 
@@ -125,7 +197,17 @@ def claimable_news_targets(
     now: datetime,
     limit: int,
 ) -> Select:
-    """Claim eligible pending/retry targets for processing with SKIP LOCKED."""
+    """Claim eligible pending/retry targets for processing with SKIP LOCKED.
+
+    Args:
+        run_id: str: .
+        statuses: list[str]: .
+        now: datetime: .
+        limit: int: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(NewsRefreshTargetRow)
         .where(
@@ -147,7 +229,14 @@ def claimable_news_targets(
 
 
 def news_targets_by_run(run_id: str) -> Select:
-    """Return all refresh targets for a run."""
+    """Return all refresh targets for a run.
+
+    Args:
+        run_id: str: .
+
+    Returns:
+        Select: .
+    """
     return select(NewsRefreshTargetRow).where(NewsRefreshTargetRow.run_id == run_id)
 
 
@@ -156,7 +245,16 @@ def materiality_score_by_event_security_version(
     security_id: str,
     scoring_version: str,
 ) -> Select:
-    """Return a materiality score row by event/security/version."""
+    """Return a materiality score row by event/security/version.
+
+    Args:
+        event_id: str: .
+        security_id: str: .
+        scoring_version: str: .
+
+    Returns:
+        Select: .
+    """
     return select(DocumentMaterialityScoreRow).where(
         DocumentMaterialityScoreRow.event_id == event_id,
         DocumentMaterialityScoreRow.security_id == security_id,
@@ -165,7 +263,15 @@ def materiality_score_by_event_security_version(
 
 
 def news_context_documents(security_id: str, max_documents: int) -> Select:
-    """Return ranked context candidates for a security."""
+    """Return ranked context candidates for a security.
+
+    Args:
+        security_id: str: .
+        max_documents: int: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(DocumentEventRow, DocumentMaterialityScoreRow)
         .join(
@@ -175,10 +281,7 @@ def news_context_documents(security_id: str, max_documents: int) -> Select:
         .join(
             DocumentMaterialityScoreRow,
             (DocumentMaterialityScoreRow.event_id == DocumentEventRow.event_id)
-            & (
-                DocumentMaterialityScoreRow.security_id
-                == DocumentSecurityLinkRow.security_id
-            ),
+            & (DocumentMaterialityScoreRow.security_id == DocumentSecurityLinkRow.security_id),
         )
         .where(DocumentSecurityLinkRow.security_id == security_id)
         .order_by(
@@ -195,7 +298,15 @@ def news_target_statuses_by_run_security(
     run_id: str,
     security_id: str,
 ) -> Select:
-    """List target statuses for one security in a refresh run."""
+    """List target statuses for one security in a refresh run.
+
+    Args:
+        run_id: str: .
+        security_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(NewsRefreshTargetRow.status)
         .where(
@@ -207,7 +318,14 @@ def news_target_statuses_by_run_security(
 
 
 def news_search_plans_by_run(run_id: str) -> Select:
-    """Return reviewed agentic search plans for one run."""
+    """Return reviewed agentic search plans for one run.
+
+    Args:
+        run_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(NewsSearchPlanRow)
         .where(NewsSearchPlanRow.run_id == run_id)
@@ -216,7 +334,14 @@ def news_search_plans_by_run(run_id: str) -> Select:
 
 
 def news_agent_tasks_by_run(run_id: str) -> Select:
-    """Return agentic task audit rows for one run."""
+    """Return agentic task audit rows for one run.
+
+    Args:
+        run_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(NewsAgentTaskRow)
         .where(NewsAgentTaskRow.run_id == run_id)
@@ -233,10 +358,16 @@ def news_article_findings_by_run(
     run_id: str,
     security_id: str | None = None,
 ) -> Select:
-    """Return article findings for one agentic run."""
-    statement = select(NewsArticleFindingRow).where(
-        NewsArticleFindingRow.run_id == run_id
-    )
+    """Return article findings for one agentic run.
+
+    Args:
+        run_id: str: .
+        security_id: str | None: .
+
+    Returns:
+        Select: .
+    """
+    statement = select(NewsArticleFindingRow).where(NewsArticleFindingRow.run_id == run_id)
     if security_id is not None:
         statement = statement.where(NewsArticleFindingRow.security_id == security_id)
     return statement.order_by(
@@ -247,7 +378,14 @@ def news_article_findings_by_run(
 
 
 def news_security_briefs_by_run(run_id: str) -> Select:
-    """Return security briefs for one agentic run."""
+    """Return security briefs for one agentic run.
+
+    Args:
+        run_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(NewsSecurityBriefRow)
         .where(NewsSecurityBriefRow.run_id == run_id)
@@ -256,7 +394,14 @@ def news_security_briefs_by_run(run_id: str) -> Select:
 
 
 def document_events_by_ids(event_ids: list[str]) -> Select:
-    """Return document events by event ids."""
+    """Return document events by event ids.
+
+    Args:
+        event_ids: list[str]: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(DocumentEventRow)
         .where(DocumentEventRow.event_id.in_(event_ids))

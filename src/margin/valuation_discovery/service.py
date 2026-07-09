@@ -23,7 +23,7 @@ from margin.valuation_discovery.quant.repository import QuantRepository
 
 @dataclass(frozen=True)
 class RefreshStartResponse:
-    """DTO returned to HTTP/API callers when a refresh is accepted."""
+    """DTO returned to HTTP/API callers when a refresh is accepted.."""
 
     run_id: str
     status: str = "accepted"
@@ -32,7 +32,7 @@ class RefreshStartResponse:
 
 @dataclass(frozen=True)
 class RefreshStatus:
-    """DTO describing the current status of a refresh run."""
+    """DTO describing the current status of a refresh run.."""
 
     run_id: str
     state: str
@@ -42,7 +42,7 @@ class RefreshStatus:
 
 @dataclass(frozen=True)
 class RefreshSummary:
-    """DTO describing one refresh run row in a list view."""
+    """DTO describing one refresh run row in a list view.."""
 
     run_id: str
     state: str
@@ -53,10 +53,17 @@ class RefreshSummary:
 
 
 class ValuationDiscoveryService:
-    """Thin application boundary around the valuation discovery orchestrator."""
+    """Thin application boundary around the valuation discovery orchestrator.."""
 
     def __init__(self, orchestrator: ValuationDiscoveryOrchestrator) -> None:
-        """Initialize the service with a valuation discovery orchestrator."""
+        """Initialize the service with a valuation discovery orchestrator.
+
+        Args:
+            orchestrator: ValuationDiscoveryOrchestrator: .
+
+        Returns:
+            None: .
+        """
         self._orchestrator = orchestrator
 
     def start_refresh(
@@ -67,7 +74,17 @@ class ValuationDiscoveryService:
         idempotency_key: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> RefreshStartResponse:
-        """Start a refresh and return an accepted response DTO."""
+        """Start a refresh and return an accepted response DTO.
+
+        Args:
+            scope_version_id: str: .
+            decision_at: datetime: .
+            idempotency_key: str | None: .
+            metadata: dict[str, Any] | None: .
+
+        Returns:
+            RefreshStartResponse: .
+        """
         run = self._orchestrator.start(
             scope_version_id=scope_version_id,
             decision_at=decision_at,
@@ -85,9 +102,13 @@ class ValuationDiscoveryService:
     ) -> int:
         """Wake a valuation-discovery worker once after accepting a refresh.
 
-        The persistent worker still owns normal execution, but this short wake
-        prevents a new refresh from waiting for the next polling tick before its
-        first step is claimed.
+        Args:
+            max_steps: int: .
+            now: datetime | None: .
+            worker_id: str: .
+
+        Returns:
+            int: .
         """
         if max_steps <= 0:
             raise ValueError("max_steps must be positive")
@@ -102,7 +123,14 @@ class ValuationDiscoveryService:
         return processed
 
     def get_refresh_status(self, run_id: str) -> RefreshStatus | None:
-        """Return the status of a refresh run, or ``None`` if not found."""
+        """Return the status of a refresh run, or ``None`` if not found.
+
+        Args:
+            run_id: str: .
+
+        Returns:
+            RefreshStatus | None: .
+        """
         run = self._orchestrator.get_run(run_id)
         if run is None:
             return None
@@ -121,7 +149,16 @@ class ValuationDiscoveryService:
         state: str | None = None,
         limit: int = 50,
     ) -> list[RefreshSummary]:
-        """Return recent refresh runs, newest first."""
+        """Return recent refresh runs, newest first.
+
+        Args:
+            scope_version_id: str | None: .
+            state: str | None: .
+            limit: int: .
+
+        Returns:
+            list[RefreshSummary]: .
+        """
         runs = self._orchestrator.list_runs(
             scope_version_id=scope_version_id,
             state=state,
@@ -140,7 +177,14 @@ class ValuationDiscoveryService:
         ]
 
     def create_step_worker(self, *, worker_id: str) -> ValuationDiscoveryStepWorker:
-        """Create a lease worker sharing this service's durable dependencies."""
+        """Create a lease worker sharing this service's durable dependencies.
+
+        Args:
+            worker_id: str: .
+
+        Returns:
+            ValuationDiscoveryStepWorker: .
+        """
         return ValuationDiscoveryStepWorker(
             self._orchestrator.dependencies,
             worker_id=worker_id,
@@ -148,7 +192,14 @@ class ValuationDiscoveryService:
 
 
 def _step_to_dict(step: StepAttempt) -> dict:
-    """Convert a step attempt into a JSON-serializable dictionary."""
+    """Convert a step attempt into a JSON-serializable dictionary.
+
+    Args:
+        step: StepAttempt: .
+
+    Returns:
+        dict: .
+    """
     return {
         "step_id": step.step_id,
         "state": step.state.value,
@@ -161,7 +212,14 @@ def _step_to_dict(step: StepAttempt) -> dict:
 
 
 def _response_from_run(run: OrchestrationRun) -> RefreshStartResponse:
-    """Convert an orchestration run into a refresh start response DTO."""
+    """Convert an orchestration run into a refresh start response DTO.
+
+    Args:
+        run: OrchestrationRun: .
+
+    Returns:
+        RefreshStartResponse: .
+    """
     return RefreshStartResponse(run_id=run.run_id)
 
 
@@ -172,7 +230,7 @@ def _response_from_run(run: OrchestrationRun) -> RefreshStartResponse:
 
 @dataclass(frozen=True)
 class FactorScoreItem:
-    """Single factor group score with label and weight."""
+    """Single factor group score with label and weight.."""
 
     factor_key: str
     label: str
@@ -182,7 +240,7 @@ class FactorScoreItem:
 
 @dataclass(frozen=True)
 class CompanyQuantProfile:
-    """Quant screening profile for one security, ready for visualization."""
+    """Quant screening profile for one security, ready for visualization.."""
 
     security_id: str
     quant_run_id: str
@@ -204,7 +262,7 @@ class CompanyQuantProfile:
 
 @dataclass(frozen=True)
 class CompanyAnalysisProfile:
-    """Fourth-layer Analysis Mart profile for one security."""
+    """Fourth-layer Analysis Mart profile for one security.."""
 
     security_id: str
     analysis_snapshot: AnalysisSnapshot | None
@@ -239,19 +297,34 @@ _FACTOR_WEIGHTS: dict[str, float] = {
 
 
 class CompanyProfileService:
-    """Read-only service that assembles quant and Analysis Mart profiles."""
+    """Read-only service that assembles quant and Analysis Mart profiles.."""
 
     def __init__(
         self,
         quant_repository: QuantRepository,
         analysis_mart_repository: AnalysisMartRepository,
     ) -> None:
-        """Initialize with quant and Analysis Mart repositories."""
+        """Initialize with quant and Analysis Mart repositories.
+
+        Args:
+            quant_repository: QuantRepository: .
+            analysis_mart_repository: AnalysisMartRepository: .
+
+        Returns:
+            None: .
+        """
         self._quant_repository = quant_repository
         self._analysis_mart_repository = analysis_mart_repository
 
     def get_quant_profile(self, security_id: str) -> CompanyQuantProfile | None:
-        """Return the latest quant profile for a security, or None."""
+        """Return the latest quant profile for a security, or None.
+
+        Args:
+            security_id: str: .
+
+        Returns:
+            CompanyQuantProfile | None: .
+        """
         result = self._quant_repository.latest_result_for_security(security_id)
         if result is None:
             return None
@@ -264,8 +337,12 @@ class CompanyProfileService:
     ) -> CompanyAnalysisProfile:
         """Return the Analysis Mart profile for a security.
 
-        When ``scope_version_id`` is None, returns the latest snapshot across
-        all scopes for the given security.
+        Args:
+            security_id: str: .
+            scope_version_id: str | None: .
+
+        Returns:
+            CompanyAnalysisProfile: .
         """
         snapshot = self._analysis_mart_repository.latest_snapshot(
             security_id=security_id,
@@ -295,7 +372,14 @@ class CompanyProfileService:
 
 
 def _quant_profile_from_result(result: QuantResult) -> CompanyQuantProfile:
-    """Convert a QuantResult into a visualization-ready profile DTO."""
+    """Convert a QuantResult into a visualization-ready profile DTO.
+
+    Args:
+        result: QuantResult: .
+
+    Returns:
+        CompanyQuantProfile: .
+    """
     factor_scores = tuple(
         FactorScoreItem(
             factor_key=key,

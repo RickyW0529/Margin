@@ -8,11 +8,25 @@ from margin.api.main import create_app
 
 
 def test_create_app_disposes_container_on_shutdown(monkeypatch) -> None:
-    """Verify app shutdown disposes process-level runtime resources."""
+    """Verify app shutdown disposes process-level runtime resources.
+
+    Args:
+        monkeypatch: Any: .
+
+    Returns:
+        None: .
+    """
     disposed = {"value": False}
 
     class FakeContainer:
+        """Class implementing FakeContainer.."""
+
         def dispose(self) -> None:
+            """Process dispose.
+
+            Returns:
+                None: .
+            """
             disposed["value"] = True
 
     monkeypatch.setattr("margin.api.main.get_app_container", lambda: FakeContainer())

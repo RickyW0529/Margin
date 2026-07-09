@@ -20,11 +20,11 @@ from margin.storage.database import (
 def test_database_settings_reads_environment(monkeypatch):
     """Verify that ``DatabaseSettings`` reads the PostgreSQL URL from the environment.
 
-    The test patches ``MARGIN_DATABASE_URL`` and asserts that ``DatabaseSettings.from_env``
-    returns a settings object with the expected URL.
-
     Args:
-        monkeypatch: Pytest fixture for temporarily modifying environment variables.
+        monkeypatch: Any: .
+
+    Returns:
+        Any: .
     """
     url = "postgresql+psycopg://margin:margin@localhost:5432/margin"
     monkeypatch.setenv("MARGIN_DATABASE_URL", url)
@@ -45,9 +45,8 @@ def test_database_settings_reads_environment(monkeypatch):
 def test_database_settings_can_be_built_from_margin_settings():
     """Verify ``DatabaseSettings`` can be constructed from a ``MarginSettings`` instance.
 
-    Builds a ``MarginSettings`` with explicit database fields and asserts that
-    ``DatabaseSettings.from_settings`` returns a settings object with the
-    matching URL, echo, and pool pre-ping values.
+    Returns:
+        Any: .
     """
     margin_settings = MarginSettings(
         _env_file=None,
@@ -68,10 +67,26 @@ def test_database_settings_can_be_built_from_margin_settings():
 
 
 def test_create_database_engine_applies_pool_and_statement_timeout(monkeypatch):
-    """Verify engine creation forwards pool and PostgreSQL timeout settings."""
+    """Verify engine creation forwards pool and PostgreSQL timeout settings.
+
+    Args:
+        monkeypatch: Any: .
+
+    Returns:
+        Any: .
+    """
     captured: dict[str, object] = {}
 
     def fake_create_engine(url: str, **kwargs: object) -> object:
+        """Process fake_create_engine.
+
+        Args:
+            url: str: .
+            **kwargs: object: .
+
+        Returns:
+            object: .
+        """
         captured["url"] = url
         captured["kwargs"] = kwargs
         return object()
@@ -97,11 +112,11 @@ def test_create_database_engine_applies_pool_and_statement_timeout(monkeypatch):
 def test_session_factory_connects_to_postgres(database_url):
     """Verify that a session factory can execute a simple query against PostgreSQL.
 
-    The test creates an engine and a session factory, runs ``select 1``, and ensures
-    the returned scalar value is ``1``.
-
     Args:
-        database_url: Fixture providing the PostgreSQL integration-test URL.
+        database_url: Any: .
+
+    Returns:
+        Any: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     session_factory = create_session_factory(engine)

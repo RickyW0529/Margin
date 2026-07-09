@@ -10,20 +10,40 @@ from margin.data.tushare_warehouse import TushareWarehousePublisher
 
 
 class _Stack:
-    """In-memory ingestion stack double tracking published records per endpoint."""
+    """In-memory ingestion stack double tracking published records per endpoint.."""
 
     def __init__(self) -> None:
-        """Initialize the call log."""
+        """Initialize the call log.
+
+        Returns:
+            None: .
+        """
         self.calls: list[tuple[str, str, list[dict[str, Any]]]] = []
 
     def ingest_security_master(self, work_item: object, **kwargs: Any) -> EndpointSyncResult:
-        """Log a security-master ingestion call and return a success result."""
+        """Log a security-master ingestion call and return a success result.
+
+        Args:
+            work_item: object: .
+            **kwargs: Any: .
+
+        Returns:
+            EndpointSyncResult: .
+        """
         records = kwargs["raw_records"]
         self.calls.append(("security", "security_master", records))
         return _result(work_item, fact_count=0)
 
     def ingest_records(self, work_item: object, **kwargs: Any) -> EndpointSyncResult:
-        """Log a record ingestion call and return a success result with fact count."""
+        """Log a record ingestion call and return a success result with fact count.
+
+        Args:
+            work_item: object: .
+            **kwargs: Any: .
+
+        Returns:
+            EndpointSyncResult: .
+        """
         records = kwargs["raw_records"]
         self.calls.append(("records", kwargs["endpoint_code"], records))
         return _result(work_item, fact_count=6 * len(records))
@@ -33,14 +53,30 @@ class _Stack:
         work_item: object,
         **kwargs: Any,
     ) -> EndpointSyncResult:
-        """Log an indicator ingestion call and return a success result."""
+        """Log an indicator ingestion call and return a success result.
+
+        Args:
+            work_item: object: .
+            **kwargs: Any: .
+
+        Returns:
+            EndpointSyncResult: .
+        """
         records = kwargs["raw_records"]
         self.calls.append(("indicators", kwargs["endpoint_code"], records))
         return _result(work_item, fact_count=len(records))
 
 
 def _result(work_item: object, *, fact_count: int) -> EndpointSyncResult:
-    """Build a succeeded ``EndpointSyncResult`` with the given fact count."""
+    """Build a succeeded ``EndpointSyncResult`` with the given fact count.
+
+    Args:
+        work_item: object: .
+        fact_count: int: .
+
+    Returns:
+        EndpointSyncResult: .
+    """
     return EndpointSyncResult(
         work_item_id=getattr(work_item, "work_item_id"),
         status=DataSyncStatus.SUCCEEDED,
@@ -49,7 +85,11 @@ def _result(work_item: object, *, fact_count: int) -> EndpointSyncResult:
 
 
 def test_daily_publication_normalizes_tushare_units() -> None:
-    """Daily source rows enter the unified warehouse contract."""
+    """Daily source rows enter the unified warehouse contract.
+
+    Returns:
+        None: .
+    """
     stack = _Stack()
     publisher = TushareWarehousePublisher(stack)
 
@@ -74,7 +114,11 @@ def test_daily_publication_normalizes_tushare_units() -> None:
 
 
 def test_financial_publication_maps_quant_indicator_names() -> None:
-    """Balance-sheet and audit rows publish fields consumed by hard filters."""
+    """Balance-sheet and audit rows publish fields consumed by hard filters.
+
+    Returns:
+        None: .
+    """
     stack = _Stack()
     publisher = TushareWarehousePublisher(stack)
     decision_at = datetime(2026, 6, 23, tzinfo=UTC)
@@ -121,7 +165,11 @@ def test_financial_publication_maps_quant_indicator_names() -> None:
 
 
 def test_ml_lifecycle_extra_publication_maps_indicator_names() -> None:
-    """ML lifecycle extra endpoints publish canonical feature fields."""
+    """ML lifecycle extra endpoints publish canonical feature fields.
+
+    Returns:
+        None: .
+    """
     stack = _Stack()
     publisher = TushareWarehousePublisher(stack)
     decision_at = datetime(2026, 6, 23, tzinfo=UTC)

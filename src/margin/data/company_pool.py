@@ -24,7 +24,7 @@ from margin.sql.data_queries import (
 
 
 class CompanyPoolMember(BaseModel):
-    """One company-pool member exposed to quant and upper services."""
+    """One company-pool member exposed to quant and upper services.."""
 
     membership_id: str
     security_id: str
@@ -40,7 +40,7 @@ class CompanyPoolMember(BaseModel):
 
 
 class CompanyPoolSnapshot(BaseModel):
-    """Immutable materialization of the current non-ST All-A view."""
+    """Immutable materialization of the current non-ST All-A view.."""
 
     snapshot_id: str
     pool_code: str = "ALL_A_NON_ST"
@@ -57,30 +57,45 @@ class CompanyPoolSnapshot(BaseModel):
     @field_validator("business_at", "known_at", "created_at")
     @classmethod
     def normalize_time(cls, value: datetime) -> datetime:
-        """Normalize snapshot clocks to UTC."""
+        """Normalize snapshot clocks to UTC.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def member_count(self) -> int:
-        """Return included company count."""
+        """Return included company count.
+
+        Returns:
+            int: .
+        """
         return sum(member.included for member in self.members)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def security_ids(self) -> tuple[str, ...]:
-        """Return deterministic included security IDs."""
-        return tuple(
-            member.security_id for member in self.members if member.included
-        )
+        """Return deterministic included security IDs.
+
+        Returns:
+            tuple[str, ...]: .
+        """
+        return tuple(member.security_id for member in self.members if member.included)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def membership_ids(self) -> tuple[str, ...]:
-        """Return deterministic membership IDs."""
-        return tuple(
-            member.membership_id for member in self.members if member.included
-        )
+        """Return deterministic membership IDs.
+
+        Returns:
+            tuple[str, ...]: .
+        """
+        return tuple(member.membership_id for member in self.members if member.included)
 
 
 def build_company_pool_snapshot(
@@ -94,16 +109,14 @@ def build_company_pool_snapshot(
     """Build a stable immutable snapshot from serving-view rows.
 
     Args:
-        rows: Serving-view rows keyed by ``security_id`` with optional
-            ``name``, ``exchange``, ``industry_code`` and ``industry_name``.
-        source_run_id: The source run that produced the serving view.
-        business_at: The business date the snapshot represents.
-        known_at: The system time at which the snapshot became known.
-        created_at: Optional override for the creation timestamp.
+        rows: list[dict[str, Any]]: .
+        source_run_id: str: .
+        business_at: datetime: .
+        known_at: datetime: .
+        created_at: datetime | None: .
 
     Returns:
-        An immutable ``CompanyPoolSnapshot`` with deterministic IDs and a
-        content-addressed ``input_hash``.
+        CompanyPoolSnapshot: .
     """
     normalized_rows = sorted(rows, key=lambda row: str(row["security_id"]))
     payload = [
@@ -116,32 +129,27 @@ def build_company_pool_snapshot(
         }
         for row in normalized_rows
     ]
-    input_hash = "sha256:" + hashlib.sha256(
-        json.dumps(
-            payload,
-            ensure_ascii=False,
-            sort_keys=True,
-            default=str,
-        ).encode()
-    ).hexdigest()
-    snapshot_id = "cps_" + hashlib.sha256(
-        f"{source_run_id}|{input_hash}".encode()
-    ).hexdigest()[:28]
+    input_hash = (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(
+                payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                default=str,
+            ).encode()
+        ).hexdigest()
+    )
+    snapshot_id = "cps_" + hashlib.sha256(f"{source_run_id}|{input_hash}".encode()).hexdigest()[:28]
     members = tuple(
         CompanyPoolMember(
             membership_id="cpm_"
-            + hashlib.sha256(
-                f"{snapshot_id}|{row['security_id']}".encode()
-            ).hexdigest()[:28],
+            + hashlib.sha256(f"{snapshot_id}|{row['security_id']}".encode()).hexdigest()[:28],
             security_id=str(row["security_id"]),
             name=str(row.get("name") or row["security_id"]),
             exchange=str(row.get("exchange") or ""),
-            industry_code=(
-                str(row["industry_code"]) if row.get("industry_code") else None
-            ),
-            industry_name=(
-                str(row["industry_name"]) if row.get("industry_name") else None
-            ),
+            industry_code=(str(row["industry_code"]) if row.get("industry_code") else None),
+            industry_name=(str(row["industry_name"]) if row.get("industry_name") else None),
         )
         for row in normalized_rows
     )
@@ -170,32 +178,33 @@ def filter_company_pool_rows_as_of(
     """Filter serving-view rows to securities listed by the business date.
 
     Args:
-        rows: Raw serving-view rows to filter.
-        business_at: The business date used for listing-date and ST/delisting
-            exclusion checks.
+        rows: list[dict[str, Any]]: .
+        business_at: datetime: .
 
     Returns:
-        Rows excluding ST, delisting-transition, and not-yet-listed securities.
+        list[dict[str, Any]]: .
     """
     business_date = ensure_utc(business_at).date()
     return [
         row
         for row in rows
-        if (listed_at := _row_date(row.get("listed_at"))) is None
-        or listed_at <= business_date
+        if (listed_at := _row_date(row.get("listed_at"))) is None or listed_at <= business_date
         if not is_st_security_name(str(row.get("name") or ""))
         and not is_delisting_security_name(str(row.get("name") or ""))
     ]
 
 
 class SQLAlchemyCompanyPoolRepository:
-    """Materialize and load company-pool snapshots from PostgreSQL."""
+    """Materialize and load company-pool snapshots from PostgreSQL.."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
         """Initialize the repository.
 
         Args:
-            session_factory: Callable returning a SQLAlchemy ``Session``.
+            session_factory: Callable[[], Session]: .
+
+        Returns:
+            None: .
         """
         self._session_factory = session_factory
 
@@ -209,18 +218,15 @@ class SQLAlchemyCompanyPoolRepository:
         """Freeze the current serving view for one completed source run.
 
         Args:
-            source_run_id: The source run that produced the serving view.
-            business_at: The business date the snapshot represents.
-            known_at: The system time at which the snapshot became known.
+            source_run_id: str: .
+            business_at: datetime: .
+            known_at: datetime: .
 
         Returns:
-            The materialized immutable ``CompanyPoolSnapshot``. If a snapshot
-            for this source run already exists, the existing one is returned.
+            CompanyPoolSnapshot: .
         """
         with self._session_factory.begin() as session:
-            existing = session.scalar(
-                pool_snapshot_by_run("ALL_A_NON_ST", source_run_id)
-            )
+            existing = session.scalar(pool_snapshot_by_run("ALL_A_NON_ST", source_run_id))
             if existing is not None:
                 return self._load(session, existing)
             rows = [
@@ -262,9 +268,7 @@ class SQLAlchemyCompanyPoolRepository:
                             {
                                 **member.model_dump(mode="python"),
                                 "snapshot_id": snapshot.snapshot_id,
-                                "exclusion_reasons": list(
-                                    member.exclusion_reasons
-                                ),
+                                "exclusion_reasons": list(member.exclusion_reasons),
                             }
                             for member in snapshot.members
                         ]
@@ -276,10 +280,10 @@ class SQLAlchemyCompanyPoolRepository:
         """Return the newest immutable snapshot for upper services.
 
         Args:
-            pool_code: The pool code to look up. Defaults to ``ALL_A_NON_ST``.
+            pool_code: str: .
 
         Returns:
-            The latest ``CompanyPoolSnapshot``, or ``None`` if none exists.
+            CompanyPoolSnapshot | None: .
         """
         with self._session_factory() as session:
             row = session.scalar(latest_pool_snapshot(pool_code))
@@ -290,10 +294,16 @@ class SQLAlchemyCompanyPoolRepository:
         session: Session,
         row: CompanyPoolSnapshotRow,
     ) -> CompanyPoolSnapshot:
-        """Reconstruct a snapshot model from persisted rows."""
-        members = session.scalars(
-            pool_members_by_snapshot(row.snapshot_id)
-        ).all()
+        """Reconstruct a snapshot model from persisted rows.
+
+        Args:
+            session: Session: .
+            row: CompanyPoolSnapshotRow: .
+
+        Returns:
+            CompanyPoolSnapshot: .
+        """
+        members = session.scalars(pool_members_by_snapshot(row.snapshot_id)).all()
         return CompanyPoolSnapshot(
             snapshot_id=row.snapshot_id,
             pool_code=row.pool_code,
@@ -321,7 +331,14 @@ class SQLAlchemyCompanyPoolRepository:
 
 
 def _row_date(value: Any) -> date | None:
-    """Normalize SQL/string date values from serving-view rows."""
+    """Normalize SQL/string date values from serving-view rows.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        date | None: .
+    """
     if value is None:
         return None
     if isinstance(value, datetime):

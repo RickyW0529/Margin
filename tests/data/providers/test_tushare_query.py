@@ -9,14 +9,15 @@ from margin.data.tushare_query import TushareQueryCatalog
 
 
 def test_every_admitted_endpoint_has_a_bounded_query_plan() -> None:
-    """No admitted API may fall back to an unbounded generic crawl."""
+    """No admitted API may fall back to an unbounded generic crawl.
+
+    Returns:
+        None: .
+    """
     requirements = QuantDataRequirementCatalog.default()
     queries = TushareQueryCatalog.default()
 
-    admitted = {
-        endpoint.api_name
-        for endpoint in requirements.enabled_endpoints("tushare")
-    }
+    admitted = {endpoint.api_name for endpoint in requirements.enabled_endpoints("tushare")}
 
     assert set(queries.api_names()) == admitted
     assert all(queries.get(api_name).fields for api_name in admitted)
@@ -24,7 +25,11 @@ def test_every_admitted_endpoint_has_a_bounded_query_plan() -> None:
 
 
 def test_probe_parameters_are_small_and_secret_free() -> None:
-    """Real-seat probes must be low-volume and never serialize credentials."""
+    """Real-seat probes must be low-volume and never serialize credentials.
+
+    Returns:
+        None: .
+    """
     catalog = TushareQueryCatalog.default()
     as_of = datetime(2026, 6, 23, tzinfo=UTC)
 
@@ -41,7 +46,11 @@ def test_probe_parameters_are_small_and_secret_free() -> None:
 
 
 def test_financial_query_plans_use_symbol_batches_for_current_proxy() -> None:
-    """All-A financial backfill uses verified multi-symbol proxy calls."""
+    """All-A financial backfill uses verified multi-symbol proxy calls.
+
+    Returns:
+        None: .
+    """
     catalog = TushareQueryCatalog.default()
 
     for api_name in (
@@ -58,7 +67,11 @@ def test_financial_query_plans_use_symbol_batches_for_current_proxy() -> None:
 
 
 def test_ml_lifecycle_extra_query_plans_are_bounded() -> None:
-    """ML lifecycle extra endpoints must avoid unbounded provider pulls."""
+    """ML lifecycle extra endpoints must avoid unbounded provider pulls.
+
+    Returns:
+        None: .
+    """
     catalog = TushareQueryCatalog.default()
 
     assert catalog.get("moneyflow").query_mode == "date_slice"

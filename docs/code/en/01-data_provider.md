@@ -8,6 +8,7 @@ This module turns external market data into internal, traceable, point-in-time-s
 - Stores raw responses, request parameters, fetch time, and source metadata.
 - Standardizes fields and runs schema, key, date, and quality checks.
 - Publishes market, financial, valuation, index-member, and suspension data.
+- Provides the 20-year backfill control plane: campaign, endpoint plan, partitions, dry-run executor, quality report, and publish guard.
 
 ## How It Runs
 
@@ -22,6 +23,12 @@ provider config
 
 Quant, Agent, and Dashboard code should read published data, not call external providers directly.
 
+The 20-year backfill starts at `2006-01-01` on full calendar-year boundaries. CLI entry:
+
+```bash
+python -m margin.cli.backfill init --years 20 --start-date 2006-01-01 --end-date auto
+```
+
 ## Main Entry Points
 
 - `src/margin/data/providers/`
@@ -29,6 +36,8 @@ Quant, Agent, and Dashboard code should read published data, not call external p
 - `src/margin/data/tushare_quality.py`
 - `src/margin/data/tushare_warehouse.py`
 - `src/margin/data/requirements.py`
+- `src/margin/data/backfill/`
+- `src/margin/cli/backfill.py`
 - `scripts/run_tushare_backfill.py`
 
 ## Who Uses It

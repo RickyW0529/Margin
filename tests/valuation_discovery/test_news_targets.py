@@ -22,12 +22,9 @@ def test_selector_includes_all_pass_without_top_n_limit() -> None:
     """Verify the selector includes all pass results without a top-N limit.
 
     Returns:
-        None.
+        None: .
     """
-    results = [
-        _result_with_status(f"000{i:03d}.SZ", ScreeningStatus.PASS)
-        for i in range(120)
-    ]
+    results = [_result_with_status(f"000{i:03d}.SZ", ScreeningStatus.PASS) for i in range(120)]
     selector = NewsTargetSelector()
 
     targets = selector.select(
@@ -38,16 +35,14 @@ def test_selector_includes_all_pass_without_top_n_limit() -> None:
 
     assert len(targets) == 120
     assert targets[0].scope_version_id == "scope-1"
-    assert {target.security_id for target in targets} == {
-        f"000{i:03d}.SZ" for i in range(120)
-    }
+    assert {target.security_id for target in targets} == {f"000{i:03d}.SZ" for i in range(120)}
 
 
 def test_selector_includes_near_threshold_only_when_strategy_allows() -> None:
     """Verify near-threshold results are included only when the strategy allows.
 
     Returns:
-        None.
+        None: .
     """
     near = _result_with_status(
         "000001.SZ",
@@ -74,7 +69,7 @@ def test_selector_excludes_research_blocked_results() -> None:
     """Verify the selector excludes results with a research-blocked guardrail.
 
     Returns:
-        None.
+        None: .
     """
     blocked = _result_with_status(
         "000001.SZ",
@@ -95,7 +90,7 @@ def test_priority_increases_for_review_due_and_material_events() -> None:
     """Verify priority increases for review-due and material event results.
 
     Returns:
-        None.
+        None: .
     """
     normal = _result_with_status("000001.SZ", ScreeningStatus.PASS)
     urgent = _result_with_status(
@@ -119,7 +114,7 @@ def test_price_change_only_recalculates_discount_without_ai_event() -> None:
     """Verify a price change only recalculates discount without triggering an AI event.
 
     Returns:
-        None.
+        None: .
     """
     event = RefreshPolicy().classify_price_move(
         security_id="000001.SZ",
@@ -137,7 +132,7 @@ def test_entering_watch_band_creates_news_target() -> None:
     """Verify entering the watch band creates a news target.
 
     Returns:
-        None.
+        None: .
     """
     event = RefreshPolicy().classify_price_move(
         security_id="000001.SZ",
@@ -154,7 +149,7 @@ def test_refresh_policy_failure_semantics() -> None:
     """Verify refresh policy classifies step failures with correct downstream semantics.
 
     Returns:
-        None.
+        None: .
     """
     policy = RefreshPolicy()
 
@@ -172,7 +167,18 @@ def _result_with_status(
     review_required: bool = False,
     factor_details: dict[str, object] | None = None,
 ) -> QuantResult:
-    """Build one deterministic QuantResult with the given screening status."""
+    """Build one deterministic QuantResult with the given screening status.
+
+    Args:
+        security_id: str: .
+        status: ScreeningStatus: .
+        guardrail: ResearchGuardrail: .
+        review_required: bool: .
+        factor_details: dict[str, object] | None: .
+
+    Returns:
+        QuantResult: .
+    """
     return QuantResult(
         quant_run_id="quant-1",
         security_id=security_id,

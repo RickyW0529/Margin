@@ -18,7 +18,7 @@ def test_registry_uses_bank_model_for_bank_industry() -> None:
     """Verify the registry uses the bank PB-ROE model for the bank industry family.
 
     Returns:
-        None.
+        None: .
     """
     registry = IndustryValuationRegistry.default()
 
@@ -44,7 +44,7 @@ def test_non_matching_model_returns_unavailable_reason() -> None:
     """Verify a non-matching model returns unavailable with a descriptive reason.
 
     Returns:
-        None.
+        None: .
     """
     registry = IndustryValuationRegistry.default()
 
@@ -58,7 +58,7 @@ def test_registry_has_distinct_models_for_core_industry_families() -> None:
     """Verify the registry has distinct valuation models for core industry families.
 
     Returns:
-        None.
+        None: .
     """
     registry = IndustryValuationRegistry.default()
 
@@ -71,9 +71,10 @@ def test_registry_has_distinct_models_for_core_industry_families() -> None:
 
 def test_confidence_is_deterministic_and_penalized_by_conflicts() -> None:
     """Verify confidence scoring is deterministic and penalized by evidence conflicts.
+    Returns:.
 
     Returns:
-        None.
+        None: .
     """
     calibrator = ConfidenceCalibrator(version="confidence-v0.2.0")
 
@@ -105,7 +106,7 @@ def test_confidence_does_not_accept_llm_override() -> None:
     """Verify the confidence calibrator does not accept an LLM confidence override.
 
     Returns:
-        None.
+        None: .
     """
     calibrator = ConfidenceCalibrator(version="confidence-v0.2.0")
 

@@ -13,14 +13,26 @@ from margin.data.tushare_backfill import (
 
 
 class _Client:
-    """In-memory Tushare client double returning canned DataFrames per endpoint."""
+    """In-memory Tushare client double returning canned DataFrames per endpoint.."""
 
     def __init__(self) -> None:
-        """Initialize the call log."""
+        """Initialize the call log.
+
+        Returns:
+            None: .
+        """
         self.calls: list[tuple[str, dict[str, object]]] = []
 
     def query(self, api_name: str, **params: object) -> pd.DataFrame:
-        """Return a canned DataFrame for the requested endpoint and log the call."""
+        """Return a canned DataFrame for the requested endpoint and log the call.
+
+        Args:
+            api_name: str: .
+            **params: object: .
+
+        Returns:
+            pd.DataFrame: .
+        """
         self.calls.append((api_name, params))
         if params.get("offset", 0) not in (0, None):
             return pd.DataFrame()
@@ -68,20 +80,36 @@ class _Client:
 
 
 class _FlakyDailyClient(_Client):
-    """Client double that raises a timeout for one specific daily date slice."""
+    """Client double that raises a timeout for one specific daily date slice.."""
 
     def query(self, api_name: str, **params: object) -> pd.DataFrame:
-        """Raise a timeout for the 20260621 daily slice, otherwise delegate."""
+        """Raise a timeout for the 20260621 daily slice, otherwise delegate.
+
+        Args:
+            api_name: str: .
+            **params: object: .
+
+        Returns:
+            pd.DataFrame: .
+        """
         if api_name == "daily" and params.get("trade_date") == "20260621":
             raise TimeoutError("slice timeout")
         return super().query(api_name, **params)
 
 
 class _FlakyIndexWeightClient(_Client):
-    """Client double that raises a timeout for one index-weight month slice."""
+    """Client double that raises a timeout for one index-weight month slice.."""
 
     def query(self, api_name: str, **params: object) -> pd.DataFrame:
-        """Raise a timeout for the 20260201 index-weight slice, otherwise delegate."""
+        """Raise a timeout for the 20260201 index-weight slice, otherwise delegate.
+
+        Args:
+            api_name: str: .
+            **params: object: .
+
+        Returns:
+            pd.DataFrame: .
+        """
         self.calls.append((api_name, params))
         if params.get("offset", 0) not in (0, None):
             return pd.DataFrame()
@@ -102,32 +130,65 @@ class _FlakyIndexWeightClient(_Client):
 
 
 class _Repository:
-    """In-memory repository double tracking inserted records and run lifecycle."""
+    """In-memory repository double tracking inserted records and run lifecycle.."""
 
     def __init__(self, *, expected_endpoint_count: int = 3) -> None:
-        """Initialize record/decision stores and expected endpoint count."""
+        """Initialize record/decision stores and expected endpoint count.
+
+        Args:
+            expected_endpoint_count: int: .
+
+        Returns:
+            None: .
+        """
         self.records: list[object] = []
         self.decisions: list[object] = []
         self.finished: tuple[int, dict[str, str]] | None = None
         self.expected_endpoint_count = expected_endpoint_count
 
     def seed_catalog(self) -> None:
-        """No-op catalog seeding for the in-memory double."""
+        """No-op catalog seeding for the in-memory double.
+
+        Returns:
+            None: .
+        """
         pass
 
     def start_run(self, request: object, *, endpoint_count: int) -> str:
-        """Assert the endpoint count and return a fixed run id."""
+        """Assert the endpoint count and return a fixed run id.
+
+        Args:
+            request: object: .
+            endpoint_count: int: .
+
+        Returns:
+            str: .
+        """
         assert endpoint_count == self.expected_endpoint_count
         return "run-1"
 
     def insert_records(self, records: object) -> int:
-        """Collect landing records and return the count inserted."""
+        """Collect landing records and return the count inserted.
+
+        Args:
+            records: object: .
+
+        Returns:
+            int: .
+        """
         rows = list(records)
         self.records.extend(rows)
         return len(rows)
 
     def record_quality_decisions(self, decisions: object) -> int:
-        """Collect quality decisions and return the count recorded."""
+        """Collect quality decisions and return the count recorded.
+
+        Args:
+            decisions: object: .
+
+        Returns:
+            int: .
+        """
         rows = list(decisions)
         self.decisions.extend(rows)
         return len(rows)
@@ -139,16 +200,29 @@ class _Repository:
         completed_count: int,
         failed_endpoints: dict[str, str],
     ) -> None:
-        """Assert the run id and store the completion summary."""
+        """Assert the run id and store the completion summary.
+
+        Args:
+            run_id: str: .
+            completed_count: int: .
+            failed_endpoints: dict[str, str]: .
+
+        Returns:
+            None: .
+        """
         assert run_id == "run-1"
         self.finished = (completed_count, failed_endpoints)
 
 
 class _Publisher:
-    """In-memory warehouse publisher double tracking published records per endpoint."""
+    """In-memory warehouse publisher double tracking published records per endpoint.."""
 
     def __init__(self) -> None:
-        """Initialize the published-records store."""
+        """Initialize the published-records store.
+
+        Returns:
+            None: .
+        """
         self.records: dict[str, list[dict[str, object]]] = {}
 
     def publish(
@@ -159,14 +233,24 @@ class _Publisher:
         run_id: str,
         decision_at: datetime,
     ) -> int:
-        """Assert the run id, store records by endpoint, and return the count."""
+        """Assert the run id, store records by endpoint, and return the count.
+
+        Args:
+            api_name: str: .
+            records: list[dict[str, object]]: .
+            run_id: str: .
+            decision_at: datetime: .
+
+        Returns:
+            int: .
+        """
         assert run_id == "run-1"
         self.records[api_name] = records
         return len(records)
 
 
 class _Pool:
-    """In-memory company-pool repository double returning a fixed snapshot."""
+    """In-memory company-pool repository double returning a fixed snapshot.."""
 
     def materialize(
         self,
@@ -175,7 +259,16 @@ class _Pool:
         business_at: datetime,
         known_at: datetime,
     ) -> object:
-        """Assert the run id and return a stub pool snapshot."""
+        """Assert the run id and return a stub pool snapshot.
+
+        Args:
+            source_run_id: str: .
+            business_at: datetime: .
+            known_at: datetime: .
+
+        Returns:
+            object: .
+        """
         assert source_run_id == "run-1"
         return type(
             "PoolSnapshot",
@@ -185,7 +278,11 @@ class _Pool:
 
 
 def test_backfill_filters_st_and_uses_open_date_slices() -> None:
-    """The source run persists only non-ST business rows and bounded date calls."""
+    """The source run persists only non-ST business rows and bounded date calls.
+
+    Returns:
+        None: .
+    """
     client = _Client()
     repository = _Repository()
     publisher = _Publisher()
@@ -205,12 +302,8 @@ def test_backfill_filters_st_and_uses_open_date_slices() -> None:
         )
     )
 
-    persisted_symbols = {
-        row.symbol for row in repository.records if row.symbol is not None
-    }
-    daily_calls = [
-        params for api_name, params in client.calls if api_name == "daily"
-    ]
+    persisted_symbols = {row.symbol for row in repository.records if row.symbol is not None}
+    daily_calls = [params for api_name, params in client.calls if api_name == "daily"]
     assert persisted_symbols == {"000001.SZ"}
     assert [call["trade_date"] for call in daily_calls] == [
         "20260622",
@@ -220,16 +313,18 @@ def test_backfill_filters_st_and_uses_open_date_slices() -> None:
     assert report.endpoints["daily"].fetched_rows == 4
     assert report.endpoints["daily"].persisted_rows == 2
     assert report.endpoints["daily"].published_fact_count == 2
-    assert {
-        row["ts_code"] for row in publisher.records["daily"]
-    } == {"000001.SZ"}
+    assert {row["ts_code"] for row in publisher.records["daily"]} == {"000001.SZ"}
     assert report.company_pool_snapshot_id == "pool-1"
     assert report.company_pool_member_count == 1
     assert repository.finished == (3, {})
 
 
 def test_backfill_retains_date_slice_progress_when_one_slice_fails() -> None:
-    """A transient Tushare date-slice failure keeps already persisted slices auditable."""
+    """A transient Tushare date-slice failure keeps already persisted slices auditable.
+
+    Returns:
+        None: .
+    """
     client = _FlakyDailyClient()
     repository = _Repository()
     publisher = _Publisher()
@@ -262,7 +357,11 @@ def test_backfill_retains_date_slice_progress_when_one_slice_fails() -> None:
 
 
 def test_index_weight_backfill_uses_month_slices() -> None:
-    """Benchmark constituent weights are sliced monthly instead of one huge range."""
+    """Benchmark constituent weights are sliced monthly instead of one huge range.
+
+    Returns:
+        None: .
+    """
     client = _Client()
     repository = _Repository(expected_endpoint_count=2)
     service = TushareBackfillService(client=client, repository=repository)
@@ -277,13 +376,8 @@ def test_index_weight_backfill_uses_month_slices() -> None:
         )
     )
 
-    calls = [
-        params for api_name, params in client.calls if api_name == "index_weight"
-    ]
-    assert [
-        (call["index_code"], call["start_date"], call["end_date"])
-        for call in calls
-    ] == [
+    calls = [params for api_name, params in client.calls if api_name == "index_weight"]
+    assert [(call["index_code"], call["start_date"], call["end_date"]) for call in calls] == [
         ("000300.SH", "20260115", "20260131"),
         ("000300.SH", "20260201", "20260228"),
         ("000300.SH", "20260301", "20260310"),
@@ -291,7 +385,11 @@ def test_index_weight_backfill_uses_month_slices() -> None:
 
 
 def test_index_range_backfill_retains_progress_when_one_slice_fails() -> None:
-    """Index-range APIs are streamed by partition so one bad month is auditable."""
+    """Index-range APIs are streamed by partition so one bad month is auditable.
+
+    Returns:
+        None: .
+    """
     client = _FlakyIndexWeightClient()
     repository = _Repository(expected_endpoint_count=2)
     service = TushareBackfillService(client=client, repository=repository)

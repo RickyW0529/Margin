@@ -30,12 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class StartRefreshRequest(BaseModel):
-    """Request body for starting a valuation discovery refresh.
-
-    Attributes:
-        scope_version_id: Identifier of the frozen research scope.
-        decision_at: Timestamp of the refresh decision.
-    """
+    """Request body for starting a valuation discovery refresh.."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -44,13 +39,7 @@ class StartRefreshRequest(BaseModel):
 
 
 class StartRefreshResponse(BaseModel):
-    """Accepted refresh response.
-
-    Attributes:
-        run_id: Unique identifier of the created refresh run.
-        status: Initial status of the run.
-        http_status: HTTP status code associated with the response.
-    """
+    """Accepted refresh response.."""
 
     run_id: str
     status: str
@@ -58,14 +47,7 @@ class StartRefreshResponse(BaseModel):
 
 
 class RefreshStatusResponse(BaseModel):
-    """Valuation discovery refresh run status.
-
-    Attributes:
-        run_id: Unique identifier of the refresh run.
-        state: Current state of the run.
-        scope_version_id: Identifier of the frozen research scope.
-        steps: List of step status dictionaries for each orchestration step.
-    """
+    """Valuation discovery refresh run status.."""
 
     run_id: str
     state: str
@@ -74,16 +56,7 @@ class RefreshStatusResponse(BaseModel):
 
 
 class RefreshSummaryResponse(BaseModel):
-    """One refresh run row in the list view.
-
-    Attributes:
-        run_id: Unique identifier of the refresh run.
-        state: Current state of the run.
-        scope_version_id: Identifier of the frozen research scope.
-        created_at: UTC timestamp when the run was created.
-        started_at: UTC timestamp when the run started, if started.
-        finished_at: UTC timestamp when the run finished, if finished.
-    """
+    """One refresh run row in the list view.."""
 
     run_id: str
     state: str
@@ -94,26 +67,26 @@ class RefreshSummaryResponse(BaseModel):
 
 
 class RefreshListResponse(BaseModel):
-    """Paginated refresh run list response.
-
-    Attributes:
-        items: List of refresh run summary responses.
-        next_cursor: Cursor for the next page, or None if no more pages.
-        page_size: Number of items in the current page.
-    """
+    """Paginated refresh run list response.."""
 
     items: list[RefreshSummaryResponse]
     next_cursor: str | None
     page_size: int
 
 
-TERMINAL_STATES = frozenset(
-    {"succeeded", "failed_final", "cancelled", "skipped"}
-)
+TERMINAL_STATES = frozenset({"succeeded", "failed_final", "cancelled", "skipped"})
 
 
 def _has_next(items: list, limit: int) -> str | None:
-    """Return a cursor for the last item when more rows may exist."""
+    """Return a cursor for the last item when more rows may exist.
+
+    Args:
+        items: list: .
+        limit: int: .
+
+    Returns:
+        str | None: .
+    """
     if len(items) >= limit and items:
         return items[-1].run_id
     return None
@@ -138,13 +111,18 @@ def start_refresh(
     """Start a valuation discovery refresh.
 
     Args:
-        request: Validated refresh request containing scope and decision time.
-        idempotency_key: Idempotency key for the mutation.
-        _actor_id: Authenticated actor identifier (unused).
-        service: Valuation discovery service used to start the refresh.
+        request: StartRefreshRequest: .
+        background_tasks: BackgroundTasks: .
+        idempotency_key: Annotated[str, Depends(require_idempotency_key)]: .
+        _actor_id: Annotated[str, Depends(require_local_admin)]: .
+        strategy_service: Annotated[StrategyService, Depends(get_strategy_service)]: .
+        service: Annotated[
+            ValuationDiscoveryService,
+            Depends(get_valuation_discovery_service_for_api),
+        ]: .
 
     Returns:
-        StartRefreshResponse with the run id, status, and HTTP status code.
+        StartRefreshResponse: .
     """
     scope_version_id = _resolve_scope_alias(
         request.scope_version_id,
@@ -164,7 +142,14 @@ def start_refresh(
 
 
 def _wake_refresh_worker(service: ValuationDiscoveryService) -> None:
-    """Best-effort worker wake after a refresh request is accepted."""
+    """Best-effort worker wake after a refresh request is accepted.
+
+    Args:
+        service: ValuationDiscoveryService: .
+
+    Returns:
+        None: .
+    """
     try:
         service.wake_refresh_worker(max_steps=1)
     except Exception:  # noqa: BLE001
@@ -177,7 +162,16 @@ def _resolve_scope_alias(
     strategy_service: StrategyService,
     owner_id: str = "local-admin",
 ) -> str:
-    """Resolve user-facing scope aliases to persisted scope version IDs."""
+    """Resolve user-facing scope aliases to persisted scope version IDs.
+
+    Args:
+        scope_version_id: str: .
+        strategy_service: StrategyService: .
+        owner_id: str: .
+
+    Returns:
+        str: .
+    """
     if scope_version_id != "scope-current":
         return scope_version_id
     try:
@@ -209,13 +203,16 @@ def list_refresh_runs(
     """List recent valuation-discovery refresh runs, newest first.
 
     Args:
-        scope_version_id: Optional scope-version filter.
-        state: Optional run-state filter.
-        limit: Maximum number of runs to return (1..200).
-        service: Valuation discovery service used to list runs.
+        service: Annotated[
+            ValuationDiscoveryService,
+            Depends(get_valuation_discovery_service_for_api),
+        ]: .
+        scope_version_id: Annotated[str | None, Query()]: .
+        state: Annotated[str | None, Query()]: .
+        limit: Annotated[int, Query(ge=1, le=200)]: .
 
     Returns:
-        RefreshListResponse: A page of runs plus a cursor for the next page.
+        RefreshListResponse: .
     """
     summaries = service.list_refreshes(
         scope_version_id=scope_version_id,
@@ -254,15 +251,14 @@ def get_refresh_status(
     """Return the status of a valuation discovery refresh run.
 
     Args:
-        run_id: Unique identifier of the refresh run to inspect.
-        service: Valuation discovery service used to load run status.
+        run_id: str: .
+        service: Annotated[
+            ValuationDiscoveryService,
+            Depends(get_valuation_discovery_service_for_api),
+        ]: .
 
     Returns:
-        RefreshStatusResponse: The run's current state together with the
-        latest event for each orchestration step.
-
-    Raises:
-        HTTPException: 404 if the run cannot be found.
+        RefreshStatusResponse: .
     """
     status_dto = service.get_refresh_status(run_id)
     if status_dto is None:
@@ -284,7 +280,7 @@ def get_refresh_status(
 
 
 class FactorScoreItemResponse(BaseModel):
-    """Single factor group score with label and weight."""
+    """Single factor group score with label and weight.."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -295,7 +291,7 @@ class FactorScoreItemResponse(BaseModel):
 
 
 class CompanyQuantProfileResponse(BaseModel):
-    """Quant screening profile for one security, ready for visualization."""
+    """Quant screening profile for one security, ready for visualization.."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -318,7 +314,7 @@ class CompanyQuantProfileResponse(BaseModel):
 
 
 class AnalysisMetricResponse(BaseModel):
-    """One Analysis Mart metric row."""
+    """One Analysis Mart metric row.."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -336,7 +332,7 @@ class AnalysisMetricResponse(BaseModel):
 
 
 class AnalysisFindingResponse(BaseModel):
-    """One Analysis Mart finding row."""
+    """One Analysis Mart finding row.."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -350,7 +346,7 @@ class AnalysisFindingResponse(BaseModel):
 
 
 class AnalysisSnapshotHeaderResponse(BaseModel):
-    """Header metadata for an analysis snapshot."""
+    """Header metadata for an analysis snapshot.."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -366,7 +362,7 @@ class AnalysisSnapshotHeaderResponse(BaseModel):
 
 
 class CompanyAnalysisProfileResponse(BaseModel):
-    """Fourth-layer Analysis Mart profile for one security."""
+    """Fourth-layer Analysis Mart profile for one security.."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -381,16 +377,21 @@ ProfileService = Annotated[CompanyProfileService, Depends(get_company_profile_se
 
 
 def _quant_profile_to_response(profile: CompanyQuantProfile) -> CompanyQuantProfileResponse:
-    """Convert a company quant profile DTO to its HTTP response model."""
+    """Convert a company quant profile DTO to its HTTP response model.
+
+    Args:
+        profile: CompanyQuantProfile: .
+
+    Returns:
+        CompanyQuantProfileResponse: .
+    """
     return CompanyQuantProfileResponse(
         security_id=profile.security_id,
         quant_run_id=profile.quant_run_id,
         result_id=profile.result_id,
         decision_at=profile.decision_at,
         final_score=profile.final_score,
-        factor_scores=[
-            _factor_item_to_response(item) for item in profile.factor_scores
-        ],
+        factor_scores=[_factor_item_to_response(item) for item in profile.factor_scores],
         rank_overall=profile.rank_overall,
         rank_in_industry=profile.rank_in_industry,
         screening_status=profile.screening_status,
@@ -405,7 +406,14 @@ def _quant_profile_to_response(profile: CompanyQuantProfile) -> CompanyQuantProf
 
 
 def _factor_item_to_response(item: FactorScoreItem) -> FactorScoreItemResponse:
-    """Convert a factor score item DTO to its HTTP response model."""
+    """Convert a factor score item DTO to its HTTP response model.
+
+    Args:
+        item: FactorScoreItem: .
+
+    Returns:
+        FactorScoreItemResponse: .
+    """
     return FactorScoreItemResponse(
         factor_key=item.factor_key,
         label=item.label,
@@ -417,7 +425,14 @@ def _factor_item_to_response(item: FactorScoreItem) -> FactorScoreItemResponse:
 def _analysis_profile_to_response(
     profile: CompanyAnalysisProfile,
 ) -> CompanyAnalysisProfileResponse:
-    """Convert a company analysis profile DTO to its HTTP response model."""
+    """Convert a company analysis profile DTO to its HTTP response model.
+
+    Args:
+        profile: CompanyAnalysisProfile: .
+
+    Returns:
+        CompanyAnalysisProfileResponse: .
+    """
     snapshot = profile.analysis_snapshot
     return CompanyAnalysisProfileResponse(
         security_id=profile.security_id,
@@ -429,7 +444,14 @@ def _analysis_profile_to_response(
 
 
 def _snapshot_to_response(snapshot: Any) -> AnalysisSnapshotHeaderResponse:
-    """Convert an AnalysisSnapshot dataclass to its HTTP response model."""
+    """Convert an AnalysisSnapshot dataclass to its HTTP response model.
+
+    Args:
+        snapshot: Any: .
+
+    Returns:
+        AnalysisSnapshotHeaderResponse: .
+    """
     return AnalysisSnapshotHeaderResponse(
         analysis_snapshot_id=snapshot.analysis_snapshot_id,
         decision_at=snapshot.decision_at,
@@ -444,7 +466,14 @@ def _snapshot_to_response(snapshot: Any) -> AnalysisSnapshotHeaderResponse:
 
 
 def _metric_to_response(metric: Any) -> AnalysisMetricResponse:
-    """Convert an AnalysisMetric dataclass to its HTTP response model."""
+    """Convert an AnalysisMetric dataclass to its HTTP response model.
+
+    Args:
+        metric: Any: .
+
+    Returns:
+        AnalysisMetricResponse: .
+    """
     return AnalysisMetricResponse(
         metric_id=metric.metric_id,
         metric_code=metric.metric_code,
@@ -461,7 +490,14 @@ def _metric_to_response(metric: Any) -> AnalysisMetricResponse:
 
 
 def _finding_to_response(finding: Any) -> AnalysisFindingResponse:
-    """Convert an AnalysisFinding dataclass to its HTTP response model."""
+    """Convert an AnalysisFinding dataclass to its HTTP response model.
+
+    Args:
+        finding: Any: .
+
+    Returns:
+        AnalysisFindingResponse: .
+    """
     return AnalysisFindingResponse(
         finding_id=finding.finding_id,
         finding_type=finding.finding_type,
@@ -484,14 +520,11 @@ def get_company_quant_profile(
     """Return the latest quant screening profile for a security.
 
     Args:
-        security_id: Unique identifier of the security.
-        service: Company profile service used to load the quant profile.
+        security_id: str: .
+        service: ProfileService: .
 
     Returns:
-        CompanyQuantProfileResponse: The latest quant profile.
-
-    Raises:
-        HTTPException: 404 if no quant result exists for the security.
+        CompanyQuantProfileResponse: .
     """
     profile = service.get_quant_profile(security_id)
     if profile is None:
@@ -514,15 +547,12 @@ def get_company_analysis_profile(
     """Return the Analysis Mart profile for a security.
 
     Args:
-        security_id: Unique identifier of the security.
-        service: Company profile service used to load the analysis profile.
-        scope_version_id: Optional frozen research scope version to resolve
-            within. When omitted, the latest snapshot across all scopes is
-            returned.
+        security_id: str: .
+        service: ProfileService: .
+        scope_version_id: Annotated[str | None, Query(max_length=64)]: .
 
     Returns:
-        CompanyAnalysisProfileResponse: The analysis profile. If no snapshot
-        exists, ``snapshot`` is null and metrics/findings are empty.
+        CompanyAnalysisProfileResponse: .
     """
     profile = service.get_analysis_profile(
         security_id=security_id,

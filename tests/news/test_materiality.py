@@ -6,7 +6,11 @@ from margin.news.materiality import DocumentMaterialityService
 
 
 def test_regulatory_penalty_is_material_for_linked_company() -> None:
-    """regulatory penalty is material for linked company."""
+    """regulatory penalty is material for linked company.
+
+    Returns:
+        None: .
+    """
     service = DocumentMaterialityService(scoring_version="materiality-v0.2.0")
 
     score = service.score(
@@ -24,7 +28,11 @@ def test_regulatory_penalty_is_material_for_linked_company() -> None:
 
 
 def test_websearch_text_is_marked_untrusted() -> None:
-    """websearch text is marked untrusted."""
+    """websearch text is marked untrusted.
+
+    Returns:
+        None: .
+    """
     service = DocumentMaterialityService(scoring_version="materiality-v0.2.0")
 
     score = service.score(

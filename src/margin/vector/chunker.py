@@ -45,11 +45,11 @@ if TYPE_CHECKING:
 
 
 class ChunkingError(Exception):
-    """Raised when document chunking fails."""
+    """Raised when document chunking fails.."""
 
 
 class ChunkingResult(BaseModel):
-    """Structured chunking output with chunk/security links separated."""
+    """Structured chunking output with chunk/security links separated.."""
 
     chunks: tuple[Chunk, ...]
     links: tuple[ChunkSecurityLink, ...] = Field(default_factory=tuple)
@@ -66,10 +66,10 @@ def infer_doc_type(event: DocumentEvent) -> DocType:
     """Infer the document type from a document event.
 
     Args:
-        event: The document event to classify.
+        event: DocumentEvent: .
 
     Returns:
-        The inferred document type.
+        DocType: .
     """
     title = event.title.lower()
     doc_type_str = event.doc_type.lower()
@@ -111,17 +111,17 @@ def infer_doc_type(event: DocumentEvent) -> DocType:
 
 
 class BaseChunker:
-    """Base chunker providing generic paragraph-splitting utilities."""
+    """Base chunker providing generic paragraph-splitting utilities.."""
 
     def __init__(self, max_chunk_size: int = 1000, overlap: int = 100) -> None:
         """Initialize the base chunker.
 
         Args:
-            max_chunk_size: Maximum number of characters per chunk.
-            overlap: Number of overlapping characters between consecutive chunks.
+            max_chunk_size: int: .
+            overlap: int: .
 
-        Raises:
-            ValueError: If ``max_chunk_size`` is not positive or ``overlap`` is out of range.
+        Returns:
+            None: .
         """
         if max_chunk_size <= 0:
             raise ValueError("max_chunk_size must be positive")
@@ -134,13 +134,10 @@ class BaseChunker:
         """Chunk a document event into a list of chunks.
 
         Args:
-            event: The document event to chunk.
+            event: DocumentEvent: .
 
         Returns:
-            A list of chunks.
-
-        Raises:
-            NotImplementedError: Subclasses must implement this method.
+            list[Chunk]: .
         """
         raise NotImplementedError
 
@@ -148,10 +145,10 @@ class BaseChunker:
         """Split text into paragraphs separated by blank lines.
 
         Args:
-            text: The text to split.
+            text: str: .
 
         Returns:
-            A list of non-empty paragraph strings.
+            list[str]: .
         """
         paragraphs = re.split(r"\n\s*\n", text)
         return [p.strip() for p in paragraphs if p.strip()]
@@ -160,10 +157,10 @@ class BaseChunker:
         """Split text into sentences using Chinese and English punctuation.
 
         Args:
-            text: The text to split.
+            text: str: .
 
         Returns:
-            A list of non-empty sentence strings.
+            list[str]: .
         """
         sentences = re.split(r"[。！？.!?；;]+", text)
         return [s.strip() for s in sentences if s.strip()]
@@ -172,10 +169,10 @@ class BaseChunker:
         """Merge small parts into chunks that do not exceed ``max_size``.
 
         Args:
-            parts: The text parts to merge.
+            parts: list[str]: .
 
         Returns:
-            A list of merged chunk strings with configured overlap.
+            list[str]: .
         """
         chunks: list[str] = []
         current = ""
@@ -192,7 +189,7 @@ class BaseChunker:
 
             if current:
                 chunks.append(current)
-            overlap_text = current[-self._overlap:] if current and self._overlap else ""
+            overlap_text = current[-self._overlap :] if current and self._overlap else ""
             candidate = f"{overlap_text}\n{part}" if overlap_text else part
             current = candidate if len(candidate) <= self._max_size else part
 
@@ -205,10 +202,10 @@ class BaseChunker:
         """Split a single oversized segment using character overlap.
 
         Args:
-            part: The text segment to split.
+            part: str: .
 
         Returns:
-            A list of sub-segments no longer than ``max_size``.
+            list[str]: .
         """
         if len(part) <= self._max_size:
             return [part]
@@ -230,13 +227,13 @@ class BaseChunker:
         """Generate a list of chunks from text parts and populate metadata.
 
         Args:
-            event: The document event the chunks belong to.
-            text_parts: The text content for each chunk.
-            doc_type: The document type to record in chunk metadata.
-            section_labels: Optional section label for each text part.
+            event: DocumentEvent: .
+            text_parts: list[str]: .
+            doc_type: DocType: .
+            section_labels: list[str] | None: .
 
         Returns:
-            A list of populated chunks.
+            list[Chunk]: .
         """
         if not text_parts:
             return []
@@ -245,9 +242,7 @@ class BaseChunker:
         expanded_labels: list[str | None] = []
         for index, text in enumerate(text_parts):
             label = (
-                section_labels[index]
-                if section_labels and index < len(section_labels)
-                else None
+                section_labels[index] if section_labels and index < len(section_labels) else None
             )
             split_parts = self._split_oversized_part(text)
             expanded_parts.extend(split_parts)
@@ -287,7 +282,7 @@ class BaseChunker:
 
 
 class ReportChunker(BaseChunker):
-    """Annual/quarterly report chunker — splits by section, table, and page."""
+    """Annual/quarterly report chunker — splits by section, table, and page.."""
 
     SECTION_PATTERNS = [
         r"第[一二三四五六七八九十百]+章",
@@ -302,10 +297,10 @@ class ReportChunker(BaseChunker):
         """Chunk an annual or quarterly report event.
 
         Args:
-            event: The document event to chunk.
+            event: DocumentEvent: .
 
         Returns:
-            A list of chunks split by report sections.
+            list[Chunk]: .
         """
         content = event.content or ""
         if not content.strip():
@@ -329,10 +324,10 @@ class ReportChunker(BaseChunker):
         """Split text by section markers.
 
         Args:
-            text: The report text to split.
+            text: str: .
 
         Returns:
-            A list of ``(section_label, section_text)`` tuples.
+            list[tuple[str, str]]: .
         """
         positions: list[tuple[int, str]] = []
 
@@ -362,17 +357,17 @@ class ReportChunker(BaseChunker):
 
 
 class StructuredChunker:
-    """v0.2 locator-preserving chunker with symbol-independent chunk IDs."""
+    """v0.2 locator-preserving chunker with symbol-independent chunk IDs.."""
 
     def __init__(self, parser_version: str, max_chars: int = 1_000) -> None:
         """Initialize the structured chunker.
 
         Args:
-            parser_version: Version label of the parser that produced the blocks.
-            max_chars: Maximum number of characters per chunk. Must be positive.
+            parser_version: str: .
+            max_chars: int: .
 
-        Raises:
-            ValueError: If ``max_chars`` is not positive.
+        Returns:
+            None: .
         """
         if max_chars <= 0:
             raise ValueError("max_chars must be positive")
@@ -393,22 +388,18 @@ class StructuredChunker:
     ) -> ChunkingResult:
         """Chunk parsed blocks without crossing unrecoverable structural boundaries.
 
-        Blocks are grouped by structural boundary (page, section, table) and
-        merged until ``max_chars`` is reached. Each chunk receives a
-        symbol-independent stable ID and a merged source locator.
-
         Args:
-            document_id: Identifier of the parent document.
-            content_hash: Hash of the document content.
-            blocks: Parsed blocks with locator metadata.
-            security_ids: Security symbols to link to each chunk.
-            trust_level: Prompt-safety trust label for the chunks.
-            source_level: Source reliability level. Defaults to L4.
-            doc_type: Document category. Defaults to UNKNOWN.
-            **metadata: Additional Chunk fields to forward.
+            document_id: str: .
+            content_hash: str: .
+            blocks: list[VectorParsedBlock]: .
+            security_ids: tuple[str, ...]: .
+            trust_level: TrustLevel: .
+            source_level: Any: .
+            doc_type: DocType: .
+            **metadata: Any: .
 
         Returns:
-            A ``ChunkingResult`` containing the chunks and security links.
+            ChunkingResult: .
         """
         from margin.news.models import SourceLevel
 
@@ -462,7 +453,14 @@ class StructuredChunker:
         self,
         blocks: list[VectorParsedBlock],
     ) -> list[list[VectorParsedBlock]]:
-        """Group parsed blocks by structural boundary without exceeding max_chars."""
+        """Group parsed blocks by structural boundary without exceeding max_chars.
+
+        Args:
+            blocks: list[VectorParsedBlock]: .
+
+        Returns:
+            list[list[VectorParsedBlock]]: .
+        """
         groups: list[list[VectorParsedBlock]] = []
         current: list[VectorParsedBlock] = []
         current_key: tuple[str | None, int | None, str | None] | None = None
@@ -485,14 +483,28 @@ class StructuredChunker:
 
     @staticmethod
     def _boundary_key(block: VectorParsedBlock) -> tuple[str | None, int | None, str | None]:
-        """Compute a structural boundary key for a parsed block."""
+        """Compute a structural boundary key for a parsed block.
+
+        Args:
+            block: VectorParsedBlock: .
+
+        Returns:
+            tuple[str | None, int | None, str | None]: .
+        """
         locator = block.locator
         structural_type = "table" if block.block_type == "table_row" else "text"
         return (structural_type, locator.page, locator.table_id or locator.section)
 
     @staticmethod
     def _merged_locator(blocks: list[VectorParsedBlock]) -> SourceLocator:
-        """Merge locators from a group of blocks into a single source locator."""
+        """Merge locators from a group of blocks into a single source locator.
+
+        Args:
+            blocks: list[VectorParsedBlock]: .
+
+        Returns:
+            SourceLocator: .
+        """
         first = blocks[0].locator
         if len(blocks) == 1:
             return first
@@ -515,7 +527,7 @@ class StructuredChunker:
 
 
 class FilingChunker(BaseChunker):
-    """Filing chunker — splits by matter and clause."""
+    """Filing chunker — splits by matter and clause.."""
 
     ITEM_PATTERNS = [
         r"一、",
@@ -534,10 +546,10 @@ class FilingChunker(BaseChunker):
         """Chunk a filing event.
 
         Args:
-            event: The document event to chunk.
+            event: DocumentEvent: .
 
         Returns:
-            A list of chunks split by filing items.
+            list[Chunk]: .
         """
         content = event.content or ""
         if not content.strip():
@@ -561,10 +573,10 @@ class FilingChunker(BaseChunker):
         """Split text by item markers.
 
         Args:
-            text: The filing text to split.
+            text: str: .
 
         Returns:
-            A list of ``(item_label, item_text)`` tuples.
+            list[tuple[str, str]]: .
         """
         positions: list[tuple[int, str]] = []
 
@@ -594,16 +606,16 @@ class FilingChunker(BaseChunker):
 
 
 class NewsChunker(BaseChunker):
-    """News chunker — extracts title, lead, and body paragraphs."""
+    """News chunker — extracts title, lead, and body paragraphs.."""
 
     def chunk(self, event: DocumentEvent) -> list[Chunk]:
         """Chunk a news event.
 
         Args:
-            event: The document event to chunk.
+            event: DocumentEvent: .
 
         Returns:
-            A list of chunks containing the title, lead paragraph, and body.
+            list[Chunk]: .
         """
         content = event.content or ""
         title = event.title
@@ -630,7 +642,7 @@ class NewsChunker(BaseChunker):
 
 
 class IRChunker(BaseChunker):
-    """IR record chunker — splits by question-and-answer pairs."""
+    """IR record chunker — splits by question-and-answer pairs.."""
 
     QA_PATTERN = r"(问[题]?[:：]|Q[:：]|答[:：]|A[:：])"
 
@@ -638,10 +650,10 @@ class IRChunker(BaseChunker):
         """Chunk an investor relations event.
 
         Args:
-            event: The document event to chunk.
+            event: DocumentEvent: .
 
         Returns:
-            A list of chunks split by Q&A pairs.
+            list[Chunk]: .
         """
         content = event.content or ""
         if not content.strip():
@@ -662,10 +674,10 @@ class IRChunker(BaseChunker):
         """Split text by question and answer markers.
 
         Args:
-            text: The IR text to split.
+            text: str: .
 
         Returns:
-            A list of ``(segment_text, label)`` tuples grouped into Q&A pairs.
+            list[tuple[str, str]]: .
         """
         matches = list(re.finditer(self.QA_PATTERN, text))
         if len(matches) < 2:
@@ -674,7 +686,7 @@ class IRChunker(BaseChunker):
         segments: list[tuple[str, str]] = []
         for i, match in enumerate(matches):
             end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-            segment = text[match.start():end].strip()
+            segment = text[match.start() : end].strip()
             if segment:
                 segments.append((segment, match.group(1)))
 
@@ -695,16 +707,16 @@ class IRChunker(BaseChunker):
 
 
 class UserNoteChunker(BaseChunker):
-    """User note chunker — splits by heading and paragraph."""
+    """User note chunker — splits by heading and paragraph.."""
 
     def chunk(self, event: DocumentEvent) -> list[Chunk]:
         """Chunk a user note event.
 
         Args:
-            event: The document event to chunk.
+            event: DocumentEvent: .
 
         Returns:
-            A list of chunks split by paragraph.
+            list[Chunk]: .
         """
         content = event.content or ""
         if not content.strip():
@@ -733,13 +745,7 @@ _CHUNKER_MAP: dict[DocType, type[BaseChunker]] = {
 
 
 class Chunker:
-    """Entry point for document chunking — selects the strategy by document type.
-
-    Example::
-
-        chunker = Chunker()
-        chunks = chunker.chunk(document_event)
-    """
+    """Entry point for document chunking — selects the strategy by document type.."""
 
     def __init__(
         self,
@@ -750,9 +756,12 @@ class Chunker:
         """Initialize the chunker dispatcher.
 
         Args:
-            max_chunk_size: Maximum number of characters per chunk.
-            overlap: Number of overlapping characters between consecutive chunks.
-            custom_chunkers: Optional mapping of document types to custom chunker instances.
+            max_chunk_size: int: .
+            overlap: int: .
+            custom_chunkers: dict[DocType, BaseChunker] | None: .
+
+        Returns:
+            None: .
         """
         self._max_size = max_chunk_size
         self._overlap = overlap
@@ -761,17 +770,11 @@ class Chunker:
     def chunk(self, event: DocumentEvent) -> list[Chunk]:
         """Chunk a document event using the matching document-type strategy.
 
-        When parsing fails, the original title is kept as the only chunk and a parse note is
-        recorded (architecture §25).
-
         Args:
-            event: The document event to chunk.
+            event: DocumentEvent: .
 
         Returns:
-            A list of chunks, or an empty list if the event is not ready for chunking.
-
-        Raises:
-            ChunkingError: If the selected chunker fails to process the document.
+            list[Chunk]: .
         """
         if event.processing_status != DocumentStatus.READY:
             return []
@@ -806,11 +809,11 @@ class Chunker:
         """Create title-only chunks for ready documents without parsed body text.
 
         Args:
-            event: The document event to create fallback chunks for.
-            doc_type: The document type to record in chunk metadata.
+            event: DocumentEvent: .
+            doc_type: DocType: .
 
         Returns:
-            A list of title-only chunks, one per symbol.
+            list[Chunk]: .
         """
         fallback_chunker = BaseChunker(self._max_size, self._overlap)
         return fallback_chunker._make_chunks(
@@ -824,10 +827,10 @@ class Chunker:
         """Chunk a batch of document events.
 
         Args:
-            events: The document events to chunk.
+            events: list[DocumentEvent]: .
 
         Returns:
-            A flattened list of all chunks. Documents that raise ``ChunkingError`` are skipped.
+            list[Chunk]: .
         """
         all_chunks: list[Chunk] = []
         for event in events:
@@ -846,12 +849,11 @@ class Chunker:
         """Chunk structured parsed blocks while preserving source locators.
 
         Args:
-            parsed: Parsed document containing structured blocks with locator metadata.
-            event: The document event the parsed blocks belong to.
+            parsed: ParsedDocument: .
+            event: DocumentEvent: .
 
         Returns:
-            A list of chunks with page, section, paragraph, table, row, and quote span
-            locators copied from the parsed blocks.
+            list[Chunk]: .
         """
         if event.processing_status != DocumentStatus.READY:
             return []
@@ -898,11 +900,10 @@ class Chunker:
         """Split a parsed block into sub-parts and adjust quote spans.
 
         Args:
-            block: Parsed block containing text and an optional quote span.
+            block: ParsedBlock: .
 
         Returns:
-            A list of ``(text_part, quote_span)`` tuples. When the block has no quote
-            span, ``quote_span`` is ``None``.
+            list[tuple[str, tuple[int, int] | None]]: .
         """
         base = BaseChunker(self._max_size, self._overlap)
         parts = base._split_oversized_part(block.text)

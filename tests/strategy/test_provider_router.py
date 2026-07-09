@@ -9,7 +9,11 @@ from margin.strategy.provider_router import (
 
 
 def test_llm_router_detects_deepseek_from_url() -> None:
-    """DeepSeek URLs should be reflected as the DeepSeek LLM label."""
+    """DeepSeek URLs should be reflected as the DeepSeek LLM label.
+
+    Returns:
+        None: .
+    """
     detected = detect_provider_from_url("llm", "https://api.deepseek.com/v1")
 
     assert detected.provider_id == "deepseek"
@@ -18,7 +22,11 @@ def test_llm_router_detects_deepseek_from_url() -> None:
 
 
 def test_llm_router_detects_modelscope_from_url() -> None:
-    """ModelScope OpenAI-compatible URLs should be reflected as ModelScope."""
+    """ModelScope OpenAI-compatible URLs should be reflected as ModelScope.
+
+    Returns:
+        None: .
+    """
     detected = detect_provider_from_url(
         "llm",
         "https://api-inference.modelscope.cn/v1/",
@@ -29,7 +37,11 @@ def test_llm_router_detects_modelscope_from_url() -> None:
 
 
 def test_llm_router_detects_local_ollama_and_vllm_ports() -> None:
-    """Local OpenAI-compatible URLs should identify common local providers."""
+    """Local OpenAI-compatible URLs should identify common local providers.
+
+    Returns:
+        None: .
+    """
     ollama = detect_provider_from_url("llm", "http://localhost:11434/v1")
     vllm = detect_provider_from_url("llm", "http://127.0.0.1:8000/v1")
 
@@ -40,7 +52,11 @@ def test_llm_router_detects_local_ollama_and_vllm_ports() -> None:
 
 
 def test_router_falls_back_to_custom_with_user_url() -> None:
-    """Unknown URLs should remain usable as Custom within the selected category."""
+    """Unknown URLs should remain usable as Custom within the selected category.
+
+    Returns:
+        None: .
+    """
     detected = detect_provider_from_url("web_search", "https://search.internal.example")
 
     assert detected.provider_id == "custom"
@@ -49,7 +65,11 @@ def test_router_falls_back_to_custom_with_user_url() -> None:
 
 
 def test_provider_category_uses_type_and_config_fallbacks() -> None:
-    """Provider categories should normalize old and new config shapes."""
+    """Provider categories should normalize old and new config shapes.
+
+    Returns:
+        None: .
+    """
     assert provider_category_for_config("market_data", "tushare", {}) == "data_source"
     assert (
         provider_category_for_config(

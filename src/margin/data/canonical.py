@@ -13,7 +13,7 @@ from margin.news.models import ensure_utc, utc_now
 
 
 class CanonicalResolution(BaseModel):
-    """Result of resolving provider facts for one indicator at one decision time."""
+    """Result of resolving provider facts for one indicator at one decision time.."""
 
     security_id: str | None = None
     indicator_id: str | None = None
@@ -31,12 +31,19 @@ class CanonicalResolution(BaseModel):
     @field_validator("decision_at", "created_at")
     @classmethod
     def normalize_timestamp(cls, value: datetime) -> datetime:
-        """Normalize resolver timestamps to UTC."""
+        """Normalize resolver timestamps to UTC.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)
 
 
 class CanonicalResolver:
-    """Deterministically select a PIT-legal canonical fact while preserving candidates."""
+    """Deterministically select a PIT-legal canonical fact while preserving candidates.."""
 
     def __init__(
         self,
@@ -47,9 +54,11 @@ class CanonicalResolver:
         """Initialize the canonical resolver.
 
         Args:
-            resolver_version: Version tag stamped onto every resolution.
-            provider_priority: Provider codes ordered from highest to lowest
-                priority, used to break ties between candidate facts.
+            resolver_version: str: .
+            provider_priority: tuple[str, ...]: .
+
+        Returns:
+            None: .
         """
         self.resolver_version = resolver_version
         self.provider_priority = provider_priority
@@ -63,13 +72,11 @@ class CanonicalResolver:
         """Resolve available provider facts into one selected canonical value.
 
         Args:
-            facts: Candidate provider facts for one indicator.
-            decision_at: The point in time at which the decision is made.
+            facts: list[StandardizedIndicatorFact]: .
+            decision_at: datetime: .
 
         Returns:
-            A ``CanonicalResolution`` with the selected fact and all
-            PIT-legal candidates, or an ``insufficient`` status when no fact
-            is available at ``decision_at``.
+            CanonicalResolution: .
         """
         normalized_decision_at = ensure_utc(decision_at)
         available = tuple(
@@ -102,7 +109,14 @@ class CanonicalResolver:
         self,
         fact: StandardizedIndicatorFact,
     ) -> tuple[float, Decimal, int, float, str]:
-        """Return the sort key ranking one candidate fact."""
+        """Return the sort key ranking one candidate fact.
+
+        Args:
+            fact: StandardizedIndicatorFact: .
+
+        Returns:
+            tuple[float, Decimal, int, float, str]: .
+        """
         priority = (
             self.provider_priority.index(fact.provider_code)
             if fact.provider_code in self.provider_priority
@@ -117,7 +131,14 @@ class CanonicalResolver:
         )
 
     def _resolver_hash(self, candidates: tuple[StandardizedIndicatorFact, ...]) -> str:
-        """Return a stable SHA-256 hash over the resolver version and candidates."""
+        """Return a stable SHA-256 hash over the resolver version and candidates.
+
+        Args:
+            candidates: tuple[StandardizedIndicatorFact, ...]: .
+
+        Returns:
+            str: .
+        """
         payload = "|".join(
             [
                 self.resolver_version,

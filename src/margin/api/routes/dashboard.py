@@ -41,12 +41,7 @@ StrategyServices = Annotated[StrategyService, Depends(get_strategy_service)]
 
 
 class FeedbackCreate(BaseModel):
-    """Request body for recording feedback on a research item.
-
-    Attributes:
-        feedback_type: Kind of feedback being recorded. Defaults to ``COMMENT``.
-        comment: Free-text comment attached to the feedback.
-    """
+    """Request body for recording feedback on a research item.."""
 
     feedback_type: FeedbackType = FeedbackType.COMMENT
     comment: str = ""
@@ -71,21 +66,22 @@ def list_research_candidates_v2(
     """Return one v0.2 server-paginated research candidate page.
 
     Args:
-        services: Dashboard service bundle used to query candidates.
-        scope_version_id: Identifier of the frozen research scope.
-        universe: Universe code filter.
-        limit: Maximum number of candidates to return.
-        cursor: Optional pagination cursor from a previous response.
-        screening_status: Optional screening status filter.
-        data_status: Optional data status filter.
-        review_required: Optional review-required filter.
-        assessment_freshness: Optional assessment freshness filter.
-        query: Optional free-text search query.
-        sort_field: Field to sort by.
-        sort_direction: Sort direction (``asc`` or ``desc``).
+        services: Services: .
+        strategy_service: StrategyServices: .
+        scope_version_id: str: .
+        universe: Annotated[str, Query(alias='universe')]: .
+        limit: int: .
+        cursor: str | None: .
+        screening_status: str | None: .
+        data_status: str | None: .
+        review_required: bool | None: .
+        assessment_freshness: str | None: .
+        query: str | None: .
+        sort_field: str: .
+        sort_direction: str: .
 
     Returns:
-        ResearchCandidateListResponse containing one page of candidates.
+        ResearchCandidateListResponse: .
     """
     resolved_scope_version_id = _resolve_scope_alias(
         scope_version_id,
@@ -115,12 +111,11 @@ def get_research_item_detail_v2(
     """Return v0.2 company detail aggregate for one research item.
 
     Args:
-        item_id: Unique identifier of the research item.
-        services: Dashboard service bundle used to load the detail.
+        item_id: str: .
+        services: Services: .
 
     Returns:
-        ResearchItemDetailV2 for the requested item, or a 404 JSONResponse
-        if the item cannot be found.
+        ResearchItemDetailV2 | JSONResponse: .
     """
     try:
         return services.query.get_item_detail_v2(item_id)
@@ -134,7 +129,16 @@ def _resolve_scope_alias(
     strategy_service: StrategyService,
     owner_id: str = "local-admin",
 ) -> str:
-    """Resolve user-facing scope aliases to persisted scope version IDs."""
+    """Resolve user-facing scope aliases to persisted scope version IDs.
+
+    Args:
+        scope_version_id: str: .
+        strategy_service: StrategyService: .
+        owner_id: str: .
+
+    Returns:
+        str: .
+    """
     if scope_version_id != "scope-current":
         return scope_version_id
     try:
@@ -151,7 +155,14 @@ def _resolve_scope_alias(
 
 
 def _item_not_found(item_id: str) -> JSONResponse:
-    """Return a v0.2 structured item-not-found error."""
+    """Return a v0.2 structured item-not-found error.
+
+    Args:
+        item_id: str: .
+
+    Returns:
+        JSONResponse: .
+    """
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
         content={
@@ -164,7 +175,14 @@ def _item_not_found(item_id: str) -> JSONResponse:
 
 
 def _not_found(exc: KeyError) -> HTTPException:
-    """Convert a ``KeyError`` into a simple HTTP 404 exception."""
+    """Convert a ``KeyError`` into a simple HTTP 404 exception.
+
+    Args:
+        exc: KeyError: .
+
+    Returns:
+        HTTPException: .
+    """
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
@@ -182,15 +200,13 @@ def create_research_item_feedback(
     """Append feedback for a research item.
 
     Args:
-        item_id: Unique identifier of the research item.
-        request: Validated feedback creation request.
-        services: Dashboard service bundle used to record feedback.
+        item_id: str: .
+        request: FeedbackCreate: .
+        services: Services: .
+        _idempotency_key: Annotated[str, Depends(require_idempotency_key)]: .
 
     Returns:
-        FeedbackRecord: The newly created feedback record.
-
-    Raises:
-        HTTPException: 404 if the item cannot be found.
+        FeedbackRecord: .
     """
     try:
         return services.feedback.record_feedback(
@@ -207,11 +223,10 @@ def get_provider_status(services: Services) -> list[ProviderStatus]:
     """Return provider health status used by the dashboard.
 
     Args:
-        services: Dashboard service bundle that owns provider status.
+        services: Services: .
 
     Returns:
-        list[ProviderStatus]: Health status for each configured or missing
-        provider.
+        list[ProviderStatus]: .
     """
     return services.providers.list_status()
 
@@ -221,14 +236,11 @@ def get_job_run(job_run_id: str, services: Services) -> JobRun:
     """Return a dashboard job record.
 
     Args:
-        job_run_id: Unique identifier of the job run.
-        services: Dashboard service bundle used to load the job record.
+        job_run_id: str: .
+        services: Services: .
 
     Returns:
-        JobRun: The requested job run record.
-
-    Raises:
-        HTTPException: 404 if the job run cannot be found.
+        JobRun: .
     """
     try:
         return services.jobs.get_job(job_run_id)

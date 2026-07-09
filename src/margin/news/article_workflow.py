@@ -21,14 +21,17 @@ from margin.news.models import DocumentEvent, NewsTarget
 
 
 class ArticleWorkflow:
-    """Extract reviewed findings and derived briefs from persisted events."""
+    """Extract reviewed findings and derived briefs from persisted events.."""
 
     def __init__(self, *, llm_service: Any, max_review_rounds: int = 2) -> None:
         """Initialize the workflow.
 
         Args:
-            llm_service: LLM service used for structured completion calls.
-            max_review_rounds: Maximum number of writer/review revision rounds.
+            llm_service: Any: .
+            max_review_rounds: int: .
+
+        Returns:
+            None: .
         """
         self._llm = llm_service
         self._max_review_rounds = max(1, max_review_rounds)
@@ -43,12 +46,12 @@ class ArticleWorkflow:
         """Extract approved article findings for the target.
 
         Args:
-            run_id: Identifier of the agentic news acquisition run.
-            target: News target the events belong to.
-            events: Tuple of persisted document events to extract findings from.
+            run_id: str: .
+            target: NewsTarget: .
+            events: tuple[DocumentEvent, ...]: .
 
         Returns:
-            Tuple of approved ``NewsArticleFinding`` objects.
+            tuple[NewsArticleFinding, ...]: .
         """
         findings: list[NewsArticleFinding] = []
         for event in events:
@@ -67,17 +70,14 @@ class ArticleWorkflow:
         """Build a derived security brief from approved findings.
 
         Args:
-            run_id: Identifier of the agentic news acquisition run.
-            target: News target the findings belong to.
-            findings: Tuple of article findings to summarize.
+            run_id: str: .
+            target: NewsTarget: .
+            findings: tuple[NewsArticleFinding, ...]: .
 
         Returns:
-            A ``NewsSecurityBrief`` if approved findings exist and the LLM produces a
-            non-empty summary, otherwise None.
+            NewsSecurityBrief | None: .
         """
-        approved = tuple(
-            finding for finding in findings if finding.review_status == "approved"
-        )
+        approved = tuple(finding for finding in findings if finding.review_status == "approved")
         if not approved:
             return None
         prompt = build_brief_prompt(target, approved)
@@ -115,7 +115,16 @@ class ArticleWorkflow:
         target: NewsTarget,
         event: DocumentEvent,
     ) -> NewsArticleFinding | None:
-        """Extract and review one event."""
+        """Extract and review one event.
+
+        Args:
+            run_id: str: .
+            target: NewsTarget: .
+            event: DocumentEvent: .
+
+        Returns:
+            NewsArticleFinding | None: .
+        """
         revision_notes: tuple[str, ...] = ()
         draft: dict[str, Any] = {}
         writer_prompt_hash = ""
@@ -177,19 +186,43 @@ class ArticleWorkflow:
 
 
 def _finding_id(run_id: str, security_id: str, event_id: str) -> str:
-    """Return a stable article finding id."""
+    """Return a stable article finding id.
+
+    Args:
+        run_id: str: .
+        security_id: str: .
+        event_id: str: .
+
+    Returns:
+        str: .
+    """
     digest = hashlib.sha256(f"{run_id}|{security_id}|{event_id}".encode()).hexdigest()
     return f"naf_{digest[:24]}"
 
 
 def _brief_id(run_id: str, security_id: str) -> str:
-    """Return a stable security brief id."""
+    """Return a stable security brief id.
+
+    Args:
+        run_id: str: .
+        security_id: str: .
+
+    Returns:
+        str: .
+    """
     digest = hashlib.sha256(f"{run_id}|{security_id}|brief".encode()).hexdigest()
     return f"nsb_{digest[:24]}"
 
 
 def _key_points(output: dict[str, Any]) -> tuple[str, ...]:
-    """Return cleaned key points from model output."""
+    """Return cleaned key points from model output.
+
+    Args:
+        output: dict[str, Any]: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     return _string_tuple(output.get("key_points", ()))
 
 
@@ -197,11 +230,17 @@ def _local_review_notes(
     event: DocumentEvent,
     draft: dict[str, Any],
 ) -> tuple[str, ...]:
-    """Return deterministic article-review issues independent of LLM judgment."""
+    """Return deterministic article-review issues independent of LLM judgment.
+
+    Args:
+        event: DocumentEvent: .
+        draft: dict[str, Any]: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     notes: list[str] = []
-    cited_spans = tuple(
-        item for item in draft.get("cited_spans", ()) if isinstance(item, dict)
-    )
+    cited_spans = tuple(item for item in draft.get("cited_spans", ()) if isinstance(item, dict))
     if not cited_spans:
         notes.append("missing cited_spans")
         return tuple(notes)
@@ -214,7 +253,15 @@ def _local_review_notes(
 
 
 def _citation_span_issue(content: str, span: dict[str, Any]) -> str:
-    """Return a stable issue for an invalid citation span, or empty string."""
+    """Return a stable issue for an invalid citation span, or empty string.
+
+    Args:
+        content: str: .
+        span: dict[str, Any]: .
+
+    Returns:
+        str: .
+    """
     start = span.get("start")
     end = span.get("end")
     if not isinstance(start, int) or not isinstance(end, int):
@@ -228,12 +275,26 @@ def _citation_span_issue(content: str, span: dict[str, Any]) -> str:
 
 
 def _string_tuple(value: Any) -> tuple[str, ...]:
-    """Normalize iterable output into strings."""
+    """Normalize iterable output into strings.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     return tuple(str(item).strip() for item in value or () if str(item).strip())
 
 
 def _optional_str(value: Any) -> str | None:
-    """Return a stripped string or None."""
+    """Return a stripped string or None.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        str | None: .
+    """
     if value is None:
         return None
     normalized = str(value).strip()
@@ -241,7 +302,14 @@ def _optional_str(value: Any) -> str | None:
 
 
 def _hash_json(value: Any) -> str:
-    """Hash a JSON-serializable value."""
+    """Hash a JSON-serializable value.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        str: .
+    """
     encoded = json.dumps(
         value,
         sort_keys=True,

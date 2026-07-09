@@ -18,7 +18,7 @@ def test_score_theme_components_rewards_strength_and_penalizes_drawdown() -> Non
     """Verify theme score combines relative strength, volume, breadth, and drawdown.
 
     Returns:
-        None.
+        None: .
     """
     strong = score_theme_components(
         relative_strength_20d=0.16,
@@ -43,7 +43,7 @@ def test_confirmation_states_adds_entry_and_exit_hysteresis() -> None:
     """Verify theme confirmation requires two hot periods and two weak periods to exit.
 
     Returns:
-        None.
+        None: .
     """
     states = confirmation_states(
         [

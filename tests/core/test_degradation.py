@@ -11,13 +11,32 @@ from margin.core.provider import CallResult
 
 
 def test_degradation_returns_fallback_on_failure():
-    """Test that degradation returns the fallback result on primary failure."""
+    """Test that degradation returns the fallback result on primary failure.
+
+    Returns:
+        Any: .
+    """
+
     def failing(**_):
-        """Raise an error simulating a provider outage."""
+        """Raise an error simulating a provider outage.
+
+        Args:
+            **_: Any: .
+
+        Returns:
+            Any: .
+        """
         raise RuntimeError("provider down")
 
     def fallback(**_):
-        """Return a successful fallback CallResult."""
+        """Return a successful fallback CallResult.
+
+        Args:
+            **_: Any: .
+
+        Returns:
+            Any: .
+        """
         return CallResult(provider_name="x", provider_version="1", success=True, data="fallback")
 
     result = call_with_fallback(failing, fallback, trace_id="t1", metrics_label="x")
@@ -26,13 +45,32 @@ def test_degradation_returns_fallback_on_failure():
 
 
 def test_degradation_returns_primary_when_successful():
-    """Test that degradation returns the primary result when it succeeds."""
+    """Test that degradation returns the primary result when it succeeds.
+
+    Returns:
+        Any: .
+    """
+
     def primary(**_):
-        """Return a successful primary CallResult."""
+        """Return a successful primary CallResult.
+
+        Args:
+            **_: Any: .
+
+        Returns:
+            Any: .
+        """
         return CallResult(provider_name="x", provider_version="1", success=True, data="primary")
 
     def fallback(**_):
-        """Return a successful fallback CallResult."""
+        """Return a successful fallback CallResult.
+
+        Args:
+            **_: Any: .
+
+        Returns:
+            Any: .
+        """
         return CallResult(provider_name="x", provider_version="1", success=True, data="fallback")
 
     result = call_with_fallback(primary, fallback, trace_id="t1", metrics_label="x")
@@ -41,13 +79,32 @@ def test_degradation_returns_primary_when_successful():
 
 
 def test_degradation_returns_failure_when_fallback_also_fails():
-    """Test that degradation returns a failure when both primary and fallback fail."""
+    """Test that degradation returns a failure when both primary and fallback fail.
+
+    Returns:
+        Any: .
+    """
+
     def failing(**_):
-        """Raise an error simulating a primary provider outage."""
+        """Raise an error simulating a primary provider outage.
+
+        Args:
+            **_: Any: .
+
+        Returns:
+            Any: .
+        """
         raise RuntimeError("provider down")
 
     def fallback(**_):
-        """Raise an error simulating a fallback provider outage."""
+        """Raise an error simulating a fallback provider outage.
+
+        Args:
+            **_: Any: .
+
+        Returns:
+            Any: .
+        """
         raise RuntimeError("fallback down")
 
     result = call_with_fallback(failing, fallback, trace_id="t1", metrics_label="x")

@@ -20,16 +20,7 @@ from margin.news.models import utc_now
 
 
 class TavilyErrorCode(StrEnum):
-    """Stable token-safe Tavily error codes.
-
-    Attributes:
-        RATE_LIMITED: Provider returned HTTP 429 (rate limit exceeded).
-        BUDGET_EXCEEDED: Provider returned HTTP 432 (key or plan usage limit exceeded).
-        PAYGO_LIMIT_EXCEEDED: Provider returned HTTP 433 (pay-as-you-go limit exceeded).
-        AUTH_FAILED: Provider returned HTTP 401/403 (authentication failed).
-        SERVER_ERROR: Provider returned HTTP 5xx (server error).
-        BAD_RESPONSE: Provider returned a malformed or unexpected response.
-    """
+    """Stable token-safe Tavily error codes.."""
 
     RATE_LIMITED = "provider_429"
     BUDGET_EXCEEDED = "provider_budget_exceeded"
@@ -40,7 +31,7 @@ class TavilyErrorCode(StrEnum):
 
 
 class TavilyProviderError(RuntimeError):
-    """Token-safe Tavily provider error."""
+    """Token-safe Tavily provider error.."""
 
     def __init__(
         self,
@@ -53,10 +44,13 @@ class TavilyProviderError(RuntimeError):
         """Initialize the error.
 
         Args:
-            code: Stable error code.
-            retryable: Whether the error is retryable.
-            message: Human-readable error message.
-            retry_after_seconds: Optional seconds to wait before retrying.
+            code: TavilyErrorCode: .
+            retryable: bool: .
+            message: str: .
+            retry_after_seconds: int | None: .
+
+        Returns:
+            None: .
         """
         self.provider_name = "tavily_websearch"
         self.code = code
@@ -66,17 +60,7 @@ class TavilyProviderError(RuntimeError):
 
 
 class TavilySearchAdapter:
-    """Adapter mapping Tavily HTTP responses into Margin raw search results.
-
-    Performs synchronous HTTP calls to the Tavily search endpoint. Results are returned as
-    dictionaries compatible with the ``WebSearchProvider.search_func`` contract.
-
-    Attributes:
-        _api_key: Tavily API key used for authentication.
-        _client: HTTP client used to make requests.
-        _base_url: Tavily search endpoint URL.
-        _timeout: Request timeout in seconds.
-    """
+    """Adapter mapping Tavily HTTP responses into Margin raw search results.."""
 
     def __init__(
         self,
@@ -89,13 +73,13 @@ class TavilySearchAdapter:
         """Initialize the Tavily search adapter.
 
         Args:
-            api_key: Tavily API key resolved by the caller.
-            client: Optional pre-configured HTTP client. Defaults to a new ``httpx.Client``.
-            base_url: Tavily search endpoint URL.
-            timeout: Request timeout in seconds.
+            api_key: str | None: .
+            client: Any | None: .
+            base_url: str: .
+            timeout: float: .
 
-        Raises:
-            RuntimeError: If no API key is available.
+        Returns:
+            None: .
         """
         self._api_key = api_key
         if not self._api_key:
@@ -121,7 +105,7 @@ class TavilySearchAdapter:
         """Return the provider descriptor.
 
         Returns:
-            ``ProviderDescriptor`` with metadata, capabilities, and secret refs.
+            ProviderDescriptor: .
         """
         return self._descriptor
 
@@ -129,16 +113,11 @@ class TavilySearchAdapter:
         """Execute a Tavily search and return raw result dictionaries.
 
         Args:
-            query: Search query string.
-            max_results: Maximum number of results to return.
+            query: str: .
+            max_results: int: .
 
         Returns:
-            List of raw search result dictionaries containing ``url``, ``title``, and
-            ``snippet``.
-
-        Raises:
-            RuntimeError: If the request fails, the rate limit is exceeded, or the response
-                is malformed.
+            list[dict[str, str]]: .
         """
         response = self._client.post(
             self._base_url,
@@ -223,8 +202,7 @@ class TavilySearchAdapter:
         """Run a real lightweight Tavily search health check.
 
         Returns:
-            ``HealthCheckResult`` with HEALTHY status if the search succeeds, or UNHEALTHY
-            with the error message otherwise.
+            HealthCheckResult: .
         """
         try:
             self.search("healthcheck", max_results=1)

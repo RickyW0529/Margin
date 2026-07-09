@@ -25,33 +25,53 @@ from margin.strategy.service import StrategyService
 
 @dataclass(frozen=True)
 class AppContainer:
-    """Process-level container for shared database-backed runtime services."""
+    """Process-level container for shared database-backed runtime services.."""
 
     settings: MarginSettings
 
     @cached_property
     def engine(self) -> Engine:
-        """Return the shared SQLAlchemy engine."""
+        """Return the shared SQLAlchemy engine.
+
+        Returns:
+            Engine: .
+        """
         return create_database_engine(DatabaseSettings.from_settings(self.settings))
 
     @cached_property
     def session_factory(self) -> SessionFactory:
-        """Return the shared SQLAlchemy session factory."""
+        """Return the shared SQLAlchemy session factory.
+
+        Returns:
+            SessionFactory: .
+        """
         return create_session_factory(self.engine)
 
     @cached_property
     def strategy_repository(self) -> SQLAlchemyStrategyRepository:
-        """Return the versioned strategy configuration repository."""
+        """Return the versioned strategy configuration repository.
+
+        Returns:
+            SQLAlchemyStrategyRepository: .
+        """
         return SQLAlchemyStrategyRepository(self.session_factory)
 
     @cached_property
     def strategy_service(self) -> StrategyService:
-        """Return the versioned strategy configuration service."""
+        """Return the versioned strategy configuration service.
+
+        Returns:
+            StrategyService: .
+        """
         return StrategyService(repository=self.strategy_repository)
 
     @cached_property
     def secret_store(self) -> SecretStore:
-        """Return the encrypted provider Secret Store."""
+        """Return the encrypted provider Secret Store.
+
+        Returns:
+            SecretStore: .
+        """
         return SecretStore(
             SQLAlchemySecretRepository(self.session_factory),
             master_key=self.settings.secret_master_key.get_secret_value(),
@@ -60,7 +80,11 @@ class AppContainer:
 
     @cached_property
     def provider_runtime_factory(self) -> ProviderRuntimeFactory:
-        """Return the active-config Provider runtime factory."""
+        """Return the active-config Provider runtime factory.
+
+        Returns:
+            ProviderRuntimeFactory: .
+        """
         return ProviderRuntimeFactory(
             ProviderRuntimeResolver(
                 self.strategy_repository,
@@ -69,6 +93,10 @@ class AppContainer:
         )
 
     def dispose(self) -> None:
-        """Dispose the shared engine when a process shuts down."""
+        """Dispose the shared engine when a process shuts down.
+
+        Returns:
+            None: .
+        """
         if "engine" in self.__dict__:
             self.engine.dispose()

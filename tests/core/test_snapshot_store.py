@@ -11,7 +11,14 @@ from scripts.snapshot_store import main as snapshot_store_main
 
 
 def test_snapshot_store_writes_and_reads(tmp_path):
-    """Test that the snapshot store writes and reads payloads correctly."""
+    """Test that the snapshot store writes and reads payloads correctly.
+
+    Args:
+        tmp_path: Any: .
+
+    Returns:
+        Any: .
+    """
     store = FileSnapshotStore(base_path=tmp_path)
     entry = store.write(
         object_type="research_report",
@@ -25,7 +32,15 @@ def test_snapshot_store_writes_and_reads(tmp_path):
 
 
 def test_snapshot_store_cli_default_base_path_is_project_relative(tmp_path, monkeypatch):
-    """Test that the snapshot store CLI default base path is project-relative."""
+    """Test that the snapshot store CLI default base path is project-relative.
+
+    Args:
+        tmp_path: Any: .
+        monkeypatch: Any: .
+
+    Returns:
+        Any: .
+    """
     monkeypatch.chdir(tmp_path)
     exit_code = snapshot_store_main(
         [

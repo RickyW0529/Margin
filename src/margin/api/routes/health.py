@@ -40,7 +40,7 @@ def health() -> dict[str, str]:
     """Simple liveness probe.
 
     Returns:
-        A dictionary with ``status`` set to ``"ok"``.
+        dict[str, str]: .
     """
     return {"status": "ok"}
 
@@ -48,8 +48,8 @@ def health() -> dict[str, str]:
 def _database_health() -> tuple[bool, str | None]:
     """Check database connectivity and always release the temporary engine.
 
-    Creating a dedicated engine for the probe avoids coupling health status to
-    the lifespan-managed application engine and guarantees connection cleanup.
+    Returns:
+        tuple[bool, str | None]: .
     """
     settings = get_settings()
     engine: Engine | None = None
@@ -67,14 +67,22 @@ def _database_health() -> tuple[bool, str | None]:
 
 
 def _alembic_head() -> str:
-    """alembic head."""
+    """alembic head.
+
+    Returns:
+        str: .
+    """
     config = Config("alembic.ini")
     script = ScriptDirectory.from_config(config)
     return script.get_current_head()
 
 
 def _ready_checks() -> dict[str, dict[str, object]]:
-    """ready checks."""
+    """ready checks.
+
+    Returns:
+        dict[str, dict[str, object]]: .
+    """
     settings = get_settings()
     checks: dict[str, dict[str, object]] = {
         "database": {"status": "failed"},
@@ -96,9 +104,7 @@ def _ready_checks() -> dict[str, dict[str, object]]:
                 "current": current,
                 "head": head,
             }
-            outbox_pending = int(
-                conn.execute(outbox_pending_count()).scalar() or 0
-            )
+            outbox_pending = int(conn.execute(outbox_pending_count()).scalar() or 0)
             checks["outbox"] = {
                 "status": "ok",
                 "pending_count": outbox_pending,
@@ -110,9 +116,7 @@ def _ready_checks() -> dict[str, dict[str, object]]:
                 "status": "ok",
                 "active_count": active_provider_configs,
             }
-            retryable_steps = int(
-                conn.execute(retryable_step_count()).scalar() or 0
-            )
+            retryable_steps = int(conn.execute(retryable_step_count()).scalar() or 0)
             checks["worker"] = {
                 "status": "ok",
                 "ready_step_count": retryable_steps,
@@ -127,7 +131,11 @@ def _ready_checks() -> dict[str, dict[str, object]]:
 
 
 def _queue_counts() -> dict[str, int]:
-    """queue counts."""
+    """queue counts.
+
+    Returns:
+        dict[str, int]: .
+    """
     settings = get_settings()
     engine: Engine | None = None
     counts = {
@@ -146,9 +154,7 @@ def _queue_counts() -> dict[str, int]:
             counts["waiting_rate_limit_count"] = int(
                 conn.execute(probes["waiting_rate_limit"]).scalar() or 0
             )
-            counts["retry_queue_count"] = int(
-                conn.execute(probes["retry_queue"]).scalar() or 0
-            )
+            counts["retry_queue_count"] = int(conn.execute(probes["retry_queue"]).scalar() or 0)
             counts["outbox_pending_count"] = int(
                 conn.execute(probes["outbox_pending"]).scalar() or 0
             )
@@ -165,8 +171,7 @@ def ready() -> JSONResponse:
     """Readiness probe: DB, migration head, outbox, config, and worker tables.
 
     Returns:
-        A JSONResponse with ``status`` set to ``"ready"`` (200) or
-        ``"not_ready"`` (503) together with per-check details.
+        JSONResponse: .
     """
     checks = _ready_checks()
     ready_status = all(check["status"] == "ok" for check in checks.values())
@@ -186,8 +191,7 @@ def degraded() -> dict[str, object]:
     """Return true if database is not ready or any provider is degraded.
 
     Returns:
-        A dictionary with ``degraded`` flag, provider details, queue counts,
-        and service metadata.
+        dict[str, object]: .
     """
     settings = get_settings()
     degraded_providers: list[HealthCheckResult] = []
@@ -202,9 +206,7 @@ def degraded() -> dict[str, object]:
             )
         )
     counts = _queue_counts()
-    degraded_status = len(degraded_providers) > 0 or any(
-        value > 0 for value in counts.values()
-    )
+    degraded_status = len(degraded_providers) > 0 or any(value > 0 for value in counts.values())
     return {
         "degraded": degraded_status,
         "degraded_count": len(degraded_providers),
@@ -219,7 +221,14 @@ def degraded() -> dict[str, object]:
 def capabilities(
     repository: StrategyRepositoryDep,
 ) -> dict[str, object]:
-    """Return feature availability derived from active local provider config."""
+    """Return feature availability derived from active local provider config.
+
+    Args:
+        repository: StrategyRepositoryDep: .
+
+    Returns:
+        dict[str, object]: .
+    """
     statuses = build_feature_capabilities(
         tuple(repository.list_active_provider_configs("local-admin"))
     )

@@ -41,16 +41,16 @@ def _make_evidence(
     """Build a piece of evidence for use in validator tests.
 
     Args:
-        source_level: Source reliability level.
-        doc_type: Document type classification.
-        source_url: URL or file path for the source.
-        page: Page number in the source document.
-        section: Section or heading name in the source.
-        available_at: Time when the evidence became available; defaults to PUB_AT.
-        snapshot_id: Optional snapshot identifier for web sources.
+        source_level: Any: .
+        doc_type: Any: .
+        source_url: Any: .
+        page: Any: .
+        section: Any: .
+        available_at: Any: .
+        snapshot_id: Any: .
 
     Returns:
-        An Evidence instance built from the generated chunk.
+        Any: .
     """
     chunk = make_chunk(
         document_id="doc_001",
@@ -74,11 +74,11 @@ def _make_passing_claim(evidence_id, confidence=0.85):
     """Build a fact claim that should pass validation by default.
 
     Args:
-        evidence_id: Identifier of the evidence backing the claim.
-        confidence: Initial confidence score for the claim.
+        evidence_id: Any: .
+        confidence: Any: .
 
     Returns:
-        A Claim instance configured as a cash-flow improvement fact.
+        Any: .
     """
     return make_claim(
         statement="现金流改善",
@@ -90,10 +90,14 @@ def _make_passing_claim(evidence_id, confidence=0.85):
 
 
 class TestValidateClaimPass:
-    """Tests for claims that are expected to pass validation."""
+    """Tests for claims that are expected to pass validation.."""
 
     def test_valid_claim_passes(self):
-        """Verify a valid claim with L1 evidence passes and preserves capped confidence."""
+        """Verify a valid claim with L1 evidence passes and preserves capped confidence.
+
+        Returns:
+            Any: .
+        """
         ev = _make_evidence()
         claim = _make_passing_claim(ev.evidence_id)
         validator = CitationValidator()
@@ -104,7 +108,11 @@ class TestValidateClaimPass:
         assert result.capped_confidence == 0.85
 
     def test_multiple_evidences_pass(self):
-        """Verify a claim backed by multiple valid evidences passes validation."""
+        """Verify a claim backed by multiple valid evidences passes validation.
+
+        Returns:
+            Any: .
+        """
         ev1 = _make_evidence()
         ev2 = _make_evidence(source_level=SourceLevel.L2, source_url="https://other.com")
         ev2 = ev2.model_copy(update={"evidence_id": "ev_other"})
@@ -123,10 +131,14 @@ class TestValidateClaimPass:
 
 
 class TestValidateClaimFail:
-    """Tests for claims that are expected to fail validation."""
+    """Tests for claims that are expected to fail validation.."""
 
     def test_no_evidence_fails(self):
-        """Verify a claim without evidence fails and is flagged for suppression."""
+        """Verify a claim without evidence fails and is flagged for suppression.
+
+        Returns:
+            Any: .
+        """
         claim = make_claim(statement="test", confidence=0.8)
         validator = CitationValidator()
         result = validator.validate_claim(claim, {}, DECISION_AT)
@@ -135,7 +147,11 @@ class TestValidateClaimFail:
         assert result.should_suppress is True
 
     def test_evidence_not_found_fails(self):
-        """Verify a claim referencing missing evidence fails validation."""
+        """Verify a claim referencing missing evidence fails validation.
+
+        Returns:
+            Any: .
+        """
         claim = make_claim(statement="test", evidence_ids=["nonexistent"], confidence=0.8)
         validator = CitationValidator()
         result = validator.validate_claim(claim, {}, DECISION_AT)
@@ -143,7 +159,11 @@ class TestValidateClaimFail:
         assert result.fail_reason == FailReason.EVIDENCE_NOT_FOUND
 
     def test_l5_only_fails(self):
-        """Verify a claim backed only by L5 evidence fails with L5_ONLY."""
+        """Verify a claim backed only by L5 evidence fails with L5_ONLY.
+
+        Returns:
+            Any: .
+        """
         ev = _make_evidence(source_level=SourceLevel.L5)
         claim = _make_passing_claim(ev.evidence_id)
         validator = CitationValidator()
@@ -152,7 +172,11 @@ class TestValidateClaimFail:
         assert result.fail_reason == FailReason.L5_ONLY
 
     def test_l4_without_cross_validation_fails(self):
-        """Verify a single L4 news claim fails without cross-validation."""
+        """Verify a single L4 news claim fails without cross-validation.
+
+        Returns:
+            Any: .
+        """
         ev = _make_evidence(
             source_level=SourceLevel.L4,
             doc_type=DocType.NEWS,
@@ -165,7 +189,11 @@ class TestValidateClaimFail:
         assert result.fail_reason == FailReason.L4_NO_CROSS_VALIDATION
 
     def test_not_locatable_fails(self):
-        """Verify a non-locatable claim fails or is abstained."""
+        """Verify a non-locatable claim fails or is abstained.
+
+        Returns:
+            Any: .
+        """
         ev = _make_evidence(source_url=None, page=None, section=None)
         claim = _make_passing_claim(ev.evidence_id)
         validator = CitationValidator()
@@ -173,7 +201,11 @@ class TestValidateClaimFail:
         assert result.status in (ValidationStatus.FAIL, ValidationStatus.ABSTAINED)
 
     def test_lookahead_fails(self):
-        """Verify a claim using future evidence fails or is abstained."""
+        """Verify a claim using future evidence fails or is abstained.
+
+        Returns:
+            Any: .
+        """
         ev = _make_evidence(available_at=datetime(2026, 6, 20, tzinfo=UTC))
         claim = _make_passing_claim(ev.evidence_id)
         validator = CitationValidator()
@@ -182,10 +214,14 @@ class TestValidateClaimFail:
 
 
 class TestValidateClaimAbstained:
-    """Tests for claims that should be abstained rather than fail."""
+    """Tests for claims that should be abstained rather than fail.."""
 
     def test_insufficient_evidence_abstained(self):
-        """Verify a non-locatable cited evidence item fails the claim."""
+        """Verify a non-locatable cited evidence item fails the claim.
+
+        Returns:
+            Any: .
+        """
         ev = _make_evidence(source_url=None, page=None, section=None)
         claim = _make_passing_claim(ev.evidence_id)
         validator = CitationValidator(min_evidence_count=1)
@@ -195,7 +231,11 @@ class TestValidateClaimAbstained:
         assert result.should_suppress is True
 
     def test_all_evidence_lookahead_abstained(self):
-        """Verify lookahead evidence fails the claim with a specific reason."""
+        """Verify lookahead evidence fails the claim with a specific reason.
+
+        Returns:
+            Any: .
+        """
         ev = _make_evidence(available_at=datetime(2026, 6, 20, tzinfo=UTC))
         claim = _make_passing_claim(ev.evidence_id)
         validator = CitationValidator()
@@ -205,10 +245,14 @@ class TestValidateClaimAbstained:
 
 
 class TestConflictHandling:
-    """Tests for conflict-based confidence capping."""
+    """Tests for conflict-based confidence capping.."""
 
     def test_conflict_caps_confidence(self):
-        """Verify a medium conflict lowers the claim confidence cap."""
+        """Verify a medium conflict lowers the claim confidence cap.
+
+        Returns:
+            Any: .
+        """
         ev = _make_evidence()
         conflict = make_conflict(
             "clm_1", [ev.evidence_id], "test conflict", ConflictSeverity.MEDIUM
@@ -226,11 +270,13 @@ class TestConflictHandling:
         assert result.original_confidence == 0.9
 
     def test_high_conflict_caps_lower(self):
-        """Verify a high conflict lowers the claim confidence cap further."""
+        """Verify a high conflict lowers the claim confidence cap further.
+
+        Returns:
+            Any: .
+        """
         ev = _make_evidence()
-        conflict = make_conflict(
-            "clm_1", [ev.evidence_id], "high conflict", ConflictSeverity.HIGH
-        )
+        conflict = make_conflict("clm_1", [ev.evidence_id], "high conflict", ConflictSeverity.HIGH)
         claim = make_claim(
             statement="现金流改善",
             evidence_ids=[ev.evidence_id],
@@ -244,17 +290,19 @@ class TestConflictHandling:
 
 
 class TestValidateBatch:
-    """Tests for validating multiple claims in a single batch."""
+    """Tests for validating multiple claims in a single batch.."""
 
     def test_mixed_results(self):
-        """Verify validate_batch counts passes and failures across mixed claims."""
+        """Verify validate_batch counts passes and failures across mixed claims.
+
+        Returns:
+            Any: .
+        """
         ev_good = _make_evidence()
         ev_l5 = _make_evidence(source_level=SourceLevel.L5)
 
         claim_pass = _make_passing_claim(ev_good.evidence_id)
-        claim_fail = make_claim(
-            statement="test", evidence_ids=[ev_l5.evidence_id], confidence=0.8
-        )
+        claim_fail = make_claim(statement="test", evidence_ids=[ev_l5.evidence_id], confidence=0.8)
         claim_no_ev = make_claim(statement="no ev", confidence=0.7)
 
         validator = CitationValidator()
@@ -270,56 +318,68 @@ class TestValidateBatch:
         assert report.abstained == 0
 
     def test_empty_batch(self):
-        """Verify validate_batch handles an empty claim list correctly."""
+        """Verify validate_batch handles an empty claim list correctly.
+
+        Returns:
+            Any: .
+        """
         validator = CitationValidator()
         report = validator.validate_batch([], {}, DECISION_AT)
         assert report.total == 0
         assert report.should_suppress_research is False
 
     def test_should_suppress_on_abstained(self):
-        """Verify an abstained claim triggers research suppression in the report."""
+        """Verify an abstained claim triggers research suppression in the report.
+
+        Returns:
+            Any: .
+        """
         ev_bad = _make_evidence(source_url=None, page=None, section=None)
         claim = _make_passing_claim(ev_bad.evidence_id, confidence=0.5)
         validator = CitationValidator()
-        report = validator.validate_batch(
-            [claim], {ev_bad.evidence_id: ev_bad}, DECISION_AT
-        )
+        report = validator.validate_batch([claim], {ev_bad.evidence_id: ev_bad}, DECISION_AT)
         assert report.should_suppress_research is True
 
     def test_should_suppress_on_high_conf_fail(self):
-        """Verify a high-confidence failure triggers research suppression."""
+        """Verify a high-confidence failure triggers research suppression.
+
+        Returns:
+            Any: .
+        """
         ev_l5 = _make_evidence(source_level=SourceLevel.L5)
         claim = _make_passing_claim(ev_l5.evidence_id, confidence=0.85)
         validator = CitationValidator()
-        report = validator.validate_batch(
-            [claim], {ev_l5.evidence_id: ev_l5}, DECISION_AT
-        )
+        report = validator.validate_batch([claim], {ev_l5.evidence_id: ev_l5}, DECISION_AT)
         assert report.should_suppress_research is True
 
     def test_no_suppress_when_all_pass(self):
-        """Verify no research suppression is triggered when all claims pass."""
+        """Verify no research suppression is triggered when all claims pass.
+
+        Returns:
+            Any: .
+        """
         ev = _make_evidence()
         claim = _make_passing_claim(ev.evidence_id, confidence=0.6)
         validator = CitationValidator()
-        report = validator.validate_batch(
-            [claim], {ev.evidence_id: ev}, DECISION_AT
-        )
+        report = validator.validate_batch([claim], {ev.evidence_id: ev}, DECISION_AT)
         assert report.should_suppress_research is False
 
 
 class TestValidationAuditor:
-    """Tests for the validation auditor and its record keeping."""
+    """Tests for the validation auditor and its record keeping.."""
 
     def test_log_and_records(self):
-        """Verify logging a passing result updates auditor counts and records."""
+        """Verify logging a passing result updates auditor counts and records.
+
+        Returns:
+            Any: .
+        """
         ev = _make_evidence()
         claim = _make_passing_claim(ev.evidence_id)
         validator = CitationValidator()
         auditor = ValidationAuditor()
 
-        report = validator.validate_batch(
-            [claim], {ev.evidence_id: ev}, DECISION_AT
-        )
+        report = validator.validate_batch([claim], {ev.evidence_id: ev}, DECISION_AT)
         for result in report.results:
             auditor.log(result)
 
@@ -328,7 +388,11 @@ class TestValidationAuditor:
         assert auditor.fail_count == 0
 
     def test_mixed_counts(self):
-        """Verify the auditor tallies pass and fail counts correctly."""
+        """Verify the auditor tallies pass and fail counts correctly.
+
+        Returns:
+            Any: .
+        """
         ev_good = _make_evidence()
         ev_l5 = _make_evidence(source_level=SourceLevel.L5)
 
@@ -349,7 +413,11 @@ class TestValidationAuditor:
         assert auditor.abstained_count == 0
 
     def test_audit_record_frozen(self):
-        """Verify audit records are immutable after creation."""
+        """Verify audit records are immutable after creation.
+
+        Returns:
+            Any: .
+        """
         ev = _make_evidence()
         claim = _make_passing_claim(ev.evidence_id)
         validator = CitationValidator()
@@ -362,22 +430,28 @@ class TestValidationAuditor:
 
 
 class TestValidateClaimsWithAudit:
-    """Tests for the combined validation-plus-audit entry point."""
+    """Tests for the combined validation-plus-audit entry point.."""
 
     def test_combined_flow(self):
-        """Verify validate_claims_with_audit returns both a report and a populated auditor."""
+        """Verify validate_claims_with_audit returns both a report and a populated auditor.
+
+        Returns:
+            Any: .
+        """
         ev = _make_evidence()
         claim = _make_passing_claim(ev.evidence_id)
 
-        report, auditor = validate_claims_with_audit(
-            [claim], {ev.evidence_id: ev}, DECISION_AT
-        )
+        report, auditor = validate_claims_with_audit([claim], {ev.evidence_id: ev}, DECISION_AT)
 
         assert report.passed == 1
         assert len(auditor.records) == 1
 
     def test_abstained_suppresses(self):
-        """Verify validate_claims_with_audit reports suppression for abstained claims."""
+        """Verify validate_claims_with_audit reports suppression for abstained claims.
+
+        Returns:
+            Any: .
+        """
         ev_bad = _make_evidence(source_url=None, page=None, section=None)
         claim = _make_passing_claim(ev_bad.evidence_id)
 
@@ -390,10 +464,14 @@ class TestValidateClaimsWithAudit:
 
 
 class TestValidationResult:
-    """Tests for the ValidationResult data object properties."""
+    """Tests for the ValidationResult data object properties.."""
 
     def test_should_suppress_fail(self):
-        """Verify should_suppress is True for a failed validation result."""
+        """Verify should_suppress is True for a failed validation result.
+
+        Returns:
+            Any: .
+        """
         result = ValidationResult(
             claim_id="c1",
             status=ValidationStatus.FAIL,
@@ -403,7 +481,11 @@ class TestValidationResult:
         assert result.should_suppress is True
 
     def test_should_suppress_abstained(self):
-        """Verify should_suppress is True for an abstained validation result."""
+        """Verify should_suppress is True for an abstained validation result.
+
+        Returns:
+            Any: .
+        """
         result = ValidationResult(
             claim_id="c1",
             status=ValidationStatus.ABSTAINED,
@@ -412,7 +494,11 @@ class TestValidationResult:
         assert result.should_suppress is True
 
     def test_should_not_suppress_pass(self):
-        """Verify should_suppress is False for a passed validation result."""
+        """Verify should_suppress is False for a passed validation result.
+
+        Returns:
+            Any: .
+        """
         result = ValidationResult(
             claim_id="c1",
             status=ValidationStatus.PASS,
@@ -423,7 +509,11 @@ class TestValidationResult:
         assert result.should_suppress is False
 
     def test_frozen(self):
-        """Verify ValidationResult instances are immutable after creation."""
+        """Verify ValidationResult instances are immutable after creation.
+
+        Returns:
+            Any: .
+        """
         result = ValidationResult(
             claim_id="c1",
             status=ValidationStatus.PASS,

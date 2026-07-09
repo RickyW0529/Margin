@@ -45,10 +45,10 @@ def test_postgres_repository_persists_invalid_quant_input_snapshot(database_url:
     """Verify the PostgreSQL repository persists an invalid quant input snapshot.
 
     Args:
-        database_url: PostgreSQL connection URL for the isolated test database.
+        database_url: str: .
 
     Returns:
-        None.
+        None: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -111,10 +111,10 @@ def test_postgres_repository_persists_effective_assessment_pointer(
     """Verify the PostgreSQL repository persists an effective assessment pointer.
 
     Args:
-        database_url: PostgreSQL connection URL for the isolated test database.
+        database_url: str: .
 
     Returns:
-        None.
+        None: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -153,10 +153,10 @@ def test_postgres_repository_atomically_publishes_assessment_lineage(
     """Verify assessment, evidence, and pointer publication is replay-idempotent.
 
     Args:
-        database_url: PostgreSQL connection URL for the isolated test database.
+        database_url: str: .
 
     Returns:
-        None.
+        None: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -167,12 +167,8 @@ def test_postgres_repository_atomically_publishes_assessment_lineage(
         session.query(ValuationAssessmentEvidenceRow).filter_by(
             assessment_id=assessment_id
         ).delete()
-        session.query(EffectiveAssessmentPointerRow).filter_by(
-            pointer_id=pointer_id
-        ).delete()
-        session.query(ValuationAssessmentRow).filter_by(
-            assessment_id=assessment_id
-        ).delete()
+        session.query(EffectiveAssessmentPointerRow).filter_by(pointer_id=pointer_id).delete()
+        session.query(ValuationAssessmentRow).filter_by(assessment_id=assessment_id).delete()
 
     repository = SQLAlchemyValuationDiscoveryRepository(session_factory)
     assessment = ValuationAssessment(
@@ -216,25 +212,22 @@ def test_postgres_repository_atomically_publishes_assessment_lineage(
         )
 
         assert repository.get_valuation_assessment(assessment_id) == assessment
-        assert repository.list_valuation_assessment_evidence(
-            assessment_id
-        ) == [edge]
+        assert repository.list_valuation_assessment_evidence(assessment_id) == [edge]
         assert pointer in repository.list_effective_assessment_pointers()
-        assert repository.count_effective_assessments(
-            scope_version_id="scope-v1",
-            as_of=datetime(2026, 6, 23, tzinfo=UTC),
-        ) >= 1
+        assert (
+            repository.count_effective_assessments(
+                scope_version_id="scope-v1",
+                as_of=datetime(2026, 6, 23, tzinfo=UTC),
+            )
+            >= 1
+        )
     finally:
         with session_factory.begin() as session:
             session.query(ValuationAssessmentEvidenceRow).filter_by(
                 assessment_id=assessment_id
             ).delete()
-            session.query(EffectiveAssessmentPointerRow).filter_by(
-                pointer_id=pointer_id
-            ).delete()
-            session.query(ValuationAssessmentRow).filter_by(
-                assessment_id=assessment_id
-            ).delete()
+            session.query(EffectiveAssessmentPointerRow).filter_by(pointer_id=pointer_id).delete()
+            session.query(ValuationAssessmentRow).filter_by(assessment_id=assessment_id).delete()
         engine.dispose()
 
 
@@ -242,10 +235,10 @@ def test_postgres_quant_repository_persists_run_and_results(database_url: str) -
     """Verify the PostgreSQL quant repository persists a run and its results.
 
     Args:
-        database_url: PostgreSQL connection URL for the isolated test database.
+        database_url: str: .
 
     Returns:
-        None.
+        None: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)

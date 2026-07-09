@@ -10,6 +10,11 @@ from margin.agents.runtime.audit import FinalAuditor
 
 
 def test_context_pack_omits_raw_payload_by_default() -> None:
+    """Test context_pack_omits_raw_payload_by_default.
+
+    Returns:
+        None: .
+    """
     artifact = make_context_artifact(
         artifact_id="ctx_raw_doc",
         run_id="ar_1",
@@ -42,6 +47,11 @@ def test_context_pack_omits_raw_payload_by_default() -> None:
 
 
 def test_domain_capsule_preserves_refs_from_worker_artifacts() -> None:
+    """Test domain_capsule_preserves_refs_from_worker_artifacts.
+
+    Returns:
+        None: .
+    """
     artifact = make_context_artifact(
         artifact_id="ctx_quant",
         run_id="ar_1",
@@ -79,6 +89,11 @@ def test_domain_capsule_preserves_refs_from_worker_artifacts() -> None:
 
 
 def test_final_auditor_rejects_unapproved_answer_refs() -> None:
+    """Test final_auditor_rejects_unapproved_answer_refs.
+
+    Returns:
+        None: .
+    """
     auditor = FinalAuditor()
 
     report = auditor.audit_answer_refs(

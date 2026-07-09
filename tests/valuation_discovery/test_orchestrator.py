@@ -24,7 +24,7 @@ def test_start_only_enqueues_first_step() -> None:
     """Verify HTTP-facing start persists work without executing the pipeline inline.
 
     Returns:
-        None.
+        None: .
     """
     dependencies = _dependencies()
     orchestrator = ValuationDiscoveryOrchestrator(dependencies)
@@ -41,7 +41,7 @@ def test_step_worker_runs_pipeline_in_order() -> None:
     """Verify the durable worker executes and enqueues exactly one next step at a time.
 
     Returns:
-        None.
+        None: .
     """
     dependencies = _dependencies()
     orchestrator = ValuationDiscoveryOrchestrator(dependencies)
@@ -78,7 +78,7 @@ def test_pipeline_recovers_all_artifacts_after_worker_restart() -> None:
     """Verify every step can run in a fresh process using durable output references.
 
     Returns:
-        None.
+        None: .
     """
     dependencies = _dependencies()
     orchestrator = ValuationDiscoveryOrchestrator(dependencies)
@@ -100,7 +100,11 @@ def test_pipeline_recovers_all_artifacts_after_worker_restart() -> None:
 
 
 def test_quant_run_receives_reloaded_input_after_worker_restart() -> None:
-    """Verify QUANT_RUN consumes the persisted input artifact after restart."""
+    """Verify QUANT_RUN consumes the persisted input artifact after restart.
+
+    Returns:
+        None: .
+    """
     dependencies = _dependencies()
     orchestrator = ValuationDiscoveryOrchestrator(dependencies)
     orchestrator.start(scope_version_id="scope-1", decision_at=_decision_at())
@@ -121,7 +125,7 @@ def test_missing_stage_dependency_fails_instead_of_fake_success() -> None:
     """Verify a missing production stage cannot be reported as succeeded.
 
     Returns:
-        None.
+        None: .
     """
     dependencies = _dependencies()
     dependencies.indexing_runner = None
@@ -142,7 +146,7 @@ def test_retryable_data_sync_waits_without_skipping_downstream() -> None:
     """Verify a pending external sync remains retryable and resumes on a later claim.
 
     Returns:
-        None.
+        None: .
     """
     dependencies = _dependencies()
     dependencies.data_readiness_service = _RetryingDataReadinessService()
@@ -166,7 +170,7 @@ def test_repeated_start_with_same_idempotency_key_returns_same_run() -> None:
     """Verify repeated start with the same idempotency key returns the same run.
 
     Returns:
-        None.
+        None: .
     """
     dependencies = _dependencies()
     orchestrator = ValuationDiscoveryOrchestrator(dependencies)
@@ -189,7 +193,7 @@ def test_service_start_refresh_returns_accepted_response() -> None:
     """Verify the service start_refresh returns an accepted 202 response.
 
     Returns:
-        None.
+        None: .
     """
     service = ValuationDiscoveryService(ValuationDiscoveryOrchestrator(_dependencies()))
 
@@ -205,7 +209,11 @@ def test_service_start_refresh_returns_accepted_response() -> None:
 
 
 def test_dashboard_refresh_receives_agent_run_metadata() -> None:
-    """Verify scheduled MainAgent run metadata reaches dashboard publishing."""
+    """Verify scheduled MainAgent run metadata reaches dashboard publishing.
+
+    Returns:
+        None: .
+    """
     dependencies = _dependencies()
     service = ValuationDiscoveryService(ValuationDiscoveryOrchestrator(dependencies))
     response = service.start_refresh(
@@ -219,13 +227,15 @@ def test_dashboard_refresh_receives_agent_run_metadata() -> None:
         pass
 
     assert response.run_id.startswith("vdr_")
-    assert dependencies.valuation_publisher.dashboard_kwargs["agent_run_id"] == (
-        "ar_sched_1"
-    )
+    assert dependencies.valuation_publisher.dashboard_kwargs["agent_run_id"] == ("ar_sched_1")
 
 
 def test_service_wake_refresh_worker_claims_first_pending_step() -> None:
-    """Verify API wake-up claims work without waiting for the polling tick."""
+    """Verify API wake-up claims work without waiting for the polling tick.
+
+    Returns:
+        None: .
+    """
     dependencies = _dependencies()
     service = ValuationDiscoveryService(ValuationDiscoveryOrchestrator(dependencies))
     response = service.start_refresh(
@@ -245,7 +255,11 @@ def test_service_wake_refresh_worker_claims_first_pending_step() -> None:
 
 
 def test_future_decision_at_does_not_make_step_timestamps_invalid() -> None:
-    """Verify business PIT time cannot poison worker lifecycle timestamps."""
+    """Verify business PIT time cannot poison worker lifecycle timestamps.
+
+    Returns:
+        None: .
+    """
     dependencies = _dependencies()
     orchestrator = ValuationDiscoveryOrchestrator(dependencies)
     decision_at = datetime.now(UTC) + timedelta(minutes=10)
@@ -263,12 +277,20 @@ def test_future_decision_at_does_not_make_step_timestamps_invalid() -> None:
 
 
 def _decision_at() -> datetime:
-    """Return the deterministic decision timestamp used across orchestrator tests."""
+    """Return the deterministic decision timestamp used across orchestrator tests.
+
+    Returns:
+        datetime: .
+    """
     return datetime(2026, 6, 22, tzinfo=UTC)
 
 
 def _dependencies() -> ValuationDiscoveryDependencies:
-    """Build deterministic in-memory dependencies with fake services for the orchestrator."""
+    """Build deterministic in-memory dependencies with fake services for the orchestrator.
+
+    Returns:
+        ValuationDiscoveryDependencies: .
+    """
     return ValuationDiscoveryDependencies(
         repository=ValuationDiscoveryOrchestrationRepository.memory(),
         data_readiness_service=_FakeDataReadinessService(),
@@ -284,10 +306,14 @@ def _dependencies() -> ValuationDiscoveryDependencies:
 
 
 class _FakeQuantService:
-    """Fake quant service tracking calls and returning deterministic runs."""
+    """Fake quant service tracking calls and returning deterministic runs.."""
 
     def __init__(self) -> None:
-        """Initialize the fake quant service with no error and zero calls."""
+        """Initialize the fake quant service with no error and zero calls.
+
+        Returns:
+            None: .
+        """
         self._error: str | None = None
         self.call_count = 0
         self.last_run_kwargs: dict[str, object] = {}
@@ -295,11 +321,25 @@ class _FakeQuantService:
         self._run: _FakeQuantRun | None = None
 
     def fail_with(self, error_code: str) -> None:
-        """Configure the service to raise on the next run call."""
+        """Configure the service to raise on the next run call.
+
+        Args:
+            error_code: str: .
+
+        Returns:
+            None: .
+        """
         self._error = error_code
 
     def run(self, **kwargs: object) -> _FakeQuantRun:
-        """Run the fake quant pipeline and return a deterministic quant run."""
+        """Run the fake quant pipeline and return a deterministic quant run.
+
+        Args:
+            **kwargs: object: .
+
+        Returns:
+            _FakeQuantRun: .
+        """
         self.call_count += 1
         self.last_run_kwargs = dict(kwargs)
         if self._error is not None:
@@ -311,16 +351,37 @@ class _FakeQuantService:
         return self._run
 
     def build_input(self, **_: object) -> str:
-        """Build a frozen quant input reference."""
+        """Build a frozen quant input reference.
+
+        Args:
+            **_: object: .
+
+        Returns:
+            str: .
+        """
         return self._snapshot
 
     def load_input(self, snapshot_id: str) -> str:
-        """Reload the frozen input snapshot."""
+        """Reload the frozen input snapshot.
+
+        Args:
+            snapshot_id: str: .
+
+        Returns:
+            str: .
+        """
         assert snapshot_id == self._snapshot
         return self._snapshot
 
     def load_run(self, quant_run_id: str) -> _FakeQuantRun:
-        """Reload the quant run and results."""
+        """Reload the quant run and results.
+
+        Args:
+            quant_run_id: str: .
+
+        Returns:
+            _FakeQuantRun: .
+        """
         assert self._run is not None
         assert quant_run_id == self._run.quant_run_id
         return self._run
@@ -328,70 +389,125 @@ class _FakeQuantService:
 
 @dataclass(frozen=True)
 class _FakeQuantRun:
-    """Fake quant run carrying a run ID and result tuple."""
+    """Fake quant run carrying a run ID and result tuple.."""
+
     quant_run_id: str
     results: tuple[object, ...]
 
 
 @dataclass(frozen=True)
 class _FakeQuantResult:
-    """Fake quant result carrying only a security ID."""
+    """Fake quant result carrying only a security ID.."""
 
     security_id: str
 
 
 class _FakeNewsTargetSelector:
-    """Fake news target selector returning a deterministic security tuple."""
+    """Fake news target selector returning a deterministic security tuple.."""
 
     def select(self, **_: object) -> tuple[str, ...]:
-        """Return a deterministic tuple of security IDs."""
+        """Return a deterministic tuple of security IDs.
+
+        Args:
+            **_: object: .
+
+        Returns:
+            tuple[str, ...]: .
+        """
         return ("000001.SZ",)
 
 
 class _FakeNewsService:
-    """Fake news service that can be configured to fail on refresh."""
+    """Fake news service that can be configured to fail on refresh.."""
 
     def __init__(self) -> None:
-        """Initialize the fake news service with no error."""
+        """Initialize the fake news service with no error.
+
+        Returns:
+            None: .
+        """
         self._error: str | None = None
 
     def fail_with(self, error_code: str) -> None:
-        """Configure the service to raise on the next refresh call."""
+        """Configure the service to raise on the next refresh call.
+
+        Args:
+            error_code: str: .
+
+        Returns:
+            None: .
+        """
         self._error = error_code
 
     def refresh(self, **_: object) -> str:
-        """Run the fake news refresh and return a deterministic refresh ID."""
+        """Run the fake news refresh and return a deterministic refresh ID.
+
+        Args:
+            **_: object: .
+
+        Returns:
+            str: .
+        """
         if self._error is not None:
             raise RuntimeError(self._error)
         return "news-refresh-1"
 
 
 class _FakeDataReadinessService:
-    """Fake data readiness service returning deterministic readiness decisions."""
+    """Fake data readiness service returning deterministic readiness decisions.."""
 
     def __init__(self) -> None:
-        """Initialize the fake data readiness service with no observed calls."""
+        """Initialize the fake data readiness service with no observed calls.
+
+        Returns:
+            None: .
+        """
         self.last_check_decision_at: datetime | None = None
 
     def check(self, **kwargs: object) -> str:
-        """Return a real readiness decision reference."""
+        """Return a real readiness decision reference.
+
+        Args:
+            **kwargs: object: .
+
+        Returns:
+            str: .
+        """
         self.last_check_decision_at = kwargs.get("decision_at")  # type: ignore[assignment]
         return "fresh"
 
     def ensure_sync(self, **_: object) -> str:
-        """Return a no-sync-required reference."""
+        """Return a no-sync-required reference.
+
+        Args:
+            **_: object: .
+
+        Returns:
+            str: .
+        """
         return "not_required"
 
 
 class _RetryingDataReadinessService(_FakeDataReadinessService):
-    """Data readiness fake that requires one retry before reporting sync complete."""
+    """Data readiness fake that requires one retry before reporting sync complete.."""
 
     def __init__(self) -> None:
-        """Initialize the retrying service with zero calls."""
+        """Initialize the retrying service with zero calls.
+
+        Returns:
+            None: .
+        """
         self.calls = 0
 
     def ensure_sync(self, **_: object) -> str:
-        """Wait once, then report a completed sync."""
+        """Wait once, then report a completed sync.
+
+        Args:
+            **_: object: .
+
+        Returns:
+            str: .
+        """
         from margin.valuation_discovery.orchestrator import RetryableStepError
 
         self.calls += 1
@@ -404,81 +520,153 @@ class _RetryingDataReadinessService(_FakeDataReadinessService):
 
 
 class _FakeScopeService:
-    """Fake scope service returning a deterministic frozen scope."""
+    """Fake scope service returning a deterministic frozen scope.."""
 
     def resolve(self, **_: object) -> str:
-        """Resolve and return a frozen scope reference."""
+        """Resolve and return a frozen scope reference.
+
+        Args:
+            **_: object: .
+
+        Returns:
+            str: .
+        """
         return "scope-1"
 
 
 class _FakeIndexingRunner:
-    """Fake indexing runner that processes one bounded batch at a time."""
+    """Fake indexing runner that processes one bounded batch at a time.."""
 
     def __init__(self) -> None:
-        """Initialize the fake indexing runner with zero calls."""
+        """Initialize the fake indexing runner with zero calls.
+
+        Returns:
+            None: .
+        """
         self.calls = 0
 
     def run_once(self, *, limit: int = 50) -> int:
-        """Index one bounded batch."""
+        """Index one bounded batch.
+
+        Args:
+            limit: int: .
+
+        Returns:
+            int: .
+        """
         self.calls += 1
         return 1 if limit and self.calls % 2 == 1 else 0
 
 
 class _FakeContextBuilder:
-    """Fake context builder returning deterministic frozen context IDs."""
+    """Fake context builder returning deterministic frozen context IDs.."""
 
     def __init__(self) -> None:
-        """Initialize the fake context builder with no context IDs."""
+        """Initialize the fake context builder with no context IDs.
+
+        Returns:
+            None: .
+        """
         self.context_ids: tuple[str, ...] = ()
 
     def build(self, **_: object) -> tuple[str, ...]:
-        """Build and store deterministic frozen context IDs."""
+        """Build and store deterministic frozen context IDs.
+
+        Args:
+            **_: object: .
+
+        Returns:
+            tuple[str, ...]: .
+        """
         self.context_ids = ("context-1",)
         return self.context_ids
 
     def list_context_snapshot_ids(self, **_: object) -> tuple[str, ...]:
-        """Reload frozen context IDs."""
+        """Reload frozen context IDs.
+
+        Args:
+            **_: object: .
+
+        Returns:
+            tuple[str, ...]: .
+        """
         return self.context_ids
 
 
 @dataclass(frozen=True)
 class _FakeReviewSummary:
-    """Fake review summary carrying review and context snapshot IDs."""
+    """Fake review summary carrying review and context snapshot IDs.."""
 
     review_ids: tuple[str, ...] = ("review-1",)
     context_snapshot_ids: tuple[str, ...] = ("context-1",)
 
 
 class _FakeAIReviewService:
-    """Fake AI review service returning a deterministic review summary."""
+    """Fake AI review service returning a deterministic review summary.."""
 
     def __init__(self) -> None:
-        """Initialize the fake AI review service with no summary."""
+        """Initialize the fake AI review service with no summary.
+
+        Returns:
+            None: .
+        """
         self.summary: _FakeReviewSummary | None = None
 
     def review(self, **_: object) -> _FakeReviewSummary:
-        """Review frozen contexts and return a deterministic summary."""
+        """Review frozen contexts and return a deterministic summary.
+
+        Args:
+            **_: object: .
+
+        Returns:
+            _FakeReviewSummary: .
+        """
         self.summary = _FakeReviewSummary()
         return self.summary
 
     def load_summary(self, **_: object) -> _FakeReviewSummary:
-        """Reload terminal reviews."""
+        """Reload terminal reviews.
+
+        Args:
+            **_: object: .
+
+        Returns:
+            _FakeReviewSummary: .
+        """
         assert self.summary is not None
         return self.summary
 
 
 class _FakePublisher:
-    """Fake publisher returning deterministic assessment and dashboard IDs."""
+    """Fake publisher returning deterministic assessment and dashboard IDs.."""
 
     def __init__(self) -> None:
-        """Initialize fake publisher call capture."""
+        """Initialize fake publisher call capture.
+
+        Returns:
+            None: .
+        """
         self.dashboard_kwargs: dict[str, object] = {}
 
     def publish(self, **_: object) -> str:
-        """Publish and return a deterministic effective assessment ID."""
+        """Publish and return a deterministic effective assessment ID.
+
+        Args:
+            **_: object: .
+
+        Returns:
+            str: .
+        """
         return "assessment-1"
 
     def refresh_dashboard(self, **kwargs: object) -> str:
-        """Refresh dashboard projection."""
+        """Refresh dashboard projection.
+
+        Args:
+            **kwargs: object: .
+
+        Returns:
+            str: .
+        """
         self.dashboard_kwargs = dict(kwargs)
         return "dashboard-1"

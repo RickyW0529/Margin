@@ -12,7 +12,7 @@ from margin.news.models import ensure_utc
 
 
 class PriceBar(BaseModel):
-    """Raw daily close used for as-of price adjustment."""
+    """Raw daily close used for as-of price adjustment.."""
 
     security_id: str
     trade_date: date
@@ -22,7 +22,7 @@ class PriceBar(BaseModel):
 
 
 class CorporateAction(BaseModel):
-    """Corporate action with point-in-time availability."""
+    """Corporate action with point-in-time availability.."""
 
     security_id: str
     action_type: str
@@ -37,12 +37,23 @@ class CorporateAction(BaseModel):
     @field_validator("available_at")
     @classmethod
     def normalize_available_at(cls, value: datetime) -> datetime:
-        """Normalize availability timestamp to UTC."""
+        """Normalize availability timestamp to UTC.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)
 
     @property
     def stable_id(self) -> str:
-        """Return an action identifier stable enough for adjustment hashes."""
+        """Return an action identifier stable enough for adjustment hashes.
+
+        Returns:
+            str: .
+        """
         if self.action_id:
             return self.action_id
         payload = (
@@ -53,7 +64,7 @@ class CorporateAction(BaseModel):
 
 
 class AdjustedPricePoint(BaseModel):
-    """As-of adjusted price value."""
+    """As-of adjusted price value.."""
 
     security_id: str
     trade_date: date
@@ -67,13 +78,16 @@ class AdjustedPricePoint(BaseModel):
 
 
 class CorporateActionAdjuster:
-    """Build PIT-safe adjusted prices from raw prices and available actions."""
+    """Build PIT-safe adjusted prices from raw prices and available actions.."""
 
     def __init__(self, *, policy_version: str = "adjust-v0.2.0") -> None:
         """Initialize the adjuster.
 
         Args:
-            policy_version: Version tag stamped onto every adjusted price point.
+            policy_version: str: .
+
+        Returns:
+            None: .
         """
         self.policy_version = policy_version
 
@@ -87,13 +101,12 @@ class CorporateActionAdjuster:
         """Return adjusted price series using only actions available at decision time.
 
         Args:
-            prices: Raw daily price bars sorted by trade date.
-            actions: Corporate actions with point-in-time availability.
-            decision_at: The point in time at which the adjustment is computed.
+            prices: list[PriceBar]: .
+            actions: list[CorporateAction]: .
+            decision_at: datetime: .
 
         Returns:
-            A tuple of ``AdjustedPricePoint`` values, one per input price bar,
-            each carrying the cumulative adjustment factor and input action IDs.
+            tuple[AdjustedPricePoint, ...]: .
         """
         normalized_decision_at = ensure_utc(decision_at)
         available_actions = tuple(
@@ -126,7 +139,15 @@ class CorporateActionAdjuster:
 
 
 def _factor_for_action(close: Decimal, action: CorporateAction) -> Decimal:
-    """Return the cumulative adjustment factor for one action."""
+    """Return the cumulative adjustment factor for one action.
+
+    Args:
+        close: Decimal: .
+        action: CorporateAction: .
+
+    Returns:
+        Decimal: .
+    """
     if action.action_type == "cash_dividend" and action.cash_amount is not None:
         if close <= 0:
             return Decimal("1")

@@ -25,10 +25,10 @@ def news_repository(database_url: str) -> Iterator[NewsRepository]:
     """Yield a ``NewsRepository`` seeded with a single document event.
 
     Args:
-        database_url: pytest fixture providing the connection URL for the test database.
+        database_url: str: .
 
     Yields:
-        NewsRepository: repository with one pre-published document event.
+        Any: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -51,10 +51,17 @@ def news_repository(database_url: str) -> Iterator[NewsRepository]:
 
 
 class FailingPipeline:
-    """Stub pipeline that always raises to simulate embedding provider failure."""
+    """Stub pipeline that always raises to simulate embedding provider failure.."""
 
     def index_event(self, event) -> None:  # noqa: ANN001
-        """Raise a runtime error simulating embedding provider unavailability."""
+        """Raise a runtime error simulating embedding provider unavailability.
+
+        Args:
+            event: Any: .
+
+        Returns:
+            None: .
+        """
         raise RuntimeError("embedding provider unavailable")
 
 
@@ -63,11 +70,11 @@ def test_expired_processing_lease_can_be_reclaimed(
 ) -> None:
     """Expired processing leases must be reclaimable by the indexing runner.
 
-    An outbox entry stuck in ``processing`` past the lease duration should be
-    picked up by ``claim_next`` on the next runner cycle.
-
     Args:
-        news_repository: pytest fixture providing a seeded repository.
+        news_repository: NewsRepository: .
+
+    Returns:
+        None: .
     """
     outbox_id = news_repository.add_document_outbox(
         event_id="event-1",
@@ -92,11 +99,11 @@ def test_parser_success_embedding_failure_keeps_retryable_outbox(
 ) -> None:
     """Embedding failure after successful parsing must keep the outbox retryable.
 
-    When the pipeline raises during indexing, the outbox entry should transition
-    to ``failed_retryable`` rather than being permanently marked as failed.
-
     Args:
-        news_repository: pytest fixture providing a seeded repository.
+        news_repository: NewsRepository: .
+
+    Returns:
+        None: .
     """
     news_repository.add_document_outbox(
         event_id="event-1",

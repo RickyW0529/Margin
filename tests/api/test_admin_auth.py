@@ -9,7 +9,14 @@ from margin.settings import MarginSettings
 
 
 def test_local_admin_allows_development_without_token(monkeypatch) -> None:
-    """Development remains local-first and does not require bearer auth."""
+    """Development remains local-first and does not require bearer auth.
+
+    Args:
+        monkeypatch: Any: .
+
+    Returns:
+        None: .
+    """
     monkeypatch.setattr(
         "margin.api.dependencies.get_settings",
         lambda: MarginSettings(_env_file=None, environment="development"),
@@ -19,7 +26,14 @@ def test_local_admin_allows_development_without_token(monkeypatch) -> None:
 
 
 def test_local_admin_requires_bearer_token_in_production(monkeypatch) -> None:
-    """Production mutations require a configured bearer token."""
+    """Production mutations require a configured bearer token.
+
+    Args:
+        monkeypatch: Any: .
+
+    Returns:
+        None: .
+    """
     monkeypatch.setattr(
         "margin.api.dependencies.get_settings",
         lambda: MarginSettings(

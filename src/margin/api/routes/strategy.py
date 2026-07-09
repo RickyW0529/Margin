@@ -21,14 +21,7 @@ router = APIRouter(prefix="/strategies", tags=["strategy"])
 
 
 class CreateStrategyRequest(BaseModel):
-    """Request body for creating a strategy from a built-in template.
-
-    Attributes:
-        owner_id: Identifier of the user or entity that owns the strategy.
-        template: Template identifier to instantiate. Defaults to ``custom``.
-        name: Human-readable name for the new strategy.
-        description: Optional longer description of the strategy.
-    """
+    """Request body for creating a strategy from a built-in template.."""
 
     owner_id: str = Field(min_length=1)
     template: str = Field(default="custom")
@@ -37,15 +30,7 @@ class CreateStrategyRequest(BaseModel):
 
 
 class CreateCustomStrategyRequest(BaseModel):
-    """Request body for creating a strategy from a custom configuration.
-
-    Attributes:
-        owner_id: Identifier of the user or entity that owns the strategy.
-        config: Complete strategy configuration object validated against
-            ``StrategyConfig``.
-        name: Human-readable name for the new strategy.
-        description: Optional longer description of the strategy.
-    """
+    """Request body for creating a strategy from a custom configuration.."""
 
     owner_id: str = Field(min_length=1)
     config: dict[str, Any]
@@ -54,14 +39,7 @@ class CreateCustomStrategyRequest(BaseModel):
 
 
 class UpdateStrategyRequest(BaseModel):
-    """Request body for creating a new version of an existing strategy.
-
-    Attributes:
-        config_delta: Partial configuration updates to apply to the latest
-            version. Defaults to an empty dictionary.
-        name: Optional new name for the strategy.
-        description: Optional new description for the strategy.
-    """
+    """Request body for creating a new version of an existing strategy.."""
 
     config_delta: dict[str, Any] = Field(default_factory=dict)
     name: str | None = None
@@ -69,11 +47,7 @@ class UpdateStrategyRequest(BaseModel):
 
 
 class PromptResponse(BaseModel):
-    """Response payload containing a merged strategy prompt.
-
-    Attributes:
-        prompt: The final merged prompt text.
-    """
+    """Response payload containing a merged strategy prompt.."""
 
     prompt: str
 
@@ -85,11 +59,10 @@ def list_templates(
     """Return metadata for all built-in strategy templates.
 
     Args:
-        service: Strategy service that owns the template registry.
+        service: StrategyService: .
 
     Returns:
-        list[dict[str, str]]: Template metadata including identifier, name,
-        description, and category.
+        list[dict[str, str]]: .
     """
     return [
         {
@@ -111,16 +84,12 @@ def create_strategy(
     """Create a new strategy from a built-in template.
 
     Args:
-        request: Validated strategy creation request.
-        service: Strategy service used to instantiate the profile.
+        request: CreateStrategyRequest: .
+        service: StrategyService: .
+        _idempotency_key: str: .
 
     Returns:
-        dict[str, Any]: The newly created strategy profile serialised as a
-        dictionary.
-
-    Raises:
-        HTTPException: 400 if the requested template is unknown or the request
-            is otherwise invalid.
+        dict[str, Any]: .
     """
     try:
         profile = service.create_from_template(
@@ -146,15 +115,12 @@ def create_custom_strategy(
     """Create a new strategy from a fully custom configuration.
 
     Args:
-        request: Validated custom strategy creation request.
-        service: Strategy service used to instantiate the profile.
+        request: CreateCustomStrategyRequest: .
+        service: StrategyService: .
+        _idempotency_key: str: .
 
     Returns:
-        dict[str, Any]: The newly created custom strategy profile serialised as
-        a dictionary.
-
-    Raises:
-        HTTPException: 400 if the configuration fails validation.
+        dict[str, Any]: .
     """
     from margin.strategy.models import StrategyConfig
 
@@ -182,11 +148,11 @@ def list_strategies(
     """List all strategy profiles owned by the given owner.
 
     Args:
-        owner_id: Identifier of the owner whose strategies should be listed.
-        service: Strategy service used to query profiles.
+        owner_id: str: .
+        service: StrategyService: .
 
     Returns:
-        list[dict[str, Any]]: Serialised strategy profiles for the owner.
+        list[dict[str, Any]]: .
     """
     return [profile.model_dump() for profile in service.list_profiles(owner_id)]
 
@@ -199,15 +165,11 @@ def get_strategy(
     """Return a single strategy profile.
 
     Args:
-        strategy_id: Unique identifier of the strategy.
-        service: Strategy service used to load the profile.
+        strategy_id: str: .
+        service: StrategyService: .
 
     Returns:
-        dict[str, Any]: The requested strategy profile serialised as a
-        dictionary.
-
-    Raises:
-        HTTPException: 404 if the strategy cannot be found.
+        dict[str, Any]: .
     """
     try:
         return service.get_profile(strategy_id).model_dump()
@@ -228,18 +190,13 @@ def update_strategy(
     """Create a new version of an existing strategy.
 
     Args:
-        strategy_id: Unique identifier of the strategy to update.
-        request: Validated update request containing optional configuration
-            deltas and metadata changes.
-        service: Strategy service used to create the new version.
+        strategy_id: str: .
+        request: UpdateStrategyRequest: .
+        service: StrategyService: .
+        _idempotency_key: str: .
 
     Returns:
-        dict[str, Any]: The newly created strategy version serialised as a
-        dictionary.
-
-    Raises:
-        HTTPException: 404 if the strategy cannot be found.
-        HTTPException: 400 if the update request is invalid.
+        dict[str, Any]: .
     """
     try:
         profile = service.update_strategy(
@@ -271,16 +228,13 @@ def validate_version(
     """Validate a strategy version and advance it to the backtesting stage.
 
     Args:
-        strategy_id: Unique identifier of the strategy.
-        version_id: Unique identifier of the version to validate.
-        service: Strategy service used to advance the version.
+        strategy_id: str: .
+        version_id: str: .
+        service: StrategyService: .
+        _idempotency_key: str: .
 
     Returns:
-        dict[str, Any]: The updated strategy version serialised as a dictionary.
-
-    Raises:
-        HTTPException: 404 if the strategy or version cannot be found.
-        HTTPException: 400 if the version cannot be validated.
+        dict[str, Any]: .
     """
     try:
         return service.validate_version(strategy_id, version_id).model_dump()
@@ -306,16 +260,13 @@ def backtest_version(
     """Advance a strategy version from backtesting to paper trading.
 
     Args:
-        strategy_id: Unique identifier of the strategy.
-        version_id: Unique identifier of the version to backtest.
-        service: Strategy service used to advance the version.
+        strategy_id: str: .
+        version_id: str: .
+        service: StrategyService: .
+        _idempotency_key: str: .
 
     Returns:
-        dict[str, Any]: The updated strategy version serialised as a dictionary.
-
-    Raises:
-        HTTPException: 404 if the strategy or version cannot be found.
-        HTTPException: 400 if the version cannot be backtested.
+        dict[str, Any]: .
     """
     try:
         return service.backtest_version(strategy_id, version_id).model_dump()
@@ -341,16 +292,13 @@ def paper_trade_version(
     """Advance a strategy version from paper trading to active-ready.
 
     Args:
-        strategy_id: Unique identifier of the strategy.
-        version_id: Unique identifier of the version to paper trade.
-        service: Strategy service used to advance the version.
+        strategy_id: str: .
+        version_id: str: .
+        service: StrategyService: .
+        _idempotency_key: str: .
 
     Returns:
-        dict[str, Any]: The updated strategy version serialised as a dictionary.
-
-    Raises:
-        HTTPException: 404 if the strategy or version cannot be found.
-        HTTPException: 400 if the version cannot be paper traded.
+        dict[str, Any]: .
     """
     try:
         return service.paper_trade_version(strategy_id, version_id).model_dump()
@@ -376,16 +324,13 @@ def activate_version(
     """Activate a strategy version for live research runs.
 
     Args:
-        strategy_id: Unique identifier of the strategy.
-        version_id: Unique identifier of the version to activate.
-        service: Strategy service used to activate the version.
+        strategy_id: str: .
+        version_id: str: .
+        service: StrategyService: .
+        _idempotency_key: str: .
 
     Returns:
-        dict[str, Any]: The updated strategy version serialised as a dictionary.
-
-    Raises:
-        HTTPException: 404 if the strategy or version cannot be found.
-        HTTPException: 400 if the version cannot be activated.
+        dict[str, Any]: .
     """
     try:
         return service.activate_version(strategy_id, version_id).model_dump()
@@ -410,15 +355,12 @@ def archive_strategy(
     """Archive the active version of a strategy.
 
     Args:
-        strategy_id: Unique identifier of the strategy to archive.
-        service: Strategy service used to archive the active version.
+        strategy_id: str: .
+        service: StrategyService: .
+        _idempotency_key: str: .
 
     Returns:
-        dict[str, Any]: The updated strategy profile serialised as a dictionary.
-
-    Raises:
-        HTTPException: 404 if the strategy cannot be found.
-        HTTPException: 400 if the strategy cannot be archived.
+        dict[str, Any]: .
     """
     try:
         return service.archive_strategy(strategy_id).model_dump()
@@ -444,16 +386,13 @@ def get_prompt(
     """Return the merged prompt for a strategy version and task.
 
     Args:
-        strategy_id: Unique identifier of the strategy.
-        version_id: Unique identifier of the version whose prompt is requested.
-        task: Optional task name used to specialise the merged prompt.
-        service: Strategy service used to build the prompt.
+        strategy_id: str: .
+        version_id: str: .
+        task: str: .
+        service: StrategyService: .
 
     Returns:
-        PromptResponse: The merged prompt wrapped in a response model.
-
-    Raises:
-        HTTPException: 404 if the strategy or version cannot be found.
+        PromptResponse: .
     """
     try:
         prompt = service.get_prompt(strategy_id, version_id, task=task)

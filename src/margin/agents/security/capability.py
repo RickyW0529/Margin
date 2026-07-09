@@ -15,7 +15,7 @@ from margin.news.models import ensure_utc
 
 
 class CapabilityToken(BaseModel):
-    """Run-scoped least-privilege capability token."""
+    """Run-scoped least-privilege capability token.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -38,7 +38,14 @@ class CapabilityToken(BaseModel):
     @field_validator("expires_at")
     @classmethod
     def normalize_datetime(cls, value: datetime) -> datetime:
-        """Normalize token timestamps to UTC."""
+        """Normalize token timestamps to UTC.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)
 
 
@@ -55,7 +62,23 @@ def derive_capability_token(
     max_tool_calls: int | None = None,
     max_result_bytes: int | None = None,
 ) -> CapabilityToken:
-    """Derive a child token by narrowing a parent token."""
+    """Derive a child token by narrowing a parent token.
+
+    Args:
+        parent: CapabilityToken: .
+        token_id: str: .
+        issued_to: str: .
+        data_access: tuple[DataAccessPolicy, ...]: .
+        production_write: tuple[ProductionWritePolicy, ...]: .
+        tool_policy: tuple[ToolPolicy, ...]: .
+        allowed_artifact_types: tuple[str, ...] | None: .
+        allowed_tool_names: tuple[str, ...] | None: .
+        max_tool_calls: int | None: .
+        max_result_bytes: int | None: .
+
+    Returns:
+        CapabilityToken: .
+    """
     if not parent.can_delegate or parent.delegation_depth_remaining <= 0:
         raise ValueError("capability token cannot delegate")
     _ensure_subset("data_access", data_access, parent.data_access)
@@ -65,9 +88,7 @@ def derive_capability_token(
     child_tools = allowed_tool_names or parent.allowed_tool_names
     _ensure_subset("allowed_artifact_types", child_artifacts, parent.allowed_artifact_types)
     _ensure_subset("allowed_tool_names", child_tools, parent.allowed_tool_names)
-    resolved_max_tool_calls = (
-        parent.max_tool_calls if max_tool_calls is None else max_tool_calls
-    )
+    resolved_max_tool_calls = parent.max_tool_calls if max_tool_calls is None else max_tool_calls
     resolved_max_result_bytes = (
         parent.max_result_bytes if max_result_bytes is None else max_result_bytes
     )
@@ -95,5 +116,15 @@ def derive_capability_token(
 
 
 def _ensure_subset(name: str, child: tuple, parent: tuple) -> None:
+    """Process _ensure_subset.
+
+    Args:
+        name: str: .
+        child: tuple: .
+        parent: tuple: .
+
+    Returns:
+        None: .
+    """
     if not set(child).issubset(set(parent)):
         raise ValueError(f"cannot expand {name}")

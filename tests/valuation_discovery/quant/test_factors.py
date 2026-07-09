@@ -19,11 +19,8 @@ from margin.valuation_discovery.quant.factors.risk import RiskFactorCalculator
 def test_quality_calculator_outputs_0_to_100_score() -> None:
     """Verify the quality calculator outputs scores in the 0-100 range.
 
-    A company with strong fundamentals should receive a high quality score
-    while all scores remain within the valid bounds.
-
     Returns:
-        None.
+        None: .
     """
     frame = pd.DataFrame(
         {
@@ -49,7 +46,7 @@ def test_growth_calculator_rewards_sustainable_growth() -> None:
     """Verify broad, persistent growth outranks weak or negative growth.
 
     Returns:
-        None.
+        None: .
     """
     frame = pd.DataFrame(
         {
@@ -74,7 +71,7 @@ def test_momentum_calculator_applies_short_term_overheat_penalty() -> None:
     """Verify a 20-day surge is recorded and reduces otherwise strong momentum.
 
     Returns:
-        None.
+        None: .
     """
     frame = pd.DataFrame(
         {
@@ -101,7 +98,7 @@ def test_risk_calculator_scores_healthier_balance_and_market_risk_higher() -> No
     """Verify lower volatility, drawdown, and accounting risk produce a higher score.
 
     Returns:
-        None.
+        None: .
     """
     frame = pd.DataFrame(
         {

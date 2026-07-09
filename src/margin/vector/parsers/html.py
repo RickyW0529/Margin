@@ -9,13 +9,16 @@ from margin.vector.parsers.base import ParsedBlock
 
 
 class HtmlParser:
-    """Parse simple HTML into heading/paragraph blocks with DOM paths."""
+    """Parse simple HTML into heading/paragraph blocks with DOM paths.."""
 
     def __init__(self, parser_version: str = "html-v0.2.0") -> None:
         """Initialize the HTML parser.
 
         Args:
-            parser_version: Version label recorded in parsed block metadata.
+            parser_version: str: .
+
+        Returns:
+            None: .
         """
         self.parser_version = parser_version
 
@@ -28,11 +31,11 @@ class HtmlParser:
         """Parse HTML content into heading and paragraph blocks with DOM paths.
 
         Args:
-            content: Raw HTML bytes to parse.
-            source_url: Optional URL of the original source.
+            content: bytes: .
+            source_url: str | None: .
 
         Returns:
-            A list of ``ParsedBlock`` instances with DOM path and section locators.
+            list[ParsedBlock]: .
         """
         parser = _BlockHtmlParser(source_url=source_url)
         parser.feed(content.decode("utf-8", errors="replace"))
@@ -40,9 +43,17 @@ class HtmlParser:
 
 
 class _BlockHtmlParser(HTMLParser):
-    """Internal HTML parser that emits heading and paragraph blocks with DOM paths."""
+    """Internal HTML parser that emits heading and paragraph blocks with DOM paths.."""
+
     def __init__(self, *, source_url: str | None) -> None:
-        """Initialize the instance."""
+        """Initialize the instance.
+
+        Args:
+            source_url: str | None: .
+
+        Returns:
+            None: .
+        """
         super().__init__()
         self.source_url = source_url
         self.blocks: list[ParsedBlock] = []
@@ -53,7 +64,15 @@ class _BlockHtmlParser(HTMLParser):
         self._section: str | None = None
 
     def handle_starttag(self, tag: str, attrs) -> None:  # noqa: ANN001
-        """Handle an opening HTML tag."""
+        """Handle an opening HTML tag.
+
+        Args:
+            tag: str: .
+            attrs: Any: .
+
+        Returns:
+            None: .
+        """
         count = self._tag_counts.get(tag, 0) + 1
         self._tag_counts[tag] = count
         self._stack.append(f"{tag}[{count}]")
@@ -61,14 +80,28 @@ class _BlockHtmlParser(HTMLParser):
         self._current_path = "/" + "/".join(self._stack)
 
     def handle_endtag(self, tag: str) -> None:
-        """Handle a closing HTML tag."""
+        """Handle a closing HTML tag.
+
+        Args:
+            tag: str: .
+
+        Returns:
+            None: .
+        """
         if self._stack:
             self._stack.pop()
         self._current_tag = self._stack[-1].split("[", maxsplit=1)[0] if self._stack else None
         self._current_path = "/" + "/".join(self._stack) if self._stack else None
 
     def handle_data(self, data: str) -> None:
-        """Handle HTML text data."""
+        """Handle HTML text data.
+
+        Args:
+            data: str: .
+
+        Returns:
+            None: .
+        """
         text = data.strip()
         if not text or self._current_tag not in {"h1", "h2", "h3", "p"}:
             return

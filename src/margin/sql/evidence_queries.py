@@ -16,7 +16,14 @@ from margin.evidence.db_models import (
 
 
 def validation_audits_by_claim(claim_id: str) -> Select:
-    """List validation audits for a claim in chronological order."""
+    """List validation audits for a claim in chronological order.
+
+    Args:
+        claim_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(EvidenceValidationAuditRow)
         .where(EvidenceValidationAuditRow.claim_id == claim_id)
@@ -28,7 +35,14 @@ def validation_audits_by_claim(claim_id: str) -> Select:
 
 
 def research_evidence_by_item(research_item_id: str) -> Select:
-    """List evidence links for a research item ordered by rank."""
+    """List evidence links for a research item ordered by rank.
+
+    Args:
+        research_item_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(ResearchEvidenceRow)
         .where(ResearchEvidenceRow.research_item_id == research_item_id)
@@ -37,7 +51,14 @@ def research_evidence_by_item(research_item_id: str) -> Select:
 
 
 def evidence_package_root_for_update(package_id: str) -> Select:
-    """Lock the first version row of an evidence package for revision."""
+    """Lock the first version row of an evidence package for revision.
+
+    Args:
+        package_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(EvidencePackageRow)
         .where(EvidencePackageRow.package_id == package_id)
@@ -48,7 +69,14 @@ def evidence_package_root_for_update(package_id: str) -> Select:
 
 
 def evidence_package_latest_version(package_id: str) -> Select:
-    """Return the latest version row of an evidence package."""
+    """Return the latest version row of an evidence package.
+
+    Args:
+        package_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(EvidencePackageRow)
         .where(EvidencePackageRow.package_id == package_id)
@@ -58,14 +86,26 @@ def evidence_package_latest_version(package_id: str) -> Select:
 
 
 def evidence_records_by_ids(evidence_ids: tuple[str, ...]) -> Select:
-    """Return evidence records matching the given IDs."""
-    return select(EvidenceRecordRow).where(
-        EvidenceRecordRow.evidence_id.in_(evidence_ids)
-    )
+    """Return evidence records matching the given IDs.
+
+    Args:
+        evidence_ids: tuple[str, ...]: .
+
+    Returns:
+        Select: .
+    """
+    return select(EvidenceRecordRow).where(EvidenceRecordRow.evidence_id.in_(evidence_ids))
 
 
 def news_context_evidence_by_bundle(bundle_id: str) -> Select:
-    """List evidence links for a news context bundle."""
+    """List evidence links for a news context bundle.
+
+    Args:
+        bundle_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(NewsContextEvidenceRow)
         .where(NewsContextEvidenceRow.bundle_id == bundle_id)
@@ -77,7 +117,14 @@ def news_context_evidence_by_bundle(bundle_id: str) -> Select:
 
 
 def claim_evidence_by_claim(claim_id: str) -> Select:
-    """List claim-evidence role links ordered by rank."""
+    """List claim-evidence role links ordered by rank.
+
+    Args:
+        claim_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(ClaimEvidenceLinkRow)
         .where(ClaimEvidenceLinkRow.claim_id == claim_id)
@@ -89,7 +136,15 @@ def evidence_conflicts_by_package(
     package_id: str,
     version: int,
 ) -> Select:
-    """List conflicts recorded for an evidence package version."""
+    """List conflicts recorded for an evidence package version.
+
+    Args:
+        package_id: str: .
+        version: int: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(EvidenceConflictRow)
         .where(

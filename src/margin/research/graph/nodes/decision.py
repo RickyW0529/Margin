@@ -13,7 +13,7 @@ from margin.research.graph.state import AIDeltaGraphState, ReviewOutcome
 
 
 class DecisionDraft(BaseModel):
-    """Structured candidate decision composed from joined analyses."""
+    """Structured candidate decision composed from joined analyses.."""
 
     outcome: ReviewOutcome
     confidence: float = Field(ge=0.0, le=1.0)
@@ -27,7 +27,7 @@ class DecisionDraft(BaseModel):
 
 
 class CitationReview(BaseModel):
-    """Structured citation validation result used by the repair router."""
+    """Structured citation validation result used by the repair router.."""
 
     valid: bool
     repairable: bool = False
@@ -45,18 +45,28 @@ CitationValidationHandler = Callable[
 
 
 class DeltaDecisionComposerNode:
-    """Compose one structured delta decision after analysis joins."""
+    """Compose one structured delta decision after analysis joins.."""
 
     def __init__(self, handler: DecisionHandler) -> None:
         """Initialize the node.
 
         Args:
-            handler: Decision handler that composes the delta decision.
+            handler: DecisionHandler: .
+
+        Returns:
+            None: .
         """
         self._handler = handler
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Compose a structured delta decision from joined analysis outputs."""
+        """Compose a structured delta decision from joined analysis outputs.
+
+        Args:
+            state: AIDeltaGraphState: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         try:
             draft = DecisionDraft.model_validate(self._handler(state))
             if draft.outcome in {
@@ -91,22 +101,30 @@ class DeltaDecisionComposerNode:
 
 
 class CitationValidationNode:
-    """Validate only references already present in the draft decision."""
+    """Validate only references already present in the draft decision.."""
 
     def __init__(self, validator: CitationValidationHandler) -> None:
         """Initialize the node.
 
         Args:
-            validator: Citation validation handler to invoke.
+            validator: CitationValidationHandler: .
+
+        Returns:
+            None: .
         """
         self._validator = validator
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Validate citation references and return a structured report."""
+        """Validate citation references and return a structured report.
+
+        Args:
+            state: AIDeltaGraphState: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         try:
-            report = CitationReview.model_validate(
-                self._validator(state.draft_decision, state)
-            )
+            report = CitationReview.model_validate(self._validator(state.draft_decision, state))
         except Exception as exc:  # noqa: BLE001 - validator details stay internal
             report = CitationReview(
                 valid=False,
@@ -122,10 +140,17 @@ class CitationValidationNode:
 
 
 class RepairDecisionNode:
-    """Remove invalid references once; never add facts or evidence IDs."""
+    """Remove invalid references once; never add facts or evidence IDs.."""
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Remove invalid evidence references once without adding new facts."""
+        """Remove invalid evidence references once without adding new facts.
+
+        Args:
+            state: AIDeltaGraphState: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         report = CitationReview.model_validate(state.citation_report)
         draft = DecisionDraft.model_validate(state.draft_decision)
         base_update: dict[str, Any] = {
@@ -148,9 +173,7 @@ class RepairDecisionNode:
             }
         invalid_ids = set(report.invalid_evidence_ids)
         repaired_ids = tuple(
-            evidence_id
-            for evidence_id in draft.evidence_ids
-            if evidence_id not in invalid_ids
+            evidence_id for evidence_id in draft.evidence_ids if evidence_id not in invalid_ids
         )
         if not repaired_ids:
             return {
@@ -181,10 +204,17 @@ class RepairDecisionNode:
 
 
 class CarryForwardDecisionNode:
-    """Produce verified carry-forward without an LLM call."""
+    """Produce verified carry-forward without an LLM call.."""
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Produce a verified carry-forward outcome without an LLM call."""
+        """Produce a verified carry-forward outcome without an LLM call.
+
+        Args:
+            state: AIDeltaGraphState: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         return {
             "current_review_outcome": ReviewOutcome.CARRY_FORWARD_VERIFIED,
             "effective_assessment_id": state.previous_effective_assessment_id,
@@ -195,10 +225,17 @@ class CarryForwardDecisionNode:
 
 
 class ReviewDeferredNode:
-    """Preserve the previous effective assessment during temporary deferral."""
+    """Preserve the previous effective assessment during temporary deferral.."""
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Preserve the previous assessment during a temporary deferral."""
+        """Preserve the previous assessment during a temporary deferral.
+
+        Args:
+            state: AIDeltaGraphState: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         return {
             "current_review_outcome": ReviewOutcome.REVIEW_DEFERRED,
             "effective_assessment_id": state.previous_effective_assessment_id,
@@ -209,10 +246,17 @@ class ReviewDeferredNode:
 
 
 class AbstainNode:
-    """Preserve the previous effective assessment when this review abstains."""
+    """Preserve the previous effective assessment when this review abstains.."""
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Preserve the previous assessment when this review abstains."""
+        """Preserve the previous assessment when this review abstains.
+
+        Args:
+            state: AIDeltaGraphState: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         return {
             "current_review_outcome": ReviewOutcome.ABSTAIN,
             "effective_assessment_id": state.previous_effective_assessment_id,
@@ -223,10 +267,17 @@ class AbstainNode:
 
 
 class FinalizeNode:
-    """Apply effective-assessment semantics and emit a terminal result."""
+    """Apply effective-assessment semantics and emit a terminal result.."""
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Apply effective-assessment semantics and emit a terminal result."""
+        """Apply effective-assessment semantics and emit a terminal result.
+
+        Args:
+            state: AIDeltaGraphState: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         outcome = state.current_review_outcome or _draft_outcome(state)
         effective_assessment_id = state.effective_assessment_id
         freshness = state.assessment_freshness
@@ -258,12 +309,8 @@ class FinalizeNode:
             "evidence_ids": tuple(state.draft_decision.get("evidence_ids", ())),
             "confidence": float(state.draft_decision.get("confidence", 0.0)),
             "conclusion": str(state.draft_decision.get("conclusion", "")),
-            "valuation_view": str(
-                state.draft_decision.get("valuation_view", "uncertain")
-            ),
-            "changed_assumptions": tuple(
-                state.draft_decision.get("changed_assumptions", ())
-            ),
+            "valuation_view": str(state.draft_decision.get("valuation_view", "uncertain")),
+            "changed_assumptions": tuple(state.draft_decision.get("changed_assumptions", ())),
             "llm_call_count": state.llm_call_count,
             "tool_call_count": len(state.tool_call_ids),
         }
@@ -279,7 +326,14 @@ class FinalizeNode:
 
 
 def _draft_outcome(state: AIDeltaGraphState) -> ReviewOutcome:
-    """Coerce the draft decision outcome into a ReviewOutcome enum member."""
+    """Coerce the draft decision outcome into a ReviewOutcome enum member.
+
+    Args:
+        state: AIDeltaGraphState: .
+
+    Returns:
+        ReviewOutcome: .
+    """
     value = state.draft_decision.get("outcome", ReviewOutcome.ABSTAIN)
     return value if isinstance(value, ReviewOutcome) else ReviewOutcome(value)
 
@@ -288,7 +342,15 @@ def _assessment_id(
     state: AIDeltaGraphState,
     outcome: ReviewOutcome,
 ) -> str:
-    """Derive a deterministic effective assessment ID from the graph run."""
+    """Derive a deterministic effective assessment ID from the graph run.
+
+    Args:
+        state: AIDeltaGraphState: .
+        outcome: ReviewOutcome: .
+
+    Returns:
+        str: .
+    """
     payload = {
         "graph_run_id": state.graph_run_id,
         "outcome": outcome.value,

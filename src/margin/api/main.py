@@ -59,7 +59,14 @@ _LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
 def _loopback_origin_aliases(origin: str) -> tuple[str, ...]:
-    """Return equivalent local origins for browser dev-server CORS checks."""
+    """Return equivalent local origins for browser dev-server CORS checks.
+
+    Args:
+        origin: str: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     parsed = urlsplit(origin)
     if parsed.scheme not in {"http", "https"} or parsed.hostname not in _LOOPBACK_HOSTS:
         return ()
@@ -77,11 +84,26 @@ def _loopback_origin_aliases(origin: str) -> tuple[str, ...]:
 
 
 def _web_origins_from_setting(web_origin: str) -> list[str]:
-    """Parse comma-separated web origins and expand local loopback aliases."""
+    """Parse comma-separated web origins and expand local loopback aliases.
+
+    Args:
+        web_origin: str: .
+
+    Returns:
+        list[str]: .
+    """
     web_origins: list[str] = []
     seen: set[str] = set()
 
     def add(origin: str) -> None:
+        """Process add.
+
+        Args:
+            origin: str: .
+
+        Returns:
+            None: .
+        """
         normalized = origin.strip().rstrip("/")
         if normalized and normalized not in seen:
             seen.add(normalized)
@@ -112,26 +134,21 @@ def create_app(
 ) -> FastAPI:
     """Create and configure the Margin API application.
 
-    The returned application includes research, strategy, valuation discovery,
-    news, data sync, dashboard, and health routes. If services are supplied, they
-    override the production dependencies so the same application can be
-    exercised with fake or test services.
-
     Args:
-        strategy_service: Optional strategy service to inject in place of the
-            default service.
-        strategy_repository: Optional v0.2 strategy config repository.
-        secret_store: Optional encrypted provider Secret Store.
-        dashboard_services: Optional dashboard service bundle to inject in
-            place of the default PostgreSQL-backed services.
-        llm_provider_factory: Optional active LLM provider factory for tests.
-        valuation_discovery_service: Optional valuation discovery service to
-            inject in place of the default fail-closed dependency.
-        news_service: Optional news service to inject in place of the default
-            WebSearch-backed dependency.
+        strategy_service: StrategyService | None: .
+        strategy_repository: object | None: .
+        secret_store: SecretStore | None: .
+        dashboard_services: DashboardServiceBundle | None: .
+        main_agent_runtime: MainAgentRuntime | None: .
+        llm_provider_factory: Callable[[], LLMProvider] | None: .
+        agent_schedule_repository: AgentScheduleRepository | None: .
+        agent_chat_repository: AgentChatRepository | None: .
+        valuation_discovery_service: ValuationDiscoveryService | None: .
+        news_service: NewsService | None: .
+        company_profile_service: CompanyProfileService | None: .
 
     Returns:
-        FastAPI: The configured API application.
+        FastAPI: .
     """
     settings = get_settings()
     configure_logging(log_level=settings.log_level, log_format=settings.log_format)
@@ -172,50 +189,36 @@ def create_app(
 
     # Override production dependencies with injected services for testing.
     if strategy_service is not None:
-        application.dependency_overrides[get_strategy_service] = (
-            lambda: strategy_service
-        )
+        application.dependency_overrides[get_strategy_service] = lambda: strategy_service
     if strategy_repository is not None:
-        application.dependency_overrides[get_strategy_repository] = (
-            lambda: strategy_repository
-        )
+        application.dependency_overrides[get_strategy_repository] = lambda: strategy_repository
     if secret_store is not None:
         application.dependency_overrides[get_secret_store] = lambda: secret_store
-        application.dependency_overrides[get_optional_secret_store] = (
-            lambda: secret_store
-        )
+        application.dependency_overrides[get_optional_secret_store] = lambda: secret_store
     if dashboard_services is not None:
-        application.dependency_overrides[get_dashboard_services] = (
-            lambda: dashboard_services
-        )
+        application.dependency_overrides[get_dashboard_services] = lambda: dashboard_services
     if main_agent_runtime is not None:
-        application.dependency_overrides[get_main_agent_runtime] = (
-            lambda: main_agent_runtime
-        )
+        application.dependency_overrides[get_main_agent_runtime] = lambda: main_agent_runtime
     if llm_provider_factory is not None:
-        application.dependency_overrides[get_llm_provider_factory] = (
-            lambda: llm_provider_factory
-        )
+        application.dependency_overrides[get_llm_provider_factory] = lambda: llm_provider_factory
     if agent_schedule_repository is not None:
-        application.dependency_overrides[get_agent_schedule_repository] = (
-            lambda: agent_schedule_repository
+        application.dependency_overrides[get_agent_schedule_repository] = lambda: (
+            agent_schedule_repository
         )
     if agent_chat_repository is not None:
-        application.dependency_overrides[get_agent_chat_repository] = (
-            lambda: agent_chat_repository
-        )
+        application.dependency_overrides[get_agent_chat_repository] = lambda: agent_chat_repository
     if valuation_discovery_service is not None:
-        application.dependency_overrides[get_valuation_discovery_service] = (
-            lambda: valuation_discovery_service
+        application.dependency_overrides[get_valuation_discovery_service] = lambda: (
+            valuation_discovery_service
         )
-        application.dependency_overrides[get_valuation_discovery_service_for_api] = (
-            lambda: valuation_discovery_service
+        application.dependency_overrides[get_valuation_discovery_service_for_api] = lambda: (
+            valuation_discovery_service
         )
     if news_service is not None:
         application.dependency_overrides[get_news_service] = lambda: news_service
     if company_profile_service is not None:
-        application.dependency_overrides[get_company_profile_service] = (
-            lambda: company_profile_service
+        application.dependency_overrides[get_company_profile_service] = lambda: (
+            company_profile_service
         )
 
     return application
@@ -223,13 +226,24 @@ def create_app(
 
 @asynccontextmanager
 async def _lifespan(_application: FastAPI):
-    """Run application startup/shutdown resource management."""
+    """Run application startup/shutdown resource management.
+
+    Args:
+        _application: FastAPI: .
+
+    Yields:
+        Any: .
+    """
     yield
     _dispose_app_container()
 
 
 def _dispose_app_container() -> None:
-    """Dispose process-level bootstrap resources on application shutdown."""
+    """Dispose process-level bootstrap resources on application shutdown.
+
+    Returns:
+        None: .
+    """
     try:
         get_app_container().dispose()
     finally:

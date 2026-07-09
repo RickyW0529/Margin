@@ -10,7 +10,7 @@ from margin.vector.repository import VectorRepository
 
 
 class PersistentEmbeddingPipeline:
-    """Expose persistent chunks/embeddings through the retrieval pipeline API."""
+    """Expose persistent chunks/embeddings through the retrieval pipeline API.."""
 
     def __init__(
         self,
@@ -21,9 +21,11 @@ class PersistentEmbeddingPipeline:
         """Initialize the persistent embedding pipeline.
 
         Args:
-            embedding_provider: Provider used to generate query embeddings. Must
-                expose an ``embed`` method.
-            repository: Persistent repository for chunks and embeddings.
+            embedding_provider: Any: .
+            repository: VectorRepository: .
+
+        Returns:
+            None: .
         """
         self._embedding_provider = embedding_provider
         self._repository = repository
@@ -37,14 +39,12 @@ class PersistentEmbeddingPipeline:
         """Search persisted embeddings using a vectorized query.
 
         Args:
-            query_text: Raw query text to embed and search for.
-            top_k: Maximum number of results to return.
-            filters: Optional metadata filters such as ``symbol`` and ``doc_type``.
-                ``doc_type`` may be a string or a collection of strings.
+            query_text: str: .
+            top_k: int: .
+            filters: dict[str, Any] | None: .
 
         Returns:
-            A list of ``(Chunk, cosine_similarity)`` tuples sorted by similarity in
-            descending order.
+            list[tuple[Chunk, float]]: .
         """
         resolved = filters or {}
         query_vector = self._embedding_provider.embed(query_text)
@@ -71,14 +71,12 @@ class PersistentEmbeddingPipeline:
         """Search persisted chunks using token overlap as a keyword fallback.
 
         Args:
-            query: Raw query text.
-            top_k: Maximum number of results to return.
-            filters: Optional metadata filters such as ``symbol`` and ``doc_type``.
-                ``doc_type`` may be a string or a collection of strings.
+            query: str: .
+            top_k: int: .
+            filters: dict[str, Any] | None: .
 
         Returns:
-            A list of ``(Chunk, overlap_ratio)`` tuples sorted by overlap in descending
-            order.
+            list[tuple[Chunk, float]]: .
         """
         resolved = filters or {}
         doc_types = resolved.get("doc_type")
@@ -108,19 +106,17 @@ class PersistentEmbeddingPipeline:
 def _tokenize(text: str) -> list[str]:
     """Tokenize text for the fallback keyword scorer.
 
-    English words, Chinese characters, and digits are extracted and lowercased.
-
     Args:
-        text: Input text.
+        text: str: .
 
     Returns:
-        A list of lowercase tokens.
+        list[str]: .
     """
     return re.findall(r"[\u4e00-\u9fff]|[a-z]+|\d+", text.lower())
 
 
 class PersistentIndexingPipeline:
-    """Persistent indexing helper with atomic embedding batch validation."""
+    """Persistent indexing helper with atomic embedding batch validation.."""
 
     def __init__(
         self,
@@ -133,12 +129,13 @@ class PersistentIndexingPipeline:
         """Initialize the persistent indexing pipeline.
 
         Args:
-            repository: Persistent repository for chunks and embeddings.
-            embedding_provider: Provider used to generate embeddings. Must expose
-                ``embed_batch`` and optional ``name``, ``model_name``, ``version``
-                attributes.
-            embedding_dimension: Expected dimensionality of embedding vectors.
-            batch_size: Number of chunks to embed and persist per batch.
+            repository: VectorRepository: .
+            embedding_provider: Any: .
+            embedding_dimension: int: .
+            batch_size: int: .
+
+        Returns:
+            None: .
         """
         self.repository = repository
         self.embedding_provider = embedding_provider
@@ -148,20 +145,11 @@ class PersistentIndexingPipeline:
     def embed_and_persist(self, chunks: list[Chunk]) -> list[str]:
         """Embed chunks and persist vectors only after the whole batch validates.
 
-        Chunks are processed in batches of ``batch_size``. Each batch is embedded
-        and validated against ``embedding_dimension`` before being persisted. If
-        any vector in a batch has the wrong dimension, a ``ValueError`` is raised
-        before any persistence occurs.
-
         Args:
-            chunks: Chunks to embed and persist.
+            chunks: list[Chunk]: .
 
         Returns:
-            A list of embedding key hashes for the persisted vectors.
-
-        Raises:
-            ValueError: If any embedding vector does not match
-                ``embedding_dimension``.
+            list[str]: .
         """
         embedding_keys: list[str] = []
         provider_name = str(getattr(self.embedding_provider, "name", "embedding"))
@@ -169,9 +157,7 @@ class PersistentIndexingPipeline:
         model_version = str(getattr(self.embedding_provider, "version", "unknown"))
         for start in range(0, len(chunks), self.batch_size):
             batch = chunks[start : start + self.batch_size]
-            vectors = self.embedding_provider.embed_batch(
-                [chunk.content for chunk in batch]
-            )
+            vectors = self.embedding_provider.embed_batch([chunk.content for chunk in batch])
             bad_indexes = [
                 start + index
                 for index, vector in enumerate(vectors)
@@ -183,10 +169,7 @@ class PersistentIndexingPipeline:
                     f"{bad_indexes}; expected {self.embedding_dimension}"
                 )
             self.repository.upsert_embeddings(
-                [
-                    (chunk.chunk_id, vector)
-                    for chunk, vector in zip(batch, vectors, strict=True)
-                ],
+                [(chunk.chunk_id, vector) for chunk, vector in zip(batch, vectors, strict=True)],
                 provider_name=provider_name,
                 model_name=model_name,
                 model_version=model_version,

@@ -42,10 +42,10 @@ def news_repository(database_url):
     """Create a clean repository with all news tables.
 
     Args:
-        database_url: SQLAlchemy database URL injected by pytest.
+        database_url: Any: .
 
     Yields:
-        A ``NewsRepository`` instance backed by a fresh set of tables.
+        Any: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -71,7 +71,7 @@ def _snapshot() -> RawSnapshot:
     """Return a fixed raw snapshot fixture.
 
     Returns:
-        A ``RawSnapshot`` with deterministic fields for test records.
+        RawSnapshot: .
     """
     return RawSnapshot(
         snapshot_id="snp_1",
@@ -89,11 +89,11 @@ def _event(event_id: str = "evt_1", url: str = "https://example.com/a.html"):
     """Return a fixed document event fixture.
 
     Args:
-        event_id: Unique identifier for the event.
-        url: Source URL for the document.
+        event_id: str: .
+        url: str: .
 
     Returns:
-        A ``DocumentEvent`` with deterministic content, symbols, and snapshot.
+        Any: .
     """
     event = make_document_event(
         source_url=url,
@@ -115,8 +115,11 @@ def test_repository_persists_cursor_snapshot_event_outbox_and_search(
 ):
     """Core repository records survive round-trips and preserve audit fields.
 
-    Verifies that cursors, snapshots, document events, outbox items, and search
-    records can be written and read back with identical values.
+    Args:
+        news_repository: Any: .
+
+    Returns:
+        Any: .
     """
     repo = news_repository
     snapshot = _snapshot()
@@ -160,8 +163,11 @@ def test_repository_persists_cursor_snapshot_event_outbox_and_search(
 def test_parse_failed_events_are_persisted_but_not_published(news_repository):
     """Parse-failed events are stored but kept out of the publishable outbox.
 
-    Verifies that a document event marked as ``PARSE_FAILED`` is persisted and
-    can be retrieved, but does not generate a vector-index outbox item.
+    Args:
+        news_repository: Any: .
+
+    Returns:
+        Any: .
     """
     news_repository.add_snapshot(_snapshot())
     failed = _event("evt_failed").model_copy(
@@ -179,7 +185,14 @@ def test_parse_failed_events_are_persisted_but_not_published(news_repository):
 
 
 def test_document_event_strips_nul_bytes_before_postgres_insert(news_repository):
-    """Document text with NUL bytes is sanitized before PostgreSQL persistence."""
+    """Document text with NUL bytes is sanitized before PostgreSQL persistence.
+
+    Args:
+        news_repository: Any: .
+
+    Returns:
+        Any: .
+    """
     news_repository.add_snapshot(_snapshot())
     event = _event("evt_nul").model_copy(
         update={
@@ -202,9 +215,11 @@ def test_document_event_strips_nul_bytes_before_postgres_insert(news_repository)
 def test_dedup_and_repost_chain_are_persistent(news_repository):
     """Dedup records and repost edges are queryable after persistence.
 
-    Verifies that a duplicate event can be linked to a canonical event with a
-    dedup record, and that the repost chain can be reconstructed from stored
-    edges.
+    Args:
+        news_repository: Any: .
+
+    Returns:
+        Any: .
     """
     news_repository.add_snapshot(_snapshot())
     canonical = _event("evt_canonical", "https://exchange.example/a")

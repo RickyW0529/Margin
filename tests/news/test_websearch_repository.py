@@ -31,10 +31,10 @@ def news_repository(database_url):
     """Create a clean repository with search audit tables.
 
     Args:
-        database_url: SQLAlchemy database URL injected by pytest.
+        database_url: Any: .
 
     Yields:
-        A ``NewsRepository`` instance backed by a fresh set of tables.
+        Any: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -55,28 +55,35 @@ def test_search_results_are_persisted_before_original_verification(
 ):
     """Search results are persisted even when the original page is inaccessible.
 
-    Verifies that a paywalled connector returns no acquisition events while the
-    repository still records the query and each result with the correct
-    ``has_accessible_original`` flag.
+    Args:
+        tmp_path: Any: .
+        news_repository: Any: .
+
+    Returns:
+        Any: .
     """
 
     class PaywallConnector(BaseConnector):
-        """Fake connector that simulates a paywalled original page."""
+        """Fake connector that simulates a paywalled original page.."""
 
         @property
         def source_name(self) -> str:
-            """Return the source identifier used by the registry."""
+            """Return the source identifier used by the registry.
+
+            Returns:
+                str: .
+            """
             return "websearch"
 
         def fetch(self, url, **kwargs) -> tuple[bytes, str, int]:
             """Return a paywalled HTML page instead of article content.
 
             Args:
-                url: The URL being fetched.
-                **kwargs: Additional fetch options.
+                url: Any: .
+                **kwargs: Any: .
 
             Returns:
-                A tuple of raw bytes, content type, and HTTP status code.
+                tuple[bytes, str, int]: .
             """
             return b"subscribe to read full article", "text/html", 200
 
@@ -84,11 +91,11 @@ def test_search_results_are_persisted_before_original_verification(
         """Return a fixed search result for the query.
 
         Args:
-            query: The search query string.
-            max_results: Maximum number of results to return.
+            query: str: .
+            max_results: int: .
 
         Returns:
-            A list of raw search result dictionaries.
+            list[dict]: .
         """
         return [
             {
@@ -132,25 +139,37 @@ def test_verified_original_persists_snapshot_event_and_index_outbox(
     tmp_path,
     news_repository,
 ) -> None:
-    """Verified content becomes a durable indexable document event."""
+    """Verified content becomes a durable indexable document event.
+
+    Args:
+        tmp_path: Any: .
+        news_repository: Any: .
+
+    Returns:
+        None: .
+    """
 
     class PublicConnector(BaseConnector):
-        """Return one compliant public document."""
+        """Return one compliant public document.."""
 
         @property
         def source_name(self) -> str:
-            """Return the source identifier used by the registry."""
+            """Return the source identifier used by the registry.
+
+            Returns:
+                str: .
+            """
             return "websearch"
 
         def fetch(self, url, **kwargs) -> tuple[bytes, str, int]:
             """Return public plain-text content with HTTP 200.
 
             Args:
-                url: The URL being fetched (ignored).
-                **kwargs: Additional fetch options (ignored).
+                url: Any: .
+                **kwargs: Any: .
 
             Returns:
-                A tuple of raw bytes, content type, and HTTP status code.
+                tuple[bytes, str, int]: .
             """
             del url, kwargs
             return "公司收入增长 20%".encode(), "text/plain", 200
@@ -184,7 +203,10 @@ def test_verified_original_persists_snapshot_event_and_index_outbox(
     assert len(events) == 1
     assert news_repository.get_document_event(events[0].event_id) == events[0]
     assert news_repository.get_snapshot(events[0].snapshot_id or "") is not None
-    assert news_repository.get_outbox_by_event(
-        events[0].event_id,
-        "vector_index",
-    ) is not None
+    assert (
+        news_repository.get_outbox_by_event(
+            events[0].event_id,
+            "vector_index",
+        )
+        is not None
+    )

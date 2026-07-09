@@ -52,16 +52,7 @@ from margin.sql.evidence_queries import (
 
 
 class ResearchEvidenceLink(BaseModel):
-    """Persisted link between a research item, a claim, and an evidence record.
-
-    Attributes:
-        research_item_id: Identifier of the research item.
-        claim_id: Identifier of the linked claim.
-        evidence_id: Identifier of the linked evidence record.
-        role: Role of the evidence in the research item (e.g. "supporting").
-        rank: Display order of the link.
-        created_at: Timestamp when the link was created (UTC).
-    """
+    """Persisted link between a research item, a claim, and an evidence record.."""
 
     research_item_id: str
     claim_id: str
@@ -74,7 +65,7 @@ class ResearchEvidenceLink(BaseModel):
 
 
 class NewsContextEvidenceLink(BaseModel):
-    """Persisted link between a news context bundle and evidence."""
+    """Persisted link between a news context bundle and evidence.."""
 
     bundle_id: str
     evidence_id: str
@@ -84,13 +75,16 @@ class NewsContextEvidenceLink(BaseModel):
 
 
 class EvidenceRepository:
-    """SQLAlchemy-backed append-only persistence boundary for module 05."""
+    """SQLAlchemy-backed append-only persistence boundary for module 05.."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
         """Initialize the repository.
 
         Args:
-            session_factory: Callable that returns a new SQLAlchemy Session.
+            session_factory: Callable[[], Session]: .
+
+        Returns:
+            None: .
         """
         self._session_factory = session_factory
 
@@ -98,11 +92,10 @@ class EvidenceRepository:
         """Persist an evidence record idempotently, rejecting mutation attempts.
 
         Args:
-            evidence: The evidence record to persist.
+            evidence: Evidence: .
 
-        Raises:
-            ValueError: If a different evidence record with the same ID already
-                exists.
+        Returns:
+            None: .
         """
         with self._session_factory.begin() as session:
             row = session.get(EvidenceRecordRow, evidence.evidence_id)
@@ -116,10 +109,10 @@ class EvidenceRepository:
         """Fetch an evidence record by ID.
 
         Args:
-            evidence_id: Unique identifier of the evidence record.
+            evidence_id: str: .
 
         Returns:
-            The evidence record if found, otherwise None.
+            Evidence | None: .
         """
         with self._session_factory() as session:
             row = session.get(EvidenceRecordRow, evidence_id)
@@ -129,10 +122,10 @@ class EvidenceRepository:
         """Persist a claim idempotently, rejecting mutation attempts.
 
         Args:
-            claim: The claim to persist.
+            claim: Claim: .
 
-        Raises:
-            ValueError: If a different claim with the same ID already exists.
+        Returns:
+            None: .
         """
         with self._session_factory.begin() as session:
             row = session.get(EvidenceClaimRow, claim.claim_id)
@@ -146,10 +139,10 @@ class EvidenceRepository:
         """Fetch a persisted claim by ID.
 
         Args:
-            claim_id: Unique identifier of the claim.
+            claim_id: str: .
 
         Returns:
-            The claim if found, otherwise None.
+            Claim | None: .
         """
         with self._session_factory() as session:
             row = session.get(EvidenceClaimRow, claim_id)
@@ -159,11 +152,10 @@ class EvidenceRepository:
         """Append a validation audit record, rejecting mutation of existing rows.
 
         Args:
-            audit: The validation audit record to persist.
+            audit: ValidationAuditRecord: .
 
-        Raises:
-            ValueError: If a different audit record with the same ID already
-                exists.
+        Returns:
+            None: .
         """
         with self._session_factory.begin() as session:
             row = session.get(EvidenceValidationAuditRow, audit.audit_id)
@@ -177,15 +169,13 @@ class EvidenceRepository:
         """List validation audits for a claim in chronological order.
 
         Args:
-            claim_id: Identifier of the claim whose audits are requested.
+            claim_id: str: .
 
         Returns:
-            List of validation audit records ordered by checked_at and audit_id.
+            list[ValidationAuditRecord]: .
         """
         with self._session_factory() as session:
-            rows = session.scalars(
-                validation_audits_by_claim(claim_id)
-            ).all()
+            rows = session.scalars(validation_audits_by_claim(claim_id)).all()
             return [_audit_from_row(row) for row in rows]
 
     def link_research_evidence(
@@ -200,15 +190,14 @@ class EvidenceRepository:
         """Persist a research-item evidence link idempotently.
 
         Args:
-            research_item_id: Identifier of the research item.
-            claim_id: Identifier of the linked claim.
-            evidence_id: Identifier of the linked evidence record.
-            role: Role of the evidence in the research item.
-            rank: Display order of the link.
+            research_item_id: str: .
+            claim_id: str: .
+            evidence_id: str: .
+            role: str: .
+            rank: int: .
 
-        Raises:
-            ValueError: If an existing link with the same composite key has a
-                different rank.
+        Returns:
+            None: .
         """
         key = (research_item_id, claim_id, evidence_id, role)
         with self._session_factory.begin() as session:
@@ -235,26 +224,23 @@ class EvidenceRepository:
         """List evidence links for a research item ordered by rank.
 
         Args:
-            research_item_id: Identifier of the research item.
+            research_item_id: str: .
 
         Returns:
-            List of ResearchEvidenceLink records ordered by rank and created_at.
+            list[ResearchEvidenceLink]: .
         """
         with self._session_factory() as session:
-            rows = session.scalars(
-                research_evidence_by_item(research_item_id)
-            ).all()
+            rows = session.scalars(research_evidence_by_item(research_item_id)).all()
             return [_research_evidence_from_row(row) for row in rows]
 
     def add_evidence_package(self, package: EvidencePackage) -> None:
         """Persist a frozen evidence package version append-only.
 
         Args:
-            package: The evidence package to persist.
+            package: EvidencePackage: .
 
-        Raises:
-            ValueError: If a different package with the same composite key
-                already exists.
+        Returns:
+            None: .
         """
         key = (package.package_id, package.version)
         with self._session_factory.begin() as session:
@@ -278,11 +264,11 @@ class EvidenceRepository:
         """Fetch a frozen evidence package version by composite key.
 
         Args:
-            package_id: Unique identifier of the evidence package.
-            version: Version number of the evidence package.
+            package_id: str: .
+            version: int: .
 
         Returns:
-            The evidence package if found, otherwise None.
+            EvidencePackage | None: .
         """
         with self._session_factory() as session:
             row = session.get(EvidencePackageRow, (package_id, version))
@@ -299,38 +285,26 @@ class EvidenceRepository:
     ) -> EvidencePackage:
         """Create the next immutable version of an evidence package.
 
-        Revisions retain the package identity and increment ``version``. The
-        first version row is locked before reading the latest version so
-        concurrent supplementation attempts serialize on PostgreSQL.
-
         Args:
-            parent_package_id: Identifier of the package to revise.
-            added_evidence_ids: Evidence IDs to add to the revision.
-            retrieval_audit_id: Optional retrieval audit record identifier.
-            coverage: Optional override for the coverage score.
-            quality_status: Optional override for the quality status.
+            parent_package_id: str: .
+            added_evidence_ids: tuple[str, ...]: .
+            retrieval_audit_id: str | None: .
+            coverage: float | None: .
+            quality_status: EvidencePackageQualityStatus | None: .
 
         Returns:
-            The newly created revision ``EvidencePackage``.
-
-        Raises:
-            ValueError: If ``added_evidence_ids`` is empty or contains no new IDs.
-            KeyError: If the parent package or referenced evidence is not found.
+            EvidencePackage: .
         """
         requested_ids = tuple(dict.fromkeys(added_evidence_ids))
         if not requested_ids:
             raise ValueError("package revision requires at least one evidence ID")
 
         with self._session_factory.begin() as session:
-            root_row = session.scalar(
-                evidence_package_root_for_update(parent_package_id)
-            )
+            root_row = session.scalar(evidence_package_root_for_update(parent_package_id))
             if root_row is None:
                 raise KeyError(f"evidence package '{parent_package_id}' not found")
 
-            parent_row = session.scalar(
-                evidence_package_latest_version(parent_package_id)
-            )
+            parent_row = session.scalar(evidence_package_latest_version(parent_package_id))
             assert parent_row is not None
             parent = _package_from_row(parent_row)
 
@@ -344,19 +318,14 @@ class EvidenceRepository:
 
             evidence_rows = {
                 row.evidence_id: row
-                for row in session.scalars(
-                    evidence_records_by_ids(new_ids)
-                ).all()
+                for row in session.scalars(evidence_records_by_ids(new_ids)).all()
             }
             missing_ids = [
-                evidence_id
-                for evidence_id in new_ids
-                if evidence_id not in evidence_rows
+                evidence_id for evidence_id in new_ids if evidence_id not in evidence_rows
             ]
             if missing_ids:
                 raise KeyError(
-                    "package revision references unknown evidence IDs: "
-                    + ",".join(missing_ids)
+                    "package revision references unknown evidence IDs: " + ",".join(missing_ids)
                 )
 
             merged_max_available_at = max(
@@ -376,9 +345,7 @@ class EvidenceRepository:
                     "evidence_ids": parent.evidence_ids + new_ids,
                     "coverage": parent.coverage if coverage is None else coverage,
                     "quality_status": (
-                        parent.quality_status
-                        if quality_status is None
-                        else quality_status
+                        parent.quality_status if quality_status is None else quality_status
                     ),
                     "max_available_at": merged_max_available_at,
                     "retrieval_audit_id": (
@@ -399,8 +366,11 @@ class EvidenceRepository:
         """Persist an immutable news-context to evidence link idempotently.
 
         Args:
-            bundle_id: Identifier of the news context bundle.
-            evidence_id: Identifier of the evidence record to link.
+            bundle_id: str: .
+            evidence_id: str: .
+
+        Returns:
+            None: .
         """
         with self._session_factory.begin() as session:
             row = session.get(NewsContextEvidenceRow, (bundle_id, evidence_id))
@@ -420,15 +390,13 @@ class EvidenceRepository:
         """List evidence links for a news context bundle.
 
         Args:
-            bundle_id: Identifier of the news context bundle.
+            bundle_id: str: .
 
         Returns:
-            List of ``NewsContextEvidenceLink`` records for the bundle.
+            list[NewsContextEvidenceLink]: .
         """
         with self._session_factory() as session:
-            rows = session.scalars(
-                news_context_evidence_by_bundle(bundle_id)
-            ).all()
+            rows = session.scalars(news_context_evidence_by_bundle(bundle_id)).all()
             return [_news_context_evidence_from_row(row) for row in rows]
 
     def link_claim_evidence(
@@ -442,14 +410,13 @@ class EvidenceRepository:
         """Persist an immutable claim-evidence role link idempotently.
 
         Args:
-            claim_id: Identifier of the claim.
-            evidence_id: Identifier of the evidence record.
-            role: Role of the evidence relative to the claim.
-            rank: Display order of the link.
+            claim_id: str: .
+            evidence_id: str: .
+            role: ClaimEvidenceRole: .
+            rank: int: .
 
-        Raises:
-            ValueError: If an existing link with the same composite key has a
-                different rank.
+        Returns:
+            None: .
         """
         role_value = role.value if isinstance(role, ClaimEvidenceRole) else str(role)
         key = (claim_id, evidence_id, role_value)
@@ -468,33 +435,30 @@ class EvidenceRepository:
                 return
             if row.rank != rank:
                 raise ValueError(
-                    "claim evidence link is immutable: "
-                    f"{claim_id}/{evidence_id}/{role_value}"
+                    f"claim evidence link is immutable: {claim_id}/{evidence_id}/{role_value}"
                 )
 
     def list_claim_evidence(self, claim_id: str) -> list[ClaimEvidenceLink]:
         """List claim-evidence role links ordered by rank.
 
         Args:
-            claim_id: Identifier of the claim.
+            claim_id: str: .
 
         Returns:
-            List of ``ClaimEvidenceLink`` records ordered by rank.
+            list[ClaimEvidenceLink]: .
         """
         with self._session_factory() as session:
-            rows = session.scalars(
-                claim_evidence_by_claim(claim_id)
-            ).all()
+            rows = session.scalars(claim_evidence_by_claim(claim_id)).all()
             return [_claim_evidence_link_from_row(row) for row in rows]
 
     def add_evidence_conflict(self, conflict: EvidenceConflict) -> None:
         """Persist an immutable evidence conflict.
 
         Args:
-            conflict: The evidence conflict to persist.
+            conflict: EvidenceConflict: .
 
-        Raises:
-            ValueError: If a different conflict with the same ID already exists.
+        Returns:
+            None: .
         """
         with self._session_factory.begin() as session:
             row = session.get(EvidenceConflictRow, conflict.conflict_id)
@@ -512,21 +476,26 @@ class EvidenceRepository:
         """List conflicts recorded for an evidence package version.
 
         Args:
-            package_id: Identifier of the evidence package.
-            version: Version number of the evidence package.
+            package_id: str: .
+            version: int: .
 
         Returns:
-            List of ``EvidenceConflict`` records for the package version.
+            list[EvidenceConflict]: .
         """
         with self._session_factory() as session:
-            rows = session.scalars(
-                evidence_conflicts_by_package(package_id, version)
-            ).all()
+            rows = session.scalars(evidence_conflicts_by_package(package_id, version)).all()
             return [_evidence_conflict_from_row(row) for row in rows]
 
 
 def _evidence_to_row(evidence: Evidence) -> EvidenceRecordRow:
-    """Convert an Evidence domain model to a database row."""
+    """Convert an Evidence domain model to a database row.
+
+    Args:
+        evidence: Evidence: .
+
+    Returns:
+        EvidenceRecordRow: .
+    """
     return EvidenceRecordRow(
         evidence_id=evidence.evidence_id,
         chunk_id=evidence.chunk_id,
@@ -558,7 +527,14 @@ def _evidence_to_row(evidence: Evidence) -> EvidenceRecordRow:
 
 
 def _evidence_from_row(row: EvidenceRecordRow) -> Evidence:
-    """Convert an EvidenceRecordRow to an Evidence domain model."""
+    """Convert an EvidenceRecordRow to an Evidence domain model.
+
+    Args:
+        row: EvidenceRecordRow: .
+
+    Returns:
+        Evidence: .
+    """
     return Evidence(
         evidence_id=row.evidence_id,
         chunk_id=row.chunk_id,
@@ -589,7 +565,14 @@ def _evidence_from_row(row: EvidenceRecordRow) -> Evidence:
 
 
 def _claim_to_row(claim: Claim) -> EvidenceClaimRow:
-    """Convert a Claim domain model to a database row."""
+    """Convert a Claim domain model to a database row.
+
+    Args:
+        claim: Claim: .
+
+    Returns:
+        EvidenceClaimRow: .
+    """
     return EvidenceClaimRow(
         claim_id=claim.claim_id,
         claim_type=claim.claim_type.value,
@@ -607,7 +590,14 @@ def _claim_to_row(claim: Claim) -> EvidenceClaimRow:
 
 
 def _claim_from_row(row: EvidenceClaimRow) -> Claim:
-    """Convert an EvidenceClaimRow to a Claim domain model."""
+    """Convert an EvidenceClaimRow to a Claim domain model.
+
+    Args:
+        row: EvidenceClaimRow: .
+
+    Returns:
+        Claim: .
+    """
     return Claim(
         claim_id=row.claim_id,
         claim_type=ClaimType(row.claim_type),
@@ -624,7 +614,14 @@ def _claim_from_row(row: EvidenceClaimRow) -> Claim:
 
 
 def _audit_to_row(audit: ValidationAuditRecord) -> EvidenceValidationAuditRow:
-    """Convert a ValidationAuditRecord domain model to a database row."""
+    """Convert a ValidationAuditRecord domain model to a database row.
+
+    Args:
+        audit: ValidationAuditRecord: .
+
+    Returns:
+        EvidenceValidationAuditRow: .
+    """
     return EvidenceValidationAuditRow(
         audit_id=audit.audit_id,
         claim_id=audit.claim_id,
@@ -643,7 +640,14 @@ def _audit_to_row(audit: ValidationAuditRecord) -> EvidenceValidationAuditRow:
 
 
 def _audit_from_row(row: EvidenceValidationAuditRow) -> ValidationAuditRecord:
-    """Convert an EvidenceValidationAuditRow to a ValidationAuditRecord model."""
+    """Convert an EvidenceValidationAuditRow to a ValidationAuditRecord model.
+
+    Args:
+        row: EvidenceValidationAuditRow: .
+
+    Returns:
+        ValidationAuditRecord: .
+    """
     return ValidationAuditRecord(
         audit_id=row.audit_id,
         claim_id=row.claim_id,
@@ -661,7 +665,14 @@ def _audit_from_row(row: EvidenceValidationAuditRow) -> ValidationAuditRecord:
 
 
 def _research_evidence_from_row(row: ResearchEvidenceRow) -> ResearchEvidenceLink:
-    """Convert a ResearchEvidenceRow to a ResearchEvidenceLink model."""
+    """Convert a ResearchEvidenceRow to a ResearchEvidenceLink model.
+
+    Args:
+        row: ResearchEvidenceRow: .
+
+    Returns:
+        ResearchEvidenceLink: .
+    """
     return ResearchEvidenceLink(
         research_item_id=row.research_item_id,
         claim_id=row.claim_id,
@@ -673,7 +684,14 @@ def _research_evidence_from_row(row: ResearchEvidenceRow) -> ResearchEvidenceLin
 
 
 def _package_to_row(package: EvidencePackage) -> EvidencePackageRow:
-    """Convert an EvidencePackage model to a database row."""
+    """Convert an EvidencePackage model to a database row.
+
+    Args:
+        package: EvidencePackage: .
+
+    Returns:
+        EvidencePackageRow: .
+    """
     return EvidencePackageRow(
         package_id=package.package_id,
         version=package.version,
@@ -695,7 +713,14 @@ def _package_to_row(package: EvidencePackage) -> EvidencePackageRow:
 
 
 def _package_from_row(row: EvidencePackageRow) -> EvidencePackage:
-    """Convert an EvidencePackageRow to an EvidencePackage model."""
+    """Convert an EvidencePackageRow to an EvidencePackage model.
+
+    Args:
+        row: EvidencePackageRow: .
+
+    Returns:
+        EvidencePackage: .
+    """
     return EvidencePackage(
         package_id=row.package_id,
         version=row.version,
@@ -716,7 +741,14 @@ def _package_from_row(row: EvidencePackageRow) -> EvidencePackage:
 
 
 def _package_item_rows(package: EvidencePackage) -> list[EvidencePackageItemRow]:
-    """Materialize package membership rows for package replay and search."""
+    """Materialize package membership rows for package replay and search.
+
+    Args:
+        package: EvidencePackage: .
+
+    Returns:
+        list[EvidencePackageItemRow]: .
+    """
     rows: list[EvidencePackageItemRow] = []
     for item_type, item_ids in (
         ("evidence", package.evidence_ids),
@@ -740,7 +772,14 @@ def _package_item_rows(package: EvidencePackage) -> list[EvidencePackageItemRow]
 def _news_context_evidence_from_row(
     row: NewsContextEvidenceRow,
 ) -> NewsContextEvidenceLink:
-    """Convert a NewsContextEvidenceRow to a domain link."""
+    """Convert a NewsContextEvidenceRow to a domain link.
+
+    Args:
+        row: NewsContextEvidenceRow: .
+
+    Returns:
+        NewsContextEvidenceLink: .
+    """
     return NewsContextEvidenceLink(
         bundle_id=row.bundle_id,
         evidence_id=row.evidence_id,
@@ -749,7 +788,14 @@ def _news_context_evidence_from_row(
 
 
 def _claim_evidence_link_from_row(row: ClaimEvidenceLinkRow) -> ClaimEvidenceLink:
-    """Convert a ClaimEvidenceLinkRow to a domain link."""
+    """Convert a ClaimEvidenceLinkRow to a domain link.
+
+    Args:
+        row: ClaimEvidenceLinkRow: .
+
+    Returns:
+        ClaimEvidenceLink: .
+    """
     return ClaimEvidenceLink(
         claim_id=row.claim_id,
         evidence_id=row.evidence_id,
@@ -760,7 +806,14 @@ def _claim_evidence_link_from_row(row: ClaimEvidenceLinkRow) -> ClaimEvidenceLin
 
 
 def _evidence_conflict_to_row(conflict: EvidenceConflict) -> EvidenceConflictRow:
-    """Convert an EvidenceConflict domain model to a database row."""
+    """Convert an EvidenceConflict domain model to a database row.
+
+    Args:
+        conflict: EvidenceConflict: .
+
+    Returns:
+        EvidenceConflictRow: .
+    """
     return EvidenceConflictRow(
         conflict_id=conflict.conflict_id,
         package_id=conflict.package_id,
@@ -775,7 +828,14 @@ def _evidence_conflict_to_row(conflict: EvidenceConflict) -> EvidenceConflictRow
 
 
 def _evidence_conflict_from_row(row: EvidenceConflictRow) -> EvidenceConflict:
-    """Convert an EvidenceConflictRow to a domain model."""
+    """Convert an EvidenceConflictRow to a domain model.
+
+    Args:
+        row: EvidenceConflictRow: .
+
+    Returns:
+        EvidenceConflict: .
+    """
     return EvidenceConflict(
         conflict_id=row.conflict_id,
         package_id=row.package_id,

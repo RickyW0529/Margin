@@ -11,7 +11,11 @@ from margin.worker import build_scheduler
 
 
 def test_v02_exposes_no_portfolio_or_holdings_api() -> None:
-    """Portfolio and holdings-monitoring routes are outside the v0.2 product."""
+    """Portfolio and holdings-monitoring routes are outside the v0.2 product.
+
+    Returns:
+        None: .
+    """
     paths = set(create_app().openapi()["paths"])
 
     assert not any(path.startswith("/api/v1/portfolios") for path in paths)
@@ -19,7 +23,11 @@ def test_v02_exposes_no_portfolio_or_holdings_api() -> None:
 
 
 def test_v02_worker_schedules_only_research_pipeline_jobs() -> None:
-    """The v0.2 worker must not run a holdings-monitoring sweep."""
+    """The v0.2 worker must not run a holdings-monitoring sweep.
+
+    Returns:
+        None: .
+    """
     scheduler = build_scheduler(
         interval_seconds=300,
         indexing_job=lambda: None,
@@ -34,13 +42,22 @@ def test_v02_worker_schedules_only_research_pipeline_jobs() -> None:
 
 
 def test_v02_source_tree_has_no_holdings_domain_packages() -> None:
-    """Removed v0.1 holdings domains must not remain importable."""
+    """Removed v0.1 holdings domains must not remain importable.
+
+    Returns:
+        None: .
+    """
     assert find_spec("margin.portfolio") is None
     assert find_spec("margin.holdings_monitoring") is None
 
 
 def test_v02_runtime_models_have_no_portfolio_or_position_controls() -> None:
-    """Research routing and strategy config must not expose removed holdings controls."""
+    """Research routing and strategy config must not expose removed holdings controls.
+    Returns:.
+
+    Returns:
+        None: .
+    """
     assert "portfolio" not in {task.value for task in TaskType}
     assert "max_position_weight" not in RiskConfig.model_fields
     assert "max_sector_weight" not in RiskConfig.model_fields

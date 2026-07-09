@@ -43,7 +43,24 @@ def _make_quant_result(
     result_id: str = "qres_001",
     created_at: datetime = DECISION_AT,
 ) -> QuantResult:
-    """Build a quant result with five factor scores."""
+    """Build a quant result with five factor scores.
+
+    Args:
+        security_id: str: .
+        final_score: float: .
+        quality: float: .
+        value: float: .
+        growth: float: .
+        momentum: float: .
+        risk: float: .
+        screening_status: ScreeningStatus: .
+        quant_run_id: str: .
+        result_id: str: .
+        created_at: datetime: .
+
+    Returns:
+        QuantResult: .
+    """
     return QuantResult(
         result_id=result_id,
         quant_run_id=quant_run_id,
@@ -69,7 +86,11 @@ def _make_quant_result(
 
 
 def _make_analysis_snapshot() -> AnalysisSnapshot:
-    """Build a minimal analysis snapshot."""
+    """Build a minimal analysis snapshot.
+
+    Returns:
+        AnalysisSnapshot: .
+    """
     return AnalysisSnapshot(
         analysis_snapshot_id="ans_001",
         security_id=SECURITY_ID,
@@ -90,7 +111,11 @@ def _make_analysis_snapshot() -> AnalysisSnapshot:
 
 
 def _make_metric() -> AnalysisMetric:
-    """Build a sample analysis metric."""
+    """Build a sample analysis metric.
+
+    Returns:
+        AnalysisMetric: .
+    """
     return AnalysisMetric(
         metric_id="am_001",
         analysis_snapshot_id="ans_001",
@@ -108,7 +133,11 @@ def _make_metric() -> AnalysisMetric:
 
 
 def _make_finding() -> AnalysisFinding:
-    """Build a sample analysis finding."""
+    """Build a sample analysis finding.
+
+    Returns:
+        AnalysisFinding: .
+    """
     return AnalysisFinding(
         finding_id="af_001",
         analysis_snapshot_id="ans_001",
@@ -122,7 +151,11 @@ def _make_finding() -> AnalysisFinding:
 
 
 def test_get_quant_profile_returns_five_factor_scores() -> None:
-    """Quant profile should expose all five factor scores with labels/weights."""
+    """Quant profile should expose all five factor scores with labels/weights.
+
+    Returns:
+        None: .
+    """
     quant_repo = MemoryQuantRepository()
     analysis_repo = MemoryAnalysisMartRepository()
     quant_repo.add_results("qr_001", [_make_quant_result()])
@@ -155,7 +188,11 @@ def test_get_quant_profile_returns_five_factor_scores() -> None:
 
 
 def test_get_quant_profile_returns_none_for_unknown_security() -> None:
-    """Quant profile should return None when no result exists."""
+    """Quant profile should return None when no result exists.
+
+    Returns:
+        None: .
+    """
     quant_repo = MemoryQuantRepository()
     analysis_repo = MemoryAnalysisMartRepository()
     service = CompanyProfileService(quant_repo, analysis_repo)
@@ -164,7 +201,11 @@ def test_get_quant_profile_returns_none_for_unknown_security() -> None:
 
 
 def test_get_quant_profile_picks_latest_result() -> None:
-    """Quant profile should return the most recent result for a security."""
+    """Quant profile should return the most recent result for a security.
+
+    Returns:
+        None: .
+    """
     quant_repo = MemoryQuantRepository()
     analysis_repo = MemoryAnalysisMartRepository()
     earlier = _make_quant_result(final_score=70.0)
@@ -184,7 +225,11 @@ def test_get_quant_profile_picks_latest_result() -> None:
 
 
 def test_get_analysis_profile_returns_metrics_and_findings() -> None:
-    """Analysis profile should expose metrics, findings, and link count."""
+    """Analysis profile should expose metrics, findings, and link count.
+
+    Returns:
+        None: .
+    """
     quant_repo = MemoryQuantRepository()
     analysis_repo = MemoryAnalysisMartRepository()
     snapshot = _make_analysis_snapshot()
@@ -226,7 +271,11 @@ def test_get_analysis_profile_returns_metrics_and_findings() -> None:
 
 
 def test_get_analysis_profile_returns_empty_when_no_snapshot() -> None:
-    """Analysis profile should return empty metrics/findings when no snapshot."""
+    """Analysis profile should return empty metrics/findings when no snapshot.
+
+    Returns:
+        None: .
+    """
     quant_repo = MemoryQuantRepository()
     analysis_repo = MemoryAnalysisMartRepository()
     service = CompanyProfileService(quant_repo, analysis_repo)

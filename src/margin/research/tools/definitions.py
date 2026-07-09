@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 
 class ToolCapability(StrEnum):
-    """Capabilities used by graph tool policy."""
+    """Capabilities used by graph tool policy.."""
 
     CONTEXT_READ = "context_read"
     QUANT_READ = "quant_read"
@@ -34,7 +34,7 @@ ToolHandler = Callable[[dict[str, Any]], Any]
 
 @dataclass(frozen=True)
 class ToolDefinition:
-    """Versioned executable definition registered before graph execution."""
+    """Versioned executable definition registered before graph execution.."""
 
     name: str
     capability: ToolCapability
@@ -46,36 +46,44 @@ class ToolDefinition:
 
     @property
     def input_schema(self) -> dict[str, Any]:
-        """Return the JSON schema shown in the node ToolManifest."""
+        """Return the JSON schema shown in the node ToolManifest.
+
+        Returns:
+            dict[str, Any]: .
+        """
         return self.input_model.model_json_schema()
 
     def validate_args(self, args: dict[str, Any]) -> dict[str, Any]:
         """Validate and normalize tool arguments before execution.
 
         Args:
-            args: Raw argument dictionary to validate.
+            args: dict[str, Any]: .
 
         Returns:
-            Validated and normalized arguments as a plain dict.
+            dict[str, Any]: .
         """
         return self.input_model.model_validate(args).model_dump(mode="python")
 
 
 class ToolDefinitionRegistry:
-    """In-memory registry of immutable v0.2 tool definitions."""
+    """In-memory registry of immutable v0.2 tool definitions.."""
 
     def __init__(self) -> None:
-        """Initialize the instance."""
+        """Initialize the instance.
+
+        Returns:
+            None: .
+        """
         self._definitions: dict[str, ToolDefinition] = {}
 
     def register(self, definition: ToolDefinition) -> None:
         """Register a definition, rejecting incompatible replacement.
 
         Args:
-            definition: Immutable tool definition to register.
+            definition: ToolDefinition: .
 
-        Raises:
-            ValueError: If a different definition with the same name exists.
+        Returns:
+            None: .
         """
         current = self._definitions.get(definition.name)
         if current is not None and current != definition:
@@ -86,10 +94,10 @@ class ToolDefinitionRegistry:
         """Return a definition by name.
 
         Args:
-            name: Tool name to look up.
+            name: str: .
 
         Returns:
-            The matching ``ToolDefinition`` or ``None``.
+            ToolDefinition | None: .
         """
         return self._definitions.get(name)
 
@@ -97,6 +105,6 @@ class ToolDefinitionRegistry:
         """Return definitions in stable name order.
 
         Returns:
-            A tuple of all registered definitions sorted by name.
+            tuple[ToolDefinition, ...]: .
         """
         return tuple(self._definitions[name] for name in sorted(self._definitions))

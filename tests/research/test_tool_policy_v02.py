@@ -26,13 +26,7 @@ DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 
 
 class EvidenceQuery(BaseModel):
-    """Input model for the evidence retrieval tool.
-
-    Attributes:
-        security_id: The security identifier to retrieve evidence for.
-        decision_at: The point-in-time decision timestamp.
-        query: An optional query string.
-    """
+    """Input model for the evidence retrieval tool.."""
 
     security_id: str
     decision_at: datetime
@@ -40,14 +34,7 @@ class EvidenceQuery(BaseModel):
 
 
 class ValuationInput(BaseModel):
-    """Input model for the deterministic valuation tool.
-
-    Attributes:
-        security_id: The security identifier to value.
-        decision_at: The point-in-time decision timestamp.
-        earnings: The earnings figure used in the valuation.
-        multiple: The valuation multiple to apply.
-    """
+    """Input model for the deterministic valuation tool.."""
 
     security_id: str
     decision_at: datetime
@@ -58,9 +45,8 @@ class ValuationInput(BaseModel):
 def test_policy_denies_realtime_websearch_inside_graph() -> None:
     """Verify the policy denies realtime websearch inside the graph.
 
-    Authorizes a realtime websearch capability for the risk review node and
-    asserts that the decision is denied with a ``capability_forbidden`` reason
-    code.
+    Returns:
+        None: .
     """
     policy = ToolPolicyEngine()
 
@@ -79,9 +65,8 @@ def test_policy_denies_realtime_websearch_inside_graph() -> None:
 def test_policy_denies_capability_not_granted_to_node() -> None:
     """Verify the policy denies a capability not granted to the node.
 
-    Authorizes an evidence retrieval capability for a node that only has
-    news read grants and asserts that the decision is denied with a
-    ``capability_not_granted`` reason code.
+    Returns:
+        None: .
     """
     decision = ToolPolicyEngine().authorize(
         node_name="risk_review",
@@ -98,9 +83,8 @@ def test_policy_denies_capability_not_granted_to_node() -> None:
 def test_scoped_factory_exposes_only_node_granted_tools() -> None:
     """Verify the scoped factory exposes only tools granted to the node.
 
-    Creates a session for the valuation analysis node with only the
-    deterministic valuation grant and asserts that the manifest includes
-    only the ``deterministic_valuation`` tool and excludes ``websearch``.
+    Returns:
+        None: .
     """
     registry = _registry()
     session = ScopedToolFactory(
@@ -125,9 +109,8 @@ def test_scoped_factory_exposes_only_node_granted_tools() -> None:
 def test_tool_executor_enforces_pit_and_audits_denial() -> None:
     """Verify the tool executor enforces PIT safety and audits denials.
 
-    Calls the evidence retrieval tool with a decision-at timestamp after the
-    session's PIT cutoff and asserts that the call fails with a ``pit_violation``
-    error code and that the denial is recorded in the audit repository.
+    Returns:
+        None: .
     """
     audit = MemoryToolCallAuditRepository()
     session = ScopedToolFactory(
@@ -162,9 +145,8 @@ def test_tool_executor_enforces_pit_and_audits_denial() -> None:
 def test_tool_executor_denies_cross_security_and_call_budget() -> None:
     """Verify the tool executor denies cross-security access and enforces call budgets.
 
-    Creates a session with a one-call budget and asserts that a call targeting
-    a different security is denied, the first valid call succeeds, and a
-    second call exceeds the budget.
+    Returns:
+        None: .
     """
     session = ScopedToolFactory(
         tool_registry=_registry(),
@@ -211,9 +193,8 @@ def test_tool_executor_denies_cross_security_and_call_budget() -> None:
 def test_tool_executor_enforces_result_byte_limit() -> None:
     """Verify the tool executor enforces the result byte limit.
 
-    Creates a session with a 32-byte result limit and a tool that returns a
-    large result, and asserts that the call fails with a ``result_too_large``
-    error code and no data is returned.
+    Returns:
+        None: .
     """
     session = ScopedToolFactory(
         tool_registry=_registry(large_result=True),
@@ -244,9 +225,8 @@ def test_tool_executor_enforces_result_byte_limit() -> None:
 def test_unknown_tool_and_invalid_decision_are_denied_and_audited() -> None:
     """Verify unknown tools and invalid decision-at values are denied and audited.
 
-    Calls a non-existent tool and the evidence retrieval tool with an invalid
-    decision-at string, and asserts that both are denied with the appropriate
-    error codes and that all audit records mark the calls as not allowed.
+    Returns:
+        None: .
     """
     audit = MemoryToolCallAuditRepository()
     session = ScopedToolFactory(
@@ -285,11 +265,10 @@ def _registry(*, large_result: bool = False) -> ToolDefinitionRegistry:
     """Build a tool definition registry with evidence, valuation, and websearch tools.
 
     Args:
-        large_result: Whether the evidence retrieval tool should return a
-            large result payload for byte-limit testing.
+        large_result: bool: .
 
     Returns:
-        A ``ToolDefinitionRegistry`` with three registered tools.
+        ToolDefinitionRegistry: .
     """
     registry = ToolDefinitionRegistry()
     registry.register(
@@ -313,9 +292,7 @@ def _registry(*, large_result: bool = False) -> ToolDefinitionRegistry:
             version="deterministic-valuation-v0.2.0",
             description="Run deterministic valuation arithmetic.",
             input_model=ValuationInput,
-            handler=lambda payload: {
-                "value": payload["earnings"] * payload["multiple"]
-            },
+            handler=lambda payload: {"value": payload["earnings"] * payload["multiple"]},
         )
     )
     registry.register(

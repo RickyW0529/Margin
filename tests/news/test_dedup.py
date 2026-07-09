@@ -28,20 +28,21 @@ def _make_event(
     """Build a document event for tests.
 
     Args:
-        url: Source URL for the event.
-        title: Title used for the event and fallback content.
-        content: Body text; defaults to a string derived from the title.
-        source_level: Authority/source level for the event.
-        published_at: Publication timestamp; defaults to 2026-06-17.
-        content_hash: Optional explicit content hash.
+        url: Any: .
+        title: Any: .
+        content: Any: .
+        source_level: Any: .
+        published_at: Any: .
+        content_hash: Any: .
 
     Returns:
-        A populated document event.
+        Any: .
     """
     if content is None:
         content = f"{title}的正文内容"
     if content_hash is None:
         from margin.news.models import compute_content_hash
+
         content_hash = compute_content_hash(f"{url}:{title}:{content}")
     return make_document_event(
         source_url=url,
@@ -55,48 +56,80 @@ def _make_event(
 
 
 class TestSimHash:
-    """Tests for SimHash fingerprint utilities."""
+    """Tests for SimHash fingerprint utilities.."""
 
     def test_identical_text_same_hash(self):
-        """Identical text must produce identical SimHash values."""
+        """Identical text must produce identical SimHash values.
+
+        Returns:
+            Any: .
+        """
         assert compute_simhash("公司经营现金流改善") == compute_simhash("公司经营现金流改善")
 
     def test_different_text_different_hash(self):
-        """Different text must produce different SimHash values."""
+        """Different text must produce different SimHash values.
+
+        Returns:
+            Any: .
+        """
         assert compute_simhash("公司经营现金流改善") != compute_simhash("公司净利润下降")
 
     def test_hamming_distance_zero(self):
-        """Hamming distance of a hash with itself must be zero."""
+        """Hamming distance of a hash with itself must be zero.
+
+        Returns:
+            Any: .
+        """
         h = compute_simhash("test")
         assert hamming_distance(h, h) == 0
 
     def test_hamming_distance_positive(self):
-        """Different hashes must have a positive Hamming distance."""
+        """Different hashes must have a positive Hamming distance.
+
+        Returns:
+            Any: .
+        """
         h1 = compute_simhash("hello world")
         h2 = compute_simhash("goodbye world")
         assert hamming_distance(h1, h2) > 0
 
     def test_similarity_identical(self):
-        """Similarity of a hash with itself must be 1.0."""
+        """Similarity of a hash with itself must be 1.0.
+
+        Returns:
+            Any: .
+        """
         h = compute_simhash("test")
         assert simhash_similarity(h, h) == 1.0
 
     def test_similarity_different(self):
-        """Different hashes must have similarity below 1.0."""
+        """Different hashes must have similarity below 1.0.
+
+        Returns:
+            Any: .
+        """
         h1 = compute_simhash("完全不同的文本A")
         h2 = compute_simhash("完全不同的文本B")
         assert simhash_similarity(h1, h2) < 1.0
 
     def test_empty_text(self):
-        """Empty text must produce a SimHash value of zero."""
+        """Empty text must produce a SimHash value of zero.
+
+        Returns:
+            Any: .
+        """
         assert compute_simhash("") == 0
 
 
 class TestDeduplicator:
-    """Tests for event deduplication logic."""
+    """Tests for event deduplication logic.."""
 
     def test_unique_events_pass(self):
-        """Unique events must all be retained."""
+        """Unique events must all be retained.
+
+        Returns:
+            Any: .
+        """
         events = [
             _make_event(url="https://a.com", title="A"),
             _make_event(url="https://b.com", title="B"),
@@ -107,7 +140,11 @@ class TestDeduplicator:
         assert result.duplicate_count == 0
 
     def test_duplicate_url(self):
-        """Events sharing a URL must be flagged as duplicates."""
+        """Events sharing a URL must be flagged as duplicates.
+
+        Returns:
+            Any: .
+        """
         events = [
             _make_event(url="https://a.com", title="A"),
             _make_event(url="https://a.com", title="A copy"),
@@ -119,7 +156,11 @@ class TestDeduplicator:
         assert result.duplicates[0]["reason"] == "duplicate_url"
 
     def test_duplicate_content_hash(self):
-        """Events sharing a content hash must be deduplicated."""
+        """Events sharing a content hash must be deduplicated.
+
+        Returns:
+            Any: .
+        """
         events = [
             _make_event(url="https://a.com", title="A", content_hash="sha256:same"),
             _make_event(url="https://b.com", title="B", content_hash="sha256:same"),
@@ -130,7 +171,11 @@ class TestDeduplicator:
         assert result.duplicate_count == 1
 
     def test_duplicate_title_date(self):
-        """Events with matching title and date must be deduplicated."""
+        """Events with matching title and date must be deduplicated.
+
+        Returns:
+            Any: .
+        """
         date = datetime(2026, 6, 17)
         events = [
             _make_event(url="https://a.com", title="相同标题", published_at=date),
@@ -142,7 +187,11 @@ class TestDeduplicator:
         assert result.duplicate_count == 1
 
     def test_simhash_duplicate(self):
-        """Near-duplicate content must be detected via SimHash."""
+        """Near-duplicate content must be detected via SimHash.
+
+        Returns:
+            Any: .
+        """
         content = "公司经营现金流显著改善，净利润同比增长30%"
         events = [
             _make_event(url="https://a.com", title="A", content=content),
@@ -153,7 +202,11 @@ class TestDeduplicator:
         assert result.duplicate_count >= 1
 
     def test_repost_keeps_earlier_lower_level(self):
-        """Reposts must keep the earlier, more authoritative source."""
+        """Reposts must keep the earlier, more authoritative source.
+
+        Returns:
+            Any: .
+        """
         early = _make_event(
             url="https://exchange.com",
             title="公告",
@@ -173,7 +226,11 @@ class TestDeduplicator:
         assert result.unique_events[0].source_url == "https://exchange.com"
 
     def test_more_authoritative_source_replaces_earlier_rumor(self):
-        """A later L1 filing must be canonical over an earlier L5 repost."""
+        """A later L1 filing must be canonical over an earlier L5 repost.
+
+        Returns:
+            Any: .
+        """
         shared_hash = "sha256:same"
         rumor = _make_event(
             url="https://social.example/rumor",
@@ -196,7 +253,11 @@ class TestDeduplicator:
         assert result.duplicates[0]["duplicate_of"] == filing.event_id
 
     def test_deduplication_does_not_mutate_input_events(self):
-        """Deduplication must preserve the immutable input event values."""
+        """Deduplication must preserve the immutable input event values.
+
+        Returns:
+            Any: .
+        """
         original = _make_event(url="https://a.com", title="A")
         duplicate = _make_event(url="https://a.com", title="B")
 
@@ -207,14 +268,22 @@ class TestDeduplicator:
         assert duplicate.duplicate_of is None
 
     def test_empty_input(self):
-        """Empty input must produce an empty deduplication result."""
+        """Empty input must produce an empty deduplication result.
+
+        Returns:
+            Any: .
+        """
         dedup = Deduplicator()
         result = dedup.deduplicate([])
         assert len(result.unique_events) == 0
         assert result.duplicate_count == 0
 
     def test_total_count(self):
-        """Total event count must include both unique and duplicate events."""
+        """Total event count must include both unique and duplicate events.
+
+        Returns:
+            Any: .
+        """
         events = [
             _make_event(url="https://a.com", title="A"),
             _make_event(url="https://a.com", title="A dup"),
@@ -225,10 +294,14 @@ class TestDeduplicator:
 
 
 class TestQualityScorer:
-    """Tests for quality scoring of document events."""
+    """Tests for quality scoring of document events.."""
 
     def test_l1_highest_authority(self):
-        """L1 sources must receive the highest authority score."""
+        """L1 sources must receive the highest authority score.
+
+        Returns:
+            Any: .
+        """
         event = _make_event(source_level=SourceLevel.L1, content="x" * 200)
         scorer = QualityScorer()
         score = scorer.score(event)
@@ -236,52 +309,83 @@ class TestQualityScorer:
         assert score.total_score > 0.5
 
     def test_l5_lowest_authority(self):
-        """L5 sources must receive the lowest authority score."""
+        """L5 sources must receive the lowest authority score.
+
+        Returns:
+            Any: .
+        """
         event = _make_event(source_level=SourceLevel.L5, content="x" * 200)
         scorer = QualityScorer()
         score = scorer.score(event)
         assert score.authority == 0.2
 
     def test_completeness_full_content(self):
-        """Long content must receive full completeness score."""
+        """Long content must receive full completeness score.
+
+        Returns:
+            Any: .
+        """
         event = _make_event(content="x" * 200)
         scorer = QualityScorer()
         score = scorer.score(event)
         assert score.completeness == 1.0
 
     def test_completeness_partial_content(self):
-        """Partial content must receive a reduced completeness score."""
+        """Partial content must receive a reduced completeness score.
+
+        Returns:
+            Any: .
+        """
         event = _make_event(content="x" * 50)
         scorer = QualityScorer()
         score = scorer.score(event)
         assert score.completeness == 0.5
 
     def test_completeness_no_content(self):
-        """Empty content must receive the minimum completeness score."""
+        """Empty content must receive the minimum completeness score.
+
+        Returns:
+            Any: .
+        """
         event = make_document_event(
-            source_url="u", source_name="s",
-            source_level=SourceLevel.L1, title="t", content="",
+            source_url="u",
+            source_name="s",
+            source_level=SourceLevel.L1,
+            title="t",
+            content="",
         )
         scorer = QualityScorer()
         score = scorer.score(event)
         assert score.completeness == 0.1
 
     def test_timeliness_recent(self):
-        """Recent events must have high timeliness score."""
+        """Recent events must have high timeliness score.
+
+        Returns:
+            Any: .
+        """
         event = _make_event(published_at=datetime.now())
         scorer = QualityScorer()
         score = scorer.score(event)
         assert score.timeliness > 0.9
 
     def test_timeliness_old(self):
-        """Events older than the decay window must have zero timeliness."""
+        """Events older than the decay window must have zero timeliness.
+
+        Returns:
+            Any: .
+        """
         event = _make_event(published_at=datetime.now() - timedelta(days=60))
         scorer = QualityScorer(timeliness_decay_days=30)
         score = scorer.score(event)
         assert score.timeliness == 0.0
 
     def test_timeliness_supports_timezone_aware_publication_time(self):
-        """Quality scoring must accept the timezone-aware timestamps used by evidence."""
+        """Quality scoring must accept the timezone-aware timestamps used by evidence.
+
+        Returns:
+            Any: .
+        """
         event = _make_event(published_at=datetime.now(UTC))
 
         score = QualityScorer().score(event)
@@ -289,7 +393,11 @@ class TestQualityScorer:
         assert score.timeliness > 0.9
 
     def test_score_frozen(self):
-        """Score objects must be immutable after creation."""
+        """Score objects must be immutable after creation.
+
+        Returns:
+            Any: .
+        """
         event = _make_event()
         scorer = QualityScorer()
         score = scorer.score(event)
@@ -297,7 +405,11 @@ class TestQualityScorer:
             score.total_score = 1.0
 
     def test_batch_scoring(self):
-        """Batch scoring must return one score per input event."""
+        """Batch scoring must return one score per input event.
+
+        Returns:
+            Any: .
+        """
         events = [
             _make_event(url="https://a.com", title="A"),
             _make_event(url="https://b.com", title="B"),
@@ -308,10 +420,14 @@ class TestQualityScorer:
 
 
 class TestNewsProcessor:
-    """Tests for the combined news processing pipeline."""
+    """Tests for the combined news processing pipeline.."""
 
     def test_process_and_score(self):
-        """Processing must deduplicate events and produce quality scores."""
+        """Processing must deduplicate events and produce quality scores.
+
+        Returns:
+            Any: .
+        """
         events = [
             _make_event(url="https://a.com", title="A", source_level=SourceLevel.L1),
             _make_event(url="https://b.com", title="B", source_level=SourceLevel.L4),
@@ -324,7 +440,11 @@ class TestNewsProcessor:
         assert scores[0].authority > scores[1].authority
 
     def test_filter_by_level(self):
-        """Filtering by level must keep only events in the requested range."""
+        """Filtering by level must keep only events in the requested range.
+
+        Returns:
+            Any: .
+        """
         events = [
             _make_event(url="https://a.com", title="A", source_level=SourceLevel.L1),
             _make_event(url="https://b.com", title="B", source_level=SourceLevel.L4),
@@ -337,17 +457,29 @@ class TestNewsProcessor:
         assert filtered[0].source_level == SourceLevel.L1
 
     def test_l5_cannot_change_state(self):
-        """L5 events must not be allowed to change research state."""
+        """L5 events must not be allowed to change research state.
+
+        Returns:
+            Any: .
+        """
         event = _make_event(source_level=SourceLevel.L5)
         assert event.can_change_research_state is False
 
     def test_l3_can_change_state(self):
-        """L3 events must be allowed to change research state."""
+        """L3 events must be allowed to change research state.
+
+        Returns:
+            Any: .
+        """
         event = _make_event(source_level=SourceLevel.L3)
         assert event.can_change_research_state is True
 
     def test_dedup_then_score_only_unique(self):
-        """Scoring must run only on unique events after deduplication."""
+        """Scoring must run only on unique events after deduplication.
+
+        Returns:
+            Any: .
+        """
         events = [
             _make_event(url="https://a.com", title="A"),
             _make_event(url="https://a.com", title="A dup"),

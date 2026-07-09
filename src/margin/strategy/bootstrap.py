@@ -44,7 +44,7 @@ DEFAULT_INDEX_UNIVERSES = {
 
 @dataclass(frozen=True)
 class ProviderBootstrapSpec:
-    """Non-sensitive Provider definition created before secret entry."""
+    """Non-sensitive Provider definition created before secret entry.."""
 
     provider_name: str
     provider_type: str
@@ -56,14 +56,18 @@ class ProviderBootstrapSpec:
 
     @property
     def version_id(self) -> str:
-        """Return the stable default config version ID."""
+        """Return the stable default config version ID.
+
+        Returns:
+            str: .
+        """
         normalized = self.provider_name.strip().lower().replace("_", "-")
         return f"provider-{normalized}-default-{self.config_revision}"
 
 
 @dataclass(frozen=True)
 class BootstrapResult:
-    """Configuration bootstrap summary safe for logs and API responses."""
+    """Configuration bootstrap summary safe for logs and API responses.."""
 
     scope_version_id: str | None
     provider_version_ids: tuple[str, ...]
@@ -71,7 +75,7 @@ class BootstrapResult:
 
 
 class StrategyBootstrapService:
-    """Create default versioned config without overwriting user versions."""
+    """Create default versioned config without overwriting user versions.."""
 
     def __init__(
         self,
@@ -80,7 +84,16 @@ class StrategyBootstrapService:
         strategy_service: StrategyService,
         health_service: ProviderConfigHealthService | None = None,
     ) -> None:
-        """Initialize the bootstrap service."""
+        """Initialize the bootstrap service.
+
+        Args:
+            repository: object: .
+            strategy_service: StrategyService: .
+            health_service: ProviderConfigHealthService | None: .
+
+        Returns:
+            None: .
+        """
         self._repository = repository
         self._service = strategy_service
         self._health_service = health_service
@@ -92,7 +105,16 @@ class StrategyBootstrapService:
         providers: tuple[ProviderBootstrapSpec, ...],
         required_provider_names: tuple[str, ...],
     ) -> BootstrapResult:
-        """Ensure one complete default config set and activate it when executable."""
+        """Ensure one complete default config set and activate it when executable.
+
+        Args:
+            member_security_ids: tuple[str, ...]: .
+            providers: tuple[ProviderBootstrapSpec, ...]: .
+            required_provider_names: tuple[str, ...]: .
+
+        Returns:
+            BootstrapResult: .
+        """
         self._ensure_universe(member_security_ids)
         self._ensure_indicator_view()
         self._ensure_quant_feature_set()
@@ -106,9 +128,7 @@ class StrategyBootstrapService:
             for config in self._repository.list_active_provider_configs(OWNER_ID)
         }
         missing = tuple(
-            name
-            for name in required_provider_names
-            if name.strip().lower() not in active_by_name
+            name for name in required_provider_names if name.strip().lower() not in active_by_name
         )
         if missing:
             return BootstrapResult(
@@ -159,7 +179,14 @@ class StrategyBootstrapService:
         *,
         index_members_by_code: Mapping[str, tuple[str, ...]],
     ) -> tuple[str, ...]:
-        """Ensure default CSI300/CSI500 universe versions without activating them."""
+        """Ensure default CSI300/CSI500 universe versions without activating them.
+
+        Args:
+            index_members_by_code: Mapping[str, tuple[str, ...]]: .
+
+        Returns:
+            tuple[str, ...]: .
+        """
         ensured_ids: list[str] = []
         for universe_code in ("CSI300", "CSI500"):
             spec = DEFAULT_INDEX_UNIVERSES[universe_code]
@@ -189,7 +216,14 @@ class StrategyBootstrapService:
         return tuple(ensured_ids)
 
     def _ensure_universe(self, members: tuple[str, ...]) -> None:
-        """Ensure the data-driven ALL_A universe."""
+        """Ensure the data-driven ALL_A universe.
+
+        Args:
+            members: tuple[str, ...]: .
+
+        Returns:
+            None: .
+        """
         version_id = "universe-all-a-default-v0.2.0"
         version = self._repository.get_universe_definition(version_id)
         if version is None:
@@ -214,7 +248,11 @@ class StrategyBootstrapService:
             )
 
     def _ensure_indicator_view(self) -> None:
-        """Ensure the default all-indicator user view."""
+        """Ensure the default all-indicator user view.
+
+        Returns:
+            None: .
+        """
         version_id = "indicator-view-default-v0.2.0"
         version = self._repository.get_indicator_view(version_id)
         if version is None:
@@ -236,7 +274,11 @@ class StrategyBootstrapService:
             )
 
     def _ensure_quant_feature_set(self) -> None:
-        """Ensure the PIT quant input contract."""
+        """Ensure the PIT quant input contract.
+
+        Returns:
+            None: .
+        """
         version_id = DEFAULT_QUANT_FEATURE_SET_VERSION_ID
         version = self._repository.get_quant_feature_set(version_id)
         if version is None:
@@ -309,7 +351,11 @@ class StrategyBootstrapService:
             )
 
     def _ensure_quant_strategy(self) -> None:
-        """Ensure the approved QuantAgent ML lifecycle policy."""
+        """Ensure the approved QuantAgent ML lifecycle policy.
+
+        Returns:
+            None: .
+        """
         version_id = DEFAULT_QUANT_STRATEGY_VERSION_ID
         version = self._repository.get_quant_strategy(version_id)
         if version is None:
@@ -343,7 +389,11 @@ class StrategyBootstrapService:
             )
 
     def _ensure_style_prompt(self) -> None:
-        """Ensure the default evidence-first output style."""
+        """Ensure the default evidence-first output style.
+
+        Returns:
+            None: .
+        """
         version_id = "style-prompt-default-v0.2.0"
         version = self._repository.get_user_style_prompt(version_id)
         if version is None:
@@ -369,7 +419,11 @@ class StrategyBootstrapService:
             )
 
     def _ensure_tool_policy(self) -> None:
-        """Ensure the read-only AI delta-review tool boundary."""
+        """Ensure the read-only AI delta-review tool boundary.
+
+        Returns:
+            None: .
+        """
         version_id = "tool-policy-default-v0.2.0"
         version = self._repository.get_tool_policy(version_id)
         if version is None:
@@ -403,7 +457,14 @@ class StrategyBootstrapService:
             )
 
     def _ensure_provider(self, spec: ProviderBootstrapSpec) -> str:
-        """Ensure one non-sensitive Provider config and activate if possible."""
+        """Ensure one non-sensitive Provider config and activate if possible.
+
+        Args:
+            spec: ProviderBootstrapSpec: .
+
+        Returns:
+            str: .
+        """
         version = self._repository.get_provider_config(spec.version_id)
         if version is None:
             config = dict(spec.non_sensitive_config)

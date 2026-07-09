@@ -34,7 +34,7 @@ SessionFactory = Callable[[], Session]
 
 @dataclass(frozen=True)
 class QuantFeatureSnapshot:
-    """Fourth-layer quant input feature snapshot materialized from layer 3."""
+    """Fourth-layer quant input feature snapshot materialized from layer 3.."""
 
     feature_snapshot_id: str
     scope_version_id: str
@@ -55,7 +55,7 @@ class QuantFeatureSnapshot:
 
 @dataclass(frozen=True)
 class QuantFeatureRow:
-    """One materialized feature row consumed by the quant layer."""
+    """One materialized feature row consumed by the quant layer.."""
 
     row_id: str
     feature_snapshot_id: str
@@ -71,7 +71,7 @@ class QuantFeatureRow:
 
 @dataclass(frozen=True)
 class AnalysisSnapshot:
-    """One immutable fourth-layer snapshot for a security and decision time."""
+    """One immutable fourth-layer snapshot for a security and decision time.."""
 
     analysis_snapshot_id: str
     security_id: str
@@ -92,13 +92,20 @@ class AnalysisSnapshot:
     created_at: datetime | None = None
 
     def with_result_hash(self, result_hash: str) -> AnalysisSnapshot:
-        """Return a copy with a different result hash for conflict tests."""
+        """Return a copy with a different result hash for conflict tests.
+
+        Args:
+            result_hash: str: .
+
+        Returns:
+            AnalysisSnapshot: .
+        """
         return replace(self, result_hash=result_hash)
 
 
 @dataclass(frozen=True)
 class AnalysisMetric:
-    """Structured metric exposed to dashboards and AI read tools."""
+    """Structured metric exposed to dashboards and AI read tools.."""
 
     metric_id: str
     analysis_snapshot_id: str
@@ -119,7 +126,7 @@ class AnalysisMetric:
 
 @dataclass(frozen=True)
 class AnalysisFinding:
-    """Human/AI-readable finding derived from quant and canonical inputs."""
+    """Human/AI-readable finding derived from quant and canonical inputs.."""
 
     finding_id: str
     analysis_snapshot_id: str
@@ -136,7 +143,7 @@ class AnalysisFinding:
 
 @dataclass(frozen=True)
 class AnalysisEvidenceLink:
-    """Lineage edge from an analysis snapshot to evidence or source rows."""
+    """Lineage edge from an analysis snapshot to evidence or source rows.."""
 
     link_id: str
     analysis_snapshot_id: str
@@ -152,7 +159,7 @@ class AnalysisEvidenceLink:
 
 @dataclass(frozen=True)
 class AnalysisMartBundle:
-    """Atomic write unit for one analysis snapshot and its child rows."""
+    """Atomic write unit for one analysis snapshot and its child rows.."""
 
     snapshot: AnalysisSnapshot
     metrics: tuple[AnalysisMetric, ...] = ()
@@ -161,20 +168,35 @@ class AnalysisMartBundle:
 
 
 class AnalysisMartRepository(Protocol):
-    """Persistence contract for fourth-layer analysis results."""
+    """Persistence contract for fourth-layer analysis results.."""
 
     def upsert_feature_snapshot(
         self,
         snapshot: QuantFeatureSnapshot,
         rows: tuple[QuantFeatureRow, ...],
     ) -> None:
-        """Persist one QuantFeatureMart snapshot idempotently."""
+        """Persist one QuantFeatureMart snapshot idempotently.
+
+        Args:
+            snapshot: QuantFeatureSnapshot: .
+            rows: tuple[QuantFeatureRow, ...]: .
+
+        Returns:
+            None: .
+        """
 
     def get_feature_snapshot(
         self,
         feature_snapshot_id: str,
     ) -> QuantFeatureSnapshot | None:
-        """Return one feature snapshot by ID."""
+        """Return one feature snapshot by ID.
+
+        Args:
+            feature_snapshot_id: str: .
+
+        Returns:
+            QuantFeatureSnapshot | None: .
+        """
 
     def latest_feature_snapshot(
         self,
@@ -182,16 +204,45 @@ class AnalysisMartRepository(Protocol):
         scope_version_id: str,
         as_of: datetime,
     ) -> QuantFeatureSnapshot | None:
-        """Return the latest feature snapshot visible at or before ``as_of``."""
+        """Return the latest feature snapshot visible at or before ``as_of``.
+
+        Args:
+            scope_version_id: str: .
+            as_of: datetime: .
+
+        Returns:
+            QuantFeatureSnapshot | None: .
+        """
 
     def list_feature_rows(self, feature_snapshot_id: str) -> list[QuantFeatureRow]:
-        """Return materialized feature rows for one snapshot."""
+        """Return materialized feature rows for one snapshot.
+
+        Args:
+            feature_snapshot_id: str: .
+
+        Returns:
+            list[QuantFeatureRow]: .
+        """
 
     def upsert_bundle(self, bundle: AnalysisMartBundle) -> None:
-        """Persist one bundle idempotently and reject conflicting replays."""
+        """Persist one bundle idempotently and reject conflicting replays.
+
+        Args:
+            bundle: AnalysisMartBundle: .
+
+        Returns:
+            None: .
+        """
 
     def get_snapshot(self, analysis_snapshot_id: str) -> AnalysisSnapshot | None:
-        """Return one snapshot by ID."""
+        """Return one snapshot by ID.
+
+        Args:
+            analysis_snapshot_id: str: .
+
+        Returns:
+            AnalysisSnapshot | None: .
+        """
 
     def latest_snapshot(
         self,
@@ -202,25 +253,55 @@ class AnalysisMartRepository(Protocol):
     ) -> AnalysisSnapshot | None:
         """Return the latest snapshot visible at or before ``as_of``.
 
-        When ``scope_version_id`` is None, returns the latest snapshot across
-        all scopes for the given security.
+        Args:
+            security_id: str: .
+            scope_version_id: str | None: .
+            as_of: datetime: .
+
+        Returns:
+            AnalysisSnapshot | None: .
         """
 
     def list_metrics(self, analysis_snapshot_id: str) -> list[AnalysisMetric]:
-        """Return metrics for a snapshot."""
+        """Return metrics for a snapshot.
+
+        Args:
+            analysis_snapshot_id: str: .
+
+        Returns:
+            list[AnalysisMetric]: .
+        """
 
     def list_findings(self, analysis_snapshot_id: str) -> list[AnalysisFinding]:
-        """Return findings for a snapshot."""
+        """Return findings for a snapshot.
+
+        Args:
+            analysis_snapshot_id: str: .
+
+        Returns:
+            list[AnalysisFinding]: .
+        """
 
     def list_evidence_links(self, analysis_snapshot_id: str) -> list[AnalysisEvidenceLink]:
-        """Return evidence and lineage links for a snapshot."""
+        """Return evidence and lineage links for a snapshot.
+
+        Args:
+            analysis_snapshot_id: str: .
+
+        Returns:
+            list[AnalysisEvidenceLink]: .
+        """
 
 
 class MemoryAnalysisMartRepository:
-    """In-memory Analysis Mart repository for unit tests."""
+    """In-memory Analysis Mart repository for unit tests.."""
 
     def __init__(self) -> None:
-        """Initialize an empty in-memory Analysis Mart repository."""
+        """Initialize an empty in-memory Analysis Mart repository.
+
+        Returns:
+            None: .
+        """
         self._feature_snapshots: dict[str, QuantFeatureSnapshot] = {}
         self._feature_rows: dict[str, QuantFeatureRow] = {}
         self._snapshots: dict[str, AnalysisSnapshot] = {}
@@ -233,7 +314,15 @@ class MemoryAnalysisMartRepository:
         snapshot: QuantFeatureSnapshot,
         rows: tuple[QuantFeatureRow, ...],
     ) -> None:
-        """Persist one feature snapshot idempotently."""
+        """Persist one feature snapshot idempotently.
+
+        Args:
+            snapshot: QuantFeatureSnapshot: .
+            rows: tuple[QuantFeatureRow, ...]: .
+
+        Returns:
+            None: .
+        """
         _validate_feature_snapshot(snapshot, rows)
         _ensure_same_or_absent(
             self._feature_snapshots,
@@ -256,7 +345,14 @@ class MemoryAnalysisMartRepository:
         self,
         feature_snapshot_id: str,
     ) -> QuantFeatureSnapshot | None:
-        """Return one feature snapshot by ID."""
+        """Return one feature snapshot by ID.
+
+        Args:
+            feature_snapshot_id: str: .
+
+        Returns:
+            QuantFeatureSnapshot | None: .
+        """
         return self._feature_snapshots.get(feature_snapshot_id)
 
     def latest_feature_snapshot(
@@ -265,12 +361,19 @@ class MemoryAnalysisMartRepository:
         scope_version_id: str,
         as_of: datetime,
     ) -> QuantFeatureSnapshot | None:
-        """Return the latest visible feature snapshot."""
+        """Return the latest visible feature snapshot.
+
+        Args:
+            scope_version_id: str: .
+            as_of: datetime: .
+
+        Returns:
+            QuantFeatureSnapshot | None: .
+        """
         candidates = [
             snapshot
             for snapshot in self._feature_snapshots.values()
-            if snapshot.scope_version_id == scope_version_id
-            and snapshot.decision_at <= as_of
+            if snapshot.scope_version_id == scope_version_id and snapshot.decision_at <= as_of
         ]
         return max(
             candidates,
@@ -279,7 +382,14 @@ class MemoryAnalysisMartRepository:
         )
 
     def list_feature_rows(self, feature_snapshot_id: str) -> list[QuantFeatureRow]:
-        """Return feature rows for one snapshot."""
+        """Return feature rows for one snapshot.
+
+        Args:
+            feature_snapshot_id: str: .
+
+        Returns:
+            list[QuantFeatureRow]: .
+        """
         return sorted(
             (
                 row
@@ -290,7 +400,14 @@ class MemoryAnalysisMartRepository:
         )
 
     def upsert_bundle(self, bundle: AnalysisMartBundle) -> None:
-        """Persist one bundle idempotently."""
+        """Persist one bundle idempotently.
+
+        Args:
+            bundle: AnalysisMartBundle: .
+
+        Returns:
+            None: .
+        """
         _validate_bundle(bundle)
         _ensure_same_or_absent(
             self._snapshots,
@@ -318,7 +435,14 @@ class MemoryAnalysisMartRepository:
             self._links.setdefault(link.link_id, link)
 
     def get_snapshot(self, analysis_snapshot_id: str) -> AnalysisSnapshot | None:
-        """Return one snapshot by ID."""
+        """Return one snapshot by ID.
+
+        Args:
+            analysis_snapshot_id: str: .
+
+        Returns:
+            AnalysisSnapshot | None: .
+        """
         return self._snapshots.get(analysis_snapshot_id)
 
     def latest_snapshot(
@@ -330,18 +454,20 @@ class MemoryAnalysisMartRepository:
     ) -> AnalysisSnapshot | None:
         """Return the latest visible snapshot.
 
-        When ``scope_version_id`` is None, returns the latest snapshot across
-        all scopes for the given security.
+        Args:
+            security_id: str: .
+            scope_version_id: str | None: .
+            as_of: datetime: .
+
+        Returns:
+            AnalysisSnapshot | None: .
         """
         candidates = [
             snapshot
             for snapshot in self._snapshots.values()
             if snapshot.security_id == security_id
             and snapshot.decision_at <= as_of
-            and (
-                scope_version_id is None
-                or snapshot.scope_version_id == scope_version_id
-            )
+            and (scope_version_id is None or snapshot.scope_version_id == scope_version_id)
         ]
         return max(
             candidates,
@@ -350,7 +476,14 @@ class MemoryAnalysisMartRepository:
         )
 
     def list_metrics(self, analysis_snapshot_id: str) -> list[AnalysisMetric]:
-        """Return metrics for one snapshot."""
+        """Return metrics for one snapshot.
+
+        Args:
+            analysis_snapshot_id: str: .
+
+        Returns:
+            list[AnalysisMetric]: .
+        """
         return sorted(
             (
                 metric
@@ -361,7 +494,14 @@ class MemoryAnalysisMartRepository:
         )
 
     def list_findings(self, analysis_snapshot_id: str) -> list[AnalysisFinding]:
-        """Return findings for one snapshot."""
+        """Return findings for one snapshot.
+
+        Args:
+            analysis_snapshot_id: str: .
+
+        Returns:
+            list[AnalysisFinding]: .
+        """
         return sorted(
             (
                 finding
@@ -372,7 +512,14 @@ class MemoryAnalysisMartRepository:
         )
 
     def list_evidence_links(self, analysis_snapshot_id: str) -> list[AnalysisEvidenceLink]:
-        """Return links for one snapshot."""
+        """Return links for one snapshot.
+
+        Args:
+            analysis_snapshot_id: str: .
+
+        Returns:
+            list[AnalysisEvidenceLink]: .
+        """
         return sorted(
             (
                 link
@@ -384,10 +531,17 @@ class MemoryAnalysisMartRepository:
 
 
 class SQLAlchemyAnalysisMartRepository:
-    """SQLAlchemy-backed Analysis Mart repository."""
+    """SQLAlchemy-backed Analysis Mart repository.."""
 
     def __init__(self, session_factory: SessionFactory) -> None:
-        """Initialize the repository with a SQLAlchemy session factory."""
+        """Initialize the repository with a SQLAlchemy session factory.
+
+        Args:
+            session_factory: SessionFactory: .
+
+        Returns:
+            None: .
+        """
         self._session_factory = session_factory
 
     def upsert_feature_snapshot(
@@ -395,7 +549,15 @@ class SQLAlchemyAnalysisMartRepository:
         snapshot: QuantFeatureSnapshot,
         rows: tuple[QuantFeatureRow, ...],
     ) -> None:
-        """Persist one feature snapshot idempotently in one transaction."""
+        """Persist one feature snapshot idempotently in one transaction.
+
+        Args:
+            snapshot: QuantFeatureSnapshot: .
+            rows: tuple[QuantFeatureRow, ...]: .
+
+        Returns:
+            None: .
+        """
         _validate_feature_snapshot(snapshot, rows)
         with self._session_factory.begin() as session:
             self._upsert_row(
@@ -420,7 +582,14 @@ class SQLAlchemyAnalysisMartRepository:
         self,
         feature_snapshot_id: str,
     ) -> QuantFeatureSnapshot | None:
-        """Return one feature snapshot by ID."""
+        """Return one feature snapshot by ID.
+
+        Args:
+            feature_snapshot_id: str: .
+
+        Returns:
+            QuantFeatureSnapshot | None: .
+        """
         with self._session_factory() as session:
             row = session.get(QuantFeatureSnapshotRow, feature_snapshot_id)
         return _feature_snapshot_from_row(row) if row is not None else None
@@ -431,7 +600,15 @@ class SQLAlchemyAnalysisMartRepository:
         scope_version_id: str,
         as_of: datetime,
     ) -> QuantFeatureSnapshot | None:
-        """Return the latest visible feature snapshot."""
+        """Return the latest visible feature snapshot.
+
+        Args:
+            scope_version_id: str: .
+            as_of: datetime: .
+
+        Returns:
+            QuantFeatureSnapshot | None: .
+        """
         with self._session_factory() as session:
             row = session.scalar(
                 latest_quant_feature_snapshot(
@@ -442,13 +619,27 @@ class SQLAlchemyAnalysisMartRepository:
         return _feature_snapshot_from_row(row) if row is not None else None
 
     def list_feature_rows(self, feature_snapshot_id: str) -> list[QuantFeatureRow]:
-        """Return rows for one feature snapshot."""
+        """Return rows for one feature snapshot.
+
+        Args:
+            feature_snapshot_id: str: .
+
+        Returns:
+            list[QuantFeatureRow]: .
+        """
         with self._session_factory() as session:
             rows = session.scalars(quant_feature_rows_by_snapshot(feature_snapshot_id)).all()
         return [_feature_row_from_row(row) for row in rows]
 
     def upsert_bundle(self, bundle: AnalysisMartBundle) -> None:
-        """Persist one bundle idempotently in one transaction."""
+        """Persist one bundle idempotently in one transaction.
+
+        Args:
+            bundle: AnalysisMartBundle: .
+
+        Returns:
+            None: .
+        """
         _validate_bundle(bundle)
         with self._session_factory.begin() as session:
             self._upsert_row(
@@ -488,7 +679,14 @@ class SQLAlchemyAnalysisMartRepository:
                 )
 
     def get_snapshot(self, analysis_snapshot_id: str) -> AnalysisSnapshot | None:
-        """Return one snapshot by ID."""
+        """Return one snapshot by ID.
+
+        Args:
+            analysis_snapshot_id: str: .
+
+        Returns:
+            AnalysisSnapshot | None: .
+        """
         with self._session_factory() as session:
             row = session.get(AnalysisSnapshotRow, analysis_snapshot_id)
         return _snapshot_from_row(row) if row is not None else None
@@ -502,8 +700,13 @@ class SQLAlchemyAnalysisMartRepository:
     ) -> AnalysisSnapshot | None:
         """Return the latest visible snapshot.
 
-        When ``scope_version_id`` is None, returns the latest snapshot across
-        all scopes for the given security.
+        Args:
+            security_id: str: .
+            scope_version_id: str | None: .
+            as_of: datetime: .
+
+        Returns:
+            AnalysisSnapshot | None: .
         """
         with self._session_factory() as session:
             row = session.scalar(
@@ -516,23 +719,42 @@ class SQLAlchemyAnalysisMartRepository:
         return _snapshot_from_row(row) if row is not None else None
 
     def list_metrics(self, analysis_snapshot_id: str) -> list[AnalysisMetric]:
-        """Return metrics for one snapshot."""
+        """Return metrics for one snapshot.
+
+        Args:
+            analysis_snapshot_id: str: .
+
+        Returns:
+            list[AnalysisMetric]: .
+        """
         with self._session_factory() as session:
             rows = session.scalars(analysis_metrics_by_snapshot(analysis_snapshot_id)).all()
         return [_metric_from_row(row) for row in rows]
 
     def list_findings(self, analysis_snapshot_id: str) -> list[AnalysisFinding]:
-        """Return findings for one snapshot."""
+        """Return findings for one snapshot.
+
+        Args:
+            analysis_snapshot_id: str: .
+
+        Returns:
+            list[AnalysisFinding]: .
+        """
         with self._session_factory() as session:
             rows = session.scalars(analysis_findings_by_snapshot(analysis_snapshot_id)).all()
         return [_finding_from_row(row) for row in rows]
 
     def list_evidence_links(self, analysis_snapshot_id: str) -> list[AnalysisEvidenceLink]:
-        """Return links for one snapshot."""
+        """Return links for one snapshot.
+
+        Args:
+            analysis_snapshot_id: str: .
+
+        Returns:
+            list[AnalysisEvidenceLink]: .
+        """
         with self._session_factory() as session:
-            rows = session.scalars(
-                analysis_evidence_links_by_snapshot(analysis_snapshot_id)
-            ).all()
+            rows = session.scalars(analysis_evidence_links_by_snapshot(analysis_snapshot_id)).all()
         return [_link_from_row(row) for row in rows]
 
     def _upsert_row(
@@ -544,7 +766,19 @@ class SQLAlchemyAnalysisMartRepository:
         mapper: Callable[[Any], Any],
         label: str,
     ) -> None:
-        """Insert a row idempotently or reject conflicting replays."""
+        """Insert a row idempotently or reject conflicting replays.
+
+        Args:
+            session: Session: .
+            row_type: type: .
+            row_id: str: .
+            row: Any: .
+            mapper: Callable[[Any], Any]: .
+            label: str: .
+
+        Returns:
+            None: .
+        """
         existing = session.get(row_type, row_id)
         if existing is not None:
             if mapper(existing) != mapper(row):
@@ -554,7 +788,7 @@ class SQLAlchemyAnalysisMartRepository:
 
 
 class AnalysisMartPublisher:
-    """Materialize quant and derived analysis outputs into Analysis Mart."""
+    """Materialize quant and derived analysis outputs into Analysis Mart.."""
 
     def __init__(
         self,
@@ -565,8 +799,11 @@ class AnalysisMartPublisher:
         """Initialize the publisher with a repository and analysis version.
 
         Args:
-            repository: Persistence boundary for Analysis Mart bundles.
-            analysis_version: Version label for published analysis snapshots.
+            repository: AnalysisMartRepository: .
+            analysis_version: str: .
+
+        Returns:
+            None: .
         """
         self._repository = repository
         self._analysis_version = analysis_version
@@ -584,7 +821,22 @@ class AnalysisMartPublisher:
         input_hash: str,
         evidence_ids: tuple[str, ...] = (),
     ) -> AnalysisSnapshot:
-        """Publish one quant result as a fourth-layer analysis snapshot."""
+        """Publish one quant result as a fourth-layer analysis snapshot.
+
+        Args:
+            scope_version_id: str: .
+            decision_at: datetime: .
+            trading_date: date: .
+            quant_result: QuantResult: .
+            input_snapshot_id: str | None: .
+            strategy_version_id: str | None: .
+            config_hash: str | None: .
+            input_hash: str: .
+            evidence_ids: tuple[str, ...]: .
+
+        Returns:
+            AnalysisSnapshot: .
+        """
         ai_profile = dict(quant_result.factor_details.get("ai_quant_profile", {}))
         ml_strategy = _dict(quant_result.factor_details.get("ml_strategy"))
         scores = _dict(ai_profile.get("scores"))
@@ -619,16 +871,19 @@ class AnalysisMartPublisher:
                 "evidence_ids": evidence_ids,
             }
         )
-        snapshot_id = "asnap_" + _hash_payload(
-            {
-                "security_id": quant_result.security_id,
-                "scope_version_id": scope_version_id,
-                "decision_at": decision_at.isoformat(),
-                "quant_result_id": quant_result.result_id,
-                "analysis_version": self._analysis_version,
-                "result_hash": result_hash,
-            }
-        ).removeprefix("sha256:")[:24]
+        snapshot_id = (
+            "asnap_"
+            + _hash_payload(
+                {
+                    "security_id": quant_result.security_id,
+                    "scope_version_id": scope_version_id,
+                    "decision_at": decision_at.isoformat(),
+                    "quant_result_id": quant_result.result_id,
+                    "analysis_version": self._analysis_version,
+                    "result_hash": result_hash,
+                }
+            ).removeprefix("sha256:")[:24]
+        )
         snapshot = AnalysisSnapshot(
             analysis_snapshot_id=snapshot_id,
             security_id=quant_result.security_id,
@@ -690,7 +945,14 @@ class AnalysisMartPublisher:
 
 
 def _validate_bundle(bundle: AnalysisMartBundle) -> None:
-    """Validate that all child rows reference the bundle's snapshot ID."""
+    """Validate that all child rows reference the bundle's snapshot ID.
+
+    Args:
+        bundle: AnalysisMartBundle: .
+
+    Returns:
+        None: .
+    """
     snapshot_id = bundle.snapshot.analysis_snapshot_id
     for metric in bundle.metrics:
         if metric.analysis_snapshot_id != snapshot_id:
@@ -708,7 +970,16 @@ def _metric_specs(
     scores: dict[str, Any],
     raw_factors: dict[str, Any],
 ) -> tuple[tuple[str, str, str, float | None, dict[str, Any]], ...]:
-    """Build metric specification tuples from quant scores and raw factors."""
+    """Build metric specification tuples from quant scores and raw factors.
+
+    Args:
+        quant_result: QuantResult: .
+        scores: dict[str, Any]: .
+        raw_factors: dict[str, Any]: .
+
+    Returns:
+        tuple[tuple[str, str, str, float | None, dict[str, Any]], ...]: .
+    """
     ml_strategy = _dict(quant_result.factor_details.get("ml_strategy"))
     ml_components = _dict(ml_strategy.get("score_components"))
     ml_coverage = _dict(ml_strategy.get("feature_coverage"))
@@ -787,13 +1058,30 @@ def _metric(
     source_id: str,
     detail: dict[str, Any],
 ) -> AnalysisMetric:
-    """Build an ``AnalysisMetric`` with a deterministic metric ID."""
-    metric_id = "am_" + _hash_payload(
-        {
-            "snapshot_id": snapshot.analysis_snapshot_id,
-            "metric_code": code,
-        }
-    ).removeprefix("sha256:")[:28]
+    """Build an ``AnalysisMetric`` with a deterministic metric ID.
+
+    Args:
+        snapshot: AnalysisSnapshot: .
+        code: str: .
+        name: str: .
+        group: str: .
+        value: float | None: .
+        source_type: str: .
+        source_id: str: .
+        detail: dict[str, Any]: .
+
+    Returns:
+        AnalysisMetric: .
+    """
+    metric_id = (
+        "am_"
+        + _hash_payload(
+            {
+                "snapshot_id": snapshot.analysis_snapshot_id,
+                "metric_code": code,
+            }
+        ).removeprefix("sha256:")[:28]
+    )
     return AnalysisMetric(
         metric_id=metric_id,
         analysis_snapshot_id=snapshot.analysis_snapshot_id,
@@ -820,14 +1108,26 @@ def _quant_finding(
     quant_result: QuantResult,
     evidence_ids: tuple[str, ...],
 ) -> AnalysisFinding:
-    """Build a quant screening ``AnalysisFinding`` with a deterministic ID."""
-    finding_id = "af_" + _hash_payload(
-        {
-            "snapshot_id": snapshot.analysis_snapshot_id,
-            "finding_type": "quant_screening",
-            "quant_result_id": quant_result.result_id,
-        }
-    ).removeprefix("sha256:")[:28]
+    """Build a quant screening ``AnalysisFinding`` with a deterministic ID.
+
+    Args:
+        snapshot: AnalysisSnapshot: .
+        quant_result: QuantResult: .
+        evidence_ids: tuple[str, ...]: .
+
+    Returns:
+        AnalysisFinding: .
+    """
+    finding_id = (
+        "af_"
+        + _hash_payload(
+            {
+                "snapshot_id": snapshot.analysis_snapshot_id,
+                "finding_type": "quant_screening",
+                "quant_result_id": quant_result.result_id,
+            }
+        ).removeprefix("sha256:")[:28]
+    )
     severity = (
         "positive"
         if quant_result.screening_status.value == "pass"
@@ -875,7 +1175,19 @@ def _lineage_links(
     input_snapshot_id: str | None,
     evidence_ids: tuple[str, ...],
 ) -> tuple[AnalysisEvidenceLink, ...]:
-    """Build lineage and evidence link rows for one analysis snapshot."""
+    """Build lineage and evidence link rows for one analysis snapshot.
+
+    Args:
+        snapshot: AnalysisSnapshot: .
+        finding: AnalysisFinding: .
+        metrics: tuple[AnalysisMetric, ...]: .
+        quant_result: QuantResult: .
+        input_snapshot_id: str | None: .
+        evidence_ids: tuple[str, ...]: .
+
+    Returns:
+        tuple[AnalysisEvidenceLink, ...]: .
+    """
     links: list[AnalysisEvidenceLink] = [
         _link(
             snapshot=snapshot,
@@ -936,18 +1248,34 @@ def _link(
     source_id: str,
     role: str,
 ) -> AnalysisEvidenceLink:
-    """Build an ``AnalysisEvidenceLink`` with a deterministic link ID."""
-    link_id = "al_" + _hash_payload(
-        {
-            "snapshot_id": snapshot.analysis_snapshot_id,
-            "finding_id": finding_id,
-            "metric_id": metric_id,
-            "evidence_id": evidence_id,
-            "source_type": source_type,
-            "source_id": source_id,
-            "role": role,
-        }
-    ).removeprefix("sha256:")[:28]
+    """Build an ``AnalysisEvidenceLink`` with a deterministic link ID.
+
+    Args:
+        snapshot: AnalysisSnapshot: .
+        finding_id: str | None: .
+        metric_id: str | None: .
+        evidence_id: str | None: .
+        source_type: str: .
+        source_id: str: .
+        role: str: .
+
+    Returns:
+        AnalysisEvidenceLink: .
+    """
+    link_id = (
+        "al_"
+        + _hash_payload(
+            {
+                "snapshot_id": snapshot.analysis_snapshot_id,
+                "finding_id": finding_id,
+                "metric_id": metric_id,
+                "evidence_id": evidence_id,
+                "source_type": source_type,
+                "source_id": source_id,
+                "role": role,
+            }
+        ).removeprefix("sha256:")[:28]
+    )
     return AnalysisEvidenceLink(
         link_id=link_id,
         analysis_snapshot_id=snapshot.analysis_snapshot_id,
@@ -963,7 +1291,14 @@ def _link(
 
 
 def _quality_flags(quant_result: QuantResult) -> tuple[str, ...]:
-    """Build quality flag tags from a quant result's data and risk state."""
+    """Build quality flag tags from a quant result's data and risk state.
+
+    Args:
+        quant_result: QuantResult: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     flags = ["data_status:" + quant_result.data_status.value]
     flags.extend(f"risk:{flag}" for flag in quant_result.risk_flags)
     if quant_result.review_required:
@@ -972,7 +1307,14 @@ def _quality_flags(quant_result: QuantResult) -> tuple[str, ...]:
 
 
 def _metric_direction(code: str) -> str:
-    """Return whether a metric code is lower or higher is better."""
+    """Return whether a metric code is lower or higher is better.
+
+    Args:
+        code: str: .
+
+    Returns:
+        str: .
+    """
     if code.startswith(("raw_pe", "raw_pb", "raw_ps")):
         return "lower_is_better"
     if code.startswith("raw_volatility") or code.startswith("raw_max_drawdown"):
@@ -981,7 +1323,14 @@ def _metric_direction(code: str) -> str:
 
 
 def _finding_confidence(quant_result: QuantResult) -> float:
-    """Return a clamped 0-1 confidence value from a quant result."""
+    """Return a clamped 0-1 confidence value from a quant result.
+
+    Args:
+        quant_result: QuantResult: .
+
+    Returns:
+        float: .
+    """
     base = min(max(quant_result.final_score / 100.0, 0.0), 1.0)
     if quant_result.data_status.value != "ok":
         return min(base, 0.4)
@@ -991,12 +1340,26 @@ def _finding_confidence(quant_result: QuantResult) -> float:
 
 
 def _dict(value: Any) -> dict[str, Any]:
-    """Return a dict copy or an empty dict for non-dict values."""
+    """Return a dict copy or an empty dict for non-dict values.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     return dict(value) if isinstance(value, dict) else {}
 
 
 def _optional_float(value: Any) -> float | None:
-    """Convert a value to float, returning None for bool, NaN, or non-numeric."""
+    """Convert a value to float, returning None for bool, NaN, or non-numeric.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        float | None: .
+    """
     if value is None or isinstance(value, bool):
         return None
     try:
@@ -1006,7 +1369,14 @@ def _optional_float(value: Any) -> float | None:
 
 
 def _hash_payload(payload: dict[str, Any]) -> str:
-    """Hash a payload dict to a deterministic SHA-256 digest string."""
+    """Hash a payload dict to a deterministic SHA-256 digest string.
+
+    Args:
+        payload: dict[str, Any]: .
+
+    Returns:
+        str: .
+    """
     encoded = json.dumps(
         payload,
         sort_keys=True,
@@ -1023,7 +1393,17 @@ def _ensure_same_or_absent(
     value: Any,
     label: str,
 ) -> None:
-    """Reject conflicting replays when a key already holds a different value."""
+    """Reject conflicting replays when a key already holds a different value.
+
+    Args:
+        store: dict[str, Any]: .
+        key: str: .
+        value: Any: .
+        label: str: .
+
+    Returns:
+        None: .
+    """
     current = store.get(key)
     if current is not None and current != value:
         raise ValueError(f"conflicting {label}")
@@ -1033,7 +1413,15 @@ def _validate_feature_snapshot(
     snapshot: QuantFeatureSnapshot,
     rows: tuple[QuantFeatureRow, ...],
 ) -> None:
-    """Validate that feature rows match the snapshot's row count and ID."""
+    """Validate that feature rows match the snapshot's row count and ID.
+
+    Args:
+        snapshot: QuantFeatureSnapshot: .
+        rows: tuple[QuantFeatureRow, ...]: .
+
+    Returns:
+        None: .
+    """
     if snapshot.row_count != len(rows):
         raise ValueError("feature snapshot row_count does not match rows")
     for row in rows:
@@ -1042,7 +1430,14 @@ def _validate_feature_snapshot(
 
 
 def _feature_snapshot_to_row(snapshot: QuantFeatureSnapshot) -> QuantFeatureSnapshotRow:
-    """Convert a ``QuantFeatureSnapshot`` to its database row."""
+    """Convert a ``QuantFeatureSnapshot`` to its database row.
+
+    Args:
+        snapshot: QuantFeatureSnapshot: .
+
+    Returns:
+        QuantFeatureSnapshotRow: .
+    """
     return QuantFeatureSnapshotRow(
         feature_snapshot_id=snapshot.feature_snapshot_id,
         scope_version_id=snapshot.scope_version_id,
@@ -1063,7 +1458,14 @@ def _feature_snapshot_to_row(snapshot: QuantFeatureSnapshot) -> QuantFeatureSnap
 
 
 def _feature_snapshot_from_row(row: QuantFeatureSnapshotRow) -> QuantFeatureSnapshot:
-    """Convert a feature snapshot row to the immutable domain model."""
+    """Convert a feature snapshot row to the immutable domain model.
+
+    Args:
+        row: QuantFeatureSnapshotRow: .
+
+    Returns:
+        QuantFeatureSnapshot: .
+    """
     return QuantFeatureSnapshot(
         feature_snapshot_id=row.feature_snapshot_id,
         scope_version_id=row.scope_version_id,
@@ -1084,7 +1486,14 @@ def _feature_snapshot_from_row(row: QuantFeatureSnapshotRow) -> QuantFeatureSnap
 
 
 def _feature_row_to_row(row: QuantFeatureRow) -> QuantFeatureRowRow:
-    """Convert a ``QuantFeatureRow`` to its database row."""
+    """Convert a ``QuantFeatureRow`` to its database row.
+
+    Args:
+        row: QuantFeatureRow: .
+
+    Returns:
+        QuantFeatureRowRow: .
+    """
     return QuantFeatureRowRow(
         row_id=row.row_id,
         feature_snapshot_id=row.feature_snapshot_id,
@@ -1100,7 +1509,14 @@ def _feature_row_to_row(row: QuantFeatureRow) -> QuantFeatureRowRow:
 
 
 def _feature_row_from_row(row: QuantFeatureRowRow) -> QuantFeatureRow:
-    """Convert a feature row row to the immutable domain model."""
+    """Convert a feature row row to the immutable domain model.
+
+    Args:
+        row: QuantFeatureRowRow: .
+
+    Returns:
+        QuantFeatureRow: .
+    """
     return QuantFeatureRow(
         row_id=row.row_id,
         feature_snapshot_id=row.feature_snapshot_id,
@@ -1116,7 +1532,14 @@ def _feature_row_from_row(row: QuantFeatureRowRow) -> QuantFeatureRow:
 
 
 def _snapshot_to_row(snapshot: AnalysisSnapshot) -> AnalysisSnapshotRow:
-    """Convert an ``AnalysisSnapshot`` to its database row."""
+    """Convert an ``AnalysisSnapshot`` to its database row.
+
+    Args:
+        snapshot: AnalysisSnapshot: .
+
+    Returns:
+        AnalysisSnapshotRow: .
+    """
     return AnalysisSnapshotRow(
         analysis_snapshot_id=snapshot.analysis_snapshot_id,
         security_id=snapshot.security_id,
@@ -1139,7 +1562,14 @@ def _snapshot_to_row(snapshot: AnalysisSnapshot) -> AnalysisSnapshotRow:
 
 
 def _snapshot_from_row(row: AnalysisSnapshotRow) -> AnalysisSnapshot:
-    """Convert an analysis snapshot row to the immutable domain model."""
+    """Convert an analysis snapshot row to the immutable domain model.
+
+    Args:
+        row: AnalysisSnapshotRow: .
+
+    Returns:
+        AnalysisSnapshot: .
+    """
     return AnalysisSnapshot(
         analysis_snapshot_id=row.analysis_snapshot_id,
         security_id=row.security_id,
@@ -1162,7 +1592,14 @@ def _snapshot_from_row(row: AnalysisSnapshotRow) -> AnalysisSnapshot:
 
 
 def _metric_to_row(metric: AnalysisMetric) -> AnalysisMetricRow:
-    """Convert an ``AnalysisMetric`` to its database row."""
+    """Convert an ``AnalysisMetric`` to its database row.
+
+    Args:
+        metric: AnalysisMetric: .
+
+    Returns:
+        AnalysisMetricRow: .
+    """
     return AnalysisMetricRow(
         metric_id=metric.metric_id,
         analysis_snapshot_id=metric.analysis_snapshot_id,
@@ -1183,7 +1620,14 @@ def _metric_to_row(metric: AnalysisMetric) -> AnalysisMetricRow:
 
 
 def _metric_from_row(row: AnalysisMetricRow) -> AnalysisMetric:
-    """Convert an analysis metric row to the immutable domain model."""
+    """Convert an analysis metric row to the immutable domain model.
+
+    Args:
+        row: AnalysisMetricRow: .
+
+    Returns:
+        AnalysisMetric: .
+    """
     return AnalysisMetric(
         metric_id=row.metric_id,
         analysis_snapshot_id=row.analysis_snapshot_id,
@@ -1204,7 +1648,14 @@ def _metric_from_row(row: AnalysisMetricRow) -> AnalysisMetric:
 
 
 def _finding_to_row(finding: AnalysisFinding) -> AnalysisFindingRow:
-    """Convert an ``AnalysisFinding`` to its database row."""
+    """Convert an ``AnalysisFinding`` to its database row.
+
+    Args:
+        finding: AnalysisFinding: .
+
+    Returns:
+        AnalysisFindingRow: .
+    """
     return AnalysisFindingRow(
         finding_id=finding.finding_id,
         analysis_snapshot_id=finding.analysis_snapshot_id,
@@ -1221,7 +1672,14 @@ def _finding_to_row(finding: AnalysisFinding) -> AnalysisFindingRow:
 
 
 def _finding_from_row(row: AnalysisFindingRow) -> AnalysisFinding:
-    """Convert an analysis finding row to the immutable domain model."""
+    """Convert an analysis finding row to the immutable domain model.
+
+    Args:
+        row: AnalysisFindingRow: .
+
+    Returns:
+        AnalysisFinding: .
+    """
     return AnalysisFinding(
         finding_id=row.finding_id,
         analysis_snapshot_id=row.analysis_snapshot_id,
@@ -1238,7 +1696,14 @@ def _finding_from_row(row: AnalysisFindingRow) -> AnalysisFinding:
 
 
 def _link_to_row(link: AnalysisEvidenceLink) -> AnalysisEvidenceLinkRow:
-    """Convert an ``AnalysisEvidenceLink`` to its database row."""
+    """Convert an ``AnalysisEvidenceLink`` to its database row.
+
+    Args:
+        link: AnalysisEvidenceLink: .
+
+    Returns:
+        AnalysisEvidenceLinkRow: .
+    """
     return AnalysisEvidenceLinkRow(
         link_id=link.link_id,
         analysis_snapshot_id=link.analysis_snapshot_id,
@@ -1254,7 +1719,14 @@ def _link_to_row(link: AnalysisEvidenceLink) -> AnalysisEvidenceLinkRow:
 
 
 def _link_from_row(row: AnalysisEvidenceLinkRow) -> AnalysisEvidenceLink:
-    """Convert an analysis evidence link row to the immutable domain model."""
+    """Convert an analysis evidence link row to the immutable domain model.
+
+    Args:
+        row: AnalysisEvidenceLinkRow: .
+
+    Returns:
+        AnalysisEvidenceLink: .
+    """
     return AnalysisEvidenceLink(
         link_id=row.link_id,
         analysis_snapshot_id=row.analysis_snapshot_id,

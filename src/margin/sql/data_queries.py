@@ -41,7 +41,16 @@ def canonical_values_by_decision(
     decision_at: datetime,
     indicator_ids: tuple[str, ...] | None = None,
 ) -> Select:
-    """PIT-safe canonical value query: latest values known at ``decision_at``."""
+    """PIT-safe canonical value query: latest values known at ``decision_at``.
+
+    Args:
+        security_ids: tuple[str, ...]: .
+        decision_at: datetime: .
+        indicator_ids: tuple[str, ...] | None: .
+
+    Returns:
+        Select: .
+    """
     stmt = (
         select(CanonicalIndicatorValueRow)
         .where(CanonicalIndicatorValueRow.security_id.in_(security_ids))
@@ -64,7 +73,17 @@ def industry_memberships_bitemporal(
     taxonomy: str,
     system_as_of: datetime,
 ) -> Select:
-    """Bitemporal industry membership query."""
+    """Bitemporal industry membership query.
+
+    Args:
+        security_ids: tuple[str, ...]: .
+        on_date: Any: .
+        taxonomy: str: .
+        system_as_of: datetime: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(SecurityIndustryMembershipRow)
         .where(SecurityIndustryMembershipRow.security_id.in_(security_ids))
@@ -92,7 +111,17 @@ def adjusted_prices_by_decision(
     end_date: Any,
     decision_at: datetime,
 ) -> Select:
-    """PIT-safe adjusted price query."""
+    """PIT-safe adjusted price query.
+
+    Args:
+        security_ids: tuple[str, ...]: .
+        start_date: Any: .
+        end_date: Any: .
+        decision_at: datetime: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(AdjustedPriceSeriesRow)
         .where(AdjustedPriceSeriesRow.security_id.in_(security_ids))
@@ -109,17 +138,21 @@ def adjusted_prices_by_decision(
 
 
 def freshness_records(domains: set[str] | None = None) -> Select:
-    """Freshness records optionally filtered by endpoint domain."""
+    """Freshness records optionally filtered by endpoint domain.
+
+    Args:
+        domains: set[str] | None: .
+
+    Returns:
+        Select: .
+    """
     stmt = select(DataFreshnessStateRow)
     if domains:
-        stmt = (
-            stmt.join(
-                ProviderEndpointRow,
-                (ProviderEndpointRow.provider == DataFreshnessStateRow.provider)
-                & (ProviderEndpointRow.code == DataFreshnessStateRow.endpoint_code),
-            )
-            .where(ProviderEndpointRow.domain.in_(domains))
-        )
+        stmt = stmt.join(
+            ProviderEndpointRow,
+            (ProviderEndpointRow.provider == DataFreshnessStateRow.provider)
+            & (ProviderEndpointRow.code == DataFreshnessStateRow.endpoint_code),
+        ).where(ProviderEndpointRow.domain.in_(domains))
     return stmt.order_by(
         DataFreshnessStateRow.provider,
         DataFreshnessStateRow.endpoint_code,
@@ -132,7 +165,15 @@ def quality_events_recent(
     security_ids: tuple[str, ...] = (),
     since: datetime | None = None,
 ) -> Select:
-    """Append-only quality event query."""
+    """Append-only quality event query.
+
+    Args:
+        security_ids: tuple[str, ...]: .
+        since: datetime | None: .
+
+    Returns:
+        Select: .
+    """
     stmt = select(DataQualityEventRow).order_by(DataQualityEventRow.created_at.desc())
     if security_ids:
         stmt = stmt.where(DataQualityEventRow.security_id.in_(security_ids))
@@ -145,14 +186,21 @@ def security_profiles_active(
     security_ids: tuple[str, ...],
     system_as_of: datetime,
 ) -> Select:
-    """Active security-master records known at ``system_as_of``."""
+    """Active security-master records known at ``system_as_of``.
+
+    Args:
+        security_ids: tuple[str, ...]: .
+        system_as_of: datetime: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(SecurityMasterRow)
         .where(SecurityMasterRow.security_id.in_(security_ids))
         .where(SecurityMasterRow.system_from <= system_as_of)
         .where(
-            (SecurityMasterRow.system_to.is_(None))
-            | (SecurityMasterRow.system_to > system_as_of)
+            (SecurityMasterRow.system_to.is_(None)) | (SecurityMasterRow.system_to > system_as_of)
         )
         .order_by(
             SecurityMasterRow.security_id,
@@ -169,7 +217,19 @@ def indicator_history_pit(
     decision_at: datetime,
     max_points_per_indicator: int | None = None,
 ) -> Select:
-    """PIT-safe indicator history with deterministic provider deduplication."""
+    """PIT-safe indicator history with deterministic provider deduplication.
+
+    Args:
+        security_ids: tuple[str, ...]: .
+        indicator_ids: tuple[str, ...]: .
+        start_date: Any: .
+        end_date: Any: .
+        decision_at: datetime: .
+        max_points_per_indicator: int | None: .
+
+    Returns:
+        Select: .
+    """
     window_start = datetime.combine(start_date, time.min, tzinfo=UTC)
     window_end = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=UTC)
     provider_priority = case(
@@ -269,7 +329,14 @@ def indicator_history_pit(
 
 
 def sync_run_by_id_for_update(run_id: str) -> Select:
-    """Lock a sync run row for exclusive claim."""
+    """Lock a sync run row for exclusive claim.
+
+    Args:
+        run_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(DataSyncRunRow)
         .where(DataSyncRunRow.run_id == run_id)
@@ -278,7 +345,11 @@ def sync_run_by_id_for_update(run_id: str) -> Select:
 
 
 def sync_runs_active_for_update() -> Select:
-    """Lock all non-terminal sync runs for cross-run claiming."""
+    """Lock all non-terminal sync runs for cross-run claiming.
+
+    Returns:
+        Select: .
+    """
     return (
         select(DataSyncRunRow)
         .where(
@@ -296,7 +367,14 @@ def sync_runs_active_for_update() -> Select:
 
 
 def sync_run_latest_by_requester(requested_by: str) -> Select:
-    """Find the newest run created by a specific requester."""
+    """Find the newest run created by a specific requester.
+
+    Args:
+        requested_by: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(DataSyncRunRow)
         .where(DataSyncRunRow.requested_by == requested_by)
@@ -309,7 +387,15 @@ def sync_run_latest_by_requester(requested_by: str) -> Select:
 
 
 def active_work_item_for_run(run_id: str, lease_cutoff: datetime) -> Select:
-    """Check whether a run has an actively-claimed work item."""
+    """Check whether a run has an actively-claimed work item.
+
+    Args:
+        run_id: str: .
+        lease_cutoff: datetime: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(DataSyncWorkItemRow.work_item_id)
         .where(DataSyncWorkItemRow.run_id == run_id)
@@ -320,7 +406,16 @@ def active_work_item_for_run(run_id: str, lease_cutoff: datetime) -> Select:
 
 
 def claimable_work_item(run_id: str, claimed_at: datetime, lease_cutoff: datetime) -> Select:
-    """Select the next claimable work item with priority ordering and skip-locked."""
+    """Select the next claimable work item with priority ordering and skip-locked.
+
+    Args:
+        run_id: str: .
+        claimed_at: datetime: .
+        lease_cutoff: datetime: .
+
+    Returns:
+        Select: .
+    """
     priority = case(
         (DataSyncWorkItemRow.endpoint_id.like("%:security_master"), 10),
         (DataSyncWorkItemRow.endpoint_id.like("%:index_member_csi300"), 20),
@@ -359,7 +454,14 @@ def claimable_work_item(run_id: str, claimed_at: datetime, lease_cutoff: datetim
 
 
 def work_items_for_run(run_id: str) -> Select:
-    """Return all work items for a run (used for reconciliation)."""
+    """Return all work items for a run (used for reconciliation).
+
+    Args:
+        run_id: str: .
+
+    Returns:
+        Select: .
+    """
     return select(DataSyncWorkItemRow).where(DataSyncWorkItemRow.run_id == run_id)
 
 
@@ -370,7 +472,18 @@ def upsert_freshness(
     as_of_date: Any,
     observed_at: datetime,
 ) -> Any:
-    """Upsert a freshness state row on conflict."""
+    """Upsert a freshness state row on conflict.
+
+    Args:
+        freshness_id: str: .
+        provider: str: .
+        endpoint_code: str: .
+        as_of_date: Any: .
+        observed_at: datetime: .
+
+    Returns:
+        Any: .
+    """
     return (
         pg_insert(DataFreshnessStateRow)
         .values(
@@ -400,7 +513,11 @@ def upsert_freshness(
 
 
 def active_security_ids() -> Select:
-    """Return all active A-share security IDs in deterministic order."""
+    """Return all active A-share security IDs in deterministic order.
+
+    Returns:
+        Select: .
+    """
     return (
         select(SecurityMasterRow.security_id)
         .where(SecurityMasterRow.system_to.is_(None))
@@ -409,7 +526,11 @@ def active_security_ids() -> Select:
 
 
 def active_stock_security_ids() -> Select:
-    """Return all active stock security IDs in deterministic order."""
+    """Return all active stock security IDs in deterministic order.
+
+    Returns:
+        Select: .
+    """
     return (
         select(SecurityMasterRow.security_id)
         .where(SecurityMasterRow.system_to.is_(None))
@@ -423,19 +544,32 @@ def raw_snapshot_by_payload_hash(
     endpoint_code: str,
     payload_hash: str,
 ) -> Select:
-    """Find an existing raw snapshot by content-addressed hash."""
-    return (
-        select(RawDataSnapshotRow)
-        .where(
-            RawDataSnapshotRow.provider == provider,
-            RawDataSnapshotRow.endpoint_code == endpoint_code,
-            RawDataSnapshotRow.payload_hash == payload_hash,
-        )
+    """Find an existing raw snapshot by content-addressed hash.
+
+    Args:
+        provider: str: .
+        endpoint_code: str: .
+        payload_hash: str: .
+
+    Returns:
+        Select: .
+    """
+    return select(RawDataSnapshotRow).where(
+        RawDataSnapshotRow.provider == provider,
+        RawDataSnapshotRow.endpoint_code == endpoint_code,
+        RawDataSnapshotRow.payload_hash == payload_hash,
     )
 
 
 def insert_facts_batch(fact_payloads: list[dict[str, Any]]) -> Any:
-    """Batch insert standardized indicator facts with conflict-don't-nothing."""
+    """Batch insert standardized indicator facts with conflict-don't-nothing.
+
+    Args:
+        fact_payloads: list[dict[str, Any]]: .
+
+    Returns:
+        Any: .
+    """
     return (
         pg_insert(StandardizedIndicatorFactRow)
         .values(fact_payloads)
@@ -445,7 +579,14 @@ def insert_facts_batch(fact_payloads: list[dict[str, Any]]) -> Any:
 
 
 def insert_canonical_values_batch(payloads: list[dict[str, Any]]) -> Any:
-    """Batch insert canonical indicator values with conflict-don't-nothing."""
+    """Batch insert canonical indicator values with conflict-don't-nothing.
+
+    Args:
+        payloads: list[dict[str, Any]]: .
+
+    Returns:
+        Any: .
+    """
     return (
         pg_insert(CanonicalIndicatorValueRow)
         .values(payloads)
@@ -458,18 +599,30 @@ def insert_canonical_values_batch(payloads: list[dict[str, Any]]) -> Any:
 
 
 def pool_snapshot_by_run(pool_code: str, source_run_id: str) -> Select:
-    """Find an existing pool snapshot for a source run."""
-    return (
-        select(CompanyPoolSnapshotRow)
-        .where(
-            CompanyPoolSnapshotRow.pool_code == pool_code,
-            CompanyPoolSnapshotRow.source_run_id == source_run_id,
-        )
+    """Find an existing pool snapshot for a source run.
+
+    Args:
+        pool_code: str: .
+        source_run_id: str: .
+
+    Returns:
+        Select: .
+    """
+    return select(CompanyPoolSnapshotRow).where(
+        CompanyPoolSnapshotRow.pool_code == pool_code,
+        CompanyPoolSnapshotRow.source_run_id == source_run_id,
     )
 
 
 def latest_pool_snapshot(pool_code: str) -> Select:
-    """Return the newest immutable pool snapshot."""
+    """Return the newest immutable pool snapshot.
+
+    Args:
+        pool_code: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(CompanyPoolSnapshotRow)
         .where(CompanyPoolSnapshotRow.pool_code == pool_code)
@@ -482,7 +635,14 @@ def latest_pool_snapshot(pool_code: str) -> Select:
 
 
 def pool_members_by_snapshot(snapshot_id: str) -> Select:
-    """Return all members frozen into a pool snapshot."""
+    """Return all members frozen into a pool snapshot.
+
+    Args:
+        snapshot_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(CompanyPoolMemberRow)
         .where(CompanyPoolMemberRow.snapshot_id == snapshot_id)
@@ -491,7 +651,14 @@ def pool_members_by_snapshot(snapshot_id: str) -> Select:
 
 
 def insert_pool_members(member_payloads: list[dict[str, Any]]) -> Any:
-    """Batch insert company pool members."""
+    """Batch insert company pool members.
+
+    Args:
+        member_payloads: list[dict[str, Any]]: .
+
+    Returns:
+        Any: .
+    """
     return insert(CompanyPoolMemberRow).values(member_payloads)
 
 
@@ -499,14 +666,26 @@ def insert_pool_members(member_payloads: list[dict[str, Any]]) -> Any:
 
 
 def delete_raw_snapshot(snapshot_id: str) -> Any:
-    """Delete an unreferenced raw snapshot."""
-    return delete(RawDataSnapshotRow).where(
-        RawDataSnapshotRow.snapshot_id == snapshot_id
-    )
+    """Delete an unreferenced raw snapshot.
+
+    Args:
+        snapshot_id: str: .
+
+    Returns:
+        Any: .
+    """
+    return delete(RawDataSnapshotRow).where(RawDataSnapshotRow.snapshot_id == snapshot_id)
 
 
 def fact_reference_count(snapshot_id: str) -> Select:
-    """Count facts referencing a raw snapshot."""
+    """Count facts referencing a raw snapshot.
+
+    Args:
+        snapshot_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(func.count())
         .select_from(StandardizedIndicatorFactRow)
@@ -515,7 +694,14 @@ def fact_reference_count(snapshot_id: str) -> Select:
 
 
 def corporate_action_reference_count(snapshot_id: str) -> Select:
-    """Count corporate actions referencing a raw snapshot."""
+    """Count corporate actions referencing a raw snapshot.
+
+    Args:
+        snapshot_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(func.count())
         .select_from(CorporateActionRow)
@@ -527,7 +713,14 @@ def corporate_action_reference_count(snapshot_id: str) -> Select:
 
 
 def policy_versions_by_owner(owner_id: str) -> Select:
-    """List policy versions newest-first."""
+    """List policy versions newest-first.
+
+    Args:
+        owner_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(DataAcquisitionPolicyVersionRow)
         .where(DataAcquisitionPolicyVersionRow.owner_id == owner_id)
@@ -539,7 +732,15 @@ def policy_versions_by_owner(owner_id: str) -> Select:
 
 
 def active_policy_by_owner(owner_id: str, lifecycle_value: str) -> Select:
-    """Return the active policy for an owner."""
+    """Return the active policy for an owner.
+
+    Args:
+        owner_id: str: .
+        lifecycle_value: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(DataAcquisitionPolicyVersionRow)
         .where(DataAcquisitionPolicyVersionRow.owner_id == owner_id)
@@ -549,32 +750,51 @@ def active_policy_by_owner(owner_id: str, lifecycle_value: str) -> Select:
 
 
 def policy_by_create_idempotency(actor_id: str, idempotency_key: str) -> Select:
-    """Find a prior policy create by actor and idempotency key."""
+    """Find a prior policy create by actor and idempotency key.
+
+    Args:
+        actor_id: str: .
+        idempotency_key: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(DataAcquisitionPolicyVersionRow)
         .where(DataAcquisitionPolicyVersionRow.created_by == actor_id)
-        .where(
-            DataAcquisitionPolicyVersionRow.create_idempotency_key == idempotency_key
-        )
+        .where(DataAcquisitionPolicyVersionRow.create_idempotency_key == idempotency_key)
         .limit(1)
     )
 
 
 def policy_by_activation_idempotency(actor_id: str, idempotency_key: str) -> Select:
-    """Find a prior policy activation by actor and idempotency key."""
+    """Find a prior policy activation by actor and idempotency key.
+
+    Args:
+        actor_id: str: .
+        idempotency_key: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(DataAcquisitionPolicyVersionRow)
-        .where(
-            DataAcquisitionPolicyVersionRow.activation_idempotency_key
-            == idempotency_key
-        )
+        .where(DataAcquisitionPolicyVersionRow.activation_idempotency_key == idempotency_key)
         .where(DataAcquisitionPolicyVersionRow.created_by == actor_id)
         .limit(1)
     )
 
 
 def active_policies_for_update(owner_id: str, lifecycle_value: str) -> Select:
-    """Lock active policy versions for deprecation during activation."""
+    """Lock active policy versions for deprecation during activation.
+
+    Args:
+        owner_id: str: .
+        lifecycle_value: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(DataAcquisitionPolicyVersionRow)
         .where(DataAcquisitionPolicyVersionRow.owner_id == owner_id)
@@ -587,7 +807,15 @@ def active_policies_for_update(owner_id: str, lifecycle_value: str) -> Select:
 
 
 def insert_landing_records(table: Any, payloads: list[dict[str, Any]]) -> Any:
-    """Insert immutable source landing rows with conflict-don't-nothing."""
+    """Insert immutable source landing rows with conflict-don't-nothing.
+
+    Args:
+        table: Any: .
+        payloads: list[dict[str, Any]]: .
+
+    Returns:
+        Any: .
+    """
     return (
         insert(table)
         .values(payloads)
@@ -601,16 +829,30 @@ def update_landing_quality_status(
     source_row_ids: list[str],
     status: str,
 ) -> Any:
-    """Update quality_status on landing rows after quality decision."""
+    """Update quality_status on landing rows after quality decision.
+
+    Args:
+        table: Any: .
+        source_row_ids: list[str]: .
+        status: str: .
+
+    Returns:
+        Any: .
+    """
     return (
-        update(table)
-        .where(table.c.source_row_id.in_(source_row_ids))
-        .values(quality_status=status)
+        update(table).where(table.c.source_row_id.in_(source_row_ids)).values(quality_status=status)
     )
 
 
 def insert_quality_decisions(payloads: list[dict[str, Any]]) -> Any:
-    """Append quality decisions with conflict-don't-nothing."""
+    """Append quality decisions with conflict-don't-nothing.
+
+    Args:
+        payloads: list[dict[str, Any]]: .
+
+    Returns:
+        Any: .
+    """
     return (
         insert(_QUALITY_TABLE_PLACEHOLDER)
         .values(payloads)
@@ -620,12 +862,27 @@ def insert_quality_decisions(payloads: list[dict[str, Any]]) -> Any:
 
 
 def landing_row_count(table: Any) -> Select:
-    """Count source rows for coverage reporting."""
+    """Count source rows for coverage reporting.
+
+    Args:
+        table: Any: .
+
+    Returns:
+        Select: .
+    """
     return select(func.count()).select_from(table)
 
 
 def quality_decision_counts(provider: str, endpoint: str) -> Select:
-    """Return quality-decision counts by state for one endpoint."""
+    """Return quality-decision counts by state for one endpoint.
+
+    Args:
+        provider: str: .
+        endpoint: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(_QUALITY_TABLE_PLACEHOLDER.c.decision, func.count())
         .where(

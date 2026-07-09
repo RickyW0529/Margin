@@ -35,12 +35,7 @@ DECISION_AT = datetime(2026, 6, 23, 8, 30, tzinfo=UTC)
 
 @dataclass(frozen=True)
 class ReviewSummary:
-    """Minimal persisted-review summary consumed by the publisher.
-
-    Attributes:
-        review_ids: Tuple of persisted review identifiers.
-        context_snapshot_ids: Tuple of frozen context snapshot identifiers.
-    """
+    """Minimal persisted-review summary consumed by the publisher.."""
 
     review_ids: tuple[str, ...]
     context_snapshot_ids: tuple[str, ...] = ()
@@ -50,7 +45,7 @@ def test_update_review_publishes_real_assessment_evidence_and_pointer() -> None:
     """Verify the publisher uses the persisted AI review without inventing identifiers.
 
     Returns:
-        None.
+        None: .
     """
     reviews = MemoryResearchDeltaRepository()
     valuations = MemoryValuationDiscoveryRepository()
@@ -86,10 +81,7 @@ def test_update_review_publishes_real_assessment_evidence_and_pointer() -> None:
     assert assessment.evidence_refs == review.evidence_ids
     assert assessment.valuation_model == "ai_delta_review_v0.2"
     assert [
-        edge.evidence_id
-        for edge in valuations.list_valuation_assessment_evidence(
-            "assessment-new"
-        )
+        edge.evidence_id for edge in valuations.list_valuation_assessment_evidence("assessment-new")
     ] == ["evidence-1", "evidence-2"]
     [pointer] = valuations.list_effective_assessment_pointers()
     assert pointer.effective_assessment_id == "assessment-new"
@@ -101,7 +93,7 @@ def test_publisher_replay_is_idempotent() -> None:
     """Verify retrying the publication step does not duplicate immutable records.
 
     Returns:
-        None.
+        None: .
     """
     reviews = MemoryResearchDeltaRepository()
     valuations = MemoryValuationDiscoveryRepository()
@@ -137,16 +129,14 @@ def test_publisher_replay_is_idempotent() -> None:
     assert first == second
     assert len(valuations.list_valuation_assessments()) == 1
     assert len(valuations.list_effective_assessment_pointers()) == 1
-    assert len(
-        valuations.list_valuation_assessment_evidence("assessment-invalid")
-    ) == 1
+    assert len(valuations.list_valuation_assessment_evidence("assessment-invalid")) == 1
 
 
 def test_abstain_without_previous_assessment_does_not_create_fake_pointer() -> None:
     """Verify a first-run abstention remains review-only until an assessment exists.
 
     Returns:
-        None.
+        None: .
     """
     reviews = MemoryResearchDeltaRepository()
     valuations = MemoryValuationDiscoveryRepository()
@@ -183,7 +173,7 @@ def test_dashboard_refresh_reports_persisted_effective_projection() -> None:
     """Verify dashboard refresh reflects persisted pointers rather than a no-op string.
 
     Returns:
-        None.
+        None: .
     """
     reviews = MemoryResearchDeltaRepository()
     valuations = MemoryValuationDiscoveryRepository()
@@ -219,7 +209,11 @@ def test_dashboard_refresh_reports_persisted_effective_projection() -> None:
 
 
 def test_dashboard_refresh_publishes_latest_quant_projection_items() -> None:
-    """Verify refresh writes visible quant results into the dashboard repository."""
+    """Verify refresh writes visible quant results into the dashboard repository.
+
+    Returns:
+        None: .
+    """
     reviews = MemoryResearchDeltaRepository()
     valuations = MemoryValuationDiscoveryRepository()
     dashboard = MemoryDashboardRepository()
@@ -278,7 +272,11 @@ def test_dashboard_refresh_publishes_latest_quant_projection_items() -> None:
 
 
 def test_dashboard_refresh_can_publish_stock_analyst_adjusted_projection() -> None:
-    """Publisher can let StockAnalystAgent remove risky names and update dashboard."""
+    """Publisher can let StockAnalystAgent remove risky names and update dashboard.
+
+    Returns:
+        None: .
+    """
     reviews = MemoryResearchDeltaRepository()
     valuations = MemoryValuationDiscoveryRepository()
     dashboard = MemoryDashboardRepository()
@@ -348,7 +346,19 @@ def _review(
     conclusion: str,
     evidence_ids: tuple[str, ...],
 ) -> ResearchDeltaReview:
-    """Build one deterministic ResearchDeltaReview for publisher adapter tests."""
+    """Build one deterministic ResearchDeltaReview for publisher adapter tests.
+
+    Args:
+        review_id: str: .
+        outcome: ReviewOutcome: .
+        previous_assessment_id: str | None: .
+        effective_assessment_id: str | None: .
+        conclusion: str: .
+        evidence_ids: tuple[str, ...]: .
+
+    Returns:
+        ResearchDeltaReview: .
+    """
 
     return ResearchDeltaReview(
         review_id=review_id,
@@ -370,11 +380,7 @@ def _review(
             }
             else "stale"
         ),
-        stale_reason=(
-            "insufficient_evidence"
-            if outcome is ReviewOutcome.ABSTAIN
-            else None
-        ),
+        stale_reason=("insufficient_evidence" if outcome is ReviewOutcome.ABSTAIN else None),
         confidence=0.72,
         conclusion=conclusion,
         valuation_view="undervalued",
@@ -394,7 +400,20 @@ def _quant_result(
     risk_flags: tuple[str, ...] = (),
     target_weight: float | None = None,
 ) -> QuantResult:
-    """Build one deterministic quant result for dashboard projection tests."""
+    """Build one deterministic quant result for dashboard projection tests.
+
+    Args:
+        security_id: str: .
+        score: float: .
+        screening_status: ScreeningStatus: .
+        review_required: bool: .
+        review_reasons: tuple[str, ...]: .
+        risk_flags: tuple[str, ...]: .
+        target_weight: float | None: .
+
+    Returns:
+        QuantResult: .
+    """
     return QuantResult(
         quant_run_id="quant-1",
         security_id=security_id,

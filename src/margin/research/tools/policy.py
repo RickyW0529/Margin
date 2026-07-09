@@ -25,7 +25,7 @@ GRAPH_ALLOWED_CAPABILITIES = frozenset(
 
 
 class ToolPolicyDecision(BaseModel):
-    """Deterministic authorization result."""
+    """Deterministic authorization result.."""
 
     allowed: bool
     reason_code: str
@@ -35,13 +35,16 @@ class ToolPolicyDecision(BaseModel):
 
 
 class ToolPolicyEngine:
-    """Authorize scoped calls without relying on LLM judgment."""
+    """Authorize scoped calls without relying on LLM judgment.."""
 
     def __init__(self, policy_version: str = "tool-policy-v0.2.0") -> None:
         """Initialize the policy engine.
 
         Args:
-            policy_version: Version string included in every policy decision.
+            policy_version: str: .
+
+        Returns:
+            None: .
         """
         self.policy_version = policy_version
 
@@ -64,21 +67,21 @@ class ToolPolicyEngine:
         """Return a fail-closed decision for one requested tool capability.
 
         Args:
-            node_name: Name of the calling node (unused).
-            capability: Capability requested by the tool call.
-            security_id: Security scoped to this session.
-            decision_at: Point-in-time decision timestamp.
-            node_grants: Capabilities granted to the calling node.
-            requested_security_id: Security ID in the tool arguments, if any.
-            requested_decision_at: Decision time in the tool arguments, if any.
-            call_count: Current number of calls made by this session.
-            max_calls: Maximum allowed calls for this session.
-            estimated_result_bytes: Estimated result size for the tool.
-            max_result_bytes: Maximum allowed result size for this session.
-            deadline: Optional deadline for tool calls.
+            node_name: str: .
+            capability: ToolCapability: .
+            security_id: str: .
+            decision_at: datetime: .
+            node_grants: set[ToolCapability] | frozenset[ToolCapability]: .
+            requested_security_id: str | None: .
+            requested_decision_at: datetime | str | None: .
+            call_count: int: .
+            max_calls: int: .
+            estimated_result_bytes: int: .
+            max_result_bytes: int: .
+            deadline: datetime | None: .
 
         Returns:
-            A ``ToolPolicyDecision`` that is allowed only if all checks pass.
+            ToolPolicyDecision: .
         """
         del node_name
         if capability not in node_grants:
@@ -114,16 +117,23 @@ class ToolPolicyEngine:
         """Return whether a capability may appear in a node manifest.
 
         Args:
-            capability: Capability to check.
-            grants: Capabilities granted to the node.
+            capability: ToolCapability: .
+            grants: set[ToolCapability] | frozenset[ToolCapability]: .
 
         Returns:
-            True if the capability is both granted and allowed by the graph policy.
+            bool: .
         """
         return capability in grants and capability in GRAPH_ALLOWED_CAPABILITIES
 
     def _deny(self, reason_code: str) -> ToolPolicyDecision:
-        """Return a denied policy decision with the given reason code."""
+        """Return a denied policy decision with the given reason code.
+
+        Args:
+            reason_code: str: .
+
+        Returns:
+            ToolPolicyDecision: .
+        """
         return ToolPolicyDecision(
             allowed=False,
             reason_code=reason_code,
@@ -132,7 +142,14 @@ class ToolPolicyEngine:
 
 
 def _parse_datetime(value: datetime | str) -> datetime:
-    """Parse a datetime or ISO string into a UTC-aware datetime."""
+    """Parse a datetime or ISO string into a UTC-aware datetime.
+
+    Args:
+        value: datetime | str: .
+
+    Returns:
+        datetime: .
+    """
     if isinstance(value, datetime):
         return ensure_utc(value)
     return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)

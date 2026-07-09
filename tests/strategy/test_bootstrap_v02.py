@@ -41,14 +41,11 @@ def test_bootstrap_creates_one_executable_default_scope_idempotently(
 ) -> None:
     """Verify bootstrap produces an active base config without duplicating versions.
 
-    Running bootstrap twice with the same inputs must yield the same scope
-    version and exactly one of each configuration entity.
-
     Args:
-        database_url: PostgreSQL connection URL for the isolated test database.
+        database_url: str: .
 
     Returns:
-        None.
+        None: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -98,7 +95,14 @@ def test_bootstrap_creates_one_executable_default_scope_idempotently(
 def test_bootstrap_creates_v03_defaults_when_v02_history_exists(
     database_url: str,
 ) -> None:
-    """Verify v0.3 bootstrap does not reuse stale v0.2 quant versions."""
+    """Verify v0.3 bootstrap does not reuse stale v0.2 quant versions.
+
+    Args:
+        database_url: str: .
+
+    Returns:
+        None: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     secret_store = SecretStore(
@@ -212,11 +216,8 @@ def test_bootstrap_creates_v03_defaults_when_v02_history_exists(
 def test_bootstrap_does_not_activate_scope_when_required_provider_is_missing() -> None:
     """Verify a partial Provider setup remains visible but is not executable.
 
-    When a required provider is absent, the scope version must not be created
-    and the missing provider names must be reported.
-
     Returns:
-        None.
+        None: .
     """
     repository = MemoryStrategyRepository()
     bootstrap = StrategyBootstrapService(
@@ -236,7 +237,11 @@ def test_bootstrap_does_not_activate_scope_when_required_provider_is_missing() -
 
 
 def test_bootstrap_creates_default_index_universes_without_switching_scope() -> None:
-    """Verify CSI300/CSI500 defaults are visible but do not change scope."""
+    """Verify CSI300/CSI500 defaults are visible but do not change scope.
+
+    Returns:
+        None: .
+    """
     repository = MemoryStrategyRepository()
     bootstrap = StrategyBootstrapService(
         repository=repository,
@@ -281,14 +286,11 @@ def test_optional_provider_health_failure_does_not_abort_bootstrap(
 ) -> None:
     """Verify a failed optional adapter stays in review while base config remains usable.
 
-    A failing optional provider health check must not abort the bootstrap;
-    the provider config should remain in review state.
-
     Args:
-        database_url: PostgreSQL connection URL for the isolated test database.
+        database_url: str: .
 
     Returns:
-        None.
+        None: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -325,7 +327,8 @@ def test_optional_provider_health_failure_does_not_abort_bootstrap(
     )
 
     assert result.scope_version_id is None
-    assert repository.get_provider_config(
-        "provider-akshare-default-v0.2.0"
-    ).lifecycle.value == "review"
+    assert (
+        repository.get_provider_config("provider-akshare-default-v0.2.0").lifecycle.value
+        == "review"
+    )
     engine.dispose()

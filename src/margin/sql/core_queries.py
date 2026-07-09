@@ -25,7 +25,15 @@ def outbox_row_by_topic_and_key(
     topic: str,
     idempotency_key: str,
 ) -> Select:
-    """Return an outbox row by topic and idempotency key."""
+    """Return an outbox row by topic and idempotency key.
+
+    Args:
+        topic: str: .
+        idempotency_key: str: .
+
+    Returns:
+        Select: .
+    """
     return select(TransactionalOutboxRow).where(
         TransactionalOutboxRow.topic == topic,
         TransactionalOutboxRow.idempotency_key == idempotency_key,
@@ -37,7 +45,16 @@ def outbox_claim_batch(
     now: datetime,
     limit: int,
 ) -> Select:
-    """Return claimable outbox rows for a topic using SKIP LOCKED."""
+    """Return claimable outbox rows for a topic using SKIP LOCKED.
+
+    Args:
+        topic: str: .
+        now: datetime: .
+        limit: int: .
+
+    Returns:
+        Select: .
+    """
     claimable = or_(
         and_(
             TransactionalOutboxRow.state.in_(
@@ -67,7 +84,14 @@ def outbox_claim_batch(
 
 
 def outbox_count_by_topic(topic: str) -> Select:
-    """Return a count query for outbox messages by topic."""
+    """Return a count query for outbox messages by topic.
+
+    Args:
+        topic: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(func.count())
         .select_from(TransactionalOutboxRow)
@@ -85,7 +109,20 @@ def insert_outbox_row(
     available_at: datetime,
     now: datetime,
 ) -> Any:
-    """Insert one outbox row with idempotency conflict handling."""
+    """Insert one outbox row with idempotency conflict handling.
+
+    Args:
+        outbox_id: str: .
+        topic: str: .
+        idempotency_key: str: .
+        payload: dict[str, Any]: .
+        state: str: .
+        available_at: datetime: .
+        now: datetime: .
+
+    Returns:
+        Any: .
+    """
     return (
         insert(TransactionalOutboxRow)
         .values(
@@ -108,7 +145,14 @@ def insert_outbox_row(
 
 
 def active_capacity_limit(limit_key: str) -> Select:
-    """Return the active capacity limit for a given key."""
+    """Return the active capacity limit for a given key.
+
+    Args:
+        limit_key: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(CapacityLimitVersionRow)
         .where(
@@ -121,7 +165,14 @@ def active_capacity_limit(limit_key: str) -> Select:
 
 
 def deprecate_active_limits(limit_key: str) -> Any:
-    """Deprecate all active limits for a given key."""
+    """Deprecate all active limits for a given key.
+
+    Args:
+        limit_key: str: .
+
+    Returns:
+        Any: .
+    """
     return (
         update(CapacityLimitVersionRow)
         .where(
@@ -140,7 +191,18 @@ def insert_capacity_counter(
     window_started_at: datetime,
     window_ends_at: datetime,
 ) -> Any:
-    """Insert one capacity counter row with conflict handling."""
+    """Insert one capacity counter row with conflict handling.
+
+    Args:
+        counter_id: str: .
+        limit_key: str: .
+        limit_version_id: str: .
+        window_started_at: datetime: .
+        window_ends_at: datetime: .
+
+    Returns:
+        Any: .
+    """
     from decimal import Decimal
 
     return (
@@ -171,7 +233,16 @@ def capacity_counter_for_update(
     limit_version_id: str,
     window_started_at: datetime,
 ) -> Select:
-    """Return a capacity counter row locked for update."""
+    """Return a capacity counter row locked for update.
+
+    Args:
+        limit_key: str: .
+        limit_version_id: str: .
+        window_started_at: datetime: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(ProviderCapacityCounterRow)
         .where(
@@ -188,7 +259,16 @@ def secret_by_idempotency(
     secret_name: str,
     idempotency_key: str,
 ) -> Select:
-    """Return a secret version row by provider, name, and idempotency key."""
+    """Return a secret version row by provider, name, and idempotency key.
+
+    Args:
+        provider_name: str: .
+        secret_name: str: .
+        idempotency_key: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(ProviderSecretVersionRow)
         .where(ProviderSecretVersionRow.provider_name == provider_name)
@@ -201,7 +281,15 @@ def active_secrets_by_provider_and_name(
     provider_name: str,
     secret_name: str,
 ) -> Select:
-    """Return active secret rows for a provider and name."""
+    """Return active secret rows for a provider and name.
+
+    Args:
+        provider_name: str: .
+        secret_name: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(ProviderSecretVersionRow)
         .where(ProviderSecretVersionRow.provider_name == provider_name)
@@ -214,7 +302,15 @@ def secrets_list(
     provider_name: str | None = None,
     secret_name: str | None = None,
 ) -> Select:
-    """Return secret rows in creation order without decrypting them."""
+    """Return secret rows in creation order without decrypting them.
+
+    Args:
+        provider_name: str | None: .
+        secret_name: str | None: .
+
+    Returns:
+        Select: .
+    """
     query = select(ProviderSecretVersionRow)
     if provider_name is not None:
         query = query.where(ProviderSecretVersionRow.provider_name == provider_name)
@@ -229,10 +325,18 @@ def audit_records(
     trace_id: str | None = None,
     limit: int = 100,
 ) -> Select:
-    """Return audit records ordered by recorded_at desc with optional filters."""
-    statement = select(AuditLogRecordRow).order_by(
-        AuditLogRecordRow.recorded_at.desc()
-    )
+    """Return audit records ordered by recorded_at desc with optional filters.
+
+    Args:
+        record_type: str | None: .
+        object_id: str | None: .
+        trace_id: str | None: .
+        limit: int: .
+
+    Returns:
+        Select: .
+    """
+    statement = select(AuditLogRecordRow).order_by(AuditLogRecordRow.recorded_at.desc())
     if record_type is not None:
         statement = statement.where(AuditLogRecordRow.record_type == record_type)
     if object_id is not None:
@@ -248,7 +352,17 @@ def orchestration_runs(
     state_value: str | None = None,
     limit: int = 50,
 ) -> Select:
-    """Return persisted runs, newest first, filtered by optional facets."""
+    """Return persisted runs, newest first, filtered by optional facets.
+
+    Args:
+        run_type: str | None: .
+        scope_version_id: str | None: .
+        state_value: str | None: .
+        limit: int: .
+
+    Returns:
+        Select: .
+    """
     clause = []
     if run_type is not None:
         clause.append(OrchestrationRunRow.run_type == run_type)
@@ -271,7 +385,17 @@ def step_event_by_sequence(
     attempt_no: int,
     state_seq: int,
 ) -> Select:
-    """Return a step event ID by its unique sequence key."""
+    """Return a step event ID by its unique sequence key.
+
+    Args:
+        run_id: str: .
+        step_id: str: .
+        attempt_no: int: .
+        state_seq: int: .
+
+    Returns:
+        Select: .
+    """
     return select(OrchestrationStepAttemptRow.event_id).where(
         OrchestrationStepAttemptRow.run_id == run_id,
         OrchestrationStepAttemptRow.step_id == step_id,
@@ -284,7 +408,15 @@ def step_events_by_run_and_step(
     run_id: str,
     step_id: str,
 ) -> Select:
-    """Return all step events for a run and step ordered by sequence."""
+    """Return all step events for a run and step ordered by sequence.
+
+    Args:
+        run_id: str: .
+        step_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(OrchestrationStepAttemptRow)
         .where(
@@ -303,7 +435,15 @@ def latest_step_event(
     run_id: str,
     step_id: str,
 ) -> Select:
-    """Return the most recent step event for a run and step."""
+    """Return the most recent step event for a run and step.
+
+    Args:
+        run_id: str: .
+        step_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(OrchestrationStepAttemptRow)
         .where(
@@ -323,7 +463,15 @@ def claim_next_step_statement(
     now: datetime,
     allowed_step_ids: frozenset[str] | None = None,
 ) -> Select:
-    """Return a claimable step event using a PostgreSQL row lock."""
+    """Return a claimable step event using a PostgreSQL row lock.
+
+    Args:
+        now: datetime: .
+        allowed_step_ids: frozenset[str] | None: .
+
+    Returns:
+        Select: .
+    """
     current = OrchestrationStepAttemptRow
     newer = aliased(OrchestrationStepAttemptRow)
     has_newer = exists(

@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 
 class DocumentFormat(StrEnum):
-    """Supported source document formats."""
+    """Supported source document formats.."""
 
     PDF = "pdf"
     HTML = "html"
@@ -30,11 +30,11 @@ class DocumentFormat(StrEnum):
 
 
 class DoclingUnavailableError(RuntimeError):
-    """Raised when Docling conversion is required but unavailable."""
+    """Raised when Docling conversion is required but unavailable.."""
 
 
 class MarkdownConversionRequest(BaseModel):
-    """Input payload for document-to-Markdown conversion."""
+    """Input payload for document-to-Markdown conversion.."""
 
     document_id: str
     content: bytes
@@ -47,7 +47,7 @@ class MarkdownConversionRequest(BaseModel):
 
 
 class MarkdownConversionResult(BaseModel):
-    """Canonical Markdown conversion artifact."""
+    """Canonical Markdown conversion artifact.."""
 
     document_id: str
     markdown: str
@@ -65,14 +65,21 @@ class MarkdownConversionResult(BaseModel):
 
 
 class MarkdownBackend(Protocol):
-    """Backend protocol implemented by Docling and tests."""
+    """Backend protocol implemented by Docling and tests.."""
 
     def convert(self, request: MarkdownConversionRequest) -> MarkdownConversionResult:
-        """Convert a request into canonical Markdown."""
+        """Convert a request into canonical Markdown.
+
+        Args:
+            request: MarkdownConversionRequest: .
+
+        Returns:
+            MarkdownConversionResult: .
+        """
 
 
 class DocumentFormatRouter:
-    """Detect document format from Content-Type and URL/file extension."""
+    """Detect document format from Content-Type and URL/file extension.."""
 
     CONTENT_TYPE_MAP: tuple[tuple[str, DocumentFormat], ...] = (
         ("pdf", DocumentFormat.PDF),
@@ -106,7 +113,16 @@ class DocumentFormatRouter:
         source_url: str | None,
         filename: str | None = None,
     ) -> DocumentFormat:
-        """Detect a document format from MIME type, filename, or URL."""
+        """Detect a document format from MIME type, filename, or URL.
+
+        Args:
+            content_type: str | None: .
+            source_url: str | None: .
+            filename: str | None: .
+
+        Returns:
+            DocumentFormat: .
+        """
         normalized_content_type = (content_type or "").lower()
         for marker, document_format in self.CONTENT_TYPE_MAP:
             if marker in normalized_content_type:
@@ -118,7 +134,7 @@ class DocumentFormatRouter:
 
 
 class DoclingMarkdownConverter:
-    """Convert arbitrary document bytes into Markdown using Docling when available."""
+    """Convert arbitrary document bytes into Markdown using Docling when available.."""
 
     def __init__(
         self,
@@ -131,14 +147,13 @@ class DoclingMarkdownConverter:
         """Initialize the converter.
 
         Args:
-            backend: Optional injected backend. Tests and future import flows can provide
-                a backend without importing Docling.
-            router: Optional format router.
-            allow_fallback: Whether to use lightweight local conversion if Docling is
-                absent. Set False for fail-closed production smoke checks.
-            pdf_do_ocr: Whether Docling should initialize OCR for PDF conversion.
-                Defaults to True so scanned filings and research reports can be
-                normalized through the same Markdown path.
+            backend: MarkdownBackend | None: .
+            router: DocumentFormatRouter | None: .
+            allow_fallback: bool: .
+            pdf_do_ocr: bool: .
+
+        Returns:
+            None: .
         """
         self._backend = backend
         self._router = router or DocumentFormatRouter()
@@ -154,7 +169,18 @@ class DoclingMarkdownConverter:
         content_type: str | None = None,
         filename: str | None = None,
     ) -> MarkdownConversionResult:
-        """Convert source bytes into a canonical Markdown artifact."""
+        """Convert source bytes into a canonical Markdown artifact.
+
+        Args:
+            content: bytes: .
+            document_id: str: .
+            source_url: str | None: .
+            content_type: str | None: .
+            filename: str | None: .
+
+        Returns:
+            MarkdownConversionResult: .
+        """
         document_format = self._router.detect(
             content_type=content_type,
             source_url=source_url,
@@ -180,7 +206,14 @@ class DoclingMarkdownConverter:
 
     @staticmethod
     def _load_docling_backend(*, pdf_do_ocr: bool = True) -> MarkdownBackend | None:
-        """Return the real Docling backend when the optional dependency is installed."""
+        """Return the real Docling backend when the optional dependency is installed.
+
+        Args:
+            pdf_do_ocr: bool: .
+
+        Returns:
+            MarkdownBackend | None: .
+        """
         try:
             from docling.document_converter import DocumentConverter
         except ImportError:
@@ -210,13 +243,28 @@ class DoclingMarkdownConverter:
 
 
 class _DoclingBackend:
-    """Thin adapter around Docling's ``DocumentConverter`` API."""
+    """Thin adapter around Docling's ``DocumentConverter`` API.."""
 
     def __init__(self, converter: Any) -> None:
+        """Process __init__.
+
+        Args:
+            converter: Any: .
+
+        Returns:
+            None: .
+        """
         self._converter = converter
 
     def convert(self, request: MarkdownConversionRequest) -> MarkdownConversionResult:
-        """Convert bytes by writing them to a temporary file for Docling."""
+        """Convert bytes by writing them to a temporary file for Docling.
+
+        Args:
+            request: MarkdownConversionRequest: .
+
+        Returns:
+            MarkdownConversionResult: .
+        """
         suffix = _suffix_for_format(request.document_format)
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
             temp_path = Path(temp_file.name)
@@ -242,7 +290,14 @@ class _DoclingBackend:
 
 
 def _fallback_convert(request: MarkdownConversionRequest) -> MarkdownConversionResult:
-    """Best-effort local Markdown conversion when Docling is not installed."""
+    """Best-effort local Markdown conversion when Docling is not installed.
+
+    Args:
+        request: MarkdownConversionRequest: .
+
+    Returns:
+        MarkdownConversionResult: .
+    """
     text = request.content.decode("utf-8", errors="replace")
     warnings = ("docling_unavailable_fallback_used",)
     if request.document_format == DocumentFormat.JSON:
@@ -281,7 +336,14 @@ def _fallback_convert(request: MarkdownConversionRequest) -> MarkdownConversionR
 
 
 def _html_to_markdownish(text: str) -> str:
-    """Extract visible HTML text as Markdown paragraphs."""
+    """Extract visible HTML text as Markdown paragraphs.
+
+    Args:
+        text: str: .
+
+    Returns:
+        str: .
+    """
     from bs4 import BeautifulSoup
 
     soup = BeautifulSoup(text, "html.parser")
@@ -298,7 +360,14 @@ def _html_to_markdownish(text: str) -> str:
 
 
 def _pdf_to_markdownish(content: bytes) -> str:
-    """Extract PDF text with pypdf as a lightweight fallback."""
+    """Extract PDF text with pypdf as a lightweight fallback.
+
+    Args:
+        content: bytes: .
+
+    Returns:
+        str: .
+    """
     import io
 
     from pypdf import PdfReader
@@ -312,7 +381,14 @@ def _pdf_to_markdownish(content: bytes) -> str:
 
 
 def _docling_json(document: Any) -> dict[str, Any]:
-    """Export Docling document JSON with API-version tolerance."""
+    """Export Docling document JSON with API-version tolerance.
+
+    Args:
+        document: Any: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     for attr in ("export_to_dict", "model_dump"):
         method = getattr(document, attr, None)
         if callable(method):
@@ -322,7 +398,14 @@ def _docling_json(document: Any) -> dict[str, Any]:
 
 
 def _docling_tables(document: Any) -> tuple[dict[str, Any], ...]:
-    """Extract table data from Docling document when exposed by the API."""
+    """Extract table data from Docling document when exposed by the API.
+
+    Args:
+        document: Any: .
+
+    Returns:
+        tuple[dict[str, Any], ...]: .
+    """
     tables = getattr(document, "tables", None) or []
     extracted: list[dict[str, Any]] = []
     for index, table in enumerate(tables, start=1):
@@ -346,7 +429,14 @@ def _docling_tables(document: Any) -> tuple[dict[str, Any], ...]:
 
 
 def _suffix_for_format(document_format: DocumentFormat) -> str:
-    """Return a file suffix Docling can use for input detection."""
+    """Return a file suffix Docling can use for input detection.
+
+    Args:
+        document_format: DocumentFormat: .
+
+    Returns:
+        str: .
+    """
     if document_format == DocumentFormat.UNKNOWN:
         return ".bin"
     return f".{document_format.value}"

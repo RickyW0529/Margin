@@ -60,7 +60,7 @@ from margin.valuation_discovery.quant.scoring import (
 
 
 class QuantService:
-    """Run a single-day multi-factor quant screen."""
+    """Run a single-day multi-factor quant screen.."""
 
     def __init__(
         self,
@@ -72,9 +72,12 @@ class QuantService:
         """Initialize the quant service with repository and configuration.
 
         Args:
-            repository: Persistence boundary for quant runs and results.
-            config: Optional hard-filter and scoring thresholds.
-            strategy_version_id: Default strategy version identifier.
+            repository: QuantRepository: .
+            config: QuantConfig | None: .
+            strategy_version_id: str: .
+
+        Returns:
+            None: .
         """
         self._repository = repository
         self._config = config or QuantConfig()
@@ -94,14 +97,11 @@ class QuantService:
         """Run quant screening for a frozen input snapshot and persist results.
 
         Args:
-            snapshot: Frozen PIT-safe quant input snapshot.
-            decision_at: Timezone-aware decision timestamp.
+            snapshot: QuantInputSnapshot: .
+            decision_at: datetime: .
 
         Returns:
-            The persisted ``QuantRun`` with completed status.
-
-        Raises:
-            ValueError: If the snapshot is not valid for publishable results.
+            QuantRun: .
         """
         if not snapshot.is_valid:
             raise ValueError("invalid quant input snapshot")
@@ -117,8 +117,7 @@ class QuantService:
             input_snapshot_id=snapshot.snapshot_id,
             scope_version_id=snapshot.scope_version_id,
             strategy_version_id=str(
-                strategy_metadata.get("quant_strategy_version_id")
-                or self._strategy_version_id
+                strategy_metadata.get("quant_strategy_version_id") or self._strategy_version_id
             ),
             decision_at=decision_at,
             config_hash=self._config_hash(),
@@ -171,7 +170,18 @@ class QuantService:
         filter_result: Any,
         strategy_metadata: dict[str, Any],
     ) -> tuple[QuantResult, ...]:
-        """Run the provider-free ML lifecycle scoring route."""
+        """Run the provider-free ML lifecycle scoring route.
+
+        Args:
+            quant_run: QuantRun: .
+            snapshot: QuantInputSnapshot: .
+            cross_section: pd.DataFrame: .
+            filter_result: Any: .
+            strategy_metadata: dict[str, Any]: .
+
+        Returns:
+            tuple[QuantResult, ...]: .
+        """
         allowed_ids = [
             security_id
             for security_id, result in filter_result.by_security.items()
@@ -183,9 +193,7 @@ class QuantService:
                 cross_section.loc[allowed_ids].copy(),
                 metadata=strategy_metadata,
             )
-            scored_by_security = {
-                str(row["security_id"]): row for _, row in scored.iterrows()
-            }
+            scored_by_security = {str(row["security_id"]): row for _, row in scored.iterrows()}
         config = MLLifecycleConfig.from_metadata(strategy_metadata)
         return tuple(
             self._build_ml_result(
@@ -205,7 +213,16 @@ class QuantService:
         snapshot: QuantInputSnapshot,
         decision_at: datetime,
     ) -> pd.DataFrame:
-        """Prepare a cross-section DataFrame with security_id index and missing rows."""
+        """Prepare a cross-section DataFrame with security_id index and missing rows.
+
+        Args:
+            frame: pd.DataFrame: .
+            snapshot: QuantInputSnapshot: .
+            decision_at: datetime: .
+
+        Returns:
+            pd.DataFrame: .
+        """
         prepared = frame.copy(deep=True)
         if prepared.empty:
             prepared = pd.DataFrame({"security_id": list(snapshot.security_ids)})
@@ -245,7 +262,17 @@ class QuantService:
         manual_config: ManualAllAConfig,
         manual_final_enabled: bool,
     ) -> dict[str, pd.Series]:
-        """Score all filter-allowed securities and return scored rows by ID."""
+        """Score all filter-allowed securities and return scored rows by ID.
+
+        Args:
+            cross_section: pd.DataFrame: .
+            filter_result: Any: .
+            manual_config: ManualAllAConfig: .
+            manual_final_enabled: bool: .
+
+        Returns:
+            dict[str, pd.Series]: .
+        """
         allowed_ids = [
             security_id
             for security_id, result in filter_result.by_security.items()
@@ -261,10 +288,7 @@ class QuantService:
         scored = self._risk_calculator.calculate(scored)
         scored = score_manual_all_a(scored, config=manual_config)
         scored["__use_manual_all_a_final_score"] = manual_final_enabled
-        return {
-            str(row["security_id"]): row
-            for _, row in scored.iterrows()
-        }
+        return {str(row["security_id"]): row for _, row in scored.iterrows()}
 
     def _build_ml_result(
         self,
@@ -275,7 +299,18 @@ class QuantService:
         scored_row: pd.Series | None,
         config: MLLifecycleConfig,
     ) -> QuantResult:
-        """Build an ML lifecycle ``QuantResult`` with serving metadata."""
+        """Build an ML lifecycle ``QuantResult`` with serving metadata.
+
+        Args:
+            quant_run: QuantRun: .
+            security_id: str: .
+            filter_result: SecurityFilterResult: .
+            scored_row: pd.Series | None: .
+            config: MLLifecycleConfig: .
+
+        Returns:
+            QuantResult: .
+        """
         if not filter_result.allowed_for_scoring or scored_row is None:
             blocked = self._blocked_result(
                 quant_run=quant_run,
@@ -300,9 +335,7 @@ class QuantService:
         risk_score = _float(scored_row.get("ml_risk_health"))
         screening_status = _ml_screening_status(final_score, config)
         risk_reasons = _tuple_strings(scored_row.get("ml_risk_reasons"))
-        review_reasons = _dedupe(
-            risk_reasons + _reason_codes(filter_result, severity="review")
-        )
+        review_reasons = _dedupe(risk_reasons + _reason_codes(filter_result, severity="review"))
         research_guardrail = _ml_guardrail(
             screening_status=screening_status,
             risk_reasons=risk_reasons,
@@ -357,7 +390,17 @@ class QuantService:
         filter_result: SecurityFilterResult,
         scored_row: pd.Series | None,
     ) -> QuantResult:
-        """Build a ``QuantResult`` from filter and scored row data."""
+        """Build a ``QuantResult`` from filter and scored row data.
+
+        Args:
+            quant_run: QuantRun: .
+            security_id: str: .
+            filter_result: SecurityFilterResult: .
+            scored_row: pd.Series | None: .
+
+        Returns:
+            QuantResult: .
+        """
         if not filter_result.allowed_for_scoring or scored_row is None:
             return self._blocked_result(
                 quant_run=quant_run,
@@ -428,7 +471,16 @@ class QuantService:
         security_id: str,
         filter_result: SecurityFilterResult,
     ) -> QuantResult:
-        """Build a rejected ``QuantResult`` for blocked or missing securities."""
+        """Build a rejected ``QuantResult`` for blocked or missing securities.
+
+        Args:
+            quant_run: QuantRun: .
+            security_id: str: .
+            filter_result: SecurityFilterResult: .
+
+        Returns:
+            QuantResult: .
+        """
         blocker_codes = _reason_codes(filter_result, severity="blocker")
         review_reasons = _dedupe(
             blocker_codes
@@ -458,7 +510,11 @@ class QuantService:
         )
 
     def _config_hash(self) -> str:
-        """Return a deterministic SHA-256 hash of the quant configuration."""
+        """Return a deterministic SHA-256 hash of the quant configuration.
+
+        Returns:
+            str: .
+        """
         rendered = json.dumps(
             self._config.model_dump(mode="json"),
             ensure_ascii=False,
@@ -471,7 +527,15 @@ def _ordered_security_ids(
     snapshot: QuantInputSnapshot,
     cross_section: pd.DataFrame,
 ) -> tuple[str, ...]:
-    """Return snapshot security IDs followed by any cross-section extras."""
+    """Return snapshot security IDs followed by any cross-section extras.
+
+    Args:
+        snapshot: QuantInputSnapshot: .
+        cross_section: pd.DataFrame: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     snapshot_ids = tuple(str(security_id) for security_id in snapshot.security_ids)
     extras = tuple(
         security_id
@@ -482,18 +546,32 @@ def _ordered_security_ids(
 
 
 def _strategy_metadata(snapshot: QuantInputSnapshot) -> dict[str, Any]:
-    """Return quant strategy metadata embedded in the feature-set binding."""
+    """Return quant strategy metadata embedded in the feature-set binding.
+
+    Args:
+        snapshot: QuantInputSnapshot: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     feature_set = snapshot.quant_feature_set
     metadata = getattr(feature_set, "metadata", None)
     if isinstance(metadata, dict):
         strategy = metadata.get("quant_strategy")
         if isinstance(strategy, dict):
-                return strategy
+            return strategy
     return {}
 
 
 def _strategy_family(metadata: dict[str, Any]) -> str:
-    """Return the normalized strategy family from metadata."""
+    """Return the normalized strategy family from metadata.
+
+    Args:
+        metadata: dict[str, Any]: .
+
+    Returns:
+        str: .
+    """
     return str(metadata.get("strategy_family") or "").strip().lower()
 
 
@@ -501,7 +579,15 @@ def _ml_screening_status(
     final_score: float,
     config: MLLifecycleConfig,
 ) -> ScreeningStatus:
-    """Map ML lifecycle score to screening status."""
+    """Map ML lifecycle score to screening status.
+
+    Args:
+        final_score: float: .
+        config: MLLifecycleConfig: .
+
+    Returns:
+        ScreeningStatus: .
+    """
     if final_score >= config.pass_threshold:
         return ScreeningStatus.PASS
     if final_score >= config.near_threshold:
@@ -516,7 +602,15 @@ def _ml_guardrail(
     screening_status: ScreeningStatus,
     risk_reasons: tuple[str, ...],
 ) -> ResearchGuardrail:
-    """Return research guardrail for an ML lifecycle result."""
+    """Return research guardrail for an ML lifecycle result.
+
+    Args:
+        screening_status: ScreeningStatus: .
+        risk_reasons: tuple[str, ...]: .
+
+    Returns:
+        ResearchGuardrail: .
+    """
     if screening_status == ScreeningStatus.REJECT:
         return ResearchGuardrail.RESEARCH_BLOCKED
     if "short_term_overheat" in risk_reasons:
@@ -532,7 +626,15 @@ def _ml_strategy_details(
     row: pd.Series,
     config: MLLifecycleConfig,
 ) -> dict[str, Any]:
-    """Build auditable ML serving details for one security."""
+    """Build auditable ML serving details for one security.
+
+    Args:
+        row: pd.Series: .
+        config: MLLifecycleConfig: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     return {
         "model_family": ML_MODEL_FAMILY,
         "strategy_version": config.strategy_version,
@@ -559,7 +661,14 @@ def _ml_strategy_details(
 
 
 def _empty_ml_strategy(config: MLLifecycleConfig) -> dict[str, Any]:
-    """Return ML metadata for hard-filtered securities."""
+    """Return ML metadata for hard-filtered securities.
+
+    Args:
+        config: MLLifecycleConfig: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     return {
         "model_family": ML_MODEL_FAMILY,
         "strategy_version": config.strategy_version,
@@ -600,7 +709,16 @@ def _ml_ai_quant_profile(
     status: ScreeningStatus,
     ml_strategy: dict[str, Any],
 ) -> dict[str, Any]:
-    """Build research-only profile exposed to AI/Dashboard consumers."""
+    """Build research-only profile exposed to AI/Dashboard consumers.
+
+    Args:
+        row: pd.Series: .
+        status: ScreeningStatus: .
+        ml_strategy: dict[str, Any]: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     raw_factors = {
         key: _optional_score(row.get(key))
         for key in (
@@ -644,7 +762,16 @@ def _ml_reason_summary(
     status: ScreeningStatus,
     ml_strategy: dict[str, Any],
 ) -> str:
-    """Build a concise ML result explanation."""
+    """Build a concise ML result explanation.
+
+    Args:
+        final_score: float: .
+        status: ScreeningStatus: .
+        ml_strategy: dict[str, Any]: .
+
+    Returns:
+        str: .
+    """
     target_weight = float(ml_strategy.get("target_weight") or 0.0)
     risk_gate = ml_strategy.get("risk_controls", {}).get("risk_gate", "normal")
     return (
@@ -654,12 +781,26 @@ def _ml_reason_summary(
 
 
 def _object_dict(value: Any) -> dict[str, Any]:
-    """Return a plain dict for object-valued DataFrame cells."""
+    """Return a plain dict for object-valued DataFrame cells.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     return dict(value) if isinstance(value, dict) else {}
 
 
 def _tuple_strings(value: Any) -> tuple[str, ...]:
-    """Normalize object-valued reason collections to string tuples."""
+    """Normalize object-valued reason collections to string tuples.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     if value is None:
         return ()
     if isinstance(value, tuple):
@@ -676,7 +817,15 @@ def _manual_config_from_strategy_metadata(
     *,
     fallback: ManualAllAConfig,
 ) -> ManualAllAConfig:
-    """Build manual strategy config from a versioned strategy payload."""
+    """Build manual strategy config from a versioned strategy payload.
+
+    Args:
+        metadata: dict[str, Any]: .
+        fallback: ManualAllAConfig: .
+
+    Returns:
+        ManualAllAConfig: .
+    """
     thresholds = metadata.get("thresholds")
     factor_weights = metadata.get("factor_weights")
     if not isinstance(thresholds, dict):
@@ -688,8 +837,7 @@ def _manual_config_from_strategy_metadata(
     presets = thresholds.get("presets")
     preset = (
         presets.get(default_universe)
-        if isinstance(presets, dict)
-        and isinstance(presets.get(default_universe), dict)
+        if isinstance(presets, dict) and isinstance(presets.get(default_universe), dict)
         else {}
     )
     weights = preset.get("factor_weights") if isinstance(preset, dict) else None
@@ -711,7 +859,14 @@ def _manual_config_from_strategy_metadata(
 
 
 def _manual_final_score_enabled(metadata: dict[str, Any]) -> bool:
-    """Return whether versioned strategy metadata should own final score."""
+    """Return whether versioned strategy metadata should own final score.
+
+    Args:
+        metadata: dict[str, Any]: .
+
+    Returns:
+        bool: .
+    """
     thresholds = metadata.get("thresholds")
     if not isinstance(thresholds, dict):
         return False
@@ -719,8 +874,7 @@ def _manual_final_score_enabled(metadata: dict[str, Any]) -> bool:
     default_universe = str(thresholds.get("default_universe") or "ALL_A")
     preset = (
         presets.get(default_universe)
-        if isinstance(presets, dict)
-        and isinstance(presets.get(default_universe), dict)
+        if isinstance(presets, dict) and isinstance(presets.get(default_universe), dict)
         else None
     )
     if not isinstance(preset, dict):
@@ -733,7 +887,15 @@ def _combined_with_manual_final_score(
     combined: CombinedFactorScore,
     scored_row: pd.Series,
 ) -> CombinedFactorScore:
-    """Use manual strategy score as final score when strategy metadata asks for it."""
+    """Use manual strategy score as final score when strategy metadata asks for it.
+
+    Args:
+        combined: CombinedFactorScore: .
+        scored_row: pd.Series: .
+
+    Returns:
+        CombinedFactorScore: .
+    """
     if not _bool_value(scored_row.get("__use_manual_all_a_final_score")):
         return combined
     manual_score = _optional_score(scored_row.get("manual_all_a_score"))
@@ -751,7 +913,14 @@ def _combined_with_manual_final_score(
 
 
 def _optional_score(value: Any) -> float | None:
-    """Convert a value to a clamped 0-100 float, returning None for NaN."""
+    """Convert a value to a clamped 0-100 float, returning None for NaN.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        float | None: .
+    """
     try:
         numeric = float(value)
     except (TypeError, ValueError):
@@ -762,7 +931,15 @@ def _optional_score(value: Any) -> float | None:
 
 
 def _number_or_fallback(value: Any, fallback: float) -> float:
-    """Convert a value to float, returning the fallback for NaN or non-numeric."""
+    """Convert a value to float, returning the fallback for NaN or non-numeric.
+
+    Args:
+        value: Any: .
+        fallback: float: .
+
+    Returns:
+        float: .
+    """
     try:
         numeric = float(value)
     except (TypeError, ValueError):
@@ -777,33 +954,67 @@ def _reason_codes(
     *,
     severity: str,
 ) -> tuple[str, ...]:
-    """Return reason codes of a specific severity from a filter result."""
-    return tuple(
-        reason.code for reason in filter_result.reasons if reason.severity == severity
-    )
+    """Return reason codes of a specific severity from a filter result.
+
+    Args:
+        filter_result: SecurityFilterResult: .
+        severity: str: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
+    return tuple(reason.code for reason in filter_result.reasons if reason.severity == severity)
 
 
 def _dedupe(values: tuple[str, ...]) -> tuple[str, ...]:
-    """Remove duplicate strings while preserving order."""
+    """Remove duplicate strings while preserving order.
+
+    Args:
+        values: tuple[str, ...]: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     return tuple(dict.fromkeys(values))
 
 
 def _float(value: Any) -> float:
-    """Convert a value to float, returning 0.0 for None or NaN."""
+    """Convert a value to float, returning 0.0 for None or NaN.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        float: .
+    """
     if value is None or bool(pd.isna(value)):
         return 0.0
     return float(value)
 
 
 def _bool_value(value: Any) -> bool:
-    """Convert a value to bool, returning False for None or NaN."""
+    """Convert a value to bool, returning False for None or NaN.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        bool: .
+    """
     if value is None or bool(pd.isna(value)):
         return False
     return bool(value)
 
 
 def _is_short_term_overheated(row: pd.Series) -> bool:
-    """Return whether a scored row indicates short-term price overheat."""
+    """Return whether a scored row indicates short-term price overheat.
+
+    Args:
+        row: pd.Series: .
+
+    Returns:
+        bool: .
+    """
     if bool(row.get("short_term_overheat", False)):
         return True
     value = row.get("return_20d")
@@ -816,7 +1027,15 @@ def _score_reason_summary(
     scores: Any,
     status: ScreeningStatus,
 ) -> str:
-    """Build a human-readable score and status summary string."""
+    """Build a human-readable score and status summary string.
+
+    Args:
+        scores: Any: .
+        status: ScreeningStatus: .
+
+    Returns:
+        str: .
+    """
     return (
         f"Quant screen {status.value}: final_score={scores.final_score:.2f}, "
         f"quality={scores.quality_score:.2f}, value={scores.value_score:.2f}, "
@@ -826,7 +1045,14 @@ def _score_reason_summary(
 
 
 def _blocked_reason_summary(filter_result: SecurityFilterResult) -> str:
-    """Build a human-readable rejection summary from filter reasons."""
+    """Build a human-readable rejection summary from filter reasons.
+
+    Args:
+        filter_result: SecurityFilterResult: .
+
+    Returns:
+        str: .
+    """
     if not filter_result.reasons:
         return "Rejected before scoring because required cross-section data is unavailable."
     codes = ", ".join(reason.code for reason in filter_result.reasons)
@@ -837,7 +1063,15 @@ def _assign_ranks(
     results: tuple[QuantResult, ...],
     cross_section: pd.DataFrame,
 ) -> tuple[QuantResult, ...]:
-    """Assign overall and industry ranks to quant results."""
+    """Assign overall and industry ranks to quant results.
+
+    Args:
+        results: tuple[QuantResult, ...]: .
+        cross_section: pd.DataFrame: .
+
+    Returns:
+        tuple[QuantResult, ...]: .
+    """
     overall = {
         result.security_id: rank
         for rank, result in enumerate(
@@ -880,7 +1114,14 @@ def _assign_ranks(
 
 
 def _industry_by_security(cross_section: pd.DataFrame) -> dict[str, str]:
-    """Build a security_id to industry_id mapping from a cross-section."""
+    """Build a security_id to industry_id mapping from a cross-section.
+
+    Args:
+        cross_section: pd.DataFrame: .
+
+    Returns:
+        dict[str, str]: .
+    """
     mapping: dict[str, str] = {}
     for _, row in cross_section.iterrows():
         security_id = str(row.get("security_id", ""))

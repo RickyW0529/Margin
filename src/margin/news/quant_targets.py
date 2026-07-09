@@ -15,13 +15,16 @@ from margin.sql.valuation_queries import quant_news_candidate_results
 
 
 class SQLAlchemyQuantNewsTargetRepository:
-    """Load quant-selected securities as existing ``NewsTarget`` objects."""
+    """Load quant-selected securities as existing ``NewsTarget`` objects.."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
         """Initialize the repository.
 
         Args:
-            session_factory: Callable that returns a SQLAlchemy ``Session``.
+            session_factory: Callable[[], Session]: .
+
+        Returns:
+            None: .
         """
         self._session_factory = session_factory
 
@@ -36,14 +39,13 @@ class SQLAlchemyQuantNewsTargetRepository:
         """Return PASS targets, optionally including near-threshold securities.
 
         Args:
-            scope_version_id: Identifier of the scope version that produced the quant run.
-            quant_run_id: Identifier of the quant run whose candidates are being loaded.
-            decision_at: Decision timestamp used to scope the quant run.
-            include_near_threshold: Whether to include near-threshold securities in addition
-                to PASS targets.
+            scope_version_id: str: .
+            quant_run_id: str: .
+            decision_at: datetime: .
+            include_near_threshold: bool: .
 
         Returns:
-            Tuple of ``NewsTarget`` objects sorted by priority and security id.
+            tuple[NewsTarget, ...]: .
         """
         with self._session_factory() as session:
             rows = session.scalars(
@@ -76,15 +78,21 @@ def _target_from_row(
     decision_at: datetime,
     company_context: CompanyPoolMemberRow | None = None,
 ) -> NewsTarget:
-    """Map one quant result row to a durable news target."""
+    """Map one quant result row to a durable news target.
+
+    Args:
+        row: Any: .
+        scope_version_id: str: .
+        decision_at: datetime: .
+        company_context: CompanyPoolMemberRow | None: .
+
+    Returns:
+        NewsTarget: .
+    """
     details = dict(row.factor_details or {})
     screening_status = str(row.screening_status)
     is_pass = screening_status == "pass"
-    trigger_type = (
-        TargetTriggerType.QUANT_PASS
-        if is_pass
-        else TargetTriggerType.NEAR_THRESHOLD
-    )
+    trigger_type = TargetTriggerType.QUANT_PASS if is_pass else TargetTriggerType.NEAR_THRESHOLD
     priority = 100 if is_pass else 60
     name = _first_text(details.get("name"), getattr(company_context, "name", None), row.security_id)
     symbol = str(details.get("symbol") or row.security_id)
@@ -114,7 +122,15 @@ def _company_context_by_security(
     session: Session,
     security_ids: tuple[str, ...],
 ) -> dict[str, CompanyPoolMemberRow]:
-    """Return latest included company-pool member metadata for securities."""
+    """Return latest included company-pool member metadata for securities.
+
+    Args:
+        session: Session: .
+        security_ids: tuple[str, ...]: .
+
+    Returns:
+        dict[str, CompanyPoolMemberRow]: .
+    """
     if not security_ids:
         return {}
     rows = session.scalars(
@@ -141,7 +157,14 @@ def _company_context_by_security(
 
 
 def _first_text(*values: Any) -> str:
-    """Return the first non-empty string among values."""
+    """Return the first non-empty string among values.
+
+    Args:
+        *values: Any: .
+
+    Returns:
+        str: .
+    """
     for value in values:
         text = str(value).strip() if value is not None else ""
         if text:
@@ -150,7 +173,14 @@ def _first_text(*values: Any) -> str:
 
 
 def _unique_texts(*values: Any) -> tuple[str, ...]:
-    """Return unique non-empty text values, preserving order."""
+    """Return unique non-empty text values, preserving order.
+
+    Args:
+        *values: Any: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     seen: set[str] = set()
     result: list[str] = []
     for value in values:

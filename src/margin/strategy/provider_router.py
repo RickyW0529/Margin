@@ -49,7 +49,7 @@ _PROVIDER_NAME_CATEGORY: dict[str, ProviderCategory] = {
 
 @dataclass(frozen=True)
 class ProviderDetection:
-    """Safe URL detection metadata for provider settings UI and runtime routing."""
+    """Safe URL detection metadata for provider settings UI and runtime routing.."""
 
     category: ProviderCategory
     provider_id: str
@@ -60,7 +60,7 @@ class ProviderDetection:
 
 @dataclass(frozen=True)
 class _ProviderRule:
-    """One regex-based provider detection rule."""
+    """One regex-based provider detection rule.."""
 
     provider_id: str
     label: str
@@ -68,7 +68,11 @@ class _ProviderRule:
 
     @property
     def rule_id(self) -> str:
-        """Return stable rule id."""
+        """Return stable rule id.
+
+        Returns:
+            str: .
+        """
         return f"{self.provider_id}"
 
 
@@ -132,9 +136,7 @@ _RULES: dict[ProviderCategory, tuple[_ProviderRule, ...]] = {
 }
 
 _LABELS_BY_PROVIDER: dict[str, str] = {
-    rule.provider_id: rule.label
-    for rules in _RULES.values()
-    for rule in rules
+    rule.provider_id: rule.label for rules in _RULES.values() for rule in rules
 }
 
 
@@ -143,7 +145,16 @@ def provider_category_for_config(
     provider_name: str,
     non_sensitive_config: dict[str, object] | None,
 ) -> ProviderCategory:
-    """Return the normalized provider category for old and new config shapes."""
+    """Return the normalized provider category for old and new config shapes.
+
+    Args:
+        provider_type: str: .
+        provider_name: str: .
+        non_sensitive_config: dict[str, object] | None: .
+
+    Returns:
+        ProviderCategory: .
+    """
     config = non_sensitive_config or {}
     configured = str(config.get("provider_category") or "").strip().lower()
     if configured in _CATEGORY_ALIASES:
@@ -163,7 +174,16 @@ def detect_provider_from_url(
     *,
     fallback_provider_name: str | None = None,
 ) -> ProviderDetection:
-    """Detect provider metadata from URL, falling back to Custom when unknown."""
+    """Detect provider metadata from URL, falling back to Custom when unknown.
+
+    Args:
+        category: ProviderCategory: .
+        base_url: str | None: .
+        fallback_provider_name: str | None: .
+
+    Returns:
+        ProviderDetection: .
+    """
     normalized_category = _CATEGORY_ALIASES.get(category.strip().lower(), category)
     url = (base_url or "").strip()
     for rule in _RULES.get(normalized_category, ()):
@@ -196,7 +216,14 @@ def detect_provider_from_url(
 
 
 def enrich_provider_config_metadata(config: object) -> dict[str, object]:
-    """Return non-sensitive router metadata for a ProviderConfigVersion-like object."""
+    """Return non-sensitive router metadata for a ProviderConfigVersion-like object.
+
+    Args:
+        config: object: .
+
+    Returns:
+        dict[str, object]: .
+    """
     non_sensitive_config = dict(getattr(config, "non_sensitive_config", {}) or {})
     category = provider_category_for_config(
         str(getattr(config, "provider_type")),

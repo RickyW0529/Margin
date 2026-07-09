@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class ReflectionAction(StrEnum):
-    """Only actions a critic may return."""
+    """Only actions a critic may return.."""
 
     ACCEPT = "accept"
     REVISE = "revise"
@@ -17,7 +17,7 @@ class ReflectionAction(StrEnum):
 
 
 class NodeReflection(BaseModel):
-    """Structured critic output; it never mutates graph state directly."""
+    """Structured critic output; it never mutates graph state directly.."""
 
     action: ReflectionAction
     reasons: tuple[str, ...] = Field(default_factory=tuple)
@@ -29,10 +29,10 @@ class NodeReflection(BaseModel):
         """Return whether critic references only existing evidence IDs.
 
         Args:
-            existing_evidence_ids: Set of evidence IDs available to the node.
+            existing_evidence_ids: set[str]: .
 
         Returns:
-            True if all critic-referenced evidence IDs are in the existing set.
+            bool: .
         """
         return set(self.evidence_ids) <= existing_evidence_ids
 

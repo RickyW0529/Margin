@@ -15,7 +15,11 @@ from margin.data.policy import (
 
 
 def test_default_policy_uses_24_calendar_months() -> None:
-    """The default policy computes a calendar-month window, not fixed days."""
+    """The default policy computes a calendar-month window, not fixed days.
+
+    Returns:
+        None: .
+    """
     policy = DataAcquisitionPolicyVersion(version_id="policy-default")
 
     window = policy.window_for(datetime(2026, 3, 31, 8, tzinfo=UTC))
@@ -27,7 +31,14 @@ def test_default_policy_uses_24_calendar_months() -> None:
 
 @pytest.mark.parametrize("months", [11, 61])
 def test_policy_rejects_frontend_window_outside_safe_range(months: int) -> None:
-    """The server remains authoritative over frontend policy bounds."""
+    """The server remains authoritative over frontend policy bounds.
+
+    Args:
+        months: int: .
+
+    Returns:
+        None: .
+    """
     with pytest.raises(ValidationError):
         DataAcquisitionPolicyVersion(
             version_id=f"policy-{months}",
@@ -36,7 +47,11 @@ def test_policy_rejects_frontend_window_outside_safe_range(months: int) -> None:
 
 
 def test_activation_deprecates_previous_active_version() -> None:
-    """Only one acquisition policy may be active for an owner."""
+    """Only one acquisition policy may be active for an owner.
+
+    Returns:
+        None: .
+    """
     repository = MemoryDataAcquisitionPolicyRepository()
     service = DataAcquisitionPolicyService(repository)
     first = service.create(
@@ -67,10 +82,12 @@ def test_activation_deprecates_previous_active_version() -> None:
 
 
 def test_create_is_idempotent_for_same_admin_key() -> None:
-    """Frontend retries do not create duplicate policy versions."""
-    service = DataAcquisitionPolicyService(
-        MemoryDataAcquisitionPolicyRepository()
-    )
+    """Frontend retries do not create duplicate policy versions.
+
+    Returns:
+        None: .
+    """
+    service = DataAcquisitionPolicyService(MemoryDataAcquisitionPolicyRepository())
 
     first = service.create(
         rolling_window_months=18,

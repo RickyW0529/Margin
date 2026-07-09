@@ -17,7 +17,11 @@ DECISION_AT = datetime(2026, 6, 30, tzinfo=UTC)
 
 
 def test_rag_evidence_tool_returns_agent_ready_evidence_blocks() -> None:
-    """The scoped tool should return locatable evidence blocks for agents."""
+    """The scoped tool should return locatable evidence blocks for agents.
+
+    Returns:
+        None: .
+    """
     registry = ToolDefinitionRegistry()
     package_builder = FakeEvidencePackageBuilder()
     register_rag_evidence_tools(
@@ -100,7 +104,11 @@ def test_rag_evidence_tool_returns_agent_ready_evidence_blocks() -> None:
 
 
 def test_rag_evidence_tool_uses_gap_query_for_supplemental_retrieval() -> None:
-    """Supplemental retrieval should query evidence gaps when no explicit query is given."""
+    """Supplemental retrieval should query evidence gaps when no explicit query is given.
+
+    Returns:
+        None: .
+    """
     retrieval_tool = FakeRetrievalTool([])
     registry = ToolDefinitionRegistry()
     register_rag_evidence_tools(registry, retrieval_tool=retrieval_tool)
@@ -134,7 +142,11 @@ def test_rag_evidence_tool_uses_gap_query_for_supplemental_retrieval() -> None:
 
 
 def test_rag_evidence_tool_is_available_from_manifest() -> None:
-    """The registry helper should expose the tool under EVIDENCE_RETRIEVE grants."""
+    """The registry helper should expose the tool under EVIDENCE_RETRIEVE grants.
+
+    Returns:
+        None: .
+    """
     registry = ToolDefinitionRegistry()
     register_rag_evidence_tools(registry, retrieval_tool=FakeRetrievalTool([]))
     session = ScopedToolFactory(
@@ -154,7 +166,11 @@ def test_rag_evidence_tool_is_available_from_manifest() -> None:
 
 
 def test_default_tool_factory_uses_rag_retrieval_when_dependencies_are_provided() -> None:
-    """The graph's existing evidence_retrieve tool should use RAG when wired."""
+    """The graph's existing evidence_retrieve tool should use RAG when wired.
+
+    Returns:
+        None: .
+    """
     retrieval_tool = FakeRetrievalTool(
         [
             _retrieval_result(
@@ -202,10 +218,17 @@ def test_default_tool_factory_uses_rag_retrieval_when_dependencies_are_provided(
 
 
 class FakeRetrievalTool:
-    """Fake retrieval tool recording calls and returning fixed results."""
+    """Fake retrieval tool recording calls and returning fixed results.."""
 
     def __init__(self, results: list[RetrievalResult]) -> None:
-        """Initialize the fake with fixed results."""
+        """Initialize the fake with fixed results.
+
+        Args:
+            results: list[RetrievalResult]: .
+
+        Returns:
+            None: .
+        """
         self.results = results
         self.calls: list[dict] = []
 
@@ -219,7 +242,19 @@ class FakeRetrievalTool:
         top_k: int,
         prefer_official: bool,
     ) -> list[RetrievalResult]:
-        """Record arguments and return fixed retrieval results."""
+        """Record arguments and return fixed retrieval results.
+
+        Args:
+            query: str: .
+            symbol: str: .
+            decision_at: datetime: .
+            doc_types: list[str] | None: .
+            top_k: int: .
+            prefer_official: bool: .
+
+        Returns:
+            list[RetrievalResult]: .
+        """
         self.calls.append(
             {
                 "query": query,
@@ -234,14 +269,25 @@ class FakeRetrievalTool:
 
 
 class FakeEvidencePackageBuilder:
-    """Fake package builder returning a stable package for tests."""
+    """Fake package builder returning a stable package for tests.."""
 
     def __init__(self) -> None:
-        """Initialize call storage."""
+        """Initialize call storage.
+
+        Returns:
+            None: .
+        """
         self.calls: list[dict] = []
 
     def build(self, **kwargs) -> EvidencePackage:
-        """Record the build call and return a package."""
+        """Record the build call and return a package.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            EvidencePackage: .
+        """
         self.calls.append(kwargs)
         return EvidencePackage(
             package_id="pkg-test",
@@ -251,8 +297,7 @@ class FakeEvidencePackageBuilder:
             scope_hash=kwargs["scope_hash"],
             questions=tuple(kwargs["questions"]),
             evidence_ids=tuple(
-                f"ev-{result.chunk.chunk_id}"
-                for result in kwargs["retrieval_results"]
+                f"ev-{result.chunk.chunk_id}" for result in kwargs["retrieval_results"]
             ),
             claim_ids=(),
             conflict_ids=(),
@@ -264,8 +309,7 @@ class FakeEvidencePackageBuilder:
             ),
             retrieval_audit_id=kwargs.get("retrieval_audit_id"),
             added_evidence_ids=tuple(
-                f"ev-{result.chunk.chunk_id}"
-                for result in kwargs["retrieval_results"]
+                f"ev-{result.chunk.chunk_id}" for result in kwargs["retrieval_results"]
             ),
         )
 
@@ -276,7 +320,16 @@ def _retrieval_result(
     content: str,
     score: float,
 ) -> RetrievalResult:
-    """Build one retrieval result with complete source locator metadata."""
+    """Build one retrieval result with complete source locator metadata.
+
+    Args:
+        chunk_id: str: .
+        content: str: .
+        score: float: .
+
+    Returns:
+        RetrievalResult: .
+    """
     published_at = datetime(2026, 6, 29, tzinfo=UTC)
     chunk = make_chunk(
         document_id=f"doc-{chunk_id}",

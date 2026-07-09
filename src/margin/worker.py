@@ -42,14 +42,14 @@ def build_scheduler(
     """Build the worker scheduler without starting it.
 
     Args:
-        interval_seconds: Seconds between successive job executions.
-        indexing_job: Optional callable executed on each indexing tick.
-        data_sync_job: Optional callable executed on each data-sync tick.
-        orchestration_job: Optional callable that wakes durable orchestration steps.
-        scheduled_agent_job: Optional callable that triggers due agent schedules.
+        interval_seconds: int: .
+        indexing_job: Callable[[], None] | None: .
+        data_sync_job: Callable[[], None] | None: .
+        orchestration_job: Callable[[], None] | None: .
+        scheduled_agent_job: Callable[[], None] | None: .
 
     Returns:
-        BlockingScheduler: Configured APScheduler instance with the requested jobs.
+        BlockingScheduler: .
     """
     scheduler = BlockingScheduler(timezone="Asia/Shanghai")
     if indexing_job is not None:
@@ -107,15 +107,12 @@ def build_document_indexing_runner() -> DocumentIndexingRunner:
     """Build the module 03 to module 04 persistent indexing worker.
 
     Returns:
-        DocumentIndexingRunner: Runner wired to the active versioned embedding
-            Provider and persistent vector repository.
+        DocumentIndexingRunner: .
     """
     settings = get_settings()
     engine = create_database_engine(DatabaseSettings.from_settings(settings))
     session_factory = create_session_factory(engine)
-    embedding_provider = build_worker_provider_runtime_factory(
-        settings
-    ).build_embedding().adapter
+    embedding_provider = build_worker_provider_runtime_factory(settings).build_embedding().adapter
     return DocumentIndexingRunner(
         news_repository=NewsRepository(session_factory),
         vector_repository=VectorRepository(
@@ -134,11 +131,11 @@ def build_data_ingestion_stack(
     """Build the production data warehouse ingestion stack.
 
     Args:
-        settings: Optional application settings. Defaults to ``get_settings()``.
-        default_provider: Default data provider name. Defaults to ``tushare``.
+        settings: MarginSettings | None: .
+        default_provider: str: .
 
     Returns:
-        A configured ``DataWarehouseIngestionStack`` ready for ingestion.
+        DataWarehouseIngestionStack: .
     """
     resolved = settings or get_settings()
     engine = create_database_engine(DatabaseSettings.from_settings(resolved))
@@ -155,13 +152,10 @@ def build_worker_provider_runtime_factory(
     """Build the worker's strict active-config Provider factory.
 
     Args:
-        settings: Application settings containing database and secret configuration.
+        settings: MarginSettings: .
 
     Returns:
-        A ``ProviderRuntimeFactory`` wired to the active versioned strategy config.
-
-    The encrypted secret store uses a stable local default key unless
-    ``MARGIN_SECRET_MASTER_KEY`` overrides it.
+        ProviderRuntimeFactory: .
     """
     engine = create_database_engine(DatabaseSettings.from_settings(settings))
     session_factory = create_session_factory(engine)
@@ -182,17 +176,11 @@ def build_data_sync_worker(
 ) -> DataSyncWorker:
     """Build the production durable data-sync worker and configured providers.
 
-    Attempts to build both Tushare and AKShare providers from the active
-    strategy config. At least one provider must be successfully configured.
-
     Args:
-        settings: Optional application settings. Defaults to ``get_settings()``.
+        settings: MarginSettings | None: .
 
     Returns:
-        A configured ``DataSyncWorker`` with active market-data providers.
-
-    Raises:
-        RuntimeError: If no active market-data Provider is configured.
+        DataSyncWorker: .
     """
     resolved = settings or get_settings()
     factory = build_worker_provider_runtime_factory(resolved)
@@ -234,7 +222,11 @@ def build_data_sync_worker(
 
 
 def main() -> None:
-    """Start the persistent worker and run recurring pipeline sweeps."""
+    """Start the persistent worker and run recurring pipeline sweeps.
+
+    Returns:
+        None: .
+    """
     settings = get_settings()
     configure_logging(
         log_level=settings.log_level,
@@ -244,7 +236,11 @@ def main() -> None:
     data_sync_worker = build_data_sync_worker(settings)
 
     def indexing_job() -> None:
-        """indexing job."""
+        """indexing job.
+
+        Returns:
+            None: .
+        """
         try:
             indexed_count = indexing_runner.run_once()
             logger.info(
@@ -255,7 +251,11 @@ def main() -> None:
             logger.exception("document_indexing_sweep_failed")
 
     def data_sync_job() -> None:
-        """data sync job."""
+        """data sync job.
+
+        Returns:
+            None: .
+        """
         try:
             processed_count = data_sync_worker.run_once(
                 max_items=settings.worker_max_concurrency,
@@ -268,7 +268,11 @@ def main() -> None:
             logger.exception("data_provider_sync_failed")
 
     def orchestration_job() -> None:
-        """Claim and execute durable valuation-discovery steps."""
+        """Claim and execute durable valuation-discovery steps.
+
+        Returns:
+            None: .
+        """
         try:
             from margin.api.dependencies import (
                 get_valuation_discovery_step_worker,
@@ -288,7 +292,11 @@ def main() -> None:
             logger.exception("valuation_discovery_sweep_failed")
 
     def scheduled_agent_job() -> None:
-        """Trigger due user-configured MainAgent schedules."""
+        """Trigger due user-configured MainAgent schedules.
+
+        Returns:
+            None: .
+        """
         try:
             from margin.agent_runtime.schedules import ScheduledStockAnalysisRunner
             from margin.api.dependencies import (
@@ -302,6 +310,14 @@ def main() -> None:
             strategy_service = get_strategy_service()
 
             def resolve_scope(scope_version_id: str) -> str:
+                """Process resolve_scope.
+
+                Args:
+                    scope_version_id: str: .
+
+                Returns:
+                    str: .
+                """
                 if scope_version_id != "scope-current":
                     return scope_version_id
                 return str(

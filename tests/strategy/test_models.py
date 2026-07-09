@@ -13,7 +13,7 @@ def test_strategy_ai_default_model_is_deepseek_pro():
     """Verify the default AI model for a strategy config is deepseek-v4-pro.
 
     Returns:
-        None.
+        Any: .
     """
     config = StrategyConfig()
     assert config.ai.model == "deepseek-v4-pro"
@@ -23,7 +23,7 @@ def test_strategy_version_is_immutable():
     """Verify a strategy version is created in the draft state by default.
 
     Returns:
-        None.
+        Any: .
     """
     version = StrategyVersion(
         strategy_id="st_001",
@@ -39,7 +39,7 @@ def test_strategy_config_validates_prohibited_outputs():
     """Verify strategy config accepts and stores prohibited output declarations.
 
     Returns:
-        None.
+        Any: .
     """
     config = StrategyConfig(decision={"prohibited_outputs": ["GUARANTEED_RETURN"]})
     assert "GUARANTEED_RETURN" in config.decision.prohibited_outputs
@@ -49,7 +49,7 @@ def test_strategy_version_freeze_rejects_mutation():
     """Verify a frozen strategy version rejects direct state mutation.
 
     Returns:
-        None.
+        Any: .
     """
     version = StrategyVersion(
         strategy_id="st_001",

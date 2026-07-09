@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 
 class QuantDataRequirement(BaseModel):
-    """One versioned data requirement owned by a deterministic consumer."""
+    """One versioned data requirement owned by a deterministic consumer.."""
 
     code: str
     consumer: str
@@ -27,7 +27,7 @@ class QuantDataRequirement(BaseModel):
 
 
 class ProviderEndpointRequirement(BaseModel):
-    """Provider endpoint candidate and its quant admission decision."""
+    """Provider endpoint candidate and its quant admission decision.."""
 
     provider: str
     api_name: str
@@ -43,7 +43,7 @@ class ProviderEndpointRequirement(BaseModel):
 
 
 class QuantDataRequirementCatalog:
-    """Resolve provider endpoints from active quant data requirements."""
+    """Resolve provider endpoints from active quant data requirements.."""
 
     def __init__(
         self,
@@ -54,23 +54,19 @@ class QuantDataRequirementCatalog:
         """Initialize and validate requirement links.
 
         Args:
-            requirements: Quant data requirements keyed by code.
-            endpoints: Provider endpoint candidates with admission decisions.
+            requirements: Iterable[QuantDataRequirement]: .
+            endpoints: Iterable[ProviderEndpointRequirement]: .
 
-        Raises:
-            ValueError: If an endpoint references an unknown requirement or an
-                enabled endpoint has no quant requirement.
+        Returns:
+            None: .
         """
         self._requirements = {item.code: item for item in requirements}
         self._endpoints = {
-            (item.provider.lower(), item.api_name.lower()): item
-            for item in endpoints
+            (item.provider.lower(), item.api_name.lower()): item for item in endpoints
         }
         for endpoint in self._endpoints.values():
             missing = [
-                code
-                for code in endpoint.quant_requirement_codes
-                if code not in self._requirements
+                code for code in endpoint.quant_requirement_codes if code not in self._requirements
             ]
             if missing:
                 raise ValueError(
@@ -90,10 +86,10 @@ class QuantDataRequirementCatalog:
         """Return endpoints admitted by at least one active requirement.
 
         Args:
-            provider: The provider name to filter by.
+            provider: str: .
 
         Returns:
-            Enabled endpoints for the provider, sorted by provider and API name.
+            tuple[ProviderEndpointRequirement, ...]: .
         """
         normalized = provider.strip().lower()
         return tuple(
@@ -104,22 +100,16 @@ class QuantDataRequirementCatalog:
             )
             if endpoint.provider.lower() == normalized
             and endpoint.admission == "enabled"
-            and all(
-                self._requirements[code].active
-                for code in endpoint.quant_requirement_codes
-            )
+            and all(self._requirements[code].active for code in endpoint.quant_requirement_codes)
         )
 
     def requirements(self) -> tuple[QuantDataRequirement, ...]:
         """Return all cataloged quant requirements in stable order.
 
         Returns:
-            All requirements sorted by code.
+            tuple[QuantDataRequirement, ...]: .
         """
-        return tuple(
-            self._requirements[code]
-            for code in sorted(self._requirements)
-        )
+        return tuple(self._requirements[code] for code in sorted(self._requirements))
 
     def endpoints(
         self,
@@ -128,10 +118,10 @@ class QuantDataRequirementCatalog:
         """Return all endpoint decisions, optionally scoped to one provider.
 
         Args:
-            provider: Optional provider name filter.
+            provider: str | None: .
 
         Returns:
-            Endpoint decisions sorted by provider and API name.
+            tuple[ProviderEndpointRequirement, ...]: .
         """
         normalized = provider.strip().lower() if provider else None
         return tuple(
@@ -151,11 +141,11 @@ class QuantDataRequirementCatalog:
         """Return one endpoint catalog entry.
 
         Args:
-            provider: The provider name.
-            api_name: The API name.
+            provider: str: .
+            api_name: str: .
 
         Returns:
-            The matching endpoint requirement.
+            ProviderEndpointRequirement: .
         """
         return self._endpoints[(provider.strip().lower(), api_name.strip().lower())]
 
@@ -168,25 +158,21 @@ class QuantDataRequirementCatalog:
         """Return quant requirements that admit one endpoint.
 
         Args:
-            provider: The provider name.
-            api_name: The API name.
+            provider: str: .
+            api_name: str: .
 
         Returns:
-            Quant requirements linked to the endpoint.
+            tuple[QuantDataRequirement, ...]: .
         """
         endpoint = self.endpoint(provider, api_name)
-        return tuple(
-            self._requirements[code]
-            for code in endpoint.quant_requirement_codes
-        )
+        return tuple(self._requirements[code] for code in endpoint.quant_requirement_codes)
 
     @classmethod
     def default(cls) -> QuantDataRequirementCatalog:
         """Build the v0.3 default quant requirement closure.
 
         Returns:
-            A catalog with 20 quant requirements and 22 enabled Tushare
-            endpoints plus 7 out-of-scope cataloged endpoints.
+            QuantDataRequirementCatalog: .
         """
         requirements = (
             _requirement(
@@ -463,7 +449,18 @@ def _requirement(
     *,
     history: int = 0,
 ) -> QuantDataRequirement:
-    """Build one active default requirement."""
+    """Build one active default requirement.
+
+    Args:
+        code: str: .
+        consumer: str: .
+        warehouse_fields: tuple[str, ...]: .
+        description: str: .
+        history: int: .
+
+    Returns:
+        QuantDataRequirement: .
+    """
     return QuantDataRequirement(
         code=code,
         consumer=consumer,
@@ -474,7 +471,14 @@ def _requirement(
 
 
 def _domain_for(api_name: str) -> str:
-    """Return the warehouse domain for a Tushare API."""
+    """Return the warehouse domain for a Tushare API.
+
+    Args:
+        api_name: str: .
+
+    Returns:
+        str: .
+    """
     if api_name in {"stock_basic", "namechange"}:
         return "security"
     if api_name in {
@@ -507,7 +511,14 @@ def _domain_for(api_name: str) -> str:
 
 
 def _partition_for(api_name: str) -> str:
-    """Return the bounded partition strategy for an endpoint."""
+    """Return the bounded partition strategy for an endpoint.
+
+    Args:
+        api_name: str: .
+
+    Returns:
+        str: .
+    """
     if api_name in {
         "daily",
         "adj_factor",
@@ -538,7 +549,14 @@ def _partition_for(api_name: str) -> str:
 
 
 def _natural_key_for(api_name: str) -> tuple[str, ...]:
-    """Return stable source natural-key fields."""
+    """Return stable source natural-key fields.
+
+    Args:
+        api_name: str: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     if api_name == "trade_cal":
         return ("exchange", "cal_date")
     if api_name in {
@@ -575,7 +593,14 @@ def _natural_key_for(api_name: str) -> tuple[str, ...]:
 
 
 def _pit_fields_for(api_name: str) -> tuple[str, ...]:
-    """Return provider fields used to derive PIT timestamps."""
+    """Return provider fields used to derive PIT timestamps.
+
+    Args:
+        api_name: str: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     if api_name in {
         "daily",
         "adj_factor",

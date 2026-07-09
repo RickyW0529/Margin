@@ -14,7 +14,7 @@ from margin.research.tools.factory import ScopedToolFactory, ScopedToolSession
 
 
 class AnalysisRequest(BaseModel):
-    """Frozen input supplied to one analysis handler."""
+    """Frozen input supplied to one analysis handler.."""
 
     node_name: str
     security_id: str
@@ -59,7 +59,7 @@ NODE_GRANTS: dict[str, set[ToolCapability]] = {
 
 
 class AnalysisNode:
-    """Execute one scoped analysis handler without retrieval capability."""
+    """Execute one scoped analysis handler without retrieval capability.."""
 
     def __init__(
         self,
@@ -71,16 +71,26 @@ class AnalysisNode:
         """Initialize the analysis node with its handler and tool factory.
 
         Args:
-            node_name: Name of the analysis node.
-            tool_factory: Scoped tool factory for node sessions.
-            handler: Analysis handler to execute.
+            node_name: str: .
+            tool_factory: ScopedToolFactory: .
+            handler: AnalysisHandler: .
+
+        Returns:
+            None: .
         """
         self.node_name = node_name
         self._tool_factory = tool_factory
         self._handler = handler
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Execute the scoped analysis handler and return graph state updates."""
+        """Execute the scoped analysis handler and return graph state updates.
+
+        Args:
+            state: AIDeltaGraphState: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         session = self._tool_factory.create_session(
             graph_run_id=state.graph_run_id,
             node_name=self.node_name,
@@ -95,9 +105,7 @@ class AnalysisNode:
             security_id=state.security_id,
             decision_at=state.decision_at,
             evidence_package_ids=state.evidence_package_ids,
-            package_summaries=dict(
-                state.node_outputs.get("evidence_packages", {})
-            ),
+            package_summaries=dict(state.node_outputs.get("evidence_packages", {})),
             evidence_gaps=state.evidence_gaps,
         )
         try:
@@ -115,9 +123,7 @@ class AnalysisNode:
                 "graph_step_count": 1,
             }
         gaps = tuple(str(value) for value in output.get("evidence_gaps", ()))
-        llm_call_ids = tuple(
-            str(value) for value in output.get("llm_call_ids", ())
-        )
+        llm_call_ids = tuple(str(value) for value in output.get("llm_call_ids", ()))
         return {
             "node_outputs": {self.node_name: output},
             "evidence_gaps": gaps,
@@ -129,7 +135,7 @@ class AnalysisNode:
 
 
 class AnalysisJoinNode:
-    """Validate that the four parallel analysis branches completed."""
+    """Validate that the four parallel analysis branches completed.."""
 
     required_nodes = (
         "fundamental_analysis",
@@ -139,16 +145,19 @@ class AnalysisJoinNode:
     )
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Validate that all parallel analysis branches completed."""
+        """Validate that all parallel analysis branches completed.
+
+        Args:
+            state: AIDeltaGraphState: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         completed = tuple(
-            node_name
-            for node_name in self.required_nodes
-            if node_name in state.node_outputs
+            node_name for node_name in self.required_nodes if node_name in state.node_outputs
         )
         errors = (
-            ()
-            if len(completed) == len(self.required_nodes)
-            else ("analysis_fan_in_incomplete",)
+            () if len(completed) == len(self.required_nodes) else ("analysis_fan_in_incomplete",)
         )
         return {
             "node_outputs": {
@@ -163,10 +172,17 @@ class AnalysisJoinNode:
 
 
 class EvidenceGapRouter:
-    """Record the deterministic supplemental-retrieval routing decision."""
+    """Record the deterministic supplemental-retrieval routing decision.."""
 
     def __call__(self, state: AIDeltaGraphState) -> dict[str, Any]:
-        """Record the deterministic supplemental-retrieval routing decision."""
+        """Record the deterministic supplemental-retrieval routing decision.
+
+        Args:
+            state: AIDeltaGraphState: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         return {
             "node_outputs": {
                 "evidence_gap_router": {
@@ -179,7 +195,7 @@ class EvidenceGapRouter:
 
 
 class TargetedReanalysisNode(AnalysisNode):
-    """Reanalyze only the explicit gaps after the one supplemental retrieval."""
+    """Reanalyze only the explicit gaps after the one supplemental retrieval.."""
 
     def __init__(
         self,
@@ -190,8 +206,11 @@ class TargetedReanalysisNode(AnalysisNode):
         """Initialize the targeted reanalysis node.
 
         Args:
-            tool_factory: Scoped tool factory for node sessions.
-            handlers: Mapping from node name to analysis handler.
+            tool_factory: ScopedToolFactory: .
+            handlers: Mapping[str, AnalysisHandler]: .
+
+        Returns:
+            None: .
         """
         super().__init__(
             node_name="targeted_reanalysis",

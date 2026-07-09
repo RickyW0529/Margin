@@ -35,7 +35,7 @@ _DEFAULT_PROVIDER_CAPABILITIES: dict[str, frozenset[str]] = {
 
 @dataclass(frozen=True)
 class RuntimeBoundProvider(Generic[T]):
-    """Executable adapter bound to a frozen Provider config version."""
+    """Executable adapter bound to a frozen Provider config version.."""
 
     adapter: T
     config_version_id: str
@@ -43,14 +43,14 @@ class RuntimeBoundProvider(Generic[T]):
 
 @dataclass(frozen=True)
 class ResolvedProviderRuntime:
-    """Active non-sensitive config plus an optional masked secret value."""
+    """Active non-sensitive config plus an optional masked secret value.."""
 
     config: ProviderConfigVersion
     secret: SecretValue | None
 
 
 class ProviderRuntimeResolver:
-    """Resolve one executable Provider version for trusted runtime consumers."""
+    """Resolve one executable Provider version for trusted runtime consumers.."""
 
     def __init__(
         self,
@@ -59,39 +59,54 @@ class ProviderRuntimeResolver:
         *,
         owner_id: str = "local-admin",
     ) -> None:
-        """Initialize the resolver."""
+        """Initialize the resolver.
+
+        Args:
+            repository: object: .
+            secret_store: SecretStore: .
+            owner_id: str: .
+
+        Returns:
+            None: .
+        """
         self._repository = repository
         self._secret_store = secret_store
         self._owner_id = owner_id
 
     def resolve(self, provider_name: str) -> ResolvedProviderRuntime:
-        """Return the single active config and its frozen secret version."""
+        """Return the single active config and its frozen secret version.
+
+        Args:
+            provider_name: str: .
+
+        Returns:
+            ResolvedProviderRuntime: .
+        """
         normalized_name = provider_name.strip().lower()
         matches = [
             config
-            for config in self._repository.list_active_provider_configs(
-                self._owner_id
-            )
+            for config in self._repository.list_active_provider_configs(self._owner_id)
             if config.provider_name.strip().lower() == normalized_name
         ]
         if not matches:
-            raise LookupError(
-                f"active provider config not found: {normalized_name}"
-            )
+            raise LookupError(f"active provider config not found: {normalized_name}")
         if len(matches) != 1:
-            raise RuntimeError(
-                f"multiple active provider configs found: {normalized_name}"
-            )
+            raise RuntimeError(f"multiple active provider configs found: {normalized_name}")
         return self._resolve_config(matches[0], normalized_name)
 
     def resolve_category(self, provider_category: str) -> ResolvedProviderRuntime:
-        """Return the single active config for a provider category."""
+        """Return the single active config for a provider category.
+
+        Args:
+            provider_category: str: .
+
+        Returns:
+            ResolvedProviderRuntime: .
+        """
         normalized_category = provider_category.strip().lower()
         matches = [
             config
-            for config in self._repository.list_active_provider_configs(
-                self._owner_id
-            )
+            for config in self._repository.list_active_provider_configs(self._owner_id)
             if provider_category_for_config(
                 config.provider_type,
                 config.provider_name,
@@ -100,13 +115,9 @@ class ProviderRuntimeResolver:
             == normalized_category
         ]
         if not matches:
-            raise LookupError(
-                f"active provider config not found: {normalized_category}"
-            )
+            raise LookupError(f"active provider config not found: {normalized_category}")
         if len(matches) != 1:
-            raise RuntimeError(
-                f"multiple active provider configs found: {normalized_category}"
-            )
+            raise RuntimeError(f"multiple active provider configs found: {normalized_category}")
         return self._resolve_config(matches[0], normalized_category)
 
     def resolve_capability(
@@ -114,14 +125,20 @@ class ProviderRuntimeResolver:
         provider_category: str,
         capability: str,
     ) -> ResolvedProviderRuntime:
-        """Return the active provider config that supports a capability."""
+        """Return the active provider config that supports a capability.
+
+        Args:
+            provider_category: str: .
+            capability: str: .
+
+        Returns:
+            ResolvedProviderRuntime: .
+        """
         normalized_category = provider_category.strip().lower()
         normalized_capability = capability.strip().lower()
         matches = [
             config
-            for config in self._repository.list_active_provider_configs(
-                self._owner_id
-            )
+            for config in self._repository.list_active_provider_configs(self._owner_id)
             if provider_category_for_config(
                 config.provider_type,
                 config.provider_name,
@@ -150,26 +167,26 @@ class ProviderRuntimeResolver:
         config: ProviderConfigVersion,
         lookup_name: str,
     ) -> ResolvedProviderRuntime:
-        """Resolve one config and its frozen secret."""
-        secret_required = bool(
-            config.non_sensitive_config.get("secret_required", True)
-        )
+        """Resolve one config and its frozen secret.
+
+        Args:
+            config: ProviderConfigVersion: .
+            lookup_name: str: .
+
+        Returns:
+            ResolvedProviderRuntime: .
+        """
+        secret_required = bool(config.non_sensitive_config.get("secret_required", True))
         if config.secret_version_id is None:
             if secret_required:
-                raise RuntimeError(
-                    f"active provider secret not configured: {lookup_name}"
-                )
+                raise RuntimeError(f"active provider secret not configured: {lookup_name}")
             return ResolvedProviderRuntime(config=config, secret=None)
 
         metadata = self._secret_store.metadata(config.secret_version_id)
         if metadata.status != "active":
-            raise RuntimeError(
-                f"active provider references inactive secret: {lookup_name}"
-            )
+            raise RuntimeError(f"active provider references inactive secret: {lookup_name}")
         if not _secret_ref_matches_config(metadata.ref.provider_name, config):
-            raise RuntimeError(
-                f"provider secret reference mismatch: {lookup_name}"
-            )
+            raise RuntimeError(f"provider secret reference mismatch: {lookup_name}")
         return ResolvedProviderRuntime(
             config=config,
             secret=self._secret_store.resolve(metadata.ref),
@@ -177,14 +194,25 @@ class ProviderRuntimeResolver:
 
 
 class ProviderRuntimeFactory:
-    """Construct real adapters exclusively from active versioned configuration."""
+    """Construct real adapters exclusively from active versioned configuration.."""
 
     def __init__(self, resolver: ProviderRuntimeResolver) -> None:
-        """Initialize the factory."""
+        """Initialize the factory.
+
+        Args:
+            resolver: ProviderRuntimeResolver: .
+
+        Returns:
+            None: .
+        """
         self._resolver = resolver
 
     def build_llm(self) -> RuntimeBoundProvider:
-        """Build an OpenAI-compatible LLM adapter."""
+        """Build an OpenAI-compatible LLM adapter.
+
+        Returns:
+            RuntimeBoundProvider: .
+        """
         from margin.research.llm import LLMProvider
 
         runtime = self._resolver.resolve_category("llm")
@@ -199,13 +227,15 @@ class ProviderRuntimeFactory:
         )
 
     def build_embedding(self) -> RuntimeBoundProvider:
-        """Build an OpenAI-compatible embedding adapter."""
+        """Build an OpenAI-compatible embedding adapter.
+
+        Returns:
+            RuntimeBoundProvider: .
+        """
         from margin.vector.providers.openai_embedding import OpenAIEmbeddingProvider
 
         runtime = self._resolver.resolve_category("embedding")
-        dimension = int(
-            runtime.config.non_sensitive_config.get("dimension", 1536)
-        )
+        dimension = int(runtime.config.non_sensitive_config.get("dimension", 1536))
         return RuntimeBoundProvider(
             adapter=OpenAIEmbeddingProvider(
                 api_key=_required_secret(runtime),
@@ -217,23 +247,28 @@ class ProviderRuntimeFactory:
         )
 
     def build_websearch(self) -> RuntimeBoundProvider:
-        """Build the Tavily WebSearch adapter."""
+        """Build the Tavily WebSearch adapter.
+
+        Returns:
+            RuntimeBoundProvider: .
+        """
         from margin.news.providers.tavily import TavilySearchAdapter
 
         runtime = self._resolver.resolve_category("web_search")
         return RuntimeBoundProvider(
             adapter=TavilySearchAdapter(
                 api_key=_required_secret(runtime),
-                base_url=(
-                    runtime.config.base_url
-                    or "https://api.tavily.com/search"
-                ),
+                base_url=(runtime.config.base_url or "https://api.tavily.com/search"),
             ),
             config_version_id=runtime.config.version_id,
         )
 
     def build_tushare(self) -> RuntimeBoundProvider:
-        """Build the Tushare market-data adapter."""
+        """Build the Tushare market-data adapter.
+
+        Returns:
+            RuntimeBoundProvider: .
+        """
         from margin.data.providers.tushare_provider import TushareProvider
 
         runtime = self._resolver.resolve("tushare")
@@ -246,7 +281,11 @@ class ProviderRuntimeFactory:
         )
 
     def build_akshare(self) -> RuntimeBoundProvider:
-        """Build the explicitly active secretless AKShare adapter."""
+        """Build the explicitly active secretless AKShare adapter.
+
+        Returns:
+            RuntimeBoundProvider: .
+        """
         from margin.data.providers.akshare_provider import AKShareProvider
 
         runtime = self._resolver.resolve("akshare")
@@ -256,7 +295,14 @@ class ProviderRuntimeFactory:
         )
 
     def build_market_data(self, capability: str) -> RuntimeBoundProvider:
-        """Build a market-data adapter by declared capability."""
+        """Build a market-data adapter by declared capability.
+
+        Args:
+            capability: str: .
+
+        Returns:
+            RuntimeBoundProvider: .
+        """
         runtime = self._resolver.resolve_capability("data_source", capability)
         provider_name = runtime.config.provider_name.strip().lower()
         if provider_name == "tushare":
@@ -279,7 +325,11 @@ class ProviderRuntimeFactory:
         raise RuntimeError(f"unsupported market-data provider: {provider_name}")
 
     def build_rerank(self) -> RuntimeBoundProvider:
-        """Build the configured HTTP rerank adapter."""
+        """Build the configured HTTP rerank adapter.
+
+        Returns:
+            RuntimeBoundProvider: .
+        """
         from margin.vector.providers.rerank import HTTPRerankProvider
 
         runtime = self._resolver.resolve_category("rerank")
@@ -294,16 +344,28 @@ class ProviderRuntimeFactory:
 
 
 def _required_secret(runtime: ResolvedProviderRuntime) -> str:
-    """Return plaintext only at the final trusted adapter-construction boundary."""
+    """Return plaintext only at the final trusted adapter-construction boundary.
+
+    Args:
+        runtime: ResolvedProviderRuntime: .
+
+    Returns:
+        str: .
+    """
     if runtime.secret is None:
-        raise RuntimeError(
-            f"provider secret not configured: {runtime.config.provider_name}"
-        )
+        raise RuntimeError(f"provider secret not configured: {runtime.config.provider_name}")
     return runtime.secret.get_secret_value()
 
 
 def provider_capabilities_for_config(config: ProviderConfigVersion) -> frozenset[str]:
-    """Return normalized provider capabilities for a config version."""
+    """Return normalized provider capabilities for a config version.
+
+    Args:
+        config: ProviderConfigVersion: .
+
+    Returns:
+        frozenset[str]: .
+    """
     configured = config.non_sensitive_config.get("capabilities")
     if configured:
         return frozenset(_normalize_capabilities(configured))
@@ -312,7 +374,14 @@ def provider_capabilities_for_config(config: ProviderConfigVersion) -> frozenset
 
 
 def _normalize_capabilities(value: object) -> Iterable[str]:
-    """Yield normalized capability names from config metadata."""
+    """Yield normalized capability names from config metadata.
+
+    Args:
+        value: object: .
+
+    Yields:
+        Any: .
+    """
     if isinstance(value, str):
         raw_items = value.split(",")
     elif isinstance(value, Iterable):
@@ -329,7 +398,15 @@ def _secret_ref_matches_config(
     secret_provider_name: str,
     config: ProviderConfigVersion,
 ) -> bool:
-    """Return true when a secret is bound to the provider or config version."""
+    """Return true when a secret is bound to the provider or config version.
+
+    Args:
+        secret_provider_name: str: .
+        config: ProviderConfigVersion: .
+
+    Returns:
+        bool: .
+    """
     normalized_secret_provider = secret_provider_name.strip().lower()
     return normalized_secret_provider in {
         config.provider_name.strip().lower(),

@@ -6,7 +6,7 @@ from margin.strategy.models import StrategyState, StrategyVersion
 
 
 class StrategyLifecycle:
-    """Enforce valid state transitions for strategy versions."""
+    """Enforce valid state transitions for strategy versions.."""
 
     _ALLOWED: dict[StrategyState, set[StrategyState]] = {
         StrategyState.DRAFT: {StrategyState.VALIDATING},
@@ -26,12 +26,11 @@ class StrategyLifecycle:
         """Return whether a state transition is allowed.
 
         Args:
-            from_state: The current lifecycle state.
-            to_state: The desired lifecycle state.
+            from_state: StrategyState: .
+            to_state: StrategyState: .
 
         Returns:
-            ``True`` if the transition from ``from_state`` to ``to_state`` is
-            permitted by the lifecycle graph.
+            bool: .
         """
         return to_state in self._ALLOWED.get(from_state, set())
 
@@ -44,22 +43,15 @@ class StrategyLifecycle:
         """Return a new version with the updated state.
 
         Args:
-            version: The strategy version to transition.
-            to_state: The target lifecycle state.
-            reason: Optional human-readable reason for the transition.
+            version: StrategyVersion: .
+            to_state: StrategyState: .
+            reason: str: .
 
         Returns:
-            A new :class:`StrategyVersion` with ``state`` set to ``to_state``
-            and, when ``reason`` is provided, the transition reason appended to
-            the description.
-
-        Raises:
-            ValueError: If the transition is not allowed.
+            StrategyVersion: .
         """
         if not self.can_transition(version.state, to_state):
-            raise ValueError(
-                f"cannot transition from {version.state.value} to {to_state.value}"
-            )
+            raise ValueError(f"cannot transition from {version.state.value} to {to_state.value}")
         description = version.description
         if reason:
             description = f"{description}\nTransition reason: {reason}".strip()

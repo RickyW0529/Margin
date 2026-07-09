@@ -14,10 +14,14 @@ from scripts import smoke_valuation_discovery_p1
 
 
 class _AcceptedHandler(BaseHTTPRequestHandler):
-    """HTTP handler that accepts POST requests and returns a run-id JSON body."""
+    """HTTP handler that accepts POST requests and returns a run-id JSON body.."""
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib callback name
-        """Return a 200 JSON response with a deterministic run_id."""
+        """Return a 200 JSON response with a deterministic run_id.
+
+        Returns:
+            None: .
+        """
         body = json.dumps({"run_id": "run-local"}).encode("utf-8")
         self.send_response(200)
         self.send_header("content-type", "application/json")
@@ -26,26 +30,53 @@ class _AcceptedHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002
-        """Suppress default request logging."""
+        """Suppress default request logging.
+
+        Args:
+            format: str: .
+            *args: object: .
+
+        Returns:
+            None: .
+        """
         return
 
 
 class _ProxyFailHandler(BaseHTTPRequestHandler):
-    """HTTP handler that returns 502 on POST to detect proxy usage."""
+    """HTTP handler that returns 502 on POST to detect proxy usage.."""
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib callback name
-        """Return a 502 response indicating the proxy should not be used."""
+        """Return a 502 response indicating the proxy should not be used.
+
+        Returns:
+            None: .
+        """
         self.send_response(502)
         self.end_headers()
         self.wfile.write(b"proxy should not be used")
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002
-        """Suppress default request logging."""
+        """Suppress default request logging.
+
+        Args:
+            format: str: .
+            *args: object: .
+
+        Returns:
+            None: .
+        """
         return
 
 
 def _serve(handler: type[BaseHTTPRequestHandler]) -> tuple[ThreadingHTTPServer, int]:
-    """Start a local threaded HTTP server with the given handler and return it with its port."""
+    """Start a local threaded HTTP server with the given handler and return it with its port.
+
+    Args:
+        handler: type[BaseHTTPRequestHandler]: .
+
+    Returns:
+        tuple[ThreadingHTTPServer, int]: .
+    """
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -59,8 +90,11 @@ def test_smoke_posts_to_local_api_without_proxy(
     """Test that the smoke script posts to the local API without using a proxy.
 
     Args:
-        monkeypatch: Pytest fixture for modifying environment variables.
-        capsys: Pytest fixture for capturing stdout/stderr.
+        monkeypatch: Any: .
+        capsys: Any: .
+
+    Returns:
+        None: .
     """
     api_server, api_port = _serve(_AcceptedHandler)
     proxy_server, proxy_port = _serve(_ProxyFailHandler)

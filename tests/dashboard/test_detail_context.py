@@ -8,7 +8,11 @@ from margin.dashboard.detail_context import build_dashboard_detail_context
 
 
 def test_detail_context_exposes_ai_empty_evidence_and_news_documents() -> None:
-    """Context assembly should make empty AI evidence and news docs visible."""
+    """Context assembly should make empty AI evidence and news docs visible.
+
+    Returns:
+        None: .
+    """
     context = {
         "context_snapshot_id": "rcs_1",
         "decision_at": datetime(2026, 7, 2, 8, 5, tzinfo=UTC),
@@ -97,7 +101,11 @@ def test_detail_context_exposes_ai_empty_evidence_and_news_documents() -> None:
 
 
 def test_detail_context_translates_deferred_ai_reason_into_thesis() -> None:
-    """Deferred AI reviews should not masquerade as finished research theses."""
+    """Deferred AI reviews should not masquerade as finished research theses.
+
+    Returns:
+        None: .
+    """
     context = {
         "context_snapshot_id": "rcs_2",
         "decision_at": datetime(2026, 7, 2, 8, 5, tzinfo=UTC),

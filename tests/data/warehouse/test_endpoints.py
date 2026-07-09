@@ -12,7 +12,11 @@ from margin.data.endpoints import (
 
 
 def test_registry_rejects_duplicate_provider_endpoint() -> None:
-    """Test that registering the same provider endpoint twice raises an error."""
+    """Test that registering the same provider endpoint twice raises an error.
+
+    Returns:
+        None: .
+    """
     registry = ProviderEndpointRegistry()
     endpoint = ProviderEndpoint(code="bars", provider="akshare", domain="market")
 
@@ -23,7 +27,11 @@ def test_registry_rejects_duplicate_provider_endpoint() -> None:
 
 
 def test_backfill_policy_is_not_user_scoped() -> None:
-    """Test that endpoint backfill policy is global and not scoped to a user version."""
+    """Test that endpoint backfill policy is global and not scoped to a user version.
+
+    Returns:
+        None: .
+    """
     endpoint = ProviderEndpoint(code="bars", provider="akshare", domain="market")
 
     assert endpoint.endpoint_id == "akshare:bars"
@@ -31,7 +39,11 @@ def test_backfill_policy_is_not_user_scoped() -> None:
 
 
 def test_default_registry_contains_akshare_and_tushare_market_endpoints() -> None:
-    """Test that the default registry includes market endpoints for both providers."""
+    """Test that the default registry includes market endpoints for both providers.
+
+    Returns:
+        None: .
+    """
     registry = ProviderEndpointRegistry.default()
 
     assert registry.get("akshare", "daily_bar").domain == "market"
@@ -39,7 +51,11 @@ def test_default_registry_contains_akshare_and_tushare_market_endpoints() -> Non
 
 
 def test_default_registry_contains_complete_tushare_sync_profile() -> None:
-    """Default production sync covers the quant-required Tushare domains."""
+    """Default production sync covers the quant-required Tushare domains.
+
+    Returns:
+        None: .
+    """
     registry = ProviderEndpointRegistry.default()
 
     assert {endpoint.code for endpoint in registry.list(provider="tushare")} == {

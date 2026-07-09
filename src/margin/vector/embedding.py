@@ -39,17 +39,7 @@ from margin.vector.models import Chunk
 
 
 class EmbeddingProvider(BaseProvider):
-    """Pluggable embedding provider supporting OpenAI-compatible and local models.
-
-    The MVP ships with a deterministic hash-based pseudo-embedding for testing.
-    Production usage should inject a real model via ``set_embed_func``.
-
-    Attributes:
-        descriptor: ProviderRegistry-compatible metadata.
-        name: Provider name.
-        version: Provider version string.
-        dim: Embedding vector dimension.
-    """
+    """Pluggable embedding provider supporting OpenAI-compatible and local models.."""
 
     def __init__(
         self,
@@ -62,15 +52,14 @@ class EmbeddingProvider(BaseProvider):
         """Initialize the embedding provider.
 
         Args:
-            name: Provider identifier.
-            version: Provider version.
-            dim: Expected dimension of produced embedding vectors. Must be positive.
-            embed_func: Optional function that turns text into a vector. Defaults to an
-                internal hash-based implementation.
-            secret_ref: Optional secret reference for resolving credentials.
+            name: str: .
+            version: str: .
+            dim: int: .
+            embed_func: Callable[[str], list[float]] | None: .
+            secret_ref: str | None: .
 
-        Raises:
-            ValueError: If ``dim`` is not a positive integer.
+        Returns:
+            None: .
         """
         if dim <= 0:
             raise ValueError("Embedding dimension must be positive")
@@ -91,51 +80,62 @@ class EmbeddingProvider(BaseProvider):
 
     @property
     def descriptor(self) -> ProviderDescriptor:
-        """Return ProviderRegistry-compatible metadata."""
+        """Return ProviderRegistry-compatible metadata.
+
+        Returns:
+            ProviderDescriptor: .
+        """
         return self._descriptor
 
     @property
     def name(self) -> str:
-        """Return the provider name."""
+        """Return the provider name.
+
+        Returns:
+            str: .
+        """
         return self._name
 
     @property
     def version(self) -> str:
-        """Return the provider version."""
+        """Return the provider version.
+
+        Returns:
+            str: .
+        """
         return self._version
 
     @property
     def dim(self) -> int:
-        """Return the configured embedding dimension."""
+        """Return the configured embedding dimension.
+
+        Returns:
+            int: .
+        """
         return self._dim
 
     def embed(self, text: str) -> list[float]:
         """Generate an embedding vector for the given text.
 
         Args:
-            text: Input text to embed.
+            text: str: .
 
         Returns:
-            A ``dim``-dimensional embedding vector.
-
-        Raises:
-            ValueError: If the produced vector length does not match ``dim``.
+            list[float]: .
         """
         vector = [float(value) for value in self._embed_func(text)]
         if len(vector) != self._dim:
-            raise ValueError(
-                f"Embedding dim mismatch: expected {self._dim}, got {len(vector)}"
-            )
+            raise ValueError(f"Embedding dim mismatch: expected {self._dim}, got {len(vector)}")
         return vector
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a batch of texts.
 
         Args:
-            texts: List of input texts.
+            texts: list[str]: .
 
         Returns:
-            List of embedding vectors, one per input text.
+            list[list[float]]: .
         """
         return [self.embed(t) for t in texts]
 
@@ -143,7 +143,10 @@ class EmbeddingProvider(BaseProvider):
         """Inject a real embedding model function.
 
         Args:
-            func: Callable accepting a string and returning a ``dim``-dimensional vector.
+            func: Callable[[str], list[float]]: .
+
+        Returns:
+            None: .
         """
         self._embed_func = func
 
@@ -151,7 +154,10 @@ class EmbeddingProvider(BaseProvider):
         """Receive resolved credentials from ProviderRegistry.
 
         Args:
-            secrets: Mapping of secret names to resolved values.
+            secrets: dict[str, str]: .
+
+        Returns:
+            None: .
         """
         self._secrets = dict(secrets)
 
@@ -159,7 +165,7 @@ class EmbeddingProvider(BaseProvider):
         """Verify that the configured embedding function can serve vectors.
 
         Returns:
-            A ``HealthCheckResult`` indicating healthy or unhealthy status.
+            HealthCheckResult: .
         """
         try:
             self.embed("healthcheck")
@@ -179,15 +185,11 @@ class EmbeddingProvider(BaseProvider):
     def _hash_embed(self, text: str) -> list[float]:
         """Deterministic hash-based pseudo-embedding for testing.
 
-        The same text always produces the same vector, and different texts produce different
-        vectors. It does **not** capture semantic similarity and is intended only for pipeline
-        validation and environments without an external embedding API.
-
         Args:
-            text: Input text.
+            text: str: .
 
         Returns:
-            A unit-length pseudo-random embedding vector of length ``dim``.
+            list[float]: .
         """
         vec = [0.0] * self._dim
         tokens = re.findall(r"[\u4e00-\u9fff]|[a-z]+|\d+", text.lower())
@@ -206,20 +208,16 @@ class EmbeddingProvider(BaseProvider):
 
 
 class VectorStore:
-    """In-memory vector store with a pgvector / Qdrant-compatible interface.
-
-    Supports writes, vector similarity search, and metadata filtering. It can be swapped for a
-    real pgvector backend once the Docker Compose environment is ready.
-
-    Attributes:
-        size: Number of chunks currently stored.
-    """
+    """In-memory vector store with a pgvector / Qdrant-compatible interface.."""
 
     def __init__(self, dim: int = 256) -> None:
         """Initialize the vector store.
 
         Args:
-            dim: Expected dimension of stored vectors.
+            dim: int: .
+
+        Returns:
+            None: .
         """
         self._dim = dim
         self._chunks: dict[str, Chunk] = {}
@@ -229,16 +227,14 @@ class VectorStore:
         """Write or update a chunk and its vector.
 
         Args:
-            chunk: Chunk to store.
-            vector: Embedding vector for the chunk.
+            chunk: Chunk: .
+            vector: list[float]: .
 
-        Raises:
-            ValueError: If ``vector`` length does not match the store dimension.
+        Returns:
+            None: .
         """
         if len(vector) != self._dim:
-            raise ValueError(
-                f"Vector dim mismatch: expected {self._dim}, got {len(vector)}"
-            )
+            raise ValueError(f"Vector dim mismatch: expected {self._dim}, got {len(vector)}")
         self._chunks[chunk.chunk_id] = chunk
         self._vectors[chunk.chunk_id] = tuple(vector)
 
@@ -246,10 +242,10 @@ class VectorStore:
         """Batch-write chunks and vectors.
 
         Args:
-            items: List of ``(chunk, vector)`` pairs.
+            items: list[tuple[Chunk, list[float]]]: .
 
         Returns:
-            Number of items successfully stored. Items with dimension mismatches are skipped.
+            int: .
         """
         count = 0
         for chunk, vector in items:
@@ -269,14 +265,12 @@ class VectorStore:
         """Search for chunks by vector similarity.
 
         Args:
-            query_vector: Query embedding vector.
-            top_k: Maximum number of results to return.
-            filters: Optional metadata filters such as ``symbol``, ``source_level``,
-                ``doc_type``, or ``document_id``.
+            query_vector: list[float]: .
+            top_k: int: .
+            filters: dict[str, Any] | None: .
 
         Returns:
-            List of ``(Chunk, cosine_similarity)`` tuples sorted by similarity in descending
-            order.
+            list[tuple[Chunk, float]]: .
         """
         scored: list[tuple[Chunk, float]] = []
 
@@ -294,20 +288,28 @@ class VectorStore:
         """Return the chunk with the given ID, or ``None`` if not found.
 
         Args:
-            chunk_id: Unique chunk identifier.
+            chunk_id: str: .
 
         Returns:
-            The matching ``Chunk`` or ``None``.
+            Chunk | None: .
         """
         return self._chunks.get(chunk_id)
 
     @property
     def size(self) -> int:
-        """Return the number of chunks currently stored."""
+        """Return the number of chunks currently stored.
+
+        Returns:
+            int: .
+        """
         return len(self._chunks)
 
     def clear(self) -> None:
-        """Remove all chunks and vectors from the store."""
+        """Remove all chunks and vectors from the store.
+
+        Returns:
+            None: .
+        """
         self._chunks.clear()
         self._vectors.clear()
 
@@ -316,13 +318,11 @@ class VectorStore:
         """Check whether a chunk matches the provided metadata filters.
 
         Args:
-            chunk: Chunk to evaluate.
-            filters: Metadata filters. Recognized keys include ``symbol``,
-                ``source_level``, ``doc_type`` (supports a single value or collection),
-                and ``document_id``. Unknown keys are matched against chunk attributes.
+            chunk: Chunk: .
+            filters: dict[str, Any] | None: .
 
         Returns:
-            ``True`` if the chunk matches all filters, otherwise ``False``.
+            bool: .
         """
         if not filters:
             return True
@@ -352,20 +352,17 @@ class VectorStore:
 
 
 class BM25Index:
-    """In-memory BM25 keyword index.
-
-    Tokenization supports Chinese characters (per-character) and English words.
-
-    Attributes:
-        size: Number of chunks currently indexed.
-    """
+    """In-memory BM25 keyword index.."""
 
     def __init__(self, k1: float = 1.5, b: float = 0.75) -> None:
         """Initialize the BM25 index.
 
         Args:
-            k1: BM25 term frequency saturation parameter.
-            b: BM25 length normalization parameter.
+            k1: float: .
+            b: float: .
+
+        Returns:
+            None: .
         """
         self._k1 = k1
         self._b = b
@@ -379,7 +376,10 @@ class BM25Index:
         """Write or update a chunk in the keyword index.
 
         Args:
-            chunk: Chunk to index. Existing entries are re-indexed.
+            chunk: Chunk: .
+
+        Returns:
+            None: .
         """
         previous_tf = self._term_freqs.get(chunk.chunk_id)
         if previous_tf is not None:
@@ -409,10 +409,10 @@ class BM25Index:
         """Batch-index chunks.
 
         Args:
-            chunks: List of chunks to index.
+            chunks: list[Chunk]: .
 
         Returns:
-            Number of chunks indexed.
+            int: .
         """
         for chunk in chunks:
             self.upsert(chunk)
@@ -427,12 +427,12 @@ class BM25Index:
         """Search for chunks using BM25 keyword scoring.
 
         Args:
-            query: Query text.
-            top_k: Maximum number of results to return.
-            filters: Optional metadata filters passed to ``VectorStore._match_filters``.
+            query: str: .
+            top_k: int: .
+            filters: dict[str, Any] | None: .
 
         Returns:
-            List of ``(Chunk, bm25_score)`` tuples sorted by score in descending order.
+            list[tuple[Chunk, float]]: .
         """
         query_tokens = self._tokenize(query)
         if not query_tokens:
@@ -467,11 +467,19 @@ class BM25Index:
 
     @property
     def size(self) -> int:
-        """Return the number of chunks currently indexed."""
+        """Return the number of chunks currently indexed.
+
+        Returns:
+            int: .
+        """
         return len(self._docs)
 
     def clear(self) -> None:
-        """Remove all indexed documents and reset statistics."""
+        """Remove all indexed documents and reset statistics.
+
+        Returns:
+            None: .
+        """
         self._docs.clear()
         self._term_freqs.clear()
         self._doc_freqs.clear()
@@ -482,14 +490,11 @@ class BM25Index:
     def _tokenize(text: str) -> list[str]:
         """Tokenize text for indexing.
 
-        English words are matched by alphabetic sequences; Chinese characters are matched
-        individually.
-
         Args:
-            text: Input text.
+            text: str: .
 
         Returns:
-            List of lowercase tokens.
+            list[str]: .
         """
         text = text.lower().strip()
         tokens: list[str] = []
@@ -506,23 +511,7 @@ class BM25Index:
 
 
 class IndexAuditRecord(BaseModel):
-    """Audit record for index operations.
-
-    Captures index version and query metadata needed by a future persistent replay layer.
-
-    Attributes:
-        index_name: Name of the index involved.
-        index_version: Version of the index at the time of the operation.
-        operation: Operation type, e.g. ``upsert``, ``search``, or ``clear``.
-        chunk_count: Number of chunks affected.
-        query_info: Query parameters for search operations.
-        result_count: Number of results returned by a search.
-        vector_count: Number of chunks stored in the vector index.
-        keyword_count: Number of chunks stored in the keyword index.
-        degraded: Whether the operation completed in a degraded state.
-        error: Optional error message.
-        timestamp: UTC timestamp of the record.
-    """
+    """Audit record for index operations.."""
 
     index_name: str
     index_version: str
@@ -540,10 +529,14 @@ class IndexAuditRecord(BaseModel):
 
 
 class IndexAuditor:
-    """Records in-memory index operations for auditing."""
+    """Records in-memory index operations for auditing.."""
 
     def __init__(self) -> None:
-        """Initialize an empty auditor."""
+        """Initialize an empty auditor.
+
+        Returns:
+            None: .
+        """
         self._records: list[IndexAuditRecord] = []
 
     def log_upsert(
@@ -560,16 +553,16 @@ class IndexAuditor:
         """Log an upsert/indexing operation.
 
         Args:
-            index_name: Name of the index.
-            index_version: Version of the index.
-            chunk_count: Number of chunks processed.
-            vector_count: Number of chunks stored as vectors.
-            keyword_count: Number of chunks stored in the keyword index.
-            degraded: Whether vector storage fell behind keyword indexing.
-            error: Optional error message.
+            index_name: str: .
+            index_version: str: .
+            chunk_count: int: .
+            vector_count: int: .
+            keyword_count: int: .
+            degraded: bool: .
+            error: str | None: .
 
         Returns:
-            The created audit record.
+            IndexAuditRecord: .
         """
         record = IndexAuditRecord(
             index_name=index_name,
@@ -597,15 +590,15 @@ class IndexAuditor:
         """Log a search operation.
 
         Args:
-            index_name: Name of the index searched.
-            index_version: Version of the index.
-            query_info: Query parameters.
-            result_count: Number of results returned.
-            degraded: Whether the search completed in a degraded state.
-            error: Optional error message.
+            index_name: str: .
+            index_version: str: .
+            query_info: dict[str, Any]: .
+            result_count: int: .
+            degraded: bool: .
+            error: str | None: .
 
         Returns:
-            The created audit record.
+            IndexAuditRecord: .
         """
         record = IndexAuditRecord(
             index_name=index_name,
@@ -621,7 +614,11 @@ class IndexAuditor:
 
     @property
     def records(self) -> list[IndexAuditRecord]:
-        """Return a copy of all recorded audit entries."""
+        """Return a copy of all recorded audit entries.
+
+        Returns:
+            list[IndexAuditRecord]: .
+        """
         return list(self._records)
 
 
@@ -631,23 +628,7 @@ class IndexAuditor:
 
 
 class EmbeddingPipeline:
-    """Orchestrates embedding generation, vector storage, and keyword indexing.
-
-    Data flow (architecture §7.1):
-      Chunk → Embedding → Vector DB + Keyword index
-
-    Example:
-        pipeline = EmbeddingPipeline(provider, vector_store, bm25_index)
-        pipeline.index_chunks(chunks)
-        vector_results = pipeline.vector_search(query_vector)
-        keyword_results = pipeline.keyword_search(query_text)
-
-    Attributes:
-        provider: The configured ``EmbeddingProvider``.
-        vector_store: The configured ``VectorStore``.
-        bm25_index: The configured ``BM25Index``.
-        auditor: The configured ``IndexAuditor``.
-    """
+    """Orchestrates embedding generation, vector storage, and keyword indexing.."""
 
     def __init__(
         self,
@@ -659,11 +640,13 @@ class EmbeddingPipeline:
         """Initialize the pipeline.
 
         Args:
-            embedding_provider: Provider used to generate embeddings. Defaults to a hash-based
-                provider.
-            vector_store: Vector store. Defaults to an in-memory store sized to ``provider.dim``.
-            bm25_index: Keyword index. Defaults to a new ``BM25Index``.
-            auditor: Auditor used to record operations. Defaults to a new ``IndexAuditor``.
+            embedding_provider: EmbeddingProvider | None: .
+            vector_store: VectorStore | None: .
+            bm25_index: BM25Index | None: .
+            auditor: IndexAuditor | None: .
+
+        Returns:
+            None: .
         """
         self._provider = embedding_provider or EmbeddingProvider()
         self._vector_store = vector_store or VectorStore(dim=self._provider.dim)
@@ -672,32 +655,48 @@ class EmbeddingPipeline:
 
     @property
     def provider(self) -> EmbeddingProvider:
-        """Return the configured embedding provider."""
+        """Return the configured embedding provider.
+
+        Returns:
+            EmbeddingProvider: .
+        """
         return self._provider
 
     @property
     def vector_store(self) -> VectorStore:
-        """Return the configured vector store."""
+        """Return the configured vector store.
+
+        Returns:
+            VectorStore: .
+        """
         return self._vector_store
 
     @property
     def bm25_index(self) -> BM25Index:
-        """Return the configured BM25 keyword index."""
+        """Return the configured BM25 keyword index.
+
+        Returns:
+            BM25Index: .
+        """
         return self._bm25_index
 
     @property
     def auditor(self) -> IndexAuditor:
-        """Return the configured index auditor."""
+        """Return the configured index auditor.
+
+        Returns:
+            IndexAuditor: .
+        """
         return self._auditor
 
     def index_chunks(self, chunks: list[Chunk]) -> int:
         """Embed and index a list of chunks in both vector and keyword stores.
 
         Args:
-            chunks: Chunks to index.
+            chunks: list[Chunk]: .
 
         Returns:
-            Number of chunks successfully indexed in the keyword index.
+            int: .
         """
         if not chunks:
             return 0
@@ -732,16 +731,12 @@ class EmbeddingPipeline:
         """Search the vector store using an embedding of the query text.
 
         Args:
-            query_text: Raw query text.
-            top_k: Maximum number of results to return.
-            filters: Optional metadata filters.
+            query_text: str: .
+            top_k: int: .
+            filters: dict[str, Any] | None: .
 
         Returns:
-            List of ``(Chunk, cosine_similarity)`` tuples sorted by similarity.
-
-        Raises:
-            Exception: Re-raises any embedding or search error after logging a degraded
-                audit record.
+            list[tuple[Chunk, float]]: .
         """
         query_info = {
             "text": query_text[:100],
@@ -779,12 +774,12 @@ class EmbeddingPipeline:
         """Search the BM25 keyword index.
 
         Args:
-            query: Raw query text.
-            top_k: Maximum number of results to return.
-            filters: Optional metadata filters.
+            query: str: .
+            top_k: int: .
+            filters: dict[str, Any] | None: .
 
         Returns:
-            List of ``(Chunk, bm25_score)`` tuples sorted by score.
+            list[tuple[Chunk, float]]: .
         """
         results = self._bm25_index.search(query, top_k, filters)
 
@@ -810,12 +805,11 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     """Compute cosine similarity between two vectors.
 
     Args:
-        a: First vector.
-        b: Second vector. Must have the same length as ``a``.
+        a: list[float]: .
+        b: list[float]: .
 
     Returns:
-        Cosine similarity in the range ``[-1, 1]``. Returns ``0.0`` if either vector has
-        zero magnitude.
+        float: .
     """
     dot = sum(x * y for x, y in zip(a, b, strict=True))
     norm_a = math.sqrt(sum(x * x for x in a))

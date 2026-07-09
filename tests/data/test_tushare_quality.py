@@ -13,7 +13,15 @@ from margin.data.tushare_source import TushareLandingRecord
 
 
 def _record(api_name: str, payload: dict[str, object]) -> TushareLandingRecord:
-    """Build a ``TushareLandingRecord`` fixture from a raw payload."""
+    """Build a ``TushareLandingRecord`` fixture from a raw payload.
+
+    Args:
+        api_name: str: .
+        payload: dict[str, object]: .
+
+    Returns:
+        TushareLandingRecord: .
+    """
     return TushareLandingRecord.from_payload(
         endpoint=QuantDataRequirementCatalog.default().endpoint("tushare", api_name),
         payload=payload,
@@ -23,7 +31,11 @@ def _record(api_name: str, payload: dict[str, object]) -> TushareLandingRecord:
 
 
 def test_current_st_rows_are_removed_before_source_persistence() -> None:
-    """ST payloads do not enter the non-ST source-system universe."""
+    """ST payloads do not enter the non-ST source-system universe.
+
+    Returns:
+        None: .
+    """
     accepted, excluded = select_current_non_st_securities(
         [
             {"ts_code": "000001.SZ", "name": "平安银行", "list_status": "L"},
@@ -37,7 +49,11 @@ def test_current_st_rows_are_removed_before_source_persistence() -> None:
 
 
 def test_future_listings_are_removed_for_as_of_company_pool() -> None:
-    """A rolling window ending before list_date must not include future listings."""
+    """A rolling window ending before list_date must not include future listings.
+
+    Returns:
+        None: .
+    """
     accepted, excluded = select_current_non_st_securities(
         [
             {
@@ -61,7 +77,11 @@ def test_future_listings_are_removed_for_as_of_company_pool() -> None:
 
 
 def test_delisting_transition_names_are_removed_from_company_pool() -> None:
-    """Names prefixed with 退市 are not eligible for the non-ST All-A pool."""
+    """Names prefixed with 退市 are not eligible for the non-ST All-A pool.
+
+    Returns:
+        None: .
+    """
     accepted, excluded = select_current_non_st_securities(
         [
             {"ts_code": "600636.SH", "name": "退市国化", "list_status": "L"},
@@ -74,7 +94,11 @@ def test_delisting_transition_names_are_removed_from_company_pool() -> None:
 
 
 def test_quality_accepts_in_window_row_for_eligible_security() -> None:
-    """A complete in-window market row can publish to the warehouse."""
+    """A complete in-window market row can publish to the warehouse.
+
+    Returns:
+        None: .
+    """
     decision = TushareQualityScreen().evaluate(
         _record(
             "daily",
@@ -91,7 +115,11 @@ def test_quality_accepts_in_window_row_for_eligible_security() -> None:
 
 
 def test_quality_rejects_universe_and_natural_key_violations() -> None:
-    """Rows outside the non-ST company pool or without keys cannot publish."""
+    """Rows outside the non-ST company pool or without keys cannot publish.
+
+    Returns:
+        None: .
+    """
     outside = TushareQualityScreen().evaluate(
         _record(
             "daily",
@@ -115,7 +143,11 @@ def test_quality_rejects_universe_and_natural_key_violations() -> None:
 
 
 def test_quality_quarantines_out_of_window_market_rows() -> None:
-    """Unexpected old market rows are retained for audit but not published."""
+    """Unexpected old market rows are retained for audit but not published.
+
+    Returns:
+        None: .
+    """
     decision = TushareQualityScreen().evaluate(
         _record(
             "daily",
@@ -131,7 +163,11 @@ def test_quality_quarantines_out_of_window_market_rows() -> None:
 
 
 def test_quality_accepts_trade_calendar_without_security_symbol() -> None:
-    """Market-calendar rows use exchange/date keys and are not company scoped."""
+    """Market-calendar rows use exchange/date keys and are not company scoped.
+
+    Returns:
+        None: .
+    """
     decision = TushareQualityScreen().evaluate(
         _record(
             "trade_cal",
@@ -146,7 +182,11 @@ def test_quality_accepts_trade_calendar_without_security_symbol() -> None:
 
 
 def test_quality_accepts_suspend_rows_with_empty_suspend_timing() -> None:
-    """Tushare suspend_d commonly omits suspend_timing; type/date identify the event."""
+    """Tushare suspend_d commonly omits suspend_timing; type/date identify the event.
+
+    Returns:
+        None: .
+    """
     decision = TushareQualityScreen().evaluate(
         _record(
             "suspend_d",

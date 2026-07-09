@@ -24,7 +24,11 @@ DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 
 
 def test_candidate_list_response_separates_current_and_effective() -> None:
-    """Test that the candidate list response separates current and effective assessment."""
+    """Test that the candidate list response separates current and effective assessment.
+
+    Returns:
+        None: .
+    """
     item = ResearchCandidateListItemV2(
         item_id="item-1",
         security_id="000001.SZ",
@@ -63,7 +67,11 @@ def test_candidate_list_response_separates_current_and_effective() -> None:
 
 
 def test_memory_repository_paginates_candidates_with_opaque_cursor() -> None:
-    """Test that the memory repository returns one server page and an opaque safe cursor."""
+    """Test that the memory repository returns one server page and an opaque safe cursor.
+
+    Returns:
+        None: .
+    """
     repository = MemoryDashboardRepository()
     run = ResearchRun(
         run_id="run-v02",

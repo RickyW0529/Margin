@@ -8,11 +8,4 @@ from sqlalchemy.orm import DeclarativeBase
 
 
 class Base(DeclarativeBase):
-    """Base class for all PostgreSQL ORM models.
-
-    Subclasses define tables by declaring mapped columns and relationships. The shared
-    metadata enables consistent table registration and schema management across models.
-
-    Attributes:
-        metadata: SQLAlchemy ``MetaData`` instance used for table registration.
-    """
+    """Base class for all PostgreSQL ORM models.."""

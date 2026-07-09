@@ -14,7 +14,11 @@ from margin.vector.db_models import (
 
 
 def count_chunk_security_links() -> Select:
-    """Return a count query for all chunk-security link rows."""
+    """Return a count query for all chunk-security link rows.
+
+    Returns:
+        Select: .
+    """
     return select(func.count()).select_from(ChunkSecurityLinkRow)
 
 
@@ -22,7 +26,15 @@ def chunk_security_link_count(
     chunk_id: str,
     security_id: str,
 ) -> Select:
-    """Return a count query for a specific chunk-security link."""
+    """Return a count query for a specific chunk-security link.
+
+    Args:
+        chunk_id: str: .
+        security_id: str: .
+
+    Returns:
+        Select: .
+    """
     return (
         select(func.count())
         .select_from(ChunkSecurityLinkRow)
@@ -34,7 +46,11 @@ def chunk_security_link_count(
 
 
 def count_embeddings() -> Select:
-    """Return a count query for all embedding rows."""
+    """Return a count query for all embedding rows.
+
+    Returns:
+        Select: .
+    """
     return select(func.count()).select_from(ChunkEmbeddingRow)
 
 
@@ -45,7 +61,17 @@ def search_vector_statement(
     decision_at: datetime | None = None,
     doc_types: tuple[str, ...] | None = None,
 ) -> Select:
-    """Return a chunk-embedding join statement with metadata and PIT filters."""
+    """Return a chunk-embedding join statement with metadata and PIT filters.
+
+    Args:
+        security_ids: tuple[str, ...] | None: .
+        symbol: str | None: .
+        decision_at: datetime | None: .
+        doc_types: tuple[str, ...] | None: .
+
+    Returns:
+        Select: .
+    """
     statement = select(ChunkRow, ChunkEmbeddingRow).join(
         ChunkEmbeddingRow,
         ChunkEmbeddingRow.chunk_id == ChunkRow.chunk_id,
@@ -72,7 +98,17 @@ def list_chunks_statement(
     doc_types: tuple[str, ...] | None = None,
     decision_at: datetime | None = None,
 ) -> Select:
-    """Return a chunk select statement with optional filters and ordering."""
+    """Return a chunk select statement with optional filters and ordering.
+
+    Args:
+        symbol: str | None: .
+        security_ids: tuple[str, ...] | None: .
+        doc_types: tuple[str, ...] | None: .
+        decision_at: datetime | None: .
+
+    Returns:
+        Select: .
+    """
     statement = select(ChunkRow)
     statement = statement.where(ChunkRow.is_active.is_(True))
     if security_ids:

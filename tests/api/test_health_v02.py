@@ -8,7 +8,11 @@ from margin.api.main import create_app
 
 
 def test_ready_health_checks_database_migration_outbox_and_worker() -> None:
-    """Test that ready health checks database, migration, outbox, and worker."""
+    """Test that ready health checks database, migration, outbox, and worker.
+
+    Returns:
+        None: .
+    """
     client = TestClient(create_app())
 
     response = client.get("/health/ready")
@@ -28,7 +32,11 @@ def test_ready_health_checks_database_migration_outbox_and_worker() -> None:
 
 
 def test_degraded_health_reports_capacity_and_retry_queues() -> None:
-    """Test that degraded health reports capacity and retry queues."""
+    """Test that degraded health reports capacity and retry queues.
+
+    Returns:
+        None: .
+    """
     client = TestClient(create_app())
 
     response = client.get("/health/degraded")

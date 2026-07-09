@@ -11,6 +11,11 @@ from margin.prompts.renderer import PromptRenderer, PromptRenderError
 
 
 def test_registry_loads_versioned_prompt_by_id() -> None:
+    """Test registry_loads_versioned_prompt_by_id.
+
+    Returns:
+        None: .
+    """
     registry = PromptRegistry(
         templates=[
             *agent_runtime_prompt_templates(),
@@ -29,6 +34,11 @@ def test_registry_loads_versioned_prompt_by_id() -> None:
 
 
 def test_renderer_requires_declared_variables() -> None:
+    """Test renderer_requires_declared_variables.
+
+    Returns:
+        None: .
+    """
     registry = PromptRegistry(templates=agent_runtime_prompt_templates())
     template = registry.get("main_agent_scheduled_planner_v0.4")
 
@@ -43,6 +53,11 @@ def test_renderer_requires_declared_variables() -> None:
 
 
 def test_renderer_outputs_hashes_without_mutating_template() -> None:
+    """Test renderer_outputs_hashes_without_mutating_template.
+
+    Returns:
+        None: .
+    """
     registry = PromptRegistry(templates=agent_runtime_prompt_templates())
     template = registry.get("main_agent_scheduled_planner_v0.4")
 

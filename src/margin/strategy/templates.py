@@ -18,14 +18,18 @@ from margin.strategy.models import (
 
 @dataclass(frozen=True)
 class StrategyTemplate:
-    """A built-in strategy template with metadata and default config."""
+    """A built-in strategy template with metadata and default config.."""
 
     meta: StrategyTemplateMeta
     config: StrategyConfig
 
 
 def _value_quality() -> StrategyTemplate:
-    """Return the "value quality" built-in strategy template."""
+    """Return the "value quality" built-in strategy template.
+
+    Returns:
+        StrategyTemplate: .
+    """
     return StrategyTemplate(
         meta=StrategyTemplateMeta(
             template_id="value_quality",
@@ -53,7 +57,11 @@ def _value_quality() -> StrategyTemplate:
 
 
 def _undervalued_recovery() -> StrategyTemplate:
-    """Return the "undervalued recovery" built-in strategy template."""
+    """Return the "undervalued recovery" built-in strategy template.
+
+    Returns:
+        StrategyTemplate: .
+    """
     return StrategyTemplate(
         meta=StrategyTemplateMeta(
             template_id="undervalued_recovery",
@@ -81,7 +89,11 @@ def _undervalued_recovery() -> StrategyTemplate:
 
 
 def _high_dividend() -> StrategyTemplate:
-    """Return the "high dividend" built-in strategy template."""
+    """Return the "high dividend" built-in strategy template.
+
+    Returns:
+        StrategyTemplate: .
+    """
     return StrategyTemplate(
         meta=StrategyTemplateMeta(
             template_id="high_dividend",
@@ -109,7 +121,11 @@ def _high_dividend() -> StrategyTemplate:
 
 
 def _growth_at_reasonable_price() -> StrategyTemplate:
-    """Return the "growth at reasonable price" built-in strategy template."""
+    """Return the "growth at reasonable price" built-in strategy template.
+
+    Returns:
+        StrategyTemplate: .
+    """
     return StrategyTemplate(
         meta=StrategyTemplateMeta(
             template_id="growth_at_reasonable_price",
@@ -137,7 +153,11 @@ def _growth_at_reasonable_price() -> StrategyTemplate:
 
 
 def _cyclical_reversal() -> StrategyTemplate:
-    """Return the "cyclical reversal" built-in strategy template."""
+    """Return the "cyclical reversal" built-in strategy template.
+
+    Returns:
+        StrategyTemplate: .
+    """
     return StrategyTemplate(
         meta=StrategyTemplateMeta(
             template_id="cyclical_reversal",
@@ -165,7 +185,11 @@ def _cyclical_reversal() -> StrategyTemplate:
 
 
 def _custom() -> StrategyTemplate:
-    """Return the blank "custom" built-in strategy template."""
+    """Return the blank "custom" built-in strategy template.
+
+    Returns:
+        StrategyTemplate: .
+    """
     return StrategyTemplate(
         meta=StrategyTemplateMeta(
             template_id="custom",
@@ -191,7 +215,6 @@ def list_templates() -> list[StrategyTemplateMeta]:
     """Return metadata for all built-in strategy templates.
 
     Returns:
-        A list of :class:`StrategyTemplateMeta` objects, one per built-in
-        template.
+        list[StrategyTemplateMeta]: .
     """
     return [template.meta for template in BUILTIN_TEMPLATES.values()]

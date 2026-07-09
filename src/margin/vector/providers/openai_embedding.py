@@ -14,21 +14,7 @@ from margin.news.models import utc_now
 
 
 class OpenAIEmbeddingProvider:
-    """Embedding provider for OpenAI-compatible ``/embeddings`` APIs.
-
-    The provider receives configuration explicitly from the provider runtime
-    layer, validates that required credentials are present, and exposes
-    ``embed`` and ``embed_batch`` methods for single-text and batch inference.
-
-    Attributes:
-        _api_key: Bearer token used to authenticate API requests.
-        _base_url: Base URL of the embeddings endpoint.
-        _model: Model identifier sent to the endpoint.
-        _dimension: Expected dimensionality of returned vectors.
-        _timeout: Request timeout in seconds.
-        _client: HTTP client used to call the endpoint.
-        _descriptor: Provider descriptor exposed by the ``descriptor`` property.
-    """
+    """Embedding provider for OpenAI-compatible ``/embeddings`` APIs.."""
 
     def __init__(
         self,
@@ -43,16 +29,15 @@ class OpenAIEmbeddingProvider:
         """Initialize the OpenAI-compatible embedding provider.
 
         Args:
-            api_key: API key for the embedding endpoint.
-            base_url: Base URL of the embedding endpoint.
-            model: Model identifier. Defaults to ``text-embedding-3-small``.
-            dimension: Vector dimension. Defaults to ``1536``.
-            client: Optional pre-configured HTTP client. If omitted, an ``httpx``
-                client is created.
-            timeout: Request timeout in seconds.
+            api_key: str | None: .
+            base_url: str | None: .
+            model: str | None: .
+            dimension: int | None: .
+            client: Any | None: .
+            timeout: float: .
 
-        Raises:
-            RuntimeError: If ``api_key`` or ``base_url`` cannot be resolved.
+        Returns:
+            None: .
         """
         self._api_key = api_key
         self._base_url = (base_url or "").rstrip("/")
@@ -82,8 +67,7 @@ class OpenAIEmbeddingProvider:
         """Return the provider descriptor.
 
         Returns:
-            A ``ProviderDescriptor`` describing name, version, type, capabilities,
-            secret references, and configuration.
+            ProviderDescriptor: .
         """
         return self._descriptor
 
@@ -92,7 +76,7 @@ class OpenAIEmbeddingProvider:
         """Return the provider name.
 
         Returns:
-            The canonical provider name, e.g. ``openai_embedding``.
+            str: .
         """
         return self._descriptor.name
 
@@ -101,7 +85,7 @@ class OpenAIEmbeddingProvider:
         """Return the model version string.
 
         Returns:
-            The configured model identifier.
+            str: .
         """
         return self._model
 
@@ -110,7 +94,7 @@ class OpenAIEmbeddingProvider:
         """Return the expected embedding dimension.
 
         Returns:
-            The configured vector dimension.
+            int: .
         """
         return self._dimension
 
@@ -118,10 +102,10 @@ class OpenAIEmbeddingProvider:
         """Embed a single text string.
 
         Args:
-            text: Plain text to embed.
+            text: str: .
 
         Returns:
-            A dense vector of length ``self.dim``.
+            list[float]: .
         """
         return self.embed_batch([text])[0]
 
@@ -129,15 +113,10 @@ class OpenAIEmbeddingProvider:
         """Embed a batch of text strings in a single API call.
 
         Args:
-            texts: List of plain-text strings to embed.
+            texts: list[str]: .
 
         Returns:
-            A list of dense vectors, one per input string, in the same order.
-
-        Raises:
-            RuntimeError: If the response is malformed or the data length does not
-                match the input length.
-            ValueError: If a returned vector has the wrong dimension.
+            list[list[float]]: .
         """
         response = self._client.post(
             f"{self._base_url}/embeddings",
@@ -170,11 +149,8 @@ class OpenAIEmbeddingProvider:
     def healthcheck(self) -> HealthCheckResult:
         """Run a lightweight health check against the embedding endpoint.
 
-        Performs a single-token embedding request and reports whether it succeeds.
-
         Returns:
-            A ``HealthCheckResult`` with status ``HEALTHY`` or ``UNHEALTHY`` and
-            an optional error message.
+            HealthCheckResult: .
         """
         try:
             self.embed("healthcheck")

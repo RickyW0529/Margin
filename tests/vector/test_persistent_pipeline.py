@@ -14,32 +14,57 @@ from margin.vector.persistent_pipeline import PersistentEmbeddingPipeline
 
 
 class FakeEmbeddingProvider:
-    """Stub embedding provider returning a fixed 2-D vector for any input."""
+    """Stub embedding provider returning a fixed 2-D vector for any input.."""
 
     def embed(self, text: str) -> list[float]:
-        """Return a constant ``[1.0, 0.0]`` vector, ignoring the input text."""
+        """Return a constant ``[1.0, 0.0]`` vector, ignoring the input text.
+
+        Args:
+            text: str: .
+
+        Returns:
+            list[float]: .
+        """
         del text
         return [1.0, 0.0]
 
 
 class FakeVectorRepository:
-    """Stub vector repository returning a fixed chunk for search and list calls."""
+    """Stub vector repository returning a fixed chunk for search and list calls.."""
 
     def __init__(self, chunk) -> None:
         """Initialize the fake repository with a chunk to return.
 
         Args:
-            chunk: the chunk returned by ``search_vector`` and ``list_chunks``.
+            chunk: Any: .
+
+        Returns:
+            None: .
         """
         self.chunk = chunk
 
     def search_vector(self, query_vector, **kwargs):
-        """Return a single result pair containing the stored chunk and score 0.9."""
+        """Return a single result pair containing the stored chunk and score 0.9.
+
+        Args:
+            query_vector: Any: .
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
         del query_vector, kwargs
         return [(self.chunk, 0.9)]
 
     def list_chunks(self, **kwargs):
-        """Return a single-element list containing the stored chunk."""
+        """Return a single-element list containing the stored chunk.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
         del kwargs
         return [self.chunk]
 
@@ -47,9 +72,8 @@ class FakeVectorRepository:
 def test_persistent_pipeline_combines_database_vector_and_keyword_results():
     """Persistent pipeline must combine database vector and keyword search results.
 
-    Verifies that ``PersistentEmbeddingPipeline`` delegates vector search to the
-    repository and performs keyword search over listed chunks, applying symbol
-    filters in both paths.
+    Returns:
+        Any: .
     """
     chunk = make_chunk(
         document_id="doc_1",
@@ -67,9 +91,7 @@ def test_persistent_pipeline_combines_database_vector_and_keyword_results():
         repository=FakeVectorRepository(chunk),
     )
 
-    assert pipeline.vector_search("现金流", filters={"symbol": "000001.SZ"}) == [
-        (chunk, 0.9)
-    ]
+    assert pipeline.vector_search("现金流", filters={"symbol": "000001.SZ"}) == [(chunk, 0.9)]
     keyword = pipeline.keyword_search(
         "现金流改善",
         filters={"symbol": "000001.SZ"},

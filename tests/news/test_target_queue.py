@@ -28,7 +28,14 @@ from margin.storage.database import (
 
 @pytest.fixture
 def news_repository(database_url: str) -> Iterator[NewsRepository]:
-    """Create a clean repository with the v0.2 news refresh tables."""
+    """Create a clean repository with the v0.2 news refresh tables.
+
+    Args:
+        database_url: str: .
+
+    Yields:
+        Any: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -47,7 +54,15 @@ def news_repository(database_url: str) -> Iterator[NewsRepository]:
 
 
 def make_target(symbol: str, priority: int = 10) -> NewsTarget:
-    """Build a deterministic queue target fixture."""
+    """Build a deterministic queue target fixture.
+
+    Args:
+        symbol: str: .
+        priority: int: .
+
+    Returns:
+        NewsTarget: .
+    """
     return NewsTarget(
         scope_version_id="scope-1",
         quant_run_id="quant-1",
@@ -61,7 +76,14 @@ def make_target(symbol: str, priority: int = 10) -> NewsTarget:
 
 
 def test_enqueue_all_is_complete_and_idempotent(news_repository: NewsRepository) -> None:
-    """enqueue all is complete and idempotent."""
+    """enqueue all is complete and idempotent.
+
+    Args:
+        news_repository: NewsRepository: .
+
+    Returns:
+        None: .
+    """
     queue = NewsTargetQueue(news_repository)
     run_id = queue.create_run(
         scope_version_id="scope-1",
@@ -86,7 +108,14 @@ def test_enqueue_all_is_complete_and_idempotent(news_repository: NewsRepository)
 def test_claim_batch_orders_by_priority_and_retry_time(
     news_repository: NewsRepository,
 ) -> None:
-    """claim batch orders by priority and retry time."""
+    """claim batch orders by priority and retry time.
+
+    Args:
+        news_repository: NewsRepository: .
+
+    Returns:
+        None: .
+    """
     queue = NewsTargetQueue(news_repository)
     run_id = queue.create_run(
         scope_version_id="scope-1",
@@ -108,7 +137,14 @@ def test_claim_batch_orders_by_priority_and_retry_time(
 def test_failed_retry_does_not_make_run_terminal(
     news_repository: NewsRepository,
 ) -> None:
-    """failed retry does not make run terminal."""
+    """failed retry does not make run terminal.
+
+    Args:
+        news_repository: NewsRepository: .
+
+    Returns:
+        None: .
+    """
     queue = NewsTargetQueue(news_repository)
     run_id = queue.create_run(
         scope_version_id="scope-1",

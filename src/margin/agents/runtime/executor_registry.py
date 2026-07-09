@@ -12,28 +12,58 @@ from margin.agents.cards.worker_cards import WorkerAgentCard
 
 @dataclass(frozen=True)
 class ExecutorKey:
-    """One executable agent/skill key."""
+    """One executable agent/skill key.."""
 
     agent_name: str
     skill_id: str
 
 
 class ExecutorRegistry:
-    """Registry mapping WorkerAgent skills to executable implementations."""
+    """Registry mapping WorkerAgent skills to executable implementations.."""
 
     def __init__(self) -> None:
+        """Process __init__.
+
+        Returns:
+            None: .
+        """
         self._executors: dict[ExecutorKey, object] = {}
 
     def register(self, *, agent_name: str, skill_id: str, executor: object) -> None:
-        """Register one executable agent skill."""
+        """Register one executable agent skill.
+
+        Args:
+            agent_name: str: .
+            skill_id: str: .
+            executor: object: .
+
+        Returns:
+            None: .
+        """
         self._executors[ExecutorKey(agent_name, skill_id)] = executor
 
     def has(self, agent_name: str, skill_id: str) -> bool:
-        """Return whether an executor exists."""
+        """Return whether an executor exists.
+
+        Args:
+            agent_name: str: .
+            skill_id: str: .
+
+        Returns:
+            bool: .
+        """
         return ExecutorKey(agent_name, skill_id) in self._executors
 
     def get(self, agent_name: str, skill_id: str) -> object:
-        """Return an executor or raise a clear error."""
+        """Return an executor or raise a clear error.
+
+        Args:
+            agent_name: str: .
+            skill_id: str: .
+
+        Returns:
+            object: .
+        """
         key = ExecutorKey(agent_name, skill_id)
         try:
             return self._executors[key]
@@ -44,7 +74,14 @@ class ExecutorRegistry:
         self,
         cards: Iterable[WorkerAgentCard],
     ) -> tuple[WorkerAgentCard, ...]:
-        """Return cards with only executable, non-planned skills."""
+        """Return cards with only executable, non-planned skills.
+
+        Args:
+            cards: Iterable[WorkerAgentCard]: .
+
+        Returns:
+            tuple[WorkerAgentCard, ...]: .
+        """
         visible: list[WorkerAgentCard] = []
         for card in cards:
             skills = tuple(
@@ -60,7 +97,14 @@ class ExecutorRegistry:
         self,
         cards: Iterable[AgentCard],
     ) -> tuple[AgentCard, ...]:
-        """Return legacy AgentCards with only executable Q&A skills."""
+        """Return legacy AgentCards with only executable Q&A skills.
+
+        Args:
+            cards: Iterable[AgentCard]: .
+
+        Returns:
+            tuple[AgentCard, ...]: .
+        """
         visible: list[AgentCard] = []
         for card in cards:
             skills = tuple(
@@ -78,7 +122,15 @@ class ExecutorRegistry:
         *,
         require_all_visible: bool = False,
     ) -> None:
-        """Validate that visible worker skills have executors."""
+        """Validate that visible worker skills have executors.
+
+        Args:
+            cards: Iterable[WorkerAgentCard]: .
+            require_all_visible: bool: .
+
+        Returns:
+            None: .
+        """
         missing: list[str] = []
         for card in cards:
             for skill in card.skills:
@@ -92,7 +144,11 @@ class ExecutorRegistry:
 
 
 def default_qna_executor_registry() -> ExecutorRegistry:
-    """Return the executable Q&A worker registry for current v0 adapters."""
+    """Return the executable Q&A worker registry for current v0 adapters.
+
+    Returns:
+        ExecutorRegistry: .
+    """
     registry = ExecutorRegistry()
     registry.register(
         agent_name="GeneralQnaAgent",
@@ -108,7 +164,16 @@ def default_qna_executor_registry() -> ExecutorRegistry:
 
 
 class _RegisteredOnlyExecutor:
-    """Marker executor used when the legacy route owns actual execution."""
+    """Marker executor used when the legacy route owns actual execution.."""
 
     def __call__(self, *args: Any, **kwargs: Any) -> None:
+        """Process __call__.
+
+        Args:
+            *args: Any: .
+            **kwargs: Any: .
+
+        Returns:
+            None: .
+        """
         raise NotImplementedError("legacy adapter executes this skill directly")

@@ -27,10 +27,10 @@ def _naive(dt: datetime) -> datetime:
     """Strip timezone info from a datetime for naive comparisons.
 
     Args:
-        dt: A datetime value, possibly timezone-aware.
+        dt: datetime: .
 
     Returns:
-        A naive datetime with the same local values.
+        datetime: .
     """
     if dt.tzinfo is not None:
         return dt.replace(tzinfo=None)
@@ -41,10 +41,10 @@ def _setup_pipeline(chunks_data: list[tuple[str, str, SourceLevel, datetime]]):
     """Create an ``EmbeddingPipeline`` preloaded with the given chunks.
 
     Args:
-        chunks_data: Tuples of (content, symbol, source_level, published_at).
+        chunks_data: list[tuple[str, str, SourceLevel, datetime]]: .
 
     Returns:
-        An ``EmbeddingPipeline`` with the chunks already indexed.
+        Any: .
     """
     provider = EmbeddingProvider(dim=64)
     pipeline = EmbeddingPipeline(embedding_provider=provider)
@@ -68,15 +68,21 @@ def _setup_pipeline(chunks_data: list[tuple[str, str, SourceLevel, datetime]]):
 
 
 class TestHybridRetriever:
-    """Tests for ``HybridRetriever`` combining vector and keyword search with constraints."""
+    """Tests for ``HybridRetriever`` combining vector and keyword search with constraints.."""
 
     def test_basic_search(self):
-        """Verify hybrid search returns ranked results matching the query."""
-        pipeline = _setup_pipeline([
-            ("公司经营现金流显著改善", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
-            ("公司净利润下降", "000001.SZ", SourceLevel.L2, datetime(2026, 6, 16)),
-            ("行业景气度回升", "600000.SH", SourceLevel.L4, datetime(2026, 6, 15)),
-        ])
+        """Verify hybrid search returns ranked results matching the query.
+
+        Returns:
+            Any: .
+        """
+        pipeline = _setup_pipeline(
+            [
+                ("公司经营现金流显著改善", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
+                ("公司净利润下降", "000001.SZ", SourceLevel.L2, datetime(2026, 6, 16)),
+                ("行业景气度回升", "600000.SH", SourceLevel.L4, datetime(2026, 6, 15)),
+            ]
+        )
 
         retriever = HybridRetriever(pipeline)
         constraints = SearchConstraints(
@@ -91,11 +97,17 @@ class TestHybridRetriever:
         assert results[0].rank == 1
 
     def test_symbol_filter(self):
-        """Verify search constraints restrict results to the requested symbol."""
-        pipeline = _setup_pipeline([
-            ("现金流改善", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
-            ("现金流改善", "600000.SH", SourceLevel.L1, datetime(2026, 6, 17)),
-        ])
+        """Verify search constraints restrict results to the requested symbol.
+
+        Returns:
+            Any: .
+        """
+        pipeline = _setup_pipeline(
+            [
+                ("现金流改善", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
+                ("现金流改善", "600000.SH", SourceLevel.L1, datetime(2026, 6, 17)),
+            ]
+        )
 
         retriever = HybridRetriever(pipeline)
         constraints = SearchConstraints(
@@ -108,11 +120,17 @@ class TestHybridRetriever:
         assert results[0].chunk.symbol == "000001.SZ"
 
     def test_decision_at_filter(self):
-        """Verify ``available_at`` must not exceed ``decision_at``."""
-        pipeline = _setup_pipeline([
-            ("早期数据", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 1)),
-            ("未来数据", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 20)),
-        ])
+        """Verify ``available_at`` must not exceed ``decision_at``.
+
+        Returns:
+            Any: .
+        """
+        pipeline = _setup_pipeline(
+            [
+                ("早期数据", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 1)),
+                ("未来数据", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 20)),
+            ]
+        )
 
         retriever = HybridRetriever(pipeline)
         constraints = SearchConstraints(
@@ -126,11 +144,17 @@ class TestHybridRetriever:
         assert not any("未来" in r.chunk.content for r in results)
 
     def test_prefer_official_boost(self):
-        """Verify ``prefer_official`` boosts L1-L3 sources above L4 sources."""
-        pipeline = _setup_pipeline([
-            ("官方公告现金流", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
-            ("媒体报道现金流", "000001.SZ", SourceLevel.L4, datetime(2026, 6, 17)),
-        ])
+        """Verify ``prefer_official`` boosts L1-L3 sources above L4 sources.
+
+        Returns:
+            Any: .
+        """
+        pipeline = _setup_pipeline(
+            [
+                ("官方公告现金流", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
+                ("媒体报道现金流", "000001.SZ", SourceLevel.L4, datetime(2026, 6, 17)),
+            ]
+        )
 
         retriever = HybridRetriever(pipeline)
         constraints = SearchConstraints(
@@ -143,7 +167,11 @@ class TestHybridRetriever:
         assert results[0].chunk.source_level == SourceLevel.L1
 
     def test_dedup_by_content_hash(self):
-        """Verify ``dedup=True`` removes duplicate facts from the result list."""
+        """Verify ``dedup=True`` removes duplicate facts from the result list.
+
+        Returns:
+            Any: .
+        """
         pipeline = EmbeddingPipeline(
             embedding_provider=EmbeddingProvider(dim=64),
         )
@@ -175,7 +203,11 @@ class TestHybridRetriever:
         assert len(hashes) == len(set(hashes))
 
     def test_dedup_normalizes_case_and_whitespace(self):
-        """Verify fact deduplication normalizes case and repeated whitespace."""
+        """Verify fact deduplication normalizes case and repeated whitespace.
+
+        Returns:
+            Any: .
+        """
         pipeline = EmbeddingPipeline(
             embedding_provider=EmbeddingProvider(dim=64),
         )
@@ -212,10 +244,17 @@ class TestHybridRetriever:
         assert len(results) == 1
 
     def test_score_components_present(self):
-        """Verify each result exposes vector, keyword, time-decay, and quality sub-scores."""
-        pipeline = _setup_pipeline([
-            ("测试内容", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
-        ])
+        """Verify each result exposes vector, keyword, time-decay, and quality sub-scores.
+        Returns:.
+
+        Returns:
+            Any: .
+        """
+        pipeline = _setup_pipeline(
+            [
+                ("测试内容", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
+            ]
+        )
 
         retriever = HybridRetriever(pipeline)
         results = retriever.search(
@@ -236,10 +275,16 @@ class TestHybridRetriever:
         assert r.score > 0
 
     def test_empty_results(self):
-        """Verify an irrelevant query returns an empty result list."""
-        pipeline = _setup_pipeline([
-            ("完全不相关的内容", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
-        ])
+        """Verify an irrelevant query returns an empty result list.
+
+        Returns:
+            Any: .
+        """
+        pipeline = _setup_pipeline(
+            [
+                ("完全不相关的内容", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
+            ]
+        )
 
         retriever = HybridRetriever(pipeline)
         results = retriever.search(
@@ -253,16 +298,27 @@ class TestHybridRetriever:
         assert results == []
 
     def test_constraints_require_symbol_and_decision_time(self):
-        """Verify missing required constraints raise ``ValueError``."""
-        pipeline = _setup_pipeline([
-            ("证据", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
-        ])
+        """Verify missing required constraints raise ``ValueError``.
+
+        Returns:
+            Any: .
+        """
+        pipeline = _setup_pipeline(
+            [
+                ("证据", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
+            ]
+        )
 
         with pytest.raises(ValueError, match="symbol"):
             HybridRetriever(pipeline).search("证据")
 
     def test_timezone_offsets_are_compared_in_utc(self):
-        """Verify timezone-aware ``available_at`` and ``decision_at`` are compared in UTC."""
+        """Verify timezone-aware ``available_at`` and ``decision_at`` are compared in UTC.
+        Returns:.
+
+        Returns:
+            Any: .
+        """
         provider = EmbeddingProvider(dim=64)
         pipeline = EmbeddingPipeline(embedding_provider=provider)
         chunk = make_chunk(
@@ -288,7 +344,11 @@ class TestHybridRetriever:
         assert len(results) == 1
 
     def test_multiple_doc_types_are_included(self):
-        """Verify search can include chunks from multiple document types."""
+        """Verify search can include chunks from multiple document types.
+
+        Returns:
+            Any: .
+        """
         provider = EmbeddingProvider(dim=64)
         pipeline = EmbeddingPipeline(embedding_provider=provider)
         chunks = [
@@ -327,18 +387,38 @@ class TestHybridRetriever:
         assert {result.chunk.doc_type.value for result in results} == {"filing", "news"}
 
     def test_vector_failure_degrades_to_keyword_results(self):
-        """Verify vector search failures fall back to keyword-only results."""
+        """Verify vector search failures fall back to keyword-only results.
+
+        Returns:
+            Any: .
+        """
+
         class BrokenVectorStore:
-            """Mock vector store that always raises on search."""
+            """Mock vector store that always raises on search.."""
 
             size = 0
 
             def upsert_batch(self, items):
-                """Pretend to upsert but do nothing."""
+                """Pretend to upsert but do nothing.
+
+                Args:
+                    items: Any: .
+
+                Returns:
+                    Any: .
+                """
                 return 0
 
             def search(self, *args, **kwargs):
-                """Raise a runtime error simulating vector store unavailability."""
+                """Raise a runtime error simulating vector store unavailability.
+
+                Args:
+                    *args: Any: .
+                    **kwargs: Any: .
+
+                Returns:
+                    Any: .
+                """
                 raise RuntimeError("vector store unavailable")
 
         pipeline = EmbeddingPipeline(
@@ -368,10 +448,14 @@ class TestHybridRetriever:
 
 
 class TestReranker:
-    """Tests for ``Reranker`` reordering results by query relevance."""
+    """Tests for ``Reranker`` reordering results by query relevance.."""
 
     def test_rerank_reorders(self):
-        """Verify reranking boosts the more relevant chunk to first place."""
+        """Verify reranking boosts the more relevant chunk to first place.
+
+        Returns:
+            Any: .
+        """
         from margin.vector.models import RetrievalResult
 
         chunks = [
@@ -390,14 +474,15 @@ class TestReranker:
         assert reranked[0].chunk.content == "现金流相关度非常高"
 
     def test_rerank_preserves_top_k(self):
-        """Verify reranking truncates and re-ranks the result list to ``top_k``."""
+        """Verify reranking truncates and re-ranks the result list to ``top_k``.
+
+        Returns:
+            Any: .
+        """
         from margin.vector.models import RetrievalResult
 
         chunks = [make_chunk(document_id=f"d{i}", content=f"content {i}") for i in range(5)]
-        results = [
-            RetrievalResult(chunk=c, score=0.5, rank=i + 1)
-            for i, c in enumerate(chunks)
-        ]
+        results = [RetrievalResult(chunk=c, score=0.5, rank=i + 1) for i, c in enumerate(chunks)]
 
         reranker = Reranker()
         reranked = reranker.rerank("content", results, top_k=3)
@@ -406,11 +491,23 @@ class TestReranker:
         assert reranked[2].rank == 3
 
     def test_custom_rerank_func(self):
-        """Verify a custom scoring function controls the reranking order."""
+        """Verify a custom scoring function controls the reranking order.
+
+        Returns:
+            Any: .
+        """
         from margin.vector.models import RetrievalResult
 
         def custom(query, content):
-            """custom."""
+            """custom.
+
+            Args:
+                query: Any: .
+                content: Any: .
+
+            Returns:
+                Any: .
+            """
             return 1.0 if "target" in content else 0.0
 
         chunks = [
@@ -428,15 +525,21 @@ class TestReranker:
 
 
 class TestRetrievalTool:
-    """Tests for ``RetrievalTool``, the high-level search interface."""
+    """Tests for ``RetrievalTool``, the high-level search interface.."""
 
     def test_search_with_constraints(self):
-        """Verify the tool filters by symbol and decision time and returns results."""
-        pipeline = _setup_pipeline([
-            ("现金流改善公告", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
-            ("净利润增长", "000001.SZ", SourceLevel.L2, datetime(2026, 6, 16)),
-            ("行业报告", "600000.SH", SourceLevel.L4, datetime(2026, 6, 15)),
-        ])
+        """Verify the tool filters by symbol and decision time and returns results.
+
+        Returns:
+            Any: .
+        """
+        pipeline = _setup_pipeline(
+            [
+                ("现金流改善公告", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
+                ("净利润增长", "000001.SZ", SourceLevel.L2, datetime(2026, 6, 16)),
+                ("行业报告", "600000.SH", SourceLevel.L4, datetime(2026, 6, 15)),
+            ]
+        )
 
         tool = RetrievalTool(pipeline)
         results = tool.search(
@@ -451,11 +554,17 @@ class TestRetrievalTool:
         assert all(_naive(r.chunk.available_at) <= datetime(2026, 6, 18) for r in results)
 
     def test_search_by_symbol(self):
-        """Verify ``search_by_symbol`` is a convenient symbol-scoped search."""
-        pipeline = _setup_pipeline([
-            ("关于000001的公告", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
-            ("关于600000的公告", "600000.SH", SourceLevel.L1, datetime(2026, 6, 17)),
-        ])
+        """Verify ``search_by_symbol`` is a convenient symbol-scoped search.
+
+        Returns:
+            Any: .
+        """
+        pipeline = _setup_pipeline(
+            [
+                ("关于000001的公告", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
+                ("关于600000的公告", "600000.SH", SourceLevel.L1, datetime(2026, 6, 17)),
+            ]
+        )
 
         tool = RetrievalTool(pipeline)
         results = tool.search_by_symbol(
@@ -469,10 +578,16 @@ class TestRetrievalTool:
         assert all(r.chunk.symbol == "000001.SZ" for r in results)
 
     def test_output_has_locator(self):
-        """Verify returned chunks expose source URL and paragraph index for citation."""
-        pipeline = _setup_pipeline([
-            ("有定位的chunk", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
-        ])
+        """Verify returned chunks expose source URL and paragraph index for citation.
+
+        Returns:
+            Any: .
+        """
+        pipeline = _setup_pipeline(
+            [
+                ("有定位的chunk", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
+            ]
+        )
 
         tool = RetrievalTool(pipeline)
         results = tool.search(
@@ -488,7 +603,11 @@ class TestRetrievalTool:
         assert chunk.paragraph_index is not None
 
     def test_chunk_without_locator_is_rejected(self):
-        """Verify chunks lacking source_url or paragraph_index are excluded from results."""
+        """Verify chunks lacking source_url or paragraph_index are excluded from results.
+
+        Returns:
+            Any: .
+        """
         pipeline = EmbeddingPipeline(
             embedding_provider=EmbeddingProvider(dim=64),
         )
@@ -510,10 +629,16 @@ class TestRetrievalTool:
         assert results == []
 
     def test_rerank_disabled(self):
-        """Verify retrieval works when the reranker is disabled."""
-        pipeline = _setup_pipeline([
-            ("现金流内容", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
-        ])
+        """Verify retrieval works when the reranker is disabled.
+
+        Returns:
+            Any: .
+        """
+        pipeline = _setup_pipeline(
+            [
+                ("现金流内容", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
+            ]
+        )
 
         tool = RetrievalTool(pipeline, use_rerank=False)
         results = tool.search(
@@ -525,27 +650,48 @@ class TestRetrievalTool:
         assert len(results) == 1
 
     def test_missing_pit_constraints_are_rejected(self):
-        """Verify missing ``decision_at`` raises ``ValueError``."""
-        pipeline = _setup_pipeline([
-            ("证据", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
-        ])
+        """Verify missing ``decision_at`` raises ``ValueError``.
+
+        Returns:
+            Any: .
+        """
+        pipeline = _setup_pipeline(
+            [
+                ("证据", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
+            ]
+        )
         tool = RetrievalTool(pipeline)
 
         with pytest.raises(ValueError, match="decision_at"):
             tool.search("证据", symbol="000001.SZ")
 
     def test_rerank_failure_returns_hybrid_results(self):
-        """Verify a broken reranker falls back to the raw hybrid result list."""
+        """Verify a broken reranker falls back to the raw hybrid result list.
+
+        Returns:
+            Any: .
+        """
+
         class BrokenReranker:
-            """Mock reranker that always raises."""
+            """Mock reranker that always raises.."""
 
             def rerank(self, *args, **kwargs):
-                """Raise a runtime error simulating reranker unavailability."""
+                """Raise a runtime error simulating reranker unavailability.
+
+                Args:
+                    *args: Any: .
+                    **kwargs: Any: .
+
+                Returns:
+                    Any: .
+                """
                 raise RuntimeError("reranker unavailable")
 
-        pipeline = _setup_pipeline([
-            ("现金流证据", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
-        ])
+        pipeline = _setup_pipeline(
+            [
+                ("现金流证据", "000001.SZ", SourceLevel.L1, datetime(2026, 6, 17)),
+            ]
+        )
         tool = RetrievalTool(pipeline, reranker=BrokenReranker())
 
         results = tool.search(
@@ -558,10 +704,14 @@ class TestRetrievalTool:
 
 
 class TestEndToEnd0403:
-    """End-to-end tests for chunking, indexing, and retrieving document events."""
+    """End-to-end tests for chunking, indexing, and retrieving document events.."""
 
     def test_full_retrieval_pipeline(self):
-        """Verify events are chunked, indexed, and retrievable with ranking and constraints."""
+        """Verify events are chunked, indexed, and retrievable with ranking and constraints.
+
+        Returns:
+            Any: .
+        """
         events = [
             make_document_event(
                 source_url="https://example.com/filing1",
@@ -569,8 +719,7 @@ class TestEndToEnd0403:
                 source_level=SourceLevel.L1,
                 title="关于公司经营的公告",
                 content=(
-                    "一、经营情况\n本季度现金流改善30%。\n\n"
-                    "二、财务数据\n净利润同比增长20%。"
+                    "一、经营情况\n本季度现金流改善30%。\n\n二、财务数据\n净利润同比增长20%。"
                 ),
                 symbols=["000001.SZ"],
                 doc_type="filing",

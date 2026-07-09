@@ -24,7 +24,7 @@ from margin.news.repository import NewsRepository
 
 
 class QuantTargetRepositoryLike(Protocol):
-    """Protocol for scoped quant-to-news target readers."""
+    """Protocol for scoped quant-to-news target readers.."""
 
     def list_targets(
         self,
@@ -37,34 +37,33 @@ class QuantTargetRepositoryLike(Protocol):
         """Return news targets for a quant run.
 
         Args:
-            scope_version_id: Identifier of the scope version that produced the quant run.
-            quant_run_id: Identifier of the quant run whose candidates are being loaded.
-            decision_at: Decision timestamp used to scope the quant run.
-            include_near_threshold: Whether to include near-threshold securities in addition
-                to PASS targets.
+            scope_version_id: str: .
+            quant_run_id: str: .
+            decision_at: datetime: .
+            include_near_threshold: bool: .
 
         Returns:
-            Tuple of ``NewsTarget`` objects sorted by priority and security id.
+            tuple[NewsTarget, ...]: .
         """
 
 
 class KeywordWorkflowLike(Protocol):
-    """Protocol for keyword plan builders."""
+    """Protocol for keyword plan builders.."""
 
     def build_plan(self, *, run_id: str, target: NewsTarget) -> NewsSearchPlan:
         """Build a reviewed search plan.
 
         Args:
-            run_id: Identifier of the agentic news acquisition run.
-            target: News target to build queries for.
+            run_id: str: .
+            target: NewsTarget: .
 
         Returns:
-            A reviewed ``NewsSearchPlan`` (approved or deterministic fallback).
+            NewsSearchPlan: .
         """
 
 
 class WebSearchServiceLike(Protocol):
-    """Protocol for controlled WebSearch acquisition."""
+    """Protocol for controlled WebSearch acquisition.."""
 
     def search_and_acquire(
         self,
@@ -74,16 +73,16 @@ class WebSearchServiceLike(Protocol):
         """Search, download, snapshot, parse, persist, and return events.
 
         Args:
-            query: Search query string.
-            max_results: Maximum number of results to acquire.
+            query: str: .
+            max_results: int: .
 
         Returns:
-            Tuple of (search query record, list of acquired document events).
+            tuple[object, list[object]]: .
         """
 
 
 class ArticleWorkflowLike(Protocol):
-    """Protocol for article extraction and briefing."""
+    """Protocol for article extraction and briefing.."""
 
     def extract_findings(
         self,
@@ -95,12 +94,12 @@ class ArticleWorkflowLike(Protocol):
         """Extract reviewed findings.
 
         Args:
-            run_id: Identifier of the agentic news acquisition run.
-            target: News target the events belong to.
-            events: Tuple of persisted document events to extract findings from.
+            run_id: str: .
+            target: NewsTarget: .
+            events: tuple[DocumentEvent, ...]: .
 
         Returns:
-            Tuple of reviewed ``NewsArticleFinding`` objects.
+            tuple[NewsArticleFinding, ...]: .
         """
 
     def build_brief(
@@ -113,17 +112,17 @@ class ArticleWorkflowLike(Protocol):
         """Build a derived security brief.
 
         Args:
-            run_id: Identifier of the agentic news acquisition run.
-            target: News target the findings belong to.
-            findings: Tuple of approved article findings to summarize.
+            run_id: str: .
+            target: NewsTarget: .
+            findings: tuple[NewsArticleFinding, ...]: .
 
         Returns:
-            A ``NewsSecurityBrief`` if approved findings exist, otherwise None.
+            NewsSecurityBrief | None: .
         """
 
 
 class AgenticNewsAcquisitionService:
-    """Run agentic news acquisition for one quant run."""
+    """Run agentic news acquisition for one quant run.."""
 
     def __init__(
         self,
@@ -137,11 +136,14 @@ class AgenticNewsAcquisitionService:
         """Initialize the service with its collaborators.
 
         Args:
-            repository: Repository used to persist runs, plans, findings, and briefs.
-            target_repository: Reader that loads quant-selected news targets.
-            keyword_workflow: Workflow that builds reviewed search plans.
-            websearch_service: Service that performs controlled WebSearch acquisition.
-            article_workflow: Workflow that extracts findings and builds briefs.
+            repository: NewsRepository: .
+            target_repository: QuantTargetRepositoryLike: .
+            keyword_workflow: KeywordWorkflowLike: .
+            websearch_service: WebSearchServiceLike: .
+            article_workflow: ArticleWorkflowLike: .
+
+        Returns:
+            None: .
         """
         self._repository = repository
         self._targets = target_repository
@@ -162,15 +164,15 @@ class AgenticNewsAcquisitionService:
         """Run acquisition for all eligible quant targets.
 
         Args:
-            scope_version_id: Identifier of the scope version that produced the quant run.
-            quant_run_id: Identifier of the quant run to acquire news for.
-            decision_at: Decision timestamp used to scope the quant run.
-            include_near_threshold: Whether to include near-threshold securities.
-            max_workers: Maximum number of targets to process concurrently.
-            idempotency_key: Optional mutation idempotency key.
+            scope_version_id: str: .
+            quant_run_id: str: .
+            decision_at: datetime: .
+            include_near_threshold: bool: .
+            max_workers: int: .
+            idempotency_key: str | None: .
 
         Returns:
-            A ``NewsAgentRun`` describing the final run status and target counts.
+            NewsAgentRun: .
         """
         run_id = _run_id(
             scope_version_id=scope_version_id,
@@ -247,16 +249,12 @@ class AgenticNewsAcquisitionService:
                 self._repository.add_news_agent_run(waiting)
                 return waiting
             raise
-        status = (
-            NewsAgentRunStatus.PARTIAL if failed_targets else NewsAgentRunStatus.COMPLETED
-        )
+        status = NewsAgentRunStatus.PARTIAL if failed_targets else NewsAgentRunStatus.COMPLETED
         completed = run.model_copy(
             update={
                 "status": status,
                 "finished_at": utc_now(),
-                "error_summary": {"failed_targets": failed_targets}
-                if failed_targets
-                else {},
+                "error_summary": {"failed_targets": failed_targets} if failed_targets else {},
             }
         )
         self._repository.add_news_agent_run(completed)
@@ -269,13 +267,20 @@ class AgenticNewsAcquisitionService:
         targets: tuple[NewsTarget, ...],
         max_workers: int,
     ) -> int:
-        """Process targets, using bounded parallelism when requested."""
+        """Process targets, using bounded parallelism when requested.
+
+        Args:
+            run_id: str: .
+            targets: tuple[NewsTarget, ...]: .
+            max_workers: int: .
+
+        Returns:
+            int: .
+        """
         worker_count = min(max(1, max_workers), len(targets))
         if worker_count <= 1:
             return sum(
-                1
-                for target in targets
-                if not self._process_target(run_id=run_id, target=target)
+                1 for target in targets if not self._process_target(run_id=run_id, target=target)
             )
         failed_targets = 0
         with ThreadPoolExecutor(max_workers=worker_count) as executor:
@@ -289,7 +294,15 @@ class AgenticNewsAcquisitionService:
         return failed_targets
 
     def _process_target(self, *, run_id: str, target: NewsTarget) -> bool:
-        """Process one target and return whether it completed."""
+        """Process one target and return whether it completed.
+
+        Args:
+            run_id: str: .
+            target: NewsTarget: .
+
+        Returns:
+            bool: .
+        """
         self._repository.add_news_agent_task(
             _target_task(
                 run_id=run_id,
@@ -303,9 +316,7 @@ class AgenticNewsAcquisitionService:
             events: list[DocumentEvent] = []
             for query in plan.queries:
                 _, acquired = self._websearch.search_and_acquire(query, max_results=5)
-                events.extend(
-                    event for event in acquired if isinstance(event, DocumentEvent)
-                )
+                events.extend(event for event in acquired if isinstance(event, DocumentEvent))
             findings = self._articles.extract_findings(
                 run_id=run_id,
                 target=target,
@@ -353,7 +364,18 @@ def _run_id(
     include_near_threshold: bool,
     idempotency_key: str | None = None,
 ) -> str:
-    """Return a compact run id."""
+    """Return a compact run id.
+
+    Args:
+        scope_version_id: str: .
+        quant_run_id: str: .
+        decision_at: datetime: .
+        include_near_threshold: bool: .
+        idempotency_key: str | None: .
+
+    Returns:
+        str: .
+    """
     unique_component = idempotency_key or uuid.uuid4().hex
     payload = (
         f"{scope_version_id}|{quant_run_id}|{decision_at.isoformat()}|"
@@ -371,7 +393,18 @@ def _target_task(
     error_code: str | None = None,
     error_message: str | None = None,
 ) -> NewsAgentTask:
-    """Build a target-level pipeline audit task."""
+    """Build a target-level pipeline audit task.
+
+    Args:
+        run_id: str: .
+        target: NewsTarget: .
+        status: NewsAgentTaskStatus: .
+        error_code: str | None: .
+        error_message: str | None: .
+
+    Returns:
+        NewsAgentTask: .
+    """
     completed_at = utc_now() if status != NewsAgentTaskStatus.RUNNING else None
     return NewsAgentTask(
         task_id=_target_task_id(run_id, target.security_id),
@@ -392,13 +425,28 @@ def _target_task(
 
 
 def _target_task_id(run_id: str, security_id: str) -> str:
-    """Return a deterministic target-pipeline task id."""
+    """Return a deterministic target-pipeline task id.
+
+    Args:
+        run_id: str: .
+        security_id: str: .
+
+    Returns:
+        str: .
+    """
     digest = hashlib.sha256(f"{run_id}|{security_id}|target_pipeline".encode()).hexdigest()
     return f"nat_{digest[:24]}"
 
 
 def _hash_json(value: Any) -> str:
-    """Hash a JSON-serializable value."""
+    """Hash a JSON-serializable value.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        str: .
+    """
     encoded = json.dumps(
         value,
         sort_keys=True,
@@ -409,7 +457,14 @@ def _hash_json(value: Any) -> str:
 
 
 def _is_provider_waiting_error(exc: Exception) -> bool:
-    """Return whether an exception means the external provider is unavailable."""
+    """Return whether an exception means the external provider is unavailable.
+
+    Args:
+        exc: Exception: .
+
+    Returns:
+        bool: .
+    """
     return str(getattr(exc, "code", "")) in {
         "provider_budget_exceeded",
         "provider_paygo_limit_exceeded",
@@ -418,7 +473,14 @@ def _is_provider_waiting_error(exc: Exception) -> bool:
 
 
 def _provider_error_summary(exc: Exception) -> dict[str, Any]:
-    """Return token-safe provider error metadata."""
+    """Return token-safe provider error metadata.
+
+    Args:
+        exc: Exception: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     return {
         "provider": str(getattr(exc, "provider_name", "unknown")),
         "error_code": str(getattr(exc, "code", "provider_unavailable")),

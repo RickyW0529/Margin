@@ -14,7 +14,7 @@ from margin.news.models import ensure_utc
 
 
 class ReviewMode(StrEnum):
-    """Deterministic route selected before expensive graph work."""
+    """Deterministic route selected before expensive graph work.."""
 
     FULL_REVIEW = "full_review"
     DELTA_REVIEW = "delta_review"
@@ -24,7 +24,7 @@ class ReviewMode(StrEnum):
 
 
 class ReviewOutcome(StrEnum):
-    """Terminal result of one current review run."""
+    """Terminal result of one current review run.."""
 
     CARRY_FORWARD_VERIFIED = "carry_forward_verified"
     UPDATE_ASSESSMENT = "update_assessment"
@@ -35,7 +35,7 @@ class ReviewOutcome(StrEnum):
 
 
 class AIDeltaGraphState(BaseModel):
-    """Frozen state passed between controlled LangGraph nodes."""
+    """Frozen state passed between controlled LangGraph nodes.."""
 
     graph_run_id: str
     graph_version: str = "ai-delta-review-v0.2.0"
@@ -101,12 +101,23 @@ class AIDeltaGraphState(BaseModel):
     @field_validator("decision_at")
     @classmethod
     def normalize_decision_at(cls, value: datetime) -> datetime:
-        """Normalize the immutable decision time to UTC."""
+        """Normalize the immutable decision time to UTC.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)
 
     @property
     def identity_hash(self) -> str:
-        """Return a deterministic hash of graph identity fields."""
+        """Return a deterministic hash of graph identity fields.
+
+        Returns:
+            str: .
+        """
         payload = {
             field: (
                 getattr(self, field).isoformat()
@@ -126,20 +137,14 @@ class AIDeltaGraphState(BaseModel):
         """Return an updated state while rejecting identity mutation.
 
         Args:
-            **updates: Field updates to apply to the frozen state.
+            **updates: Any: .
 
         Returns:
-            A new ``AIDeltaGraphState`` with the specified updates applied.
-
-        Raises:
-            ValueError: If unknown fields are supplied or immutable identity
-                fields are changed.
+            Self: .
         """
         unknown = set(updates) - set(type(self).model_fields)
         if unknown:
-            raise ValueError(
-                "unknown graph state fields: " + ",".join(sorted(unknown))
-            )
+            raise ValueError("unknown graph state fields: " + ",".join(sorted(unknown)))
         changed_identity = [
             field
             for field in _IDENTITY_FIELDS.intersection(updates)
@@ -147,19 +152,34 @@ class AIDeltaGraphState(BaseModel):
         ]
         if changed_identity:
             raise ValueError(
-                "immutable identity fields cannot change: "
-                + ",".join(sorted(changed_identity))
+                "immutable identity fields cannot change: " + ",".join(sorted(changed_identity))
             )
         return self.model_copy(update=updates)
 
 
 def merge_unique_tuple(left: tuple[Any, ...], right: tuple[Any, ...]) -> tuple[Any, ...]:
-    """Append tuple values while preserving first-seen order."""
+    """Append tuple values while preserving first-seen order.
+
+    Args:
+        left: tuple[Any, ...]: .
+        right: tuple[Any, ...]: .
+
+    Returns:
+        tuple[Any, ...]: .
+    """
     return tuple(dict.fromkeys((*left, *right)))
 
 
 def append_tuple(left: tuple[Any, ...], right: tuple[Any, ...]) -> tuple[Any, ...]:
-    """Append tuple values without deduplicating structured records."""
+    """Append tuple values without deduplicating structured records.
+
+    Args:
+        left: tuple[Any, ...]: .
+        right: tuple[Any, ...]: .
+
+    Returns:
+        tuple[Any, ...]: .
+    """
     return (*left, *right)
 
 
@@ -167,7 +187,15 @@ def merge_node_outputs(
     left: dict[str, Any],
     right: dict[str, Any],
 ) -> dict[str, Any]:
-    """Merge parallel node outputs and nested package maps."""
+    """Merge parallel node outputs and nested package maps.
+
+    Args:
+        left: dict[str, Any]: .
+        right: dict[str, Any]: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     merged = dict(left)
     for key, value in right.items():
         current = merged.get(key)
@@ -179,7 +207,15 @@ def merge_node_outputs(
 
 
 def add_count(left: int, right: int) -> int:
-    """Add counter deltas emitted by graph nodes."""
+    """Add counter deltas emitted by graph nodes.
+
+    Args:
+        left: int: .
+        right: int: .
+
+    Returns:
+        int: .
+    """
     return left + right
 
 
@@ -211,19 +247,19 @@ def create_initial_state(
     """Create a validated initial graph state from frozen context references.
 
     Args:
-        graph_run_id: Unique identifier for this graph run.
-        context_snapshot_id: Frozen context snapshot identifier.
-        context_input_hash: Hash of the context payload.
-        scope_version_id: Strategy scope version identifier.
-        security_id: Security under review.
-        decision_at: Point-in-time decision timestamp.
-        quant_input_snapshot_id: Optional quant input snapshot reference.
-        current_quant_result_id: Optional current quant result reference.
-        previous_effective_assessment_id: Optional prior effective assessment.
-        news_context_bundle_id: Optional news context bundle reference.
+        graph_run_id: str: .
+        context_snapshot_id: str: .
+        context_input_hash: str: .
+        scope_version_id: str: .
+        security_id: str: .
+        decision_at: datetime: .
+        quant_input_snapshot_id: str | None: .
+        current_quant_result_id: str | None: .
+        previous_effective_assessment_id: str | None: .
+        news_context_bundle_id: str | None: .
 
     Returns:
-        A validated ``AIDeltaGraphState`` ready for graph execution.
+        AIDeltaGraphState: .
     """
     return AIDeltaGraphState(
         graph_run_id=graph_run_id,

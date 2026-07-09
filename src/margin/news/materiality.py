@@ -6,7 +6,7 @@ from margin.news.models import DocumentMaterialityScore
 
 
 class DocumentMaterialityService:
-    """Score document relevance/materiality without using AI state decisions."""
+    """Score document relevance/materiality without using AI state decisions.."""
 
     RULES: tuple[tuple[str, tuple[str, ...], str, str, float], ...] = (
         (
@@ -50,8 +50,10 @@ class DocumentMaterialityService:
         """Initialize the materiality service.
 
         Args:
-            scoring_version: Version label for the scoring rules, used for audit and
-                deduplication of persisted scores.
+            scoring_version: str: .
+
+        Returns:
+            None: .
         """
         self.scoring_version = scoring_version
 
@@ -68,16 +70,15 @@ class DocumentMaterialityService:
         """Return a deterministic score for one document/security relation.
 
         Args:
-            title: Document title.
-            content: Document body text, if available.
-            symbols: Tuple of security symbols mentioned in the document.
-            target_symbol: Security symbol to score relevance against.
-            source_level: Numeric source level of the document (1-5).
-            event_id: Optional event identifier to attach to the score.
+            title: str: .
+            content: str | None: .
+            symbols: tuple[str, ...]: .
+            target_symbol: str: .
+            source_level: int: .
+            event_id: str | None: .
 
         Returns:
-            A ``DocumentMaterialityScore`` with deterministic relevance, materiality,
-            novelty, and trust flags.
+            DocumentMaterialityScore: .
         """
         text = f"{title} {content or ''}"
         trigger_type = "general_news"

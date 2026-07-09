@@ -8,7 +8,11 @@ VERSION = "v0.4.0"
 
 
 def agent_runtime_prompt_templates() -> tuple[PromptTemplate, ...]:
-    """Return v0.4 agent runtime prompt templates."""
+    """Return v0.4 agent runtime prompt templates.
+
+    Returns:
+        tuple[PromptTemplate, ...]: .
+    """
     return (
         PromptTemplate(
             prompt_id="main_agent_scheduled_planner_v0.4",

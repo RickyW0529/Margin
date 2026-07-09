@@ -11,7 +11,11 @@ from margin.data.company_pool import (
 
 
 def test_company_pool_snapshot_is_stable_and_quant_ready() -> None:
-    """The serving view becomes an immutable, ordered quant universe."""
+    """The serving view becomes an immutable, ordered quant universe.
+
+    Returns:
+        None: .
+    """
     rows = [
         {
             "security_id": "600000.SH",
@@ -54,7 +58,11 @@ def test_company_pool_snapshot_is_stable_and_quant_ready() -> None:
 
 
 def test_company_pool_rows_filter_future_listings_as_of_business_date() -> None:
-    """Materialization excludes rows not listed by the requested business date."""
+    """Materialization excludes rows not listed by the requested business date.
+
+    Returns:
+        None: .
+    """
     rows = [
         {
             "security_id": "000001.SZ",

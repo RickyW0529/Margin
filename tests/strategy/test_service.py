@@ -15,7 +15,11 @@ from margin.strategy.service import StrategyService
 
 
 def _service() -> StrategyService:
-    """Build a StrategyService backed by an in-memory repository."""
+    """Build a StrategyService backed by an in-memory repository.
+
+    Returns:
+        StrategyService: .
+    """
     return StrategyService(repository=MemoryStrategyRepository())
 
 
@@ -23,7 +27,7 @@ def test_service_creates_strategy_from_template():
     """Verify the service creates a strategy from a built-in template.
 
     Returns:
-        None.
+        Any: .
     """
     service = _service()
     profile = service.create_from_template("user_1", "value_quality")
@@ -36,7 +40,7 @@ def test_service_creates_custom_strategy():
     """Verify the service creates a custom strategy with a user-provided config.
 
     Returns:
-        None.
+        Any: .
     """
     service = _service()
     config = StrategyConfig(universe=["000001.SZ"])
@@ -49,7 +53,7 @@ def test_service_update_creates_new_version():
     """Verify updating a strategy creates a new version.
 
     Returns:
-        None.
+        Any: .
     """
     service = _service()
     profile = service.create_from_template("user_1", "value_quality")
@@ -64,7 +68,7 @@ def test_service_update_deep_merges_nested_config_delta():
     """Verify updating a strategy deep-merges nested config deltas.
 
     Returns:
-        None.
+        Any: .
     """
     service = _service()
     profile = service.create_from_template("user_1", "value_quality")
@@ -83,7 +87,7 @@ def test_service_validate_version_transitions_to_validating():
     """Verify validating a version transitions it to the backtesting state.
 
     Returns:
-        None.
+        Any: .
     """
     service = _service()
     profile = service.create_from_template("user_1", "value_quality")
@@ -96,7 +100,7 @@ def test_service_activate_version_sets_active():
     """Verify activating a version sets it as the active version.
 
     Returns:
-        None.
+        Any: .
     """
     service = _service()
     profile = service.create_from_template("user_1", "value_quality")
@@ -115,7 +119,7 @@ def test_service_get_prompt_returns_string():
     """Verify get_prompt returns a string containing guardrail content.
 
     Returns:
-        None.
+        Any: .
     """
     service = _service()
     profile = service.create_from_template("user_1", "value_quality")
@@ -128,7 +132,7 @@ def test_service_list_templates():
     """Verify list_templates returns the expected number of built-in templates.
 
     Returns:
-        None.
+        Any: .
     """
     service = _service()
     templates = service.list_templates()
@@ -139,7 +143,7 @@ def test_service_missing_strategy_raises():
     """Verify requesting a missing strategy raises a KeyError.
 
     Returns:
-        None.
+        Any: .
     """
     service = _service()
     with pytest.raises(KeyError):

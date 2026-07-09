@@ -72,13 +72,16 @@ DECISION_SCHEMA: dict[str, Any] = {
 
 
 class EvidenceBoundOutputValidator:
-    """Validate schema and prevent LLM-created evidence identifiers."""
+    """Validate schema and prevent LLM-created evidence identifiers.."""
 
     def __init__(self, allowed_evidence_ids: set[str]) -> None:
         """Initialize the validator with the frozen evidence boundary.
 
         Args:
-            allowed_evidence_ids: Set of evidence IDs that may be referenced.
+            allowed_evidence_ids: set[str]: .
+
+        Returns:
+            None: .
         """
         self._allowed_evidence_ids = allowed_evidence_ids
 
@@ -92,23 +95,19 @@ class EvidenceBoundOutputValidator:
         """Validate JSON shape, evidence references, and confidence bounds.
 
         Args:
-            node_name: Name of the calling node (unused).
-            output: Structured output to validate.
-            output_schema: JSON schema to validate against.
+            node_name: str: .
+            output: dict[str, Any]: .
+            output_schema: dict[str, Any]: .
 
         Returns:
-            A ``DeterministicValidation`` with validity and any issues found.
+            DeterministicValidation: .
         """
         del node_name
-        valid_schema, schema_error = StructuredOutputGuardrail(
-            output_schema
-        ).validate(output)
+        valid_schema, schema_error = StructuredOutputGuardrail(output_schema).validate(output)
         issues: list[str] = []
         if not valid_schema:
             issues.append(schema_error or "schema_invalid")
-        referenced = {
-            str(value) for value in output.get("evidence_ids", ())
-        }
+        referenced = {str(value) for value in output.get("evidence_ids", ())}
         if not referenced <= self._allowed_evidence_ids:
             issues.append("unknown_evidence_id")
         confidence = output.get("confidence")
@@ -135,12 +134,12 @@ def build_production_analysis_handlers(
     """Build real LLM-backed handlers for every parallel analysis node.
 
     Args:
-        context: Frozen research context snapshot.
-        llm_service: Structured LLM service for graph node execution.
-        prompt_factory: Optional prompt factory override.
+        context: ResearchContextSnapshot: .
+        llm_service: LLMService: .
+        prompt_factory: PromptFactory | None: .
 
     Returns:
-        Mapping from analysis node name to its ``AnalysisHandler``.
+        dict[str, AnalysisHandler]: .
     """
     factory = prompt_factory or PromptFactory()
     return {
@@ -169,16 +168,24 @@ def build_production_decision_handler(
     """Build a real LLM-backed handler for the delta decision composer node.
 
     Args:
-        context: Frozen research context snapshot.
-        llm_service: Structured LLM service for graph node execution.
-        prompt_factory: Optional prompt factory override.
+        context: ResearchContextSnapshot: .
+        llm_service: LLMService: .
+        prompt_factory: PromptFactory | None: .
 
     Returns:
-        A ``DecisionHandler`` callable for the delta decision node.
+        Any: .
     """
     factory = prompt_factory or PromptFactory()
 
     def handler(state: AIDeltaGraphState) -> dict[str, Any]:
+        """Process handler.
+
+        Args:
+            state: AIDeltaGraphState: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         allowed_evidence_ids = _allowed_evidence_ids(context)
         prompt = factory.build(
             node_name="delta_decision",
@@ -239,10 +246,10 @@ def build_production_citation_validator(
     """Build a real citation validator that checks evidence ID membership.
 
     Args:
-        context: Frozen research context snapshot with allowed evidence IDs.
+        context: ResearchContextSnapshot: .
 
     Returns:
-        A ``CitationValidationHandler`` callable for the citation validation node.
+        Any: .
     """
     allowed = _allowed_evidence_ids(context)
 
@@ -250,6 +257,15 @@ def build_production_citation_validator(
         draft: dict[str, Any],
         state: AIDeltaGraphState,
     ) -> dict[str, Any]:
+        """Process validator.
+
+        Args:
+            draft: dict[str, Any]: .
+            state: AIDeltaGraphState: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         del state
         referenced = tuple(str(value) for value in draft.get("evidence_ids", ()))
         invalid = tuple(value for value in referenced if value not in allowed)
@@ -257,11 +273,7 @@ def build_production_citation_validator(
             "valid": bool(referenced) and not invalid,
             "repairable": bool(referenced) and len(invalid) < len(referenced),
             "invalid_evidence_ids": invalid,
-            "reason": (
-                None
-                if referenced and not invalid
-                else "unknown_or_missing_evidence"
-            ),
+            "reason": (None if referenced and not invalid else "unknown_or_missing_evidence"),
         }
 
     return validator
@@ -274,13 +286,31 @@ def _analysis_handler(
     llm_service: LLMService,
     prompt_factory: PromptFactory,
 ) -> AnalysisHandler:
-    """Create one node-specific real LLM analysis handler."""
+    """Create one node-specific real LLM analysis handler.
+
+    Args:
+        node_name: str: .
+        context: ResearchContextSnapshot: .
+        llm_service: LLMService: .
+        prompt_factory: PromptFactory: .
+
+    Returns:
+        AnalysisHandler: .
+    """
 
     def handler(
         request: AnalysisRequest,
         session: ScopedToolSession,
     ) -> dict[str, Any]:
-        """Execute one analysis node via the bounded LLM execution runner."""
+        """Execute one analysis node via the bounded LLM execution runner.
+
+        Args:
+            request: AnalysisRequest: .
+            session: ScopedToolSession: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         allowed_evidence_ids = _allowed_evidence_ids(context)
         prompt = prompt_factory.build(
             node_name=node_name,
@@ -299,9 +329,7 @@ def _analysis_handler(
             budget={"max_calls": 3, "one_revision": True},
         )
         reflection_policy = (
-            "forced"
-            if node_name in {"risk_review", "counter_argument"}
-            else "conditional"
+            "forced" if node_name in {"risk_review", "counter_argument"} else "conditional"
         )
         result = NodeExecutionRunner(
             llm=llm_service,
@@ -331,14 +359,26 @@ def _analysis_handler(
 
 
 def _allowed_evidence_ids(context: ResearchContextSnapshot) -> set[str]:
-    """Extract the frozen set of allowed evidence IDs from context."""
-    return {
-        str(value) for value in context.payload.get("evidence_ids", ())
-    }
+    """Extract the frozen set of allowed evidence IDs from context.
+
+    Args:
+        context: ResearchContextSnapshot: .
+
+    Returns:
+        set[str]: .
+    """
+    return {str(value) for value in context.payload.get("evidence_ids", ())}
 
 
 def _strategy_params(context: ResearchContextSnapshot) -> dict[str, Any]:
-    """Build strategy parameters for prompt rendering."""
+    """Build strategy parameters for prompt rendering.
+
+    Args:
+        context: ResearchContextSnapshot: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     return {
         "scope_version_id": context.scope_version_id,
         "screening_status": context.payload.get("screening_status"),
@@ -348,7 +388,14 @@ def _strategy_params(context: ResearchContextSnapshot) -> dict[str, Any]:
 
 
 def _context_summary(context: ResearchContextSnapshot) -> str:
-    """Render a deterministic JSON context summary for prompts."""
+    """Render a deterministic JSON context summary for prompts.
+
+    Args:
+        context: ResearchContextSnapshot: .
+
+    Returns:
+        str: .
+    """
     return json.dumps(
         {
             "security_id": context.security_id,
@@ -358,12 +405,8 @@ def _context_summary(context: ResearchContextSnapshot) -> str:
             ),
             "analysis_snapshot_id": context.payload.get("analysis_snapshot_id"),
             "analysis_summary": context.payload.get("analysis_summary", {}),
-            "material_quant_change": context.payload.get(
-                "material_quant_change"
-            ),
-            "material_news_change": context.payload.get(
-                "material_news_change"
-            ),
+            "material_quant_change": context.payload.get("material_quant_change"),
+            "material_news_change": context.payload.get("material_news_change"),
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -372,7 +415,14 @@ def _context_summary(context: ResearchContextSnapshot) -> str:
 
 
 def _untrusted_blocks(context: ResearchContextSnapshot) -> list[str]:
-    """Extract untrusted evidence text blocks from context."""
+    """Extract untrusted evidence text blocks from context.
+
+    Args:
+        context: ResearchContextSnapshot: .
+
+    Returns:
+        list[str]: .
+    """
     return [
         str(block.get("content", ""))
         for block in context.payload.get("evidence_blocks", ())
@@ -384,7 +434,15 @@ def _empty_manifest(
     state: AIDeltaGraphState,
     node_name: str,
 ) -> ToolManifest:
-    """Build a tool manifest with no tools for decision-only nodes."""
+    """Build a tool manifest with no tools for decision-only nodes.
+
+    Args:
+        state: AIDeltaGraphState: .
+        node_name: str: .
+
+    Returns:
+        ToolManifest: .
+    """
     return ToolManifest(
         graph_run_id=state.graph_run_id,
         node_name=node_name,
@@ -398,7 +456,14 @@ def _empty_manifest(
 
 
 def _graph_run_id_from_manifest(manifest: ToolManifest) -> str:
-    """Extract the graph run ID from a tool manifest."""
+    """Extract the graph run ID from a tool manifest.
+
+    Args:
+        manifest: ToolManifest: .
+
+    Returns:
+        str: .
+    """
     return manifest.graph_run_id
 
 

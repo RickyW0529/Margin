@@ -40,7 +40,14 @@ _T = TypeVar("_T")
 
 
 def _landing_table(api_name: str) -> Table:
-    """Build a lightweight Core table for one admitted endpoint."""
+    """Build a lightweight Core table for one admitted endpoint.
+
+    Args:
+        api_name: str: .
+
+    Returns:
+        Table: .
+    """
     name = f"ts_{api_name}"
     key = f"{TUSHARE_SOURCE_SCHEMA}.{name}"
     existing = _METADATA.tables.get(key)
@@ -118,7 +125,7 @@ _LINKS_TABLE = Table(
 
 
 class SQLAlchemyTushareSourceRepository:
-    """Persist source rows, catalog lineage, and quality decisions."""
+    """Persist source rows, catalog lineage, and quality decisions.."""
 
     def __init__(
         self,
@@ -129,8 +136,11 @@ class SQLAlchemyTushareSourceRepository:
         """Initialize with the admitted endpoint allowlist.
 
         Args:
-            session_factory: Callable returning a SQLAlchemy ``Session``.
-            requirements: Optional custom quant requirement catalog.
+            session_factory: Callable[[], Session]: .
+            requirements: QuantDataRequirementCatalog | None: .
+
+        Returns:
+            None: .
         """
         self._session_factory = session_factory
         self._requirements = requirements or QuantDataRequirementCatalog.default()
@@ -140,7 +150,10 @@ class SQLAlchemyTushareSourceRepository:
         """Idempotently persist the versioned quant-to-endpoint closure.
 
         Args:
-            created_at: Optional override for the catalog creation timestamp.
+            created_at: datetime | None: .
+
+        Returns:
+            None: .
         """
         observed_at = ensure_utc(created_at or utc_now())
         requirement_rows = [
@@ -184,22 +197,14 @@ class SQLAlchemyTushareSourceRepository:
         with self._session_factory.begin() as session:
             if requirement_rows:
                 session.execute(
-                    insert(_REQUIREMENTS_TABLE)
-                    .values(requirement_rows)
-                    .on_conflict_do_nothing()
+                    insert(_REQUIREMENTS_TABLE).values(requirement_rows).on_conflict_do_nothing()
                 )
             if endpoint_rows:
                 session.execute(
-                    insert(_ENDPOINTS_TABLE)
-                    .values(endpoint_rows)
-                    .on_conflict_do_nothing()
+                    insert(_ENDPOINTS_TABLE).values(endpoint_rows).on_conflict_do_nothing()
                 )
             if link_rows:
-                session.execute(
-                    insert(_LINKS_TABLE)
-                    .values(link_rows)
-                    .on_conflict_do_nothing()
-                )
+                session.execute(insert(_LINKS_TABLE).values(link_rows).on_conflict_do_nothing())
 
     def start_run(
         self,
@@ -211,12 +216,12 @@ class SQLAlchemyTushareSourceRepository:
         """Create or replay a deterministic source-system backfill run.
 
         Args:
-            request: The sync request describing the provider and scope.
-            endpoint_count: The number of endpoints included in the run.
-            started_at: Optional override for the run start timestamp.
+            request: DataSyncRequest: .
+            endpoint_count: int: .
+            started_at: datetime | None: .
 
         Returns:
-            The deterministic run ID.
+            str: .
         """
         observed_at = ensure_utc(started_at or utc_now())
         digest = hashlib.sha256(
@@ -255,13 +260,13 @@ class SQLAlchemyTushareSourceRepository:
         """Finalize source-system run counters and safe error summaries.
 
         Args:
-            run_id: The sync run ID to finalize.
-            completed_count: The number of successfully completed endpoints.
-            failed_endpoints: Mapping of failed endpoint name to error message.
-            finished_at: Optional override for the finish timestamp.
+            run_id: str: .
+            completed_count: int: .
+            failed_endpoints: dict[str, str]: .
+            finished_at: datetime | None: .
 
-        Raises:
-            KeyError: If the run ID does not exist.
+        Returns:
+            None: .
         """
         observed_at = ensure_utc(finished_at or utc_now())
         with self._session_factory.begin() as session:
@@ -289,13 +294,10 @@ class SQLAlchemyTushareSourceRepository:
         """Insert immutable source revisions, returning newly inserted rows.
 
         Args:
-            records: Landing records for a single endpoint batch.
+            records: Iterable[TushareLandingRecord]: .
 
         Returns:
-            The number of newly inserted rows.
-
-        Raises:
-            ValueError: If records span more than one endpoint.
+            int: .
         """
         rows = list(records)
         if not rows:
@@ -312,9 +314,7 @@ class SQLAlchemyTushareSourceRepository:
                 result = session.execute(
                     insert(table)
                     .values([landing_insert_values(row) for row in batch])
-                    .on_conflict_do_nothing(
-                        index_elements=["natural_key_hash", "revision_hash"]
-                    )
+                    .on_conflict_do_nothing(index_elements=["natural_key_hash", "revision_hash"])
                     .returning(table.c.source_row_id)
                 )
                 inserted += len(result.scalars().all())
@@ -327,10 +327,10 @@ class SQLAlchemyTushareSourceRepository:
         """Append quality decisions and update landing publication state.
 
         Args:
-            decisions: Quality decisions to persist.
+            decisions: Iterable[SourceQualityDecision]: .
 
         Returns:
-            The number of newly inserted decision rows.
+            int: .
         """
         rows = list(decisions)
         if not rows:
@@ -373,10 +373,10 @@ class SQLAlchemyTushareSourceRepository:
         """Return source-row count for coverage reporting.
 
         Args:
-            api_name: The Tushare API name to count.
+            api_name: str: .
 
         Returns:
-            The total number of rows in the endpoint's landing table.
+            int: .
         """
         from sqlalchemy import func, select
 
@@ -388,10 +388,10 @@ class SQLAlchemyTushareSourceRepository:
         """Return quality-decision counts by state for one endpoint.
 
         Args:
-            api_name: The Tushare API name to summarize.
+            api_name: str: .
 
         Returns:
-            A mapping of decision state to row count.
+            dict[str, int]: .
         """
         from sqlalchemy import func, select
 
@@ -411,10 +411,10 @@ def landing_table_columns(api_name: str) -> tuple[str, ...]:
     """Expose the physical source-table contract for tests and diagnostics.
 
     Args:
-        api_name: The Tushare API name.
+        api_name: str: .
 
     Returns:
-        A tuple of column names in physical order.
+        tuple[str, ...]: .
     """
     return tuple(column.name for column in _landing_table(api_name).columns)
 
@@ -423,10 +423,10 @@ def landing_insert_values(record: TushareLandingRecord) -> dict[str, object]:
     """Map one logical landing record to physical SQL columns only.
 
     Args:
-        record: The landing record to map.
+        record: TushareLandingRecord: .
 
     Returns:
-        A dictionary of column names to values for SQL insertion.
+        dict[str, object]: .
     """
     return {
         **record.model_dump(mode="python", exclude={"endpoint"}),
@@ -443,14 +443,11 @@ def chunk_landing_records(
     """Split large source pages below PostgreSQL's bind-parameter limit.
 
     Args:
-        records: The records to split into batches.
-        batch_size: Maximum number of records per batch.
+        records: list[_T]: .
+        batch_size: int: .
 
     Yields:
-        Successive batches of records.
-
-    Raises:
-        ValueError: If ``batch_size`` is less than 1.
+        Any: .
     """
     if batch_size < 1:
         raise ValueError("batch_size must be positive")
@@ -466,10 +463,10 @@ def chunk_quality_decisions(
     """Split quality-decision pages below PostgreSQL's bind-parameter limit.
 
     Args:
-        decisions: The decisions to split into batches.
-        batch_size: Maximum number of decisions per batch.
+        decisions: list[_T]: .
+        batch_size: int: .
 
     Yields:
-        Successive batches of decisions.
+        Any: .
     """
     yield from chunk_landing_records(decisions, batch_size=batch_size)

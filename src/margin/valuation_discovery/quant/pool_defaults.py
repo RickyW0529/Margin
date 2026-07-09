@@ -8,7 +8,7 @@ from typing import Any
 
 @dataclass(frozen=True)
 class QuantPoolStrategyPreset:
-    """One user-facing monthly rebalance strategy preset."""
+    """One user-facing monthly rebalance strategy preset.."""
 
     universe_code: str
     label: str
@@ -23,7 +23,11 @@ class QuantPoolStrategyPreset:
     calibration: dict[str, Any]
 
     def as_payload(self) -> dict[str, Any]:
-        """Return a JSON-serializable preset payload."""
+        """Return a JSON-serializable preset payload.
+
+        Returns:
+            dict[str, Any]: .
+        """
         payload = asdict(self)
         payload["factor_weights"] = _normalized_weights(self.factor_weights)
         return payload
@@ -162,20 +166,27 @@ DEFAULT_QUANT_POOL_PRESETS: dict[str, QuantPoolStrategyPreset] = {
 
 
 def quant_strategy_defaults_payload() -> dict[str, Any]:
-    """Return the current default strategy payload for API/bootstrap use."""
+    """Return the current default strategy payload for API/bootstrap use.
+
+    Returns:
+        dict[str, Any]: .
+    """
     return {
         "profile": "monthly_manual_pool_threshold_no_top_n_v1",
         "default_universe": "ALL_A",
         "execution_boundary": "research_only_no_order",
         "presets": {
-            code: preset.as_payload()
-            for code, preset in DEFAULT_QUANT_POOL_PRESETS.items()
+            code: preset.as_payload() for code, preset in DEFAULT_QUANT_POOL_PRESETS.items()
         },
     }
 
 
 def default_quant_strategy_thresholds() -> dict[str, Any]:
-    """Return thresholds for the built-in ``QuantStrategyVersion``."""
+    """Return thresholds for the built-in ``QuantStrategyVersion``.
+
+    Returns:
+        dict[str, Any]: .
+    """
     payload = quant_strategy_defaults_payload()
     return {
         "profile": payload["profile"],
@@ -186,13 +197,27 @@ def default_quant_strategy_thresholds() -> dict[str, Any]:
 
 
 def default_factor_weights(universe_code: str = "ALL_A") -> dict[str, float]:
-    """Return normalized factor weights for a supported universe."""
+    """Return normalized factor weights for a supported universe.
+
+    Args:
+        universe_code: str: .
+
+    Returns:
+        dict[str, float]: .
+    """
     preset = DEFAULT_QUANT_POOL_PRESETS.get(universe_code, DEFAULT_QUANT_POOL_PRESETS["ALL_A"])
     return _normalized_weights(preset.factor_weights)
 
 
 def _normalized_weights(weights: dict[str, float]) -> dict[str, float]:
-    """Return weights normalized to sum to 1.0, falling back to the input."""
+    """Return weights normalized to sum to 1.0, falling back to the input.
+
+    Args:
+        weights: dict[str, float]: .
+
+    Returns:
+        dict[str, float]: .
+    """
     total = sum(value for value in weights.values() if value > 0)
     if total <= 0:
         return dict(weights)

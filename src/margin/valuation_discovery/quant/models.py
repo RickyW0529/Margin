@@ -10,7 +10,7 @@ from margin.valuation_discovery.models import DataStatus
 
 @dataclass(frozen=True)
 class FilterReason:
-    """Structured hard-filter reason."""
+    """Structured hard-filter reason.."""
 
     code: str
     severity: str
@@ -23,7 +23,7 @@ class FilterReason:
 
 @dataclass(frozen=True)
 class SecurityFilterResult:
-    """Hard-filter result for one security."""
+    """Hard-filter result for one security.."""
 
     security_id: str
     allowed_for_scoring: bool
@@ -31,12 +31,19 @@ class SecurityFilterResult:
     reasons: tuple[FilterReason, ...]
 
     def reason_by_code(self, code: str) -> FilterReason | None:
-        """Return the first reason with the supplied code."""
+        """Return the first reason with the supplied code.
+
+        Args:
+            code: str: .
+
+        Returns:
+            FilterReason | None: .
+        """
         return next((reason for reason in self.reasons if reason.code == code), None)
 
 
 @dataclass(frozen=True)
 class HardFilterResult:
-    """Hard-filter result for a full cross section."""
+    """Hard-filter result for a full cross section.."""
 
     by_security: dict[str, SecurityFilterResult]

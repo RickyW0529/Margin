@@ -37,12 +37,11 @@ DECISION_AT = datetime(2026, 6, 23, tzinfo=UTC)
 def test_llm_audit_repository_is_hash_only_and_idempotent(database_url: str) -> None:
     """Verify the LLM audit repository persists metadata only and is idempotent.
 
-    Seeds a graph run, adds the same LLM call audit record twice, and asserts
-    that only one row is stored. Also verifies that the row contains hash
-    fields but no ``prompt`` or ``response`` text columns.
-
     Args:
-        database_url: Fixture providing the PostgreSQL integration-test URL.
+        database_url: str: .
+
+    Returns:
+        None: .
     """
     session_factory = _session_factory(database_url)
     graph_run_id = "graph-audit-llm"
@@ -75,9 +74,7 @@ def test_llm_audit_repository_is_hash_only_and_idempotent(database_url: str) -> 
 
     with session_factory() as session:
         rows = session.scalars(
-            select(LLMCallRecordRow).where(
-                LLMCallRecordRow.graph_run_id == graph_run_id
-            )
+            select(LLMCallRecordRow).where(LLMCallRecordRow.graph_run_id == graph_run_id)
         ).all()
     assert len(rows) == 1
     assert rows[0].billing_key == "sha256:billing"
@@ -90,11 +87,11 @@ def test_llm_audit_repository_is_hash_only_and_idempotent(database_url: str) -> 
 def test_tool_audit_repository_is_idempotent(database_url: str) -> None:
     """Verify the tool audit repository is immutable and replay-safe.
 
-    Seeds a graph run, adds the same tool call audit record twice, and asserts
-    that only one row is stored with the expected request hash.
-
     Args:
-        database_url: Fixture providing the PostgreSQL integration-test URL.
+        database_url: str: .
+
+    Returns:
+        None: .
     """
     session_factory = _session_factory(database_url)
     graph_run_id = "graph-audit-tool"
@@ -125,9 +122,7 @@ def test_tool_audit_repository_is_idempotent(database_url: str) -> None:
 
     with session_factory() as session:
         rows = session.scalars(
-            select(ToolCallRecordRow).where(
-                ToolCallRecordRow.graph_run_id == graph_run_id
-            )
+            select(ToolCallRecordRow).where(ToolCallRecordRow.graph_run_id == graph_run_id)
         ).all()
     assert len(rows) == 1
     assert rows[0].request_hash == "sha256:request"
@@ -135,14 +130,29 @@ def test_tool_audit_repository_is_idempotent(database_url: str) -> None:
 
 
 def _session_factory(database_url: str):
-    """Create a session factory with all tables initialized on the test database."""
+    """Create a session factory with all tables initialized on the test database.
+
+    Args:
+        database_url: str: .
+
+    Returns:
+        Any: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     return create_session_factory(engine)
 
 
 def _seed_graph_run(session_factory, graph_run_id: str) -> None:
-    """Insert an initial ``AIGraphRunRow`` row for the given graph run ID."""
+    """Insert an initial ``AIGraphRunRow`` row for the given graph run ID.
+
+    Args:
+        session_factory: Any: .
+        graph_run_id: str: .
+
+    Returns:
+        None: .
+    """
     with session_factory.begin() as session:
         session.add(
             AIGraphRunRow(
@@ -169,20 +179,20 @@ def _seed_graph_run(session_factory, graph_run_id: str) -> None:
 
 
 def _cleanup(session_factory, graph_run_id: str) -> None:
-    """Delete all LLM, tool, and graph run rows for the given graph run ID."""
+    """Delete all LLM, tool, and graph run rows for the given graph run ID.
+
+    Args:
+        session_factory: Any: .
+        graph_run_id: str: .
+
+    Returns:
+        None: .
+    """
     with session_factory.begin() as session:
         session.execute(
-            delete(LLMCallRecordRow).where(
-                LLMCallRecordRow.graph_run_id == graph_run_id
-            )
+            delete(LLMCallRecordRow).where(LLMCallRecordRow.graph_run_id == graph_run_id)
         )
         session.execute(
-            delete(ToolCallRecordRow).where(
-                ToolCallRecordRow.graph_run_id == graph_run_id
-            )
+            delete(ToolCallRecordRow).where(ToolCallRecordRow.graph_run_id == graph_run_id)
         )
-        session.execute(
-            delete(AIGraphRunRow).where(
-                AIGraphRunRow.graph_run_id == graph_run_id
-            )
-        )
+        session.execute(delete(AIGraphRunRow).where(AIGraphRunRow.graph_run_id == graph_run_id))

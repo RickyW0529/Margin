@@ -21,18 +21,16 @@ AuditRedactor = Callable[[object, str, dict[str, Any]], dict[str, Any]]
 
 
 class AuditRepository(Protocol):
-    """Persistence contract for immutable audit records.
-
-    Defines the append-only contract used by services to persist audit
-    records and by dashboards to query them. Implementations must reject
-    duplicate ``record_id`` values to preserve immutability.
-    """
+    """Persistence contract for immutable audit records.."""
 
     def record(self, record: AuditLogRecord) -> None:
         """Append an audit record.
 
         Args:
-            record: The immutable audit record to persist.
+            record: AuditLogRecord: .
+
+        Returns:
+            None: .
         """
         ...
 
@@ -46,26 +44,29 @@ class AuditRepository(Protocol):
         """Return audit records ordered by recorded_at desc.
 
         Args:
-            record_type: Filter by record type.
-            object_id: Filter by object identifier.
-            trace_id: Filter by trace identifier.
-            limit: Maximum number of records to return.
+            record_type: str | None: .
+            object_id: str | None: .
+            trace_id: str | None: .
+            limit: int: .
 
         Returns:
-            Matching records, most recent first.
+            list[AuditLogRecord]: .
         """
         ...
 
 
 class MemoryAuditRepository:
-    """In-memory audit repository for tests.
-
-    Attributes:
-        _records: Mapping from record id to immutable audit record.
-    """
+    """In-memory audit repository for tests.."""
 
     def __init__(self, redactor: AuditRedactor | None = None) -> None:
-        """Initialize an empty in-memory repository."""
+        """Initialize an empty in-memory repository.
+
+        Args:
+            redactor: AuditRedactor | None: .
+
+        Returns:
+            None: .
+        """
         self._records: dict[str, AuditLogRecord] = {}
         self._redactor = redactor or SecretRedactingProcessor()
 
@@ -73,10 +74,10 @@ class MemoryAuditRepository:
         """Append an audit record, rejecting duplicate ids.
 
         Args:
-            record: The immutable audit record to store.
+            record: AuditLogRecord: .
 
-        Raises:
-            ValueError: When a record with the same ``record_id`` already exists.
+        Returns:
+            None: .
         """
         # Reject duplicates to preserve the append-only / immutable contract in memory.
         sanitized = _sanitize_record(record, self._redactor)
@@ -94,13 +95,13 @@ class MemoryAuditRepository:
         """Return in-memory audit records ordered by recorded_at desc.
 
         Args:
-            record_type: Filter by record type.
-            object_id: Filter by object identifier.
-            trace_id: Filter by trace identifier.
-            limit: Maximum number of records to return.
+            record_type: str | None: .
+            object_id: str | None: .
+            trace_id: str | None: .
+            limit: int: .
 
         Returns:
-            Matching records, most recent first.
+            list[AuditLogRecord]: .
         """
         records = list(self._records.values())
         if record_type is not None:
@@ -115,11 +116,7 @@ class MemoryAuditRepository:
 
 
 class SQLAlchemyAuditRepository:
-    """PostgreSQL audit repository backed by SQLAlchemy.
-
-    Attributes:
-        _session_factory: Callable that returns a new SQLAlchemy session.
-    """
+    """PostgreSQL audit repository backed by SQLAlchemy.."""
 
     def __init__(
         self,
@@ -129,7 +126,11 @@ class SQLAlchemyAuditRepository:
         """Initialize the repository.
 
         Args:
-            session_factory: Callable that returns a new SQLAlchemy session.
+            session_factory: Callable[[], Session]: .
+            redactor: AuditRedactor | None: .
+
+        Returns:
+            None: .
         """
         self._session_factory = session_factory
         self._redactor = redactor or SecretRedactingProcessor()
@@ -138,7 +139,10 @@ class SQLAlchemyAuditRepository:
         """Persist an audit record to PostgreSQL.
 
         Args:
-            record: The immutable audit record to store.
+            record: AuditLogRecord: .
+
+        Returns:
+            None: .
         """
         # ``begin()`` commits on success and rolls back on exception automatically.
         sanitized = _sanitize_record(record, self._redactor)
@@ -155,13 +159,13 @@ class SQLAlchemyAuditRepository:
         """Return persisted audit records ordered by recorded_at desc.
 
         Args:
-            record_type: Filter by record type.
-            object_id: Filter by object identifier.
-            trace_id: Filter by trace identifier.
-            limit: Maximum number of records to return.
+            record_type: str | None: .
+            object_id: str | None: .
+            trace_id: str | None: .
+            limit: int: .
 
         Returns:
-            Matching records, most recent first.
+            list[AuditLogRecord]: .
         """
         statement = audit_records(
             record_type=record_type,
@@ -174,7 +178,14 @@ class SQLAlchemyAuditRepository:
 
 
 def _record_to_row(record: AuditLogRecord) -> AuditLogRecordRow:
-    """Map a domain audit record to its SQLAlchemy row representation."""
+    """Map a domain audit record to its SQLAlchemy row representation.
+
+    Args:
+        record: AuditLogRecord: .
+
+    Returns:
+        AuditLogRecordRow: .
+    """
     return AuditLogRecordRow(
         record_id=record.record_id,
         record_type=record.record_type,
@@ -189,7 +200,15 @@ def _record_to_row(record: AuditLogRecord) -> AuditLogRecordRow:
 
 
 def _sanitize_record(record: AuditLogRecord, redactor: AuditRedactor) -> AuditLogRecord:
-    """Return a copy whose structured payload has been recursively redacted."""
+    """Return a copy whose structured payload has been recursively redacted.
+
+    Args:
+        record: AuditLogRecord: .
+        redactor: AuditRedactor: .
+
+    Returns:
+        AuditLogRecord: .
+    """
     if record.payload_json is None:
         return record
     return record.model_copy(
@@ -198,7 +217,14 @@ def _sanitize_record(record: AuditLogRecord, redactor: AuditRedactor) -> AuditLo
 
 
 def _record_from_row(row: AuditLogRecordRow) -> AuditLogRecord:
-    """Map a SQLAlchemy row back to the domain audit record."""
+    """Map a SQLAlchemy row back to the domain audit record.
+
+    Args:
+        row: AuditLogRecordRow: .
+
+    Returns:
+        AuditLogRecord: .
+    """
     return AuditLogRecord(
         record_id=row.record_id,
         record_type=row.record_type,

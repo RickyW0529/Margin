@@ -18,8 +18,8 @@ from margin.evidence.models import (
 def test_support_and_refute_links_create_high_severity_conflict() -> None:
     """Test that support and refute links create a high-severity conflict.
 
-    When a claim has both a SUPPORTS and a REFUTES evidence link, the classifier
-    should produce a single high-severity conflict referencing both evidence IDs.
+    Returns:
+        None: .
     """
     claim = make_claim(
         statement="收入增长",

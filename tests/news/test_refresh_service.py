@@ -18,7 +18,15 @@ from margin.news.websearch import SearchQueryRecord
 
 
 def target(symbol: str, name: str = "平安银行") -> NewsTarget:
-    """Build a refresh target fixture."""
+    """Build a refresh target fixture.
+
+    Args:
+        symbol: str: .
+        name: str: .
+
+    Returns:
+        NewsTarget: .
+    """
     return NewsTarget(
         scope_version_id="scope-1",
         quant_run_id="quant-1",
@@ -32,10 +40,14 @@ def target(symbol: str, name: str = "平安银行") -> NewsTarget:
 
 
 class FakeQueue:
-    """In-memory queue fake used to assert service ordering semantics."""
+    """In-memory queue fake used to assert service ordering semantics.."""
 
     def __init__(self) -> None:
-        """Initialize the in-memory queue fake with empty tracking lists."""
+        """Initialize the in-memory queue fake with empty tracking lists.
+
+        Returns:
+            None: .
+        """
         self.run_id = "run-1"
         self.targets: list[NewsTarget] = []
         self.enqueued_symbols: list[str] = []
@@ -51,12 +63,12 @@ class FakeQueue:
         """Return a fixed run id, ignoring the input parameters.
 
         Args:
-            scope_version_id: Scope version identifier (ignored).
-            quant_run_id: Quant run identifier (ignored).
-            decision_at: Decision timestamp (ignored).
+            scope_version_id: str: .
+            quant_run_id: str: .
+            decision_at: datetime: .
 
         Returns:
-            The fixed run id ``"run-1"``.
+            str: .
         """
         return self.run_id
 
@@ -64,8 +76,11 @@ class FakeQueue:
         """Store targets and record their symbols in enqueue order.
 
         Args:
-            run_id: The run identifier (ignored).
-            targets: The targets to enqueue.
+            run_id: str: .
+            targets: list[NewsTarget]: .
+
+        Returns:
+            None: .
         """
         self.targets = list(targets)
         self.enqueued_symbols = [item.symbol for item in targets]
@@ -80,12 +95,12 @@ class FakeQueue:
         """Claim up to ``limit`` targets as work items.
 
         Args:
-            run_id: The run identifier.
-            limit: Maximum number of targets to claim.
-            now: Optional timestamp for the claim; defaults to target decision time.
+            run_id: str: .
+            limit: int: .
+            now: datetime | None: .
 
         Returns:
-            A list of ``NewsTargetWorkItem`` instances for the claimed targets.
+            list[NewsTargetWorkItem]: .
         """
         claimed = []
         for index, item in enumerate(self.targets[:limit], start=1):
@@ -104,8 +119,11 @@ class FakeQueue:
         """Record a target as completed.
 
         Args:
-            target_id: The identifier of the completed target.
-            event_ids: Event ids associated with the completion (ignored).
+            target_id: str: .
+            event_ids: tuple[str, ...]: .
+
+        Returns:
+            None: .
         """
         self.completed.append(target_id)
 
@@ -113,8 +131,11 @@ class FakeQueue:
         """Record a target as retried.
 
         Args:
-            *args: Positional arguments; the first is the target id.
-            **kwargs: Keyword arguments; must include ``target_id`` if no args.
+            *args: Any: .
+            **kwargs: Any: .
+
+        Returns:
+            None: .
         """
         target_id = str(args[0]) if args else str(kwargs["target_id"])
         self.retried.append(target_id)
@@ -123,10 +144,10 @@ class FakeQueue:
         """Return a reconciliation summary based on current queue state.
 
         Args:
-            run_id: The run identifier (ignored).
+            run_id: str: .
 
         Returns:
-            A ``TargetReconciliation`` with counts derived from tracked lists.
+            TargetReconciliation: .
         """
         return TargetReconciliation(
             target_count=len(self.enqueued_symbols),
@@ -140,13 +161,16 @@ class FakeQueue:
 
 
 class FakeWebSearchProvider:
-    """Minimal WebSearchService-compatible fake."""
+    """Minimal WebSearchService-compatible fake.."""
 
     def __init__(self, error: Exception | None = None) -> None:
         """Initialize the fake WebSearch provider with an optional error.
 
         Args:
-            error: Optional exception to raise on the next search call.
+            error: Exception | None: .
+
+        Returns:
+            None: .
         """
         self.error = error
         self.queries_seen: list[str] = []
@@ -159,14 +183,11 @@ class FakeWebSearchProvider:
         """Record the query and return an empty result or raise the configured error.
 
         Args:
-            query: The search query string.
-            max_results: Maximum number of results (ignored).
+            query: str: .
+            max_results: int: .
 
         Returns:
-            A tuple of an empty ``SearchQueryRecord`` and an empty event list.
-
-        Raises:
-            Exception: If an error was configured at construction time.
+            tuple[SearchQueryRecord, list[Any]]: .
         """
         self.queries_seen.append(query)
         if self.error is not None:
@@ -183,7 +204,11 @@ class FakeWebSearchProvider:
 
 
 def test_refresh_persists_all_targets_before_search() -> None:
-    """refresh persists all targets before search."""
+    """refresh persists all targets before search.
+
+    Returns:
+        None: .
+    """
     fake_queue = FakeQueue()
     fake_websearch = FakeWebSearchProvider()
     service = NewsRefreshService(queue=fake_queue, websearch_provider=fake_websearch)
@@ -205,11 +230,13 @@ def test_refresh_persists_all_targets_before_search() -> None:
 
 
 def test_rate_limit_sets_waiting_rate_limit_without_dropping_targets() -> None:
-    """rate limit sets waiting rate limit without dropping targets."""
+    """rate limit sets waiting rate limit without dropping targets.
+
+    Returns:
+        None: .
+    """
     fake_queue = FakeQueue()
-    provider = FakeWebSearchProvider(
-        error=ProviderRateLimited("tavily", retry_after_seconds=60)
-    )
+    provider = FakeWebSearchProvider(error=ProviderRateLimited("tavily", retry_after_seconds=60))
     service = NewsRefreshService(queue=fake_queue, websearch_provider=provider)
 
     run = service.refresh_for_targets(
@@ -226,14 +253,18 @@ def test_rate_limit_sets_waiting_rate_limit_without_dropping_targets() -> None:
 
 
 class ProviderBudgetError(RuntimeError):
-    """Budget-exhaustion provider double."""
+    """Budget-exhaustion provider double.."""
 
     code = "provider_budget_exceeded"
     provider_name = "tavily"
 
 
 def test_budget_limit_sets_waiting_budget_without_dropping_targets() -> None:
-    """Account budget exhaustion is durable and does not consume target coverage."""
+    """Account budget exhaustion is durable and does not consume target coverage.
+
+    Returns:
+        None: .
+    """
     fake_queue = FakeQueue()
     provider = FakeWebSearchProvider(error=ProviderBudgetError("budget"))
     service = NewsRefreshService(queue=fake_queue, websearch_provider=provider)

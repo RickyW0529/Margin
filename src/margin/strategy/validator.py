@@ -18,17 +18,24 @@ from margin.strategy.models import (
 
 
 class ActivationError(ValueError):
-    """Raised when a v0.2 config version cannot be activated safely."""
+    """Raised when a v0.2 config version cannot be activated safely.."""
 
 
 class StrategyActivationValidator:
-    """Validate v0.2 versioned config lifecycle transitions."""
+    """Validate v0.2 versioned config lifecycle transitions.."""
 
     def validate_provider_config_activation(
         self,
         version: ProviderConfigVersion,
     ) -> None:
-        """Validate provider config activation without touching secret plaintext."""
+        """Validate provider config activation without touching secret plaintext.
+
+        Args:
+            version: ProviderConfigVersion: .
+
+        Returns:
+            None: .
+        """
         if not version.enabled:
             raise ActivationError("provider config must be enabled before activation")
         if version.base_url and not (
@@ -44,19 +51,31 @@ class StrategyActivationValidator:
         self,
         version: QuantStrategyVersion,
     ) -> None:
-        """Require calibration evidence before a quant strategy becomes active."""
+        """Require calibration evidence before a quant strategy becomes active.
+
+        Args:
+            version: QuantStrategyVersion: .
+
+        Returns:
+            None: .
+        """
         if version.lifecycle is ConfigLifecycle.DEPRECATED:
             raise ActivationError("deprecated quant strategy cannot be activated")
         if not version.calibration_report_id:
-            raise ActivationError(
-                "quant strategy activation requires a calibration report"
-            )
+            raise ActivationError("quant strategy activation requires a calibration report")
 
     def validate_style_prompt_activation(
         self,
         version: UserStylePromptVersion,
     ) -> None:
-        """Validate user style prompt activation."""
+        """Validate user style prompt activation.
+
+        Args:
+            version: UserStylePromptVersion: .
+
+        Returns:
+            None: .
+        """
         if version.lifecycle is ConfigLifecycle.DEPRECATED:
             raise ActivationError("deprecated style prompt cannot be activated")
         if not version.content.strip():
@@ -78,29 +97,40 @@ class StrategyActivationValidator:
             "无需引用",
         )
         if any(phrase in normalized for phrase in forbidden_phrases):
-            raise ActivationError(
-                "style prompt attempts to override a protected system boundary"
-            )
+            raise ActivationError("style prompt attempts to override a protected system boundary")
 
     def validate_tool_policy_activation(
         self,
         version: ToolPolicyVersionRef,
     ) -> None:
-        """Reject deprecated or internally contradictory tool policies."""
+        """Reject deprecated or internally contradictory tool policies.
+
+        Args:
+            version: ToolPolicyVersionRef: .
+
+        Returns:
+            None: .
+        """
         if version.lifecycle is ConfigLifecycle.DEPRECATED:
             raise ActivationError("deprecated tool policy cannot be activated")
         overlap = set(version.allowed_tool_names) & set(version.denied_tool_names)
         if overlap:
-            raise ActivationError(
-                "tool names cannot appear in both allow and deny lists"
-            )
+            raise ActivationError("tool names cannot appear in both allow and deny lists")
 
     def validate_simple_activation(
         self,
         version: object,
         resource_type: str,
     ) -> None:
-        """Reject activation of a deprecated versioned config resource."""
+        """Reject activation of a deprecated versioned config resource.
+
+        Args:
+            version: object: .
+            resource_type: str: .
+
+        Returns:
+            None: .
+        """
         if getattr(version, "lifecycle", None) is ConfigLifecycle.DEPRECATED:
             raise ActivationError(f"deprecated {resource_type} cannot be activated")
 
@@ -109,7 +139,15 @@ class StrategyActivationValidator:
         scope: ResearchScopeVersion,
         repository: object,
     ) -> None:
-        """Validate that every scope reference exists and points at active config."""
+        """Validate that every scope reference exists and points at active config.
+
+        Args:
+            scope: ResearchScopeVersion: .
+            repository: object: .
+
+        Returns:
+            None: .
+        """
         if scope.lifecycle is ConfigLifecycle.DEPRECATED:
             raise ActivationError("deprecated research scope cannot be activated")
 
@@ -166,7 +204,17 @@ class StrategyActivationValidator:
         version_id: str,
         resource_type: str,
     ) -> Any:
-        """require active reference."""
+        """require active reference.
+
+        Args:
+            repository: object: .
+            method_name: str: .
+            version_id: str: .
+            resource_type: str: .
+
+        Returns:
+            Any: .
+        """
         getter = getattr(repository, method_name)
         version = getter(version_id)
         if version is None:
@@ -180,22 +228,16 @@ class StrategyActivationValidator:
 
 
 class StrategyValidator:
-    """Validate user strategy configs and merge with system guardrails."""
+    """Validate user strategy configs and merge with system guardrails.."""
 
     def validate(self, config: StrategyConfig) -> tuple[bool, list[str]]:
         """Return validation status and a list of guardrail errors.
 
-        Pydantic-level validation is already handled by the model. This method
-        adds guardrail checks that the user cannot disable, such as ensuring
-        the universe is non-empty and the investment horizon is positive.
-
         Args:
-            config: The strategy configuration to validate.
+            config: StrategyConfig: .
 
         Returns:
-            A tuple ``(ok, errors)`` where ``ok`` is ``True`` when no guardrail
-            errors are found and ``errors`` is a list of human-readable
-            violation messages.
+            tuple[bool, list[str]]: .
         """
         errors: list[str] = []
 
@@ -219,16 +261,11 @@ class StrategyValidator:
     def merge_with_guardrails(self, config: StrategyConfig) -> StrategyConfig:
         """Return a config with system guardrails applied on top.
 
-        The returned config always includes the mandatory prohibited outputs
-        and keeps the user's other choices.
-
         Args:
-            config: The user-provided strategy configuration.
+            config: StrategyConfig: .
 
         Returns:
-            A new :class:`StrategyConfig` with system-level prohibited outputs
-            merged into ``decision.prohibited_outputs`` and a minimum evidence
-            count of at least one.
+            StrategyConfig: .
         """
         data = config.model_dump()
         decision_data = data.get("decision", {})
@@ -246,19 +283,16 @@ class StrategyValidator:
         """Validate a raw dictionary and return normalized config if valid.
 
         Args:
-            data: A plain dictionary representing a strategy configuration.
+            data: dict[str, Any]: .
 
         Returns:
-            A tuple ``(ok, errors)``. ``ok`` is ``True`` when ``data`` can be
-            parsed into a :class:`StrategyConfig` and passes all guardrail
-            checks; otherwise ``errors`` contains the violation messages.
+            tuple[bool, list[str]]: .
         """
         try:
             config = StrategyConfig.model_validate(data)
         except ValidationError as exc:
             errors = [
-                f"{'.'.join(str(x) for x in err['loc'])}: {err['msg']}"
-                for err in exc.errors()
+                f"{'.'.join(str(x) for x in err['loc'])}: {err['msg']}" for err in exc.errors()
             ]
             return False, errors
         return self.validate(config)

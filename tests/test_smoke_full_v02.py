@@ -26,10 +26,18 @@ def test_smoke_stage_suppresses_noisy_stage_output(capsys) -> None:
     """Test that the smoke stage helper suppresses noisy stdout/stderr from stages.
 
     Args:
-        capsys: Pytest fixture for capturing stdout/stderr.
+        capsys: Any: .
+
+    Returns:
+        None: .
     """
+
     def noisy_stage() -> dict[str, str]:
-        """Noisy stage that prints to stdout and stderr but returns an empty dict."""
+        """Noisy stage that prints to stdout and stderr but returns an empty dict.
+
+        Returns:
+            dict[str, str]: .
+        """
         print("provider raw output should not be printed")
         print("provider stderr should not be printed", file=sys.stderr)
         return {}
@@ -49,8 +57,11 @@ def test_full_smoke_requires_real_provider_credentials_without_leaking_secret(
     """Test that the full smoke requires real provider credentials without leaking secrets.
 
     Args:
-        tmp_path: Pytest fixture providing a temporary directory.
-        database_url: Connection string for the PostgreSQL test server.
+        tmp_path: Path: .
+        database_url: str: .
+
+    Returns:
+        None: .
     """
     output_path = tmp_path / "smoke.json"
     env = {
@@ -111,20 +122,35 @@ def test_tushare_smoke_accepts_secret_manager_env_alias(monkeypatch) -> None:
     """Test that the Tushare smoke stage accepts the secret-manager env alias.
 
     Args:
-        monkeypatch: Pytest fixture for modifying environment variables and attributes.
+        monkeypatch: Any: .
+
+    Returns:
+        None: .
     """
     calls: dict[str, str | None] = {}
 
     class DummyTushareProvider:
-        """Dummy Tushare provider that records constructor args and returns a healthy check."""
+        """Dummy Tushare provider that records constructor args and returns a healthy check.."""
 
         def __init__(self, *, token: str, http_url: str | None = None) -> None:
-            """Initialize the dummy provider and record the token and URL."""
+            """Initialize the dummy provider and record the token and URL.
+
+            Args:
+                token: str: .
+                http_url: str | None: .
+
+            Returns:
+                None: .
+            """
             calls["token"] = token
             calls["http_url"] = http_url
 
         def healthcheck(self) -> HealthCheckResult:
-            """Return a deterministic healthy check result."""
+            """Return a deterministic healthy check result.
+
+            Returns:
+                HealthCheckResult: .
+            """
             return HealthCheckResult(
                 provider_name="tushare",
                 status=ProviderStatus.HEALTHY,
@@ -148,8 +174,11 @@ def test_full_smoke_dry_run_can_skip_unconfigured_real_providers(
     """Test that the full smoke dry run can skip unconfigured real providers.
 
     Args:
-        tmp_path: Pytest fixture providing a temporary directory.
-        database_url: Connection string for the PostgreSQL test server.
+        tmp_path: Path: .
+        database_url: str: .
+
+    Returns:
+        None: .
     """
     output_path = tmp_path / "smoke.json"
     url = make_url(database_url)
@@ -160,9 +189,7 @@ def test_full_smoke_dry_run_can_skip_unconfigured_real_providers(
         drop_existing=True,
         keep_database=True,
     )
-    smoke_database_url = url.set(database=smoke_database_name).render_as_string(
-        hide_password=False
-    )
+    smoke_database_url = url.set(database=smoke_database_name).render_as_string(hide_password=False)
 
     try:
         result = subprocess.run(

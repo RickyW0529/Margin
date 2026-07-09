@@ -20,7 +20,7 @@ QueryMode = Literal[
 
 @dataclass(frozen=True)
 class TushareQuerySpec:
-    """One field-bounded API plan and its scalable All-A query mode."""
+    """One field-bounded API plan and its scalable All-A query mode.."""
 
     api_name: str
     query_mode: QueryMode
@@ -28,21 +28,25 @@ class TushareQuerySpec:
 
     @property
     def fields_csv(self) -> str:
-        """Return SDK-compatible field selection."""
+        """Return SDK-compatible field selection.
+
+        Returns:
+            str: .
+        """
         return ",".join(self.fields)
 
 
 class TushareQueryCatalog:
-    """Registry of Tushare calls admitted by active quant requirements."""
+    """Registry of Tushare calls admitted by active quant requirements.."""
 
     def __init__(self, specs: tuple[TushareQuerySpec, ...]) -> None:
         """Initialize a unique API-name registry.
 
         Args:
-            specs: Query specifications keyed by unique API name.
+            specs: tuple[TushareQuerySpec, ...]: .
 
-        Raises:
-            ValueError: If duplicate API names are provided.
+        Returns:
+            None: .
         """
         self._specs = {spec.api_name: spec for spec in specs}
         if len(self._specs) != len(specs):
@@ -52,10 +56,10 @@ class TushareQueryCatalog:
         """Return one query specification.
 
         Args:
-            api_name: The Tushare API name to look up.
+            api_name: str: .
 
         Returns:
-            The matching ``TushareQuerySpec``.
+            TushareQuerySpec: .
         """
         return self._specs[api_name.strip().lower()]
 
@@ -63,7 +67,7 @@ class TushareQueryCatalog:
         """Return stable API names.
 
         Returns:
-            A tuple of API names sorted alphabetically.
+            tuple[str, ...]: .
         """
         return tuple(sorted(self._specs))
 
@@ -78,13 +82,13 @@ class TushareQueryCatalog:
         """Build a minimal real-seat probe request.
 
         Args:
-            api_name: The Tushare API name to probe.
-            as_of: The reference datetime for the probe request.
-            sample_symbol: A sample symbol for symbol-scoped endpoints.
-            industry_code: The industry index code for membership probes.
+            api_name: str: .
+            as_of: datetime: .
+            sample_symbol: str: .
+            industry_code: str: .
 
         Returns:
-            A parameter dictionary suitable for a low-limit Tushare API call.
+            dict[str, Any]: .
         """
         spec = self.get(api_name)
         end = as_of.strftime("%Y%m%d")
@@ -140,8 +144,7 @@ class TushareQueryCatalog:
         """Build the v0.3 quant-only Tushare field and query catalog.
 
         Returns:
-            A catalog with 22 query specs covering all admitted Tushare
-            endpoints.
+            TushareQueryCatalog: .
         """
         return cls(
             (
@@ -223,8 +226,7 @@ class TushareQueryCatalog:
                 _spec(
                     "fina_audit",
                     "symbol_batch",
-                    "ts_code,ann_date,end_date,audit_result,audit_fees,"
-                    "audit_agency,audit_sign",
+                    "ts_code,ann_date,end_date,audit_result,audit_fees,audit_agency,audit_sign",
                 ),
                 _spec(
                     "forecast",
@@ -260,8 +262,7 @@ class TushareQueryCatalog:
                 _spec(
                     "index_daily",
                     "index_range",
-                    "ts_code,trade_date,open,high,low,close,pre_close,change,"
-                    "pct_chg,vol,amount",
+                    "ts_code,trade_date,open,high,low,close,pre_close,change,pct_chg,vol,amount",
                 ),
                 _spec(
                     "index_weight",
@@ -279,7 +280,16 @@ class TushareQueryCatalog:
 
 
 def _spec(api_name: str, query_mode: QueryMode, fields: str) -> TushareQuerySpec:
-    """Build a query spec from a comma-separated field list."""
+    """Build a query spec from a comma-separated field list.
+
+    Args:
+        api_name: str: .
+        query_mode: QueryMode: .
+        fields: str: .
+
+    Returns:
+        TushareQuerySpec: .
+    """
     return TushareQuerySpec(
         api_name=api_name,
         query_mode=query_mode,

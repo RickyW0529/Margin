@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class AgentRunType(StrEnum):
-    """Agent run types."""
+    """Agent run types.."""
 
     SCHEDULED_STOCK_ANALYSIS = "scheduled_stock_analysis"
     MANUAL_REFRESH = "manual_refresh"
@@ -18,14 +18,14 @@ class AgentRunType(StrEnum):
 
 
 class AgentPermissionMode(StrEnum):
-    """Permission mode for an agent run."""
+    """Permission mode for an agent run.."""
 
     READ_ONLY = "read_only"
     WRITE_ALLOWED = "write_allowed"
 
 
 class AgentExecutionStatus(StrEnum):
-    """Common execution status."""
+    """Common execution status.."""
 
     PENDING = "pending"
     RUNNING = "running"
@@ -36,7 +36,7 @@ class AgentExecutionStatus(StrEnum):
 
 
 class GuardrailStage(StrEnum):
-    """Guardrail stages."""
+    """Guardrail stages.."""
 
     INPUT = "input"
     PLAN = "plan"
@@ -46,7 +46,7 @@ class GuardrailStage(StrEnum):
 
 
 class GuardrailDecision(BaseModel):
-    """Structured guardrail decision for an agent run."""
+    """Structured guardrail decision for an agent run.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -67,7 +67,7 @@ class GuardrailDecision(BaseModel):
 
 
 class RetryPolicy(BaseModel):
-    """Retry policy declared by a fixed-flow step."""
+    """Retry policy declared by a fixed-flow step.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -76,7 +76,7 @@ class RetryPolicy(BaseModel):
 
 
 class FrontendProjection(BaseModel):
-    """Frontend label metadata for a flow step."""
+    """Frontend label metadata for a flow step.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -85,7 +85,7 @@ class FrontendProjection(BaseModel):
 
 
 class AgentStepDefinition(BaseModel):
-    """One fixed-flow step definition."""
+    """One fixed-flow step definition.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -102,7 +102,7 @@ class AgentStepDefinition(BaseModel):
 
 
 class AgentFlowDefinition(BaseModel):
-    """Fixed or dynamic flow definition."""
+    """Fixed or dynamic flow definition.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -115,16 +115,18 @@ class AgentFlowDefinition(BaseModel):
     steps: tuple[AgentStepDefinition, ...]
 
     def ordered_steps(self) -> tuple[AgentStepDefinition, ...]:
-        """Return steps ordered by explicit order."""
+        """Return steps ordered by explicit order.
+
+        Returns:
+            tuple[AgentStepDefinition, ...]: .
+        """
         return tuple(sorted(self.steps, key=lambda step: step.order))
 
     def dependency_waves(self) -> tuple[tuple[AgentStepDefinition, ...], ...]:
         """Return deterministic execution waves from artifact dependencies.
 
-        Steps in the same wave can run after the prior wave's artifacts exist.
-        The method intentionally derives the graph from the existing
-        required/produced artifact contract instead of introducing another flow
-        syntax.
+        Returns:
+            tuple[tuple[AgentStepDefinition, ...], ...]: .
         """
         remaining = list(self.ordered_steps())
         available_artifacts: set[str] = set()
@@ -138,9 +140,7 @@ class AgentFlowDefinition(BaseModel):
             ]
             if not ready:
                 blocked = {
-                    step.step_id: tuple(
-                        sorted(set(step.required_artifacts) - available_artifacts)
-                    )
+                    step.step_id: tuple(sorted(set(step.required_artifacts) - available_artifacts))
                     for step in remaining
                 }
                 raise ValueError(f"flow has unsatisfied artifact dependencies: {blocked}")
@@ -154,7 +154,7 @@ class AgentFlowDefinition(BaseModel):
 
 
 class AgentRun(BaseModel):
-    """One agent runtime run."""
+    """One agent runtime run.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -169,7 +169,7 @@ class AgentRun(BaseModel):
 
 
 class AgentStep(BaseModel):
-    """One planned or executed agent step."""
+    """One planned or executed agent step.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -187,7 +187,7 @@ class AgentStep(BaseModel):
 
 
 class ContextArtifact(BaseModel):
-    """Artifact written to the Shared Context Store."""
+    """Artifact written to the Shared Context Store.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -203,7 +203,7 @@ class ContextArtifact(BaseModel):
 
 
 class AgentSkill(BaseModel):
-    """One skill exposed on an ExpertAgent card."""
+    """One skill exposed on an ExpertAgent card.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -221,7 +221,7 @@ class AgentSkill(BaseModel):
 
 
 class AgentCard(BaseModel):
-    """A2A-style ExpertAgent card exposed to MainAgent."""
+    """A2A-style ExpertAgent card exposed to MainAgent.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -237,7 +237,7 @@ class AgentCard(BaseModel):
 
 
 class AgentPlan(BaseModel):
-    """MainAgent plan."""
+    """MainAgent plan.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -248,7 +248,7 @@ class AgentPlan(BaseModel):
 
 
 class MainAgentPlanResult(BaseModel):
-    """Result of MainAgent planning."""
+    """Result of MainAgent planning.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -257,7 +257,7 @@ class MainAgentPlanResult(BaseModel):
 
 
 class MainAgentReviewResult(BaseModel):
-    """Result of MainAgent final review."""
+    """Result of MainAgent final review.."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

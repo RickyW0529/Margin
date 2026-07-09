@@ -38,10 +38,10 @@ def secret_store(database_url: str) -> SecretStore:
     """Return an isolated encrypted Secret Store.
 
     Args:
-        database_url: PostgreSQL connection URL for the isolated test database.
+        database_url: str: .
 
     Returns:
-        A SecretStore backed by a fresh in-memory schema with a random master key.
+        SecretStore: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -55,10 +55,10 @@ def test_runtime_resolves_only_active_config_and_frozen_secret(
     """Verify runtime consumers receive the active config and its exact secret version.
 
     Args:
-        secret_store: Isolated encrypted SecretStore fixture.
+        secret_store: SecretStore: .
 
     Returns:
-        None.
+        None: .
     """
     metadata = secret_store.create_or_replace(
         WriteSecretCommand(
@@ -96,10 +96,10 @@ def test_runtime_rejects_missing_active_provider(
     """Verify a draft configuration is not executable at runtime.
 
     Args:
-        secret_store: Isolated encrypted SecretStore fixture.
+        secret_store: SecretStore: .
 
     Returns:
-        None.
+        None: .
     """
     repository = MemoryStrategyRepository()
     repository.save_provider_config(
@@ -121,10 +121,10 @@ def test_runtime_supports_explicit_secretless_provider(
     """Verify providers such as AKShare may be explicitly configured as secretless.
 
     Args:
-        secret_store: Isolated encrypted SecretStore fixture.
+        secret_store: SecretStore: .
 
     Returns:
-        None.
+        None: .
     """
     repository = MemoryStrategyRepository()
     repository.save_provider_config(
@@ -146,7 +146,14 @@ def test_runtime_supports_explicit_secretless_provider(
 def test_runtime_resolves_data_source_by_capability(
     secret_store: SecretStore,
 ) -> None:
-    """Verify runtime consumers can request a capability instead of a provider name."""
+    """Verify runtime consumers can request a capability instead of a provider name.
+
+    Args:
+        secret_store: SecretStore: .
+
+    Returns:
+        None: .
+    """
     metadata = secret_store.create_or_replace(
         WriteSecretCommand(
             provider_name="tushare",
@@ -188,7 +195,14 @@ def test_runtime_resolves_data_source_by_capability(
 def test_runtime_rejects_ambiguous_provider_capability(
     secret_store: SecretStore,
 ) -> None:
-    """Verify explicit capabilities cannot silently select among duplicates."""
+    """Verify explicit capabilities cannot silently select among duplicates.
+
+    Args:
+        secret_store: SecretStore: .
+
+    Returns:
+        None: .
+    """
     repository = MemoryStrategyRepository()
     for provider_name in ("first-source", "second-source"):
         repository.save_provider_config(
@@ -214,7 +228,14 @@ def test_runtime_rejects_ambiguous_provider_capability(
 def test_runtime_factory_builds_market_data_by_capability(
     secret_store: SecretStore,
 ) -> None:
-    """Verify market data adapters can be built by capability."""
+    """Verify market data adapters can be built by capability.
+
+    Args:
+        secret_store: SecretStore: .
+
+    Returns:
+        None: .
+    """
     repository = MemoryStrategyRepository()
     repository.save_provider_config(
         ProviderConfigVersion(
@@ -240,10 +261,10 @@ def test_runtime_factory_builds_adapter_with_config_version_lineage(
     """Verify factory output preserves the exact active config version used.
 
     Args:
-        secret_store: Isolated encrypted SecretStore fixture.
+        secret_store: SecretStore: .
 
     Returns:
-        None.
+        None: .
     """
     metadata = secret_store.create_or_replace(
         WriteSecretCommand(
@@ -267,9 +288,7 @@ def test_runtime_factory_builds_adapter_with_config_version_lineage(
         )
     )
 
-    runtime = ProviderRuntimeFactory(
-        ProviderRuntimeResolver(repository, secret_store)
-    ).build_llm()
+    runtime = ProviderRuntimeFactory(ProviderRuntimeResolver(repository, secret_store)).build_llm()
 
     assert runtime.config_version_id == "provider-llm-runtime-v1"
     assert runtime.adapter.descriptor.config["base_url"] == "https://api.deepseek.com"
@@ -280,7 +299,14 @@ def test_runtime_factory_builds_adapter_with_config_version_lineage(
 def test_runtime_factory_builds_llm_from_active_provider_category(
     secret_store: SecretStore,
 ) -> None:
-    """LLM runtime should resolve active DeepSeek configs by category."""
+    """LLM runtime should resolve active DeepSeek configs by category.
+
+    Args:
+        secret_store: SecretStore: .
+
+    Returns:
+        None: .
+    """
     metadata = secret_store.create_or_replace(
         WriteSecretCommand(
             provider_name="deepseek",
@@ -304,9 +330,7 @@ def test_runtime_factory_builds_llm_from_active_provider_category(
         )
     )
 
-    runtime = ProviderRuntimeFactory(
-        ProviderRuntimeResolver(repository, secret_store)
-    ).build_llm()
+    runtime = ProviderRuntimeFactory(ProviderRuntimeResolver(repository, secret_store)).build_llm()
 
     assert runtime.config_version_id == "provider-deepseek-active"
     assert runtime.adapter.descriptor.config["base_url"] == "https://api.deepseek.com/v1"
@@ -316,7 +340,14 @@ def test_runtime_factory_builds_llm_from_active_provider_category(
 def test_runtime_factory_uses_secret_written_by_provider_settings_flow(
     secret_store: SecretStore,
 ) -> None:
-    """Runtime factory must use encrypted secrets written by Provider Settings."""
+    """Runtime factory must use encrypted secrets written by Provider Settings.
+
+    Args:
+        secret_store: SecretStore: .
+
+    Returns:
+        None: .
+    """
     repository = MemoryStrategyRepository()
     service = StrategyService(repository)
     version_id = "provider-llm-settings-flow"
@@ -353,9 +384,7 @@ def test_runtime_factory_uses_secret_written_by_provider_settings_flow(
         idempotency_key=f"activate-{version_id}-{suffix}",
     )
 
-    runtime = ProviderRuntimeFactory(
-        ProviderRuntimeResolver(repository, secret_store)
-    ).build_llm()
+    runtime = ProviderRuntimeFactory(ProviderRuntimeResolver(repository, secret_store)).build_llm()
 
     assert runtime.config_version_id == version_id
     assert runtime.adapter.descriptor.config["base_url"] == "https://api.deepseek.com/v1"
@@ -365,7 +394,14 @@ def test_runtime_factory_uses_secret_written_by_provider_settings_flow(
 def test_runtime_factory_builds_embedding_from_active_provider_category(
     secret_store: SecretStore,
 ) -> None:
-    """Embedding runtime should resolve active provider configs by category."""
+    """Embedding runtime should resolve active provider configs by category.
+
+    Args:
+        secret_store: SecretStore: .
+
+    Returns:
+        None: .
+    """
     metadata = secret_store.create_or_replace(
         WriteSecretCommand(
             provider_name="jina",
@@ -394,7 +430,5 @@ def test_runtime_factory_builds_embedding_from_active_provider_category(
     ).build_embedding()
 
     assert runtime.config_version_id == "provider-jina-embedding-active"
-    assert runtime.adapter.descriptor.config["base_url"] == (
-        "https://api.jina.ai/v1/embeddings"
-    )
+    assert runtime.adapter.descriptor.config["base_url"] == ("https://api.jina.ai/v1/embeddings")
     assert runtime.adapter.descriptor.config["model"] == "jina-embeddings-v3"

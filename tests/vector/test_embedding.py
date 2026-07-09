@@ -26,11 +26,11 @@ def _make_chunks(n=3, prefix="test"):
     """Create a list of test chunks.
 
     Args:
-        n: Number of chunks to create.
-        prefix: Text prefix placed in each chunk's content.
+        n: Any: .
+        prefix: Any: .
 
     Returns:
-        A list of ``Chunk`` objects ready for indexing.
+        Any: .
     """
     return [
         make_chunk(
@@ -46,30 +46,48 @@ def _make_chunks(n=3, prefix="test"):
 
 
 class TestEmbeddingProvider:
-    """Tests for ``EmbeddingProvider`` including hashing, normalization, and registry contract."""
+    """Tests for ``EmbeddingProvider`` including hashing, normalization, and registry
+    contract..
+    """
 
     def test_hash_embed_deterministic(self):
-        """Verify embedding the same text twice yields identical vectors."""
+        """Verify embedding the same text twice yields identical vectors.
+
+        Returns:
+            Any: .
+        """
         provider = EmbeddingProvider(dim=64)
         v1 = provider.embed("hello world")
         v2 = provider.embed("hello world")
         assert v1 == v2
 
     def test_different_text_different_vector(self):
-        """Verify different texts produce different vectors."""
+        """Verify different texts produce different vectors.
+
+        Returns:
+            Any: .
+        """
         provider = EmbeddingProvider(dim=64)
         v1 = provider.embed("hello")
         v2 = provider.embed("world")
         assert v1 != v2
 
     def test_dim_correct(self):
-        """Verify the returned vector dimension matches the configured ``dim``."""
+        """Verify the returned vector dimension matches the configured ``dim``.
+
+        Returns:
+            Any: .
+        """
         provider = EmbeddingProvider(dim=128)
         vec = provider.embed("test")
         assert len(vec) == 128
 
     def test_normalized(self):
-        """Verify output vectors are L2-normalized."""
+        """Verify output vectors are L2-normalized.
+
+        Returns:
+            Any: .
+        """
         import math
 
         provider = EmbeddingProvider(dim=64)
@@ -78,7 +96,11 @@ class TestEmbeddingProvider:
         assert abs(norm - 1.0) < 0.01
 
     def test_batch_embed(self):
-        """Verify ``embed_batch`` returns one vector per input text."""
+        """Verify ``embed_batch`` returns one vector per input text.
+
+        Returns:
+            Any: .
+        """
         provider = EmbeddingProvider(dim=32)
         texts = ["a", "b", "c"]
         vectors = provider.embed_batch(texts)
@@ -86,9 +108,21 @@ class TestEmbeddingProvider:
         assert all(len(v) == 32 for v in vectors)
 
     def test_custom_embed_func(self):
-        """Verify a custom embedding function overrides the default behavior."""
+        """Verify a custom embedding function overrides the default behavior.
+
+        Returns:
+            Any: .
+        """
+
         def custom(text):
-            """custom."""
+            """custom.
+
+            Args:
+                text: Any: .
+
+            Returns:
+                Any: .
+            """
             return [0.1] * 16
 
         provider = EmbeddingProvider(dim=16, embed_func=custom)
@@ -96,7 +130,11 @@ class TestEmbeddingProvider:
         assert vec == [0.1] * 16
 
     def test_provider_registry_contract(self):
-        """Verify the provider can be registered and retrieved via ``ProviderRegistry``."""
+        """Verify the provider can be registered and retrieved via ``ProviderRegistry``.
+
+        Returns:
+            Any: .
+        """
         provider = EmbeddingProvider(dim=16)
         registry = ProviderRegistry()
 
@@ -108,10 +146,14 @@ class TestEmbeddingProvider:
 
 
 class TestVectorStore:
-    """Tests for ``VectorStore`` upsert/search/filter/clear behavior."""
+    """Tests for ``VectorStore`` upsert/search/filter/clear behavior.."""
 
     def test_upsert_and_search(self):
-        """Verify a single chunk can be upserted and retrieved by vector search."""
+        """Verify a single chunk can be upserted and retrieved by vector search.
+
+        Returns:
+            Any: .
+        """
         store = VectorStore(dim=64)
         provider = EmbeddingProvider(dim=64)
 
@@ -125,14 +167,22 @@ class TestVectorStore:
         assert results[0][1] > 0.99
 
     def test_dim_mismatch_raises(self):
-        """Verify upserting a vector with the wrong dimension raises ``ValueError``."""
+        """Verify upserting a vector with the wrong dimension raises ``ValueError``.
+
+        Returns:
+            Any: .
+        """
         store = VectorStore(dim=64)
         chunk = make_chunk(document_id="d1", content="test")
         with pytest.raises(ValueError, match="dim mismatch"):
             store.upsert(chunk, [0.0] * 32)
 
     def test_filter_by_symbol(self):
-        """Verify vector search can filter results by stock symbol."""
+        """Verify vector search can filter results by stock symbol.
+
+        Returns:
+            Any: .
+        """
         store = VectorStore(dim=64)
         provider = EmbeddingProvider(dim=64)
 
@@ -141,14 +191,16 @@ class TestVectorStore:
         store.upsert(c1, provider.embed("a"))
         store.upsert(c2, provider.embed("b"))
 
-        results = store.search(
-            provider.embed("query"), top_k=5, filters={"symbol": "000001.SZ"}
-        )
+        results = store.search(provider.embed("query"), top_k=5, filters={"symbol": "000001.SZ"})
         assert len(results) == 1
         assert results[0][0].symbol == "000001.SZ"
 
     def test_batch_upsert(self):
-        """Verify ``upsert_batch`` indexes multiple chunks and updates ``size``."""
+        """Verify ``upsert_batch`` indexes multiple chunks and updates ``size``.
+
+        Returns:
+            Any: .
+        """
         store = VectorStore(dim=32)
         provider = EmbeddingProvider(dim=32)
 
@@ -159,7 +211,11 @@ class TestVectorStore:
         assert store.size == 3
 
     def test_clear(self):
-        """Verify ``clear`` removes all entries from the store."""
+        """Verify ``clear`` removes all entries from the store.
+
+        Returns:
+            Any: .
+        """
         store = VectorStore(dim=32)
         provider = EmbeddingProvider(dim=32)
         chunk = make_chunk(document_id="d1", content="test")
@@ -169,10 +225,14 @@ class TestVectorStore:
 
 
 class TestBM25Index:
-    """Tests for ``BM25Index`` keyword search and filter behavior."""
+    """Tests for ``BM25Index`` keyword search and filter behavior.."""
 
     def test_upsert_and_search(self):
-        """Verify BM25 ranks matching Chinese documents above others."""
+        """Verify BM25 ranks matching Chinese documents above others.
+
+        Returns:
+            Any: .
+        """
         index = BM25Index()
         chunks = [
             make_chunk(document_id="d1", content="公司经营现金流改善"),
@@ -186,14 +246,22 @@ class TestBM25Index:
         assert results[0][0].content == "公司经营现金流改善"
 
     def test_search_no_match(self):
-        """Verify searching for a term absent from the index returns no results."""
+        """Verify searching for a term absent from the index returns no results.
+
+        Returns:
+            Any: .
+        """
         index = BM25Index()
         index.upsert(make_chunk(document_id="d1", content="hello"))
         results = index.search("nonexistent")
         assert len(results) == 0
 
     def test_filter_by_symbol(self):
-        """Verify BM25 search can filter results by stock symbol."""
+        """Verify BM25 search can filter results by stock symbol.
+
+        Returns:
+            Any: .
+        """
         index = BM25Index()
         c1 = make_chunk(document_id="d1", content="现金流", symbol="000001.SZ")
         c2 = make_chunk(document_id="d2", content="现金流", symbol="600000.SH")
@@ -205,14 +273,22 @@ class TestBM25Index:
         assert results[0][0].symbol == "000001.SZ"
 
     def test_clear(self):
-        """Verify ``clear`` removes all entries from the BM25 index."""
+        """Verify ``clear`` removes all entries from the BM25 index.
+
+        Returns:
+            Any: .
+        """
         index = BM25Index()
         index.upsert(make_chunk(document_id="d1", content="test"))
         index.clear()
         assert index.size == 0
 
     def test_reupsert_replaces_document_frequency_contribution(self):
-        """Verify re-upserting the same chunk does not inflate document frequency."""
+        """Verify re-upserting the same chunk does not inflate document frequency.
+
+        Returns:
+            Any: .
+        """
         index = BM25Index()
         chunk = make_chunk(document_id="d1", content="现金流")
 
@@ -223,10 +299,14 @@ class TestBM25Index:
 
 
 class TestEmbeddingPipeline:
-    """Tests for ``EmbeddingPipeline`` combining vector and keyword indexing."""
+    """Tests for ``EmbeddingPipeline`` combining vector and keyword indexing.."""
 
     def test_index_and_search(self):
-        """Verify chunks are indexed and searchable by both vector and keyword paths."""
+        """Verify chunks are indexed and searchable by both vector and keyword paths.
+
+        Returns:
+            Any: .
+        """
         pipeline = EmbeddingPipeline(
             embedding_provider=EmbeddingProvider(dim=64),
         )
@@ -242,13 +322,21 @@ class TestEmbeddingPipeline:
         assert len(keyword_results) > 0
 
     def test_index_empty(self):
-        """Verify indexing an empty chunk list returns zero and does not fail."""
+        """Verify indexing an empty chunk list returns zero and does not fail.
+
+        Returns:
+            Any: .
+        """
         pipeline = EmbeddingPipeline()
         count = pipeline.index_chunks([])
         assert count == 0
 
     def test_audit_logged(self):
-        """Verify indexing and searching produce audit records."""
+        """Verify indexing and searching produce audit records.
+
+        Returns:
+            Any: .
+        """
         pipeline = EmbeddingPipeline(
             embedding_provider=EmbeddingProvider(dim=32),
         )
@@ -264,9 +352,21 @@ class TestEmbeddingPipeline:
         assert records[2].operation == "search"
 
     def test_degraded_to_keyword_on_vector_failure(self):
-        """Verify vector embedding failures degrade gracefully to keyword-only indexing."""
+        """Verify vector embedding failures degrade gracefully to keyword-only indexing.
+
+        Returns:
+            Any: .
+        """
+
         def fail_embedding(text):
-            """fail embedding."""
+            """fail embedding.
+
+            Args:
+                text: Any: .
+
+            Returns:
+                Any: .
+            """
             raise RuntimeError("embedding unavailable")
 
         pipeline = EmbeddingPipeline(
@@ -284,10 +384,14 @@ class TestEmbeddingPipeline:
 
 
 class TestEndToEnd0402:
-    """End-to-end tests for chunking and indexing a document event."""
+    """End-to-end tests for chunking and indexing a document event.."""
 
     def test_full_pipeline_from_event(self):
-        """Verify a document event can be chunked and indexed, then found by keyword search."""
+        """Verify a document event can be chunked and indexed, then found by keyword search.
+
+        Returns:
+            Any: .
+        """
 
         event = make_document_event(
             source_url="https://example.com/filing",

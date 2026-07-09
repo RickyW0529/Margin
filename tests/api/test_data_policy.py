@@ -19,22 +19,27 @@ def data_policy_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     """Return an API client with an isolated policy repository.
 
     Args:
-        monkeypatch: Pytest fixture for patching environment variables.
+        monkeypatch: pytest.MonkeyPatch: .
 
     Returns:
-        A ``TestClient`` wired to an in-memory data policy service.
+        TestClient: .
     """
     get_settings.cache_clear()
-    service = DataAcquisitionPolicyService(
-        MemoryDataAcquisitionPolicyRepository()
-    )
+    service = DataAcquisitionPolicyService(MemoryDataAcquisitionPolicyRepository())
     app = create_app()
     app.dependency_overrides[get_data_policy_service] = lambda: service
     return TestClient(app)
 
 
 def _headers(key: str) -> dict[str, str]:
-    """Build request headers with the given idempotency key."""
+    """Build request headers with the given idempotency key.
+
+    Args:
+        key: str: .
+
+    Returns:
+        dict[str, str]: .
+    """
     return {
         "Idempotency-Key": key,
     }
@@ -43,7 +48,14 @@ def _headers(key: str) -> dict[str, str]:
 def test_frontend_can_create_activate_and_list_rolling_policy(
     data_policy_client: TestClient,
 ) -> None:
-    """Test that the UI contract exposes versioned policy mutations and active state."""
+    """Test that the UI contract exposes versioned policy mutations and active state.
+
+    Args:
+        data_policy_client: TestClient: .
+
+    Returns:
+        None: .
+    """
     created = data_policy_client.post(
         "/api/v1/data-policies",
         json={
@@ -73,7 +85,14 @@ def test_frontend_can_create_activate_and_list_rolling_policy(
 def test_frontend_policy_rejects_more_than_60_months(
     data_policy_client: TestClient,
 ) -> None:
-    """Test that invalid storage windows fail before persistence."""
+    """Test that invalid storage windows fail before persistence.
+
+    Args:
+        data_policy_client: TestClient: .
+
+    Returns:
+        None: .
+    """
     response = data_policy_client.post(
         "/api/v1/data-policies",
         json={"rolling_window_months": 61},

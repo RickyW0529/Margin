@@ -24,7 +24,10 @@ def test_html_locator_replays_against_snapshot(snapshot_resolver) -> None:
     """Test that an HTML locator replays correctly against a stored snapshot.
 
     Args:
-        snapshot_resolver: In-memory snapshot resolver fixture.
+        snapshot_resolver: Any: .
+
+    Returns:
+        None: .
     """
     snapshot_resolver.add_html(
         "snap-1",
@@ -58,7 +61,10 @@ def test_pdf_page_locator_replays_against_snapshot(snapshot_resolver) -> None:
     """Test that a PDF page locator replays correctly against a stored snapshot.
 
     Args:
-        snapshot_resolver: In-memory snapshot resolver fixture.
+        snapshot_resolver: Any: .
+
+    Returns:
+        None: .
     """
     fitz = pytest.importorskip("fitz")
     document = fitz.open()
@@ -96,7 +102,10 @@ def test_csv_table_cell_locator_replays_against_snapshot(snapshot_resolver) -> N
     """Test that a CSV table-cell locator replays correctly against a stored snapshot.
 
     Args:
-        snapshot_resolver: In-memory snapshot resolver fixture.
+        snapshot_resolver: Any: .
+
+    Returns:
+        None: .
     """
     snapshot_resolver.add_text(
         "snap-csv",
@@ -130,9 +139,8 @@ def test_csv_table_cell_locator_replays_against_snapshot(snapshot_resolver) -> N
 def test_evidence_preserves_structured_chunk_locator_fields() -> None:
     """Test that evidence preserves structured chunk locator fields.
 
-    Verifies that ``bbox``, ``dom_path``, and ``column_id`` from a
-    :class:`SourceLocator` are carried through to the evidence and the
-    citation locator.
+    Returns:
+        None: .
     """
     chunk = make_chunk(
         document_id="doc-structured",
@@ -163,7 +171,10 @@ def test_snapshot_hash_mismatch_fails(snapshot_resolver) -> None:
     """Test that a snapshot hash mismatch causes replay validation to fail.
 
     Args:
-        snapshot_resolver: In-memory snapshot resolver fixture.
+        snapshot_resolver: Any: .
+
+    Returns:
+        None: .
     """
     snapshot_resolver.add_text("snap-1", "收入增长 20%。", "sha256:actual")
     validator = LocatorValidator(snapshot_resolver)
@@ -192,7 +203,10 @@ def test_quote_span_out_of_range_fails(snapshot_resolver) -> None:
     """Test that an out-of-range quote span causes replay validation to fail.
 
     Args:
-        snapshot_resolver: In-memory snapshot resolver fixture.
+        snapshot_resolver: Any: .
+
+    Returns:
+        None: .
     """
     snapshot_resolver.add_text("snap-1", "短文本", "sha256:short")
     validator = LocatorValidator(snapshot_resolver)
@@ -223,7 +237,10 @@ def test_citation_validator_fails_when_replayed_quote_mismatches_snapshot(
     """Test that the citation validator fails when a replayed quote mismatches the snapshot.
 
     Args:
-        snapshot_resolver: In-memory snapshot resolver fixture.
+        snapshot_resolver: Any: .
+
+    Returns:
+        None: .
     """
     snapshot_resolver.add_text("snap-1", "利润下降 10%。", "sha256:snapshot")
     evidence = Evidence(
@@ -260,18 +277,27 @@ def test_citation_validator_fails_when_replayed_quote_mismatches_snapshot(
 
 
 class InMemorySnapshotResolver:
-    """In-memory snapshot resolver for locator replay tests.
-
-    Stores snapshots keyed by ID and returns them as ``SimpleNamespace``
-    objects mimicking the real snapshot resolver interface.
-    """
+    """In-memory snapshot resolver for locator replay tests.."""
 
     def __init__(self) -> None:
-        """Initialize the resolver with an empty snapshot store."""
+        """Initialize the resolver with an empty snapshot store.
+
+        Returns:
+            None: .
+        """
         self.snapshots = {}
 
     def add_html(self, snapshot_id: str, content: str, content_hash: str) -> None:
-        """Store an HTML snapshot with the given ID and hash."""
+        """Store an HTML snapshot with the given ID and hash.
+
+        Args:
+            snapshot_id: str: .
+            content: str: .
+            content_hash: str: .
+
+        Returns:
+            None: .
+        """
         self.snapshots[snapshot_id] = SimpleNamespace(
             snapshot_id=snapshot_id,
             source_url="https://example.com/news",
@@ -289,7 +315,17 @@ class InMemorySnapshotResolver:
         *,
         content_type: str = "text",
     ) -> None:
-        """Store a text snapshot with the given ID, hash, and content type."""
+        """Store a text snapshot with the given ID, hash, and content type.
+
+        Args:
+            snapshot_id: str: .
+            content: str: .
+            content_hash: str: .
+            content_type: str: .
+
+        Returns:
+            None: .
+        """
         self.snapshots[snapshot_id] = SimpleNamespace(
             snapshot_id=snapshot_id,
             source_url="https://example.com/news",
@@ -307,7 +343,17 @@ class InMemorySnapshotResolver:
         *,
         content_type: str,
     ) -> None:
-        """Store a binary snapshot with the given ID, hash, and content type."""
+        """Store a binary snapshot with the given ID, hash, and content type.
+
+        Args:
+            snapshot_id: str: .
+            content: bytes: .
+            content_hash: str: .
+            content_type: str: .
+
+        Returns:
+            None: .
+        """
         self.snapshots[snapshot_id] = SimpleNamespace(
             snapshot_id=snapshot_id,
             source_url="https://example.com/filing.pdf",
@@ -318,11 +364,22 @@ class InMemorySnapshotResolver:
         )
 
     def __call__(self, snapshot_id: str):
-        """Return the snapshot stored under the given ID, or ``None``."""
+        """Return the snapshot stored under the given ID, or ``None``.
+
+        Args:
+            snapshot_id: str: .
+
+        Returns:
+            Any: .
+        """
         return self.snapshots.get(snapshot_id)
 
 
 @pytest.fixture
 def snapshot_resolver() -> InMemorySnapshotResolver:
-    """Provide a fresh in-memory snapshot resolver for each test."""
+    """Provide a fresh in-memory snapshot resolver for each test.
+
+    Returns:
+        InMemorySnapshotResolver: .
+    """
     return InMemorySnapshotResolver()

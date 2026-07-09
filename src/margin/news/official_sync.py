@@ -12,7 +12,7 @@ from margin.news.repository import NewsRepository
 
 
 class OfficialDiscoveryLike(Protocol):
-    """Protocol for official exchange announcement discovery."""
+    """Protocol for official exchange announcement discovery.."""
 
     def discover(
         self,
@@ -22,17 +22,16 @@ class OfficialDiscoveryLike(Protocol):
         """Discover official documents after the provided cursor.
 
         Args:
-            cursor: Opaque cursor from a previous discovery pass, or None for the first
-                pass.
-            limit: Maximum number of documents to return.
+            cursor: str | None: .
+            limit: int: .
 
         Returns:
-            List of discovered official documents.
+            list[DiscoveredDocument]: .
         """
 
 
 class FilingAcquirerLike(Protocol):
-    """Protocol for the existing filing acquirer boundary."""
+    """Protocol for the existing filing acquirer boundary.."""
 
     def acquire(
         self,
@@ -43,29 +42,17 @@ class FilingAcquirerLike(Protocol):
         """Acquire one official filing and return a normalized event.
 
         Args:
-            source_name: Identifier of the registered source.
-            url: Target URL to acquire.
-            **kwargs: Additional arguments forwarded to the acquirer.
+            source_name: str: .
+            url: str: .
+            **kwargs: object: .
 
         Returns:
-            A normalized ``DocumentEvent``.
+            DocumentEvent: .
         """
 
 
 class FilingSyncRun(BaseModel):
-    """Summary of one official filing sync pass.
-
-    Attributes:
-        source_name: Name of the source stream.
-        cursor_key: Logical cursor key within the source.
-        started_cursor: Cursor value at the start of the sync pass.
-        finished_cursor: Cursor value at the end of the sync pass.
-        discovered_records: Number of records discovered by the connector.
-        persisted_events: Number of events successfully persisted.
-        duplicate_records: Number of records that were already persisted.
-        failed_records: Number of records that failed acquisition.
-        status: Final status of the sync pass (completed, partial, or failed).
-    """
+    """Summary of one official filing sync pass.."""
 
     source_name: str
     cursor_key: str
@@ -81,7 +68,7 @@ class FilingSyncRun(BaseModel):
 
 
 class OfficialFilingSyncService:
-    """Sync official filings globally and advance cursor only after persistence."""
+    """Sync official filings globally and advance cursor only after persistence.."""
 
     def __init__(
         self,
@@ -92,9 +79,12 @@ class OfficialFilingSyncService:
         """Initialize the sync service.
 
         Args:
-            repository: Repository used to read and update cursors and persist events.
-            discovery: Discovery connector that lists official documents incrementally.
-            acquirer: Filing acquirer that downloads and normalizes individual filings.
+            repository: NewsRepository: .
+            discovery: OfficialDiscoveryLike: .
+            acquirer: FilingAcquirerLike: .
+
+        Returns:
+            None: .
         """
         self._repository = repository
         self._discovery = discovery
@@ -110,12 +100,12 @@ class OfficialFilingSyncService:
         """Run one incremental sync batch for an official source.
 
         Args:
-            source_name: Name of the source stream.
-            cursor_key: Logical cursor key within the source.
-            limit: Maximum number of records to discover and acquire.
+            source_name: str: .
+            cursor_key: str: .
+            limit: int: .
 
         Returns:
-            A ``FilingSyncRun`` summarizing the sync pass.
+            FilingSyncRun: .
         """
         started_cursor = self._repository.get_cursor(source_name, cursor_key)
         records = self._discovery.discover(cursor=started_cursor, limit=limit)

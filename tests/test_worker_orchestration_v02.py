@@ -32,12 +32,20 @@ from margin.worker import build_scheduler
 
 
 def _now() -> datetime:
-    """Return a deterministic UTC timestamp for test fixtures."""
+    """Return a deterministic UTC timestamp for test fixtures.
+
+    Returns:
+        datetime: .
+    """
     return datetime(2026, 6, 22, 12, 0, tzinfo=UTC)
 
 
 def _repository_with_run() -> MemoryOrchestrationRepository:
-    """Build an in-memory orchestration repository pre-seeded with a running run."""
+    """Build an in-memory orchestration repository pre-seeded with a running run.
+
+    Returns:
+        MemoryOrchestrationRepository: .
+    """
     repository = MemoryOrchestrationRepository()
     repository.create_run(
         OrchestrationRun(
@@ -55,7 +63,11 @@ def _repository_with_run() -> MemoryOrchestrationRepository:
 
 
 def test_worker_claims_pending_step_with_lease() -> None:
-    """Test that a worker claims a pending step and acquires a lease."""
+    """Test that a worker claims a pending step and acquires a lease.
+
+    Returns:
+        None: .
+    """
     repository = _repository_with_run()
     pending = StepAttempt(
         event_id="step-pending-1",
@@ -83,14 +95,21 @@ def test_worker_claims_pending_step_with_lease() -> None:
     assert claim.lease_owner == "worker-new"
     assert claim.input_ref == "scope:scope-1"
     assert claim.attempt_no == 1
-    assert repository.get_latest_step_event(
-        "run-worker-1",
-        "quant",
-    ).state == StepState.RUNNING
+    assert (
+        repository.get_latest_step_event(
+            "run-worker-1",
+            "quant",
+        ).state
+        == StepState.RUNNING
+    )
 
 
 def test_worker_retries_expired_running_lease_as_new_attempt() -> None:
-    """Test that a worker retries an expired running lease as a new attempt."""
+    """Test that a worker retries an expired running lease as a new attempt.
+
+    Returns:
+        None: .
+    """
     repository = _repository_with_run()
     expired = StepAttempt(
         event_id="step-expired-1",
@@ -124,7 +143,11 @@ def test_worker_retries_expired_running_lease_as_new_attempt() -> None:
 
 
 def test_worker_does_not_steal_live_lease() -> None:
-    """Test that a worker does not steal a step whose lease is still live."""
+    """Test that a worker does not steal a step whose lease is still live.
+
+    Returns:
+        None: .
+    """
     repository = _repository_with_run()
     live = StepAttempt(
         event_id="step-live-1",
@@ -156,7 +179,10 @@ def test_postgres_workers_do_not_claim_same_live_step(database_url: str) -> None
     """Test that two PostgreSQL workers do not claim the same live step.
 
     Args:
-        database_url: Connection string for the PostgreSQL test server.
+        database_url: str: .
+
+    Returns:
+        None: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -164,13 +190,9 @@ def test_postgres_workers_do_not_claim_same_live_step(database_url: str) -> None
     run_id = "run-worker-postgres"
     with session_factory.begin() as session:
         session.execute(
-            delete(OrchestrationStepAttemptRow).where(
-                OrchestrationStepAttemptRow.run_id == run_id
-            )
+            delete(OrchestrationStepAttemptRow).where(OrchestrationStepAttemptRow.run_id == run_id)
         )
-        session.execute(
-            delete(OrchestrationRunRow).where(OrchestrationRunRow.run_id == run_id)
-        )
+        session.execute(delete(OrchestrationRunRow).where(OrchestrationRunRow.run_id == run_id))
     repository = SQLAlchemyOrchestrationRepository(session_factory)
     repository.create_run(
         OrchestrationRun(
@@ -222,16 +244,16 @@ def test_postgres_workers_do_not_claim_same_live_step(database_url: str) -> None
                     OrchestrationStepAttemptRow.run_id == run_id
                 )
             )
-            session.execute(
-                delete(OrchestrationRunRow).where(
-                    OrchestrationRunRow.run_id == run_id
-                )
-            )
+            session.execute(delete(OrchestrationRunRow).where(OrchestrationRunRow.run_id == run_id))
         engine.dispose()
 
 
 def test_scheduler_registers_orchestration_wakeup_separately() -> None:
-    """Test that the scheduler registers the orchestration wakeup job separately."""
+    """Test that the scheduler registers the orchestration wakeup job separately.
+
+    Returns:
+        None: .
+    """
     scheduler = build_scheduler(
         interval_seconds=300,
         orchestration_job=lambda: None,

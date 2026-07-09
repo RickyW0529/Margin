@@ -31,7 +31,11 @@ SCOPE_VERSION_ID = "scope_v1"
 
 
 def _make_quant_result() -> QuantResult:
-    """Build a quant result for API tests."""
+    """Build a quant result for API tests.
+
+    Returns:
+        QuantResult: .
+    """
     return QuantResult(
         result_id="qres_001",
         quant_run_id="qr_001",
@@ -57,7 +61,11 @@ def _make_quant_result() -> QuantResult:
 
 
 def _make_analysis_snapshot() -> AnalysisSnapshot:
-    """Build an analysis snapshot for API tests."""
+    """Build an analysis snapshot for API tests.
+
+    Returns:
+        AnalysisSnapshot: .
+    """
     return AnalysisSnapshot(
         analysis_snapshot_id="ans_001",
         security_id=SECURITY_ID,
@@ -78,7 +86,11 @@ def _make_analysis_snapshot() -> AnalysisSnapshot:
 
 
 def _make_metric() -> AnalysisMetric:
-    """Build a sample metric."""
+    """Build a sample metric.
+
+    Returns:
+        AnalysisMetric: .
+    """
     return AnalysisMetric(
         metric_id="am_001",
         analysis_snapshot_id="ans_001",
@@ -96,7 +108,11 @@ def _make_metric() -> AnalysisMetric:
 
 
 def _make_finding() -> AnalysisFinding:
-    """Build a sample finding."""
+    """Build a sample finding.
+
+    Returns:
+        AnalysisFinding: .
+    """
     return AnalysisFinding(
         finding_id="af_001",
         analysis_snapshot_id="ans_001",
@@ -114,7 +130,15 @@ def _build_service(
     with_quant: bool = True,
     with_analysis: bool = True,
 ) -> CompanyProfileService:
-    """Build a CompanyProfileService backed by in-memory repositories."""
+    """Build a CompanyProfileService backed by in-memory repositories.
+
+    Args:
+        with_quant: bool: .
+        with_analysis: bool: .
+
+    Returns:
+        CompanyProfileService: .
+    """
     quant_repo = MemoryQuantRepository()
     analysis_repo = MemoryAnalysisMartRepository()
     if with_quant:
@@ -145,7 +169,14 @@ def _build_service(
 
 @pytest.fixture()
 def api_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    """Return a TestClient with company profile service injected."""
+    """Return a TestClient with company profile service injected.
+
+    Args:
+        monkeypatch: pytest.MonkeyPatch: .
+
+    Returns:
+        TestClient: .
+    """
     get_settings.cache_clear()
     service = _build_service()
     app = create_app(company_profile_service=service)
@@ -153,7 +184,14 @@ def api_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 def test_get_company_quant_profile_returns_200(api_client: TestClient) -> None:
-    """Quant profile endpoint returns the five factor scores."""
+    """Quant profile endpoint returns the five factor scores.
+
+    Args:
+        api_client: TestClient: .
+
+    Returns:
+        None: .
+    """
     response = api_client.get(f"/api/v1/valuation-discovery/companies/{SECURITY_ID}/quant")
 
     assert response.status_code == 200
@@ -165,22 +203,34 @@ def test_get_company_quant_profile_returns_200(api_client: TestClient) -> None:
     assert body["screening_status"] == "pass"
     assert body["research_guardrail"] == "research_allowed"
     assert len(body["factor_scores"]) == 5
-    quality = next(
-        item for item in body["factor_scores"] if item["factor_key"] == "quality_score"
-    )
+    quality = next(item for item in body["factor_scores"] if item["factor_key"] == "quality_score")
     assert quality["score"] == 75.0
     assert quality["label"] == "质量"
     assert quality["weight"] == 0.35
 
 
 def test_get_company_quant_profile_returns_404_for_unknown(api_client: TestClient) -> None:
-    """Quant profile endpoint returns 404 when no result exists."""
+    """Quant profile endpoint returns 404 when no result exists.
+
+    Args:
+        api_client: TestClient: .
+
+    Returns:
+        None: .
+    """
     response = api_client.get("/api/v1/valuation-discovery/companies/unknown/quant")
     assert response.status_code == 404
 
 
 def test_get_company_analysis_profile_returns_200(api_client: TestClient) -> None:
-    """Analysis profile endpoint returns metrics and findings."""
+    """Analysis profile endpoint returns metrics and findings.
+
+    Args:
+        api_client: TestClient: .
+
+    Returns:
+        None: .
+    """
     response = api_client.get(
         f"/api/v1/valuation-discovery/companies/{SECURITY_ID}/analysis",
         params={"scope_version_id": SCOPE_VERSION_ID},
@@ -202,7 +252,14 @@ def test_get_company_analysis_profile_returns_200(api_client: TestClient) -> Non
 def test_get_company_analysis_profile_empty_when_no_snapshot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Analysis profile endpoint returns empty when no snapshot exists."""
+    """Analysis profile endpoint returns empty when no snapshot exists.
+
+    Args:
+        monkeypatch: pytest.MonkeyPatch: .
+
+    Returns:
+        None: .
+    """
     get_settings.cache_clear()
     service = _build_service(with_analysis=False)
     app = create_app(company_profile_service=service)

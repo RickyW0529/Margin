@@ -118,15 +118,7 @@ from margin.vector.retrieval import RetrievalTool
 
 @dataclass(frozen=True)
 class MissingConfiguredProvider:
-    """Provider-status placeholder for an external provider missing configuration.
-
-    Represents an unconfigured external provider as a degraded placeholder so
-    the dashboard can surface explicit gaps instead of silently omitting them.
-
-    Attributes:
-        descriptor: Provider descriptor with ``unconfigured`` version.
-        message: Human-readable explanation of the missing configuration.
-    """
+    """Provider-status placeholder for an external provider missing configuration.."""
 
     descriptor: ProviderDescriptor
     message: str
@@ -135,8 +127,7 @@ class MissingConfiguredProvider:
         """Return a degraded status without attempting a network call.
 
         Returns:
-            A HealthCheckResult with DEGRADED status and the configured
-            message.
+            HealthCheckResult: .
         """
         return HealthCheckResult(
             provider_name=self.descriptor.name,
@@ -148,14 +139,18 @@ class MissingConfiguredProvider:
 
 @dataclass(frozen=True)
 class ProviderConfigStatusProbe:
-    """Provider-status adapter backed by active encrypted Provider configuration."""
+    """Provider-status adapter backed by active encrypted Provider configuration.."""
 
     config: ProviderConfigVersion
     health_service: ProviderConfigHealthService
 
     @property
     def descriptor(self) -> ProviderDescriptor:
-        """Return provider metadata without exposing secrets."""
+        """Return provider metadata without exposing secrets.
+
+        Returns:
+            ProviderDescriptor: .
+        """
         provider_type = _provider_type_from_config(self.config.provider_type)
         return ProviderDescriptor(
             name=self.config.provider_name,
@@ -170,7 +165,11 @@ class ProviderConfigStatusProbe:
         )
 
     def healthcheck(self) -> HealthCheckResult:
-        """Run provider config health through the encrypted Provider database path."""
+        """Run provider config health through the encrypted Provider database path.
+
+        Returns:
+            HealthCheckResult: .
+        """
         result = self.health_service.test_connection(self.config.version_id)
         status = {
             "ok": ProviderStatus.HEALTHY,
@@ -192,7 +191,11 @@ class ProviderConfigStatusProbe:
 
 @lru_cache
 def get_app_container() -> AppContainer:
-    """Return the process-level application container."""
+    """Return the process-level application container.
+
+    Returns:
+        AppContainer: .
+    """
     return AppContainer(get_settings())
 
 
@@ -204,11 +207,11 @@ def build_data_warehouse_stack(
     """Build the data warehouse ingestion stack from centralized settings.
 
     Args:
-        settings: Application settings containing database and snapshot
-            configuration.
+        settings: MarginSettings: .
+        default_provider: str: .
 
     Returns:
-        A DataWarehouseIngestionStack ready for ingestion operations.
+        DataWarehouseIngestionStack: .
     """
     container = AppContainer(settings)
     return DataWarehouseIngestionStack(
@@ -226,7 +229,18 @@ def _missing_provider(
     capabilities: list[str],
     secret_refs: list[str],
 ) -> MissingConfiguredProvider:
-    """missing provider."""
+    """missing provider.
+
+    Args:
+        name: str: .
+        provider_type: ProviderType: .
+        message: str: .
+        capabilities: list[str]: .
+        secret_refs: list[str]: .
+
+    Returns:
+        MissingConfiguredProvider: .
+    """
     return MissingConfiguredProvider(
         descriptor=ProviderDescriptor(
             name=name,
@@ -248,27 +262,20 @@ def build_provider_status_providers(
 ) -> list[Any]:
     """Build all providers surfaced by the dashboard status endpoint.
 
-    Active providers are loaded from encrypted Provider configuration. Missing
-    common integrations are represented as degraded placeholders that point to
-    the settings page rather than environment variables.
-
     Args:
-        repository: Strategy repository containing Provider config versions.
-        health_service: Health service that resolves encrypted provider secrets.
-        owner_id: Current local owner ID.
+        repository: SQLAlchemyStrategyRepository: .
+        health_service: ProviderConfigHealthService: .
+        owner_id: str: .
 
     Returns:
-        A list of provider instances or degraded placeholders.
+        list[Any]: .
     """
     active_configs = repository.list_active_provider_configs(owner_id)
     probes: list[Any] = [
         ProviderConfigStatusProbe(config=config, health_service=health_service)
         for config in active_configs
     ]
-    active_types = {
-        _provider_type_from_config(config.provider_type)
-        for config in active_configs
-    }
+    active_types = {_provider_type_from_config(config.provider_type) for config in active_configs}
     required = (
         ("llm", ProviderType.LLM, "LLM 配置未激活，请到设置页配置模型服务。"),
         (
@@ -298,7 +305,14 @@ def build_provider_status_providers(
 
 
 def _provider_type_from_config(value: str) -> ProviderType:
-    """Map persisted provider type strings into core provider types."""
+    """Map persisted provider type strings into core provider types.
+
+    Args:
+        value: str: .
+
+    Returns:
+        ProviderType: .
+    """
     normalized = value.strip().lower()
     aliases = {
         "websearch": ProviderType.WEB_SEARCH,
@@ -312,7 +326,14 @@ def _provider_type_from_config(value: str) -> ProviderType:
 
 
 def _capabilities_for_provider_type(provider_type: ProviderType) -> list[str]:
-    """Return dashboard-safe capability labels for provider status."""
+    """Return dashboard-safe capability labels for provider status.
+
+    Args:
+        provider_type: ProviderType: .
+
+    Returns:
+        list[str]: .
+    """
     return {
         ProviderType.LLM: ["complete", "complete_structured"],
         ProviderType.EMBEDDING: ["embed", "embed_batch"],
@@ -327,7 +348,7 @@ def get_strategy_repository() -> SQLAlchemyStrategyRepository:
     """Return the production PostgreSQL-backed strategy config repository.
 
     Returns:
-        A cached SQLAlchemyStrategyRepository instance.
+        SQLAlchemyStrategyRepository: .
     """
     return get_app_container().strategy_repository
 
@@ -337,8 +358,7 @@ def get_strategy_service() -> StrategyService:
     """Return the production PostgreSQL-backed strategy configuration service.
 
     Returns:
-        StrategyService: A cached strategy service with append-only version
-        persistence backed by PostgreSQL.
+        StrategyService: .
     """
     return get_app_container().strategy_service
 
@@ -347,10 +367,8 @@ def get_strategy_service() -> StrategyService:
 def get_secret_store() -> SecretStore:
     """Return the encrypted provider Secret Store.
 
-    Personal-mode deployments use a stable local default key unless
-    ``MARGIN_SECRET_MASTER_KEY`` overrides it. The function never generates an
-    ephemeral key because doing so would make stored secrets undecryptable after
-    process restart.
+    Returns:
+        SecretStore: .
     """
     return get_app_container().secret_store
 
@@ -358,8 +376,8 @@ def get_secret_store() -> SecretStore:
 def get_optional_secret_store() -> SecretStore | None:
     """Return Secret Store when decrypt authority is configured.
 
-    Read-only configuration discovery remains available even if database-backed
-    secret metadata cannot be initialized.
+    Returns:
+        SecretStore | None: .
     """
     try:
         return get_secret_store()
@@ -372,8 +390,7 @@ def get_provider_runtime_factory() -> ProviderRuntimeFactory:
     """Return the strict active-config Provider factory used by business runs.
 
     Returns:
-        A cached ProviderRuntimeFactory bound to the production strategy
-        repository and secret store.
+        ProviderRuntimeFactory: .
     """
     return ProviderRuntimeFactory(
         ProviderRuntimeResolver(
@@ -389,19 +406,34 @@ def get_llm_provider_factory(
         Depends(get_provider_runtime_factory),
     ],
 ) -> Callable[[], LLMProvider]:
-    """Return a lazy factory for the active LLM provider."""
+    """Return a lazy factory for the active LLM provider.
+
+    Args:
+        runtime_factory: Annotated[ProviderRuntimeFactory, Depends(get_provider_runtime_factory)]: .
+
+    Returns:
+        Callable[[], LLMProvider]: .
+    """
     return lambda: runtime_factory.build_llm().adapter
 
 
 @lru_cache
 def get_config_repository() -> SQLAlchemyConfigRepository:
-    """Return the domain-specific runtime config repository."""
+    """Return the domain-specific runtime config repository.
+
+    Returns:
+        SQLAlchemyConfigRepository: .
+    """
     return SQLAlchemyConfigRepository(get_app_container().session_factory)
 
 
 @lru_cache
 def get_config_resolver() -> ConfigResolver:
-    """Return the unified runtime config resolver."""
+    """Return the unified runtime config resolver.
+
+    Returns:
+        ConfigResolver: .
+    """
     return ConfigResolver(
         get_config_repository(),
         environment=get_settings().environment,
@@ -409,19 +441,31 @@ def get_config_resolver() -> ConfigResolver:
 
 
 def _resolve_scheduled_stock_analysis_flow():
-    """Resolve the scheduled Agent flow from DB with a local default fallback."""
+    """Resolve the scheduled Agent flow from DB with a local default fallback.
+
+    Returns:
+        Any: .
+    """
     try:
-        return get_config_resolver().resolve_agent_flow(
-            flow_id="scheduled_stock_analysis",
-            decision_at=datetime.now(UTC),
-        ).to_flow()
+        return (
+            get_config_resolver()
+            .resolve_agent_flow(
+                flow_id="scheduled_stock_analysis",
+                decision_at=datetime.now(UTC),
+            )
+            .to_flow()
+        )
     except LookupError:
         return load_scheduled_stock_analysis_flow()
 
 
 @lru_cache
 def get_main_agent_runtime() -> MainAgentRuntime:
-    """Return the v0.4 MainAgent runtime foundation."""
+    """Return the v0.4 MainAgent runtime foundation.
+
+    Returns:
+        MainAgentRuntime: .
+    """
     container = get_app_container()
     runtime_factory = get_provider_runtime_factory()
     return MainAgentRuntime(
@@ -434,13 +478,21 @@ def get_main_agent_runtime() -> MainAgentRuntime:
 
 @lru_cache
 def get_agent_schedule_repository() -> SQLAlchemyAgentScheduleRepository:
-    """Return the persisted agent schedule repository."""
+    """Return the persisted agent schedule repository.
+
+    Returns:
+        SQLAlchemyAgentScheduleRepository: .
+    """
     return SQLAlchemyAgentScheduleRepository(get_app_container().session_factory)
 
 
 @lru_cache
 def get_agent_chat_repository() -> SQLAlchemyAgentChatRepository:
-    """Return the persisted Agent chat repository."""
+    """Return the persisted Agent chat repository.
+
+    Returns:
+        SQLAlchemyAgentChatRepository: .
+    """
     return SQLAlchemyAgentChatRepository(get_app_container().session_factory)
 
 
@@ -454,12 +506,11 @@ def get_provider_config_health_service(
     """Return provider health service using frozen configs and encrypted secrets.
 
     Args:
-        repository: Strategy config repository for loading frozen provider configs.
-        secret_store: Encrypted secret store for resolving provider credentials.
+        repository: Annotated[SQLAlchemyStrategyRepository, Depends(get_strategy_repository)]: .
+        secret_store: Annotated[SecretStore, Depends(get_secret_store)]: .
 
     Returns:
-        A ProviderConfigHealthService configured with real health adapters and
-        host allowlists.
+        ProviderConfigHealthService: .
     """
     settings = get_settings()
     return ProviderConfigHealthService(
@@ -483,30 +534,46 @@ def get_provider_config_health_service(
 
 
 def _build_provider_health_adapters() -> dict[str, HealthCheckCallable]:
-    """Build real read-only provider health adapters keyed by config name."""
+    """Build real read-only provider health adapters keyed by config name.
+
+    Returns:
+        dict[str, HealthCheckCallable]: .
+    """
 
     def tushare_health(config, secret: str) -> None:
         """Run a read-only Tushare health check and raise on degraded status.
 
         Args:
-            config: Frozen provider config containing the base URL.
-            secret: Resolved Tushare API token.
+            config: Any: .
+            secret: str: .
+
+        Returns:
+            None: .
         """
         endpoint = config.base_url or config.non_sensitive_config.get("http_url")
-        _require_healthy(
-            TushareProvider(token=secret, http_url=endpoint).healthcheck()
-        )
+        _require_healthy(TushareProvider(token=secret, http_url=endpoint).healthcheck())
 
     def akshare_health(_config, _secret: str) -> None:
-        """Run a read-only AKShare health check and raise on degraded status."""
+        """Run a read-only AKShare health check and raise on degraded status.
+
+        Args:
+            _config: Any: .
+            _secret: str: .
+
+        Returns:
+            None: .
+        """
         _require_healthy(AKShareProvider().healthcheck())
 
     def tavily_health(config, secret: str) -> None:
         """Run a read-only Tavily health check and raise on degraded status.
 
         Args:
-            config: Frozen provider config containing an optional base URL.
-            secret: Resolved Tavily API key.
+            config: Any: .
+            secret: str: .
+
+        Returns:
+            None: .
         """
         kwargs: dict[str, Any] = {"api_key": secret}
         if config.base_url:
@@ -517,8 +584,11 @@ def _build_provider_health_adapters() -> dict[str, HealthCheckCallable]:
         """Run a read-only LLM health check and raise on degraded status.
 
         Args:
-            config: Frozen provider config containing the base URL and model.
-            secret: Resolved LLM API key.
+            config: Any: .
+            secret: str: .
+
+        Returns:
+            None: .
         """
         _require_healthy(
             LLMProvider(
@@ -532,13 +602,13 @@ def _build_provider_health_adapters() -> dict[str, HealthCheckCallable]:
         """Run a read-only embedding health check and raise on degraded status.
 
         Args:
-            config: Frozen provider config containing the base URL, model,
-                and dimension.
-            secret: Resolved embedding API key.
+            config: Any: .
+            secret: str: .
+
+        Returns:
+            None: .
         """
-        dimension = int(
-            config.non_sensitive_config.get("dimension", 1536)
-        )
+        dimension = int(config.non_sensitive_config.get("dimension", 1536))
         _require_healthy(
             OpenAIEmbeddingProvider(
                 api_key=secret,
@@ -552,8 +622,11 @@ def _build_provider_health_adapters() -> dict[str, HealthCheckCallable]:
         """Run a read-only rerank health check and raise on degraded status.
 
         Args:
-            config: Frozen provider config containing the base URL and model.
-            secret: Resolved rerank API key.
+            config: Any: .
+            secret: str: .
+
+        Returns:
+            None: .
         """
         _require_healthy(
             HTTPRerankProvider(
@@ -578,11 +651,16 @@ def _build_provider_health_adapters() -> dict[str, HealthCheckCallable]:
 
 
 def _require_healthy(result: HealthCheckResult) -> None:
-    """require healthy."""
+    """require healthy.
+
+    Args:
+        result: HealthCheckResult: .
+
+    Returns:
+        None: .
+    """
     if result.status is not ProviderStatus.HEALTHY:
-        raise RuntimeError(
-            result.message or f"provider health status: {result.status.value}"
-        )
+        raise RuntimeError(result.message or f"provider health status: {result.status.value}")
 
 
 def require_local_admin(
@@ -593,11 +671,11 @@ def require_local_admin(
 ) -> str:
     """Resolve the local personal-mode actor for mutating API calls.
 
-    Development/test runs as a personal local workspace. Production requires a
-    configured bearer token so mutating endpoints are not publicly writable.
+    Args:
+        authorization: Annotated[str | None, Header(alias='Authorization')]: .
 
     Returns:
-        The string ``"local-admin"`` for audit attribution.
+        str: .
     """
     settings = get_settings()
     if settings.environment == "production":
@@ -623,13 +701,10 @@ def require_idempotency_key(
     """Require a non-empty idempotency key for a mutating request.
 
     Args:
-        idempotency_key: Value of the Idempotency-Key header.
+        idempotency_key: Annotated[str | None, Header(alias='Idempotency-Key')]: .
 
     Returns:
-        The stripped idempotency key string.
-
-    Raises:
-        HTTPException: 400 when the header is missing or empty.
+        str: .
     """
     if idempotency_key is None or not idempotency_key.strip():
         raise HTTPException(
@@ -643,12 +718,8 @@ def require_idempotency_key(
 def get_valuation_discovery_service() -> ValuationDiscoveryService:
     """Return the production valuation discovery service.
 
-    Builds the full orchestration pipeline from active versioned Provider
-    configurations. Missing mandatory Provider versions fail closed.
-
     Returns:
-        ValuationDiscoveryService: A cached service ready for dependency
-    injection.
+        ValuationDiscoveryService: .
     """
     settings = get_settings()
     container = get_app_container()
@@ -678,9 +749,7 @@ def get_valuation_discovery_service() -> ValuationDiscoveryService:
     )
     quant_repository = SQLAlchemyQuantRepository(
         session_factory,
-        cross_section_loader=build_feature_mart_cross_section_loader(
-            analysis_mart_repository
-        ),
+        cross_section_loader=build_feature_mart_cross_section_loader(analysis_mart_repository),
     )
     quant_service = QuantService(repository=quant_repository)
     quant_adapter = QuantAdapter(
@@ -730,9 +799,7 @@ def get_valuation_discovery_service() -> ValuationDiscoveryService:
     evidence_repository = EvidenceRepository(session_factory)
     research_context_builder = ResearchContextBuilderAdapter(
         session_factory,
-        news_bundle_builder=NewsContextBundleBuilder(
-            NewsRepository(session_factory)
-        ),
+        news_bundle_builder=NewsContextBundleBuilder(NewsRepository(session_factory)),
         retrieval_tool=RetrievalTool(
             PersistentEmbeddingPipeline(
                 embedding_provider=embedding_provider,
@@ -784,10 +851,7 @@ def get_valuation_discovery_service_for_api() -> ValuationDiscoveryService:
     """Return valuation discovery service or a typed API configuration error.
 
     Returns:
-        The cached ValuationDiscoveryService instance.
-
-    Raises:
-        HTTPException: 503 when a runtime provider configuration gap is detected.
+        ValuationDiscoveryService: .
     """
     try:
         return get_valuation_discovery_service()
@@ -805,7 +869,14 @@ def get_valuation_discovery_service_for_api() -> ValuationDiscoveryService:
 
 
 def _is_runtime_configuration_error(message: str) -> bool:
-    """Return true for expected runtime provider configuration gaps."""
+    """Return true for expected runtime provider configuration gaps.
+
+    Args:
+        message: str: .
+
+    Returns:
+        bool: .
+    """
     return any(
         marker in message
         for marker in (
@@ -823,7 +894,7 @@ def get_valuation_discovery_step_worker() -> ValuationDiscoveryStepWorker:
     """Return the background worker for durable valuation-discovery steps.
 
     Returns:
-        A cached ValuationDiscoveryStepWorker instance.
+        ValuationDiscoveryStepWorker: .
     """
     service = get_valuation_discovery_service()
     return service.create_step_worker(
@@ -835,8 +906,8 @@ def get_valuation_discovery_step_worker() -> ValuationDiscoveryStepWorker:
 def get_company_profile_service() -> CompanyProfileService:
     """Return a cached company profile service for quant/analysis visualization.
 
-    Builds standalone SQLAlchemy repositories sharing the same engine as the
-    valuation discovery service. Read-only: no orchestrator dependencies.
+    Returns:
+        CompanyProfileService: .
     """
     session_factory = get_app_container().session_factory
     quant_repository = SQLAlchemyQuantRepository(
@@ -861,11 +932,12 @@ def _build_news_refresh_adapter(
     """Build news refresh from the active frozen WebSearch configuration.
 
     Args:
-        settings: Application settings.
-        session_factory: SQLAlchemy session factory.
+        settings: MarginSettings: .
+        session_factory: Any: .
+        runtime_factory: ProviderRuntimeFactory: .
 
     Returns:
-        A configured ``NewsRefreshAdapter``.
+        NewsRefreshAdapter: .
     """
     tavily_adapter = runtime_factory.build_websearch().adapter
     repository = NewsRepository(session_factory)
@@ -886,9 +958,7 @@ def _build_news_refresh_adapter(
     websearch_service = WebSearchService(
         provider=provider,
         registry=registry,
-        snapshot_store=SnapshotStore(
-            base_dir=settings.data_snapshot_root.parent / "news"
-        ),
+        snapshot_store=SnapshotStore(base_dir=settings.data_snapshot_root.parent / "news"),
         repository=repository,
     )
     refresh_service = NewsRefreshService(
@@ -908,11 +978,12 @@ def _build_indexing_runner(
     """Build a document indexing runner for the orchestrator.
 
     Args:
-        settings: Application settings.
-        session_factory: SQLAlchemy session factory.
+        settings: MarginSettings: .
+        session_factory: Any: .
+        runtime_factory: ProviderRuntimeFactory: .
 
     Returns:
-        A ``DocumentIndexingRunner`` wired with a real active embedding Provider.
+        DocumentIndexingRunner: .
     """
     embedding_provider = runtime_factory.build_embedding().adapter
     return DocumentIndexingRunner(
@@ -933,10 +1004,11 @@ def _build_research_service(
     """Build a research service for AI delta review.
 
     Args:
-        session_factory: SQLAlchemy session factory.
+        session_factory: Any: .
+        runtime_factory: ProviderRuntimeFactory: .
 
     Returns:
-        A ``ResearchService`` with configured LLM and graph audit repositories.
+        ResearchService: .
     """
     llm_provider = runtime_factory.build_llm().adapter
     embedding_provider = runtime_factory.build_embedding().adapter
@@ -948,12 +1020,8 @@ def _build_research_service(
     return ResearchService(
         llm_provider=llm_provider,
         session_factory=session_factory,
-        v02_llm_audit_repository=SQLAlchemyLLMCallAuditRepository(
-            session_factory
-        ),
-        v02_tool_audit_repository=SQLAlchemyToolCallAuditRepository(
-            session_factory
-        ),
+        v02_llm_audit_repository=SQLAlchemyLLMCallAuditRepository(session_factory),
+        v02_tool_audit_repository=SQLAlchemyToolCallAuditRepository(session_factory),
         rag_retrieval_tool=RetrievalTool(
             PersistentEmbeddingPipeline(
                 embedding_provider=embedding_provider,
@@ -971,8 +1039,8 @@ def _build_research_service(
 def get_news_service() -> NewsService:
     """Return production target-driven news refresh service.
 
-    The dependency fails closed if Tavily/WebSearch credentials are absent; it does not
-    silently accept refresh requests without an external provider.
+    Returns:
+        NewsService: .
     """
     settings = get_settings()
     try:
@@ -1016,7 +1084,8 @@ def get_news_service() -> NewsService:
 def get_agentic_news_service() -> AgenticNewsAcquisitionService:
     """Return production agentic news acquisition service.
 
-    The dependency fails closed when active LLM or WebSearch providers are not available.
+    Returns:
+        AgenticNewsAcquisitionService: .
     """
     settings = get_settings()
     try:
@@ -1061,9 +1130,11 @@ def get_agentic_news_service() -> AgenticNewsAcquisitionService:
 def _build_agentic_news_providers(_settings: MarginSettings) -> tuple[Any, Any]:
     """Build LLM and WebSearch providers for agentic news.
 
-    Provider credentials must come from active encrypted Provider configuration.
-    Direct environment fallbacks are intentionally disabled so personal mode has
-    one source of truth.
+    Args:
+        _settings: MarginSettings: .
+
+    Returns:
+        tuple[Any, Any]: .
     """
     try:
         runtime_factory = get_provider_runtime_factory()
@@ -1072,19 +1143,17 @@ def _build_agentic_news_providers(_settings: MarginSettings) -> tuple[Any, Any]:
             runtime_factory.build_websearch().adapter,
         )
     except (LookupError, RuntimeError, ValueError) as exc:
-        raise RuntimeError(
-            "active LLM or websearch provider is not available"
-        ) from exc
+        raise RuntimeError("active LLM or websearch provider is not available") from exc
 
 
 def _build_agentic_news_llm_service(llm_provider: Any) -> LLMService:
     """Build the LLM service for agentic news.
 
-    Agentic news uses ``NewsAgentRun`` IDs rather than ``ai_graph_runs`` IDs, so
-    the LangGraph SQL audit repository would violate its graph-run foreign key.
-    The news layer persists prompt/response hashes on its own run/plan/finding
-    tables; keep LLM call audit in memory until a news-specific LLM audit table
-    is introduced.
+    Args:
+        llm_provider: Any: .
+
+    Returns:
+        LLMService: .
     """
     return LLMService(llm_provider)
 
@@ -1094,7 +1163,7 @@ def get_data_warehouse_stack() -> DataWarehouseIngestionStack:
     """Return the production data warehouse ingestion stack.
 
     Returns:
-        A cached DataWarehouseIngestionStack built from production settings.
+        DataWarehouseIngestionStack: .
     """
     return build_data_warehouse_stack(
         get_settings(),
@@ -1103,7 +1172,11 @@ def get_data_warehouse_stack() -> DataWarehouseIngestionStack:
 
 
 def _default_market_data_provider() -> str:
-    """Resolve the default data-sync provider by runtime capability."""
+    """Resolve the default data-sync provider by runtime capability.
+
+    Returns:
+        str: .
+    """
     runtime_factory = get_provider_runtime_factory()
     try:
         return runtime_factory.build_market_data(
@@ -1121,12 +1194,10 @@ def get_data_policy_service() -> DataAcquisitionPolicyService:
     """Return the PostgreSQL-backed rolling-window policy service.
 
     Returns:
-        A cached DataAcquisitionPolicyService instance.
+        DataAcquisitionPolicyService: .
     """
     container = get_app_container()
-    repository = SQLAlchemyDataAcquisitionPolicyRepository(
-        container.session_factory
-    )
+    repository = SQLAlchemyDataAcquisitionPolicyRepository(container.session_factory)
     return DataAcquisitionPolicyService(repository)
 
 
@@ -1135,8 +1206,7 @@ def get_dashboard_services() -> DashboardServiceBundle:
     """Return production dashboard services backed by PostgreSQL.
 
     Returns:
-        A cached DashboardServiceBundle wired with PostgreSQL repositories and
-        provider status probes.
+        DashboardServiceBundle: .
     """
     container = get_app_container()
     session_factory = container.session_factory
@@ -1166,12 +1236,20 @@ def get_dashboard_services() -> DashboardServiceBundle:
 def _build_dashboard_quant_profile_loader() -> Callable[[str], dict[str, Any] | None]:
     """Return a callable that loads a quant profile dict for a security id.
 
-    Used by the dashboard item detail to surface five-factor scores. Returns
-    None when no profile exists so the detail page degrades gracefully.
+    Returns:
+        Callable[[str], dict[str, Any] | None]: .
     """
     profile_service = get_company_profile_service()
 
     def loader(security_id: str) -> dict[str, Any] | None:
+        """Process loader.
+
+        Args:
+            security_id: str: .
+
+        Returns:
+            dict[str, Any] | None: .
+        """
         profile = profile_service.get_quant_profile(security_id)
         if profile is None:
             return None
@@ -1199,7 +1277,11 @@ def _build_dashboard_quant_profile_loader() -> Callable[[str], dict[str, Any] | 
 
 
 def clear_provider_runtime_caches() -> None:
-    """Clear cached services that bind active Provider runtime adapters."""
+    """Clear cached services that bind active Provider runtime adapters.
+
+    Returns:
+        None: .
+    """
     get_app_container.cache_clear()
     get_provider_runtime_factory.cache_clear()
     get_news_service.cache_clear()

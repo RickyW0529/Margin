@@ -17,19 +17,28 @@ from margin.news.models import (
 
 
 class FakeLLMService:
-    """Small fake structured LLM service keyed by prompt node name."""
+    """Small fake structured LLM service keyed by prompt node name.."""
 
     def __init__(self, responses: dict[str, list[dict[str, Any]]]) -> None:
         """Initialize the fake LLM service with queued structured responses.
 
         Args:
-            responses: Mapping from prompt node name to a list of output dicts
-                consumed in order by ``complete_structured``.
+            responses: dict[str, list[dict[str, Any]]]: .
+
+        Returns:
+            None: .
         """
         self.responses = {key: list(value) for key, value in responses.items()}
 
     def complete_structured(self, **kwargs: Any) -> SimpleNamespace:
-        """Return the next configured response for the prompt node."""
+        """Return the next configured response for the prompt node.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            SimpleNamespace: .
+        """
         prompt = kwargs["prompt"]
         output = self.responses[prompt.node_name].pop(0)
         return SimpleNamespace(
@@ -44,7 +53,11 @@ class FakeLLMService:
 
 
 def test_article_workflow_returns_only_reviewed_finding() -> None:
-    """Approved article drafts become event-bound findings."""
+    """Approved article drafts become event-bound findings.
+
+    Returns:
+        None: .
+    """
     workflow = ArticleWorkflow(
         llm_service=FakeLLMService(
             {
@@ -81,7 +94,11 @@ def test_article_workflow_returns_only_reviewed_finding() -> None:
 
 
 def test_article_workflow_drops_repeatedly_rejected_finding() -> None:
-    """Repeated writing-review rejection yields no approved finding."""
+    """Repeated writing-review rejection yields no approved finding.
+
+    Returns:
+        None: .
+    """
     workflow = ArticleWorkflow(
         llm_service=FakeLLMService(
             {
@@ -116,7 +133,11 @@ def test_article_workflow_drops_repeatedly_rejected_finding() -> None:
 
 
 def test_article_workflow_repairs_invalid_local_citation_span() -> None:
-    """LLM-approved drafts must still pass deterministic citation-span checks."""
+    """LLM-approved drafts must still pass deterministic citation-span checks.
+
+    Returns:
+        None: .
+    """
     workflow = ArticleWorkflow(
         llm_service=FakeLLMService(
             {
@@ -148,13 +169,15 @@ def test_article_workflow_repairs_invalid_local_citation_span() -> None:
     )
 
     assert len(findings) == 1
-    assert findings[0].cited_spans == (
-        {"start": 0, "end": 10, "text": "公告披露经营情况改善"},
-    )
+    assert findings[0].cited_spans == ({"start": 0, "end": 10, "text": "公告披露经营情况改善"},)
 
 
 def test_article_workflow_builds_derived_brief_from_approved_findings() -> None:
-    """Briefs are derived and retain finding/source references."""
+    """Briefs are derived and retain finding/source references.
+
+    Returns:
+        None: .
+    """
     workflow = ArticleWorkflow(
         llm_service=FakeLLMService(
             {
@@ -192,7 +215,11 @@ def test_article_workflow_builds_derived_brief_from_approved_findings() -> None:
 
 
 def _target() -> NewsTarget:
-    """Return one quant PASS target."""
+    """Return one quant PASS target.
+
+    Returns:
+        NewsTarget: .
+    """
     return NewsTarget(
         scope_version_id="scope_v1",
         quant_run_id="qr_test",
@@ -206,7 +233,11 @@ def _target() -> NewsTarget:
 
 
 def _event():
-    """Return one persisted-style document event."""
+    """Return one persisted-style document event.
+
+    Returns:
+        Any: .
+    """
     return make_document_event(
         source_url="https://example.com/article",
         source_name="websearch",

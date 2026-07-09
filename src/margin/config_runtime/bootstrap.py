@@ -19,7 +19,7 @@ DEFAULT_VALID_FROM = datetime(2020, 1, 1, tzinfo=UTC)
 
 
 class RuntimeConfigBootstrapService:
-    """Seed runtime config domain tables without overwriting active user versions."""
+    """Seed runtime config domain tables without overwriting active user versions.."""
 
     def __init__(
         self,
@@ -27,17 +27,34 @@ class RuntimeConfigBootstrapService:
         admin_service: ConfigAdminService,
         resolver: ConfigResolver,
     ) -> None:
-        """Initialize the bootstrap service."""
+        """Initialize the bootstrap service.
+
+        Args:
+            admin_service: ConfigAdminService: .
+            resolver: ConfigResolver: .
+
+        Returns:
+            None: .
+        """
         self._admin = admin_service
         self._resolver = resolver
 
     def ensure_defaults(self) -> tuple[str, str]:
-        """Ensure active defaults for Agent flow and QuantAgent profile."""
+        """Ensure active defaults for Agent flow and QuantAgent profile.
+
+        Returns:
+            tuple[str, str]: .
+        """
         flow_version_id = self._ensure_agent_flow()
         profile_version_id = self._ensure_quant_profile()
         return flow_version_id, profile_version_id
 
     def _ensure_agent_flow(self) -> str:
+        """Process _ensure_agent_flow.
+
+        Returns:
+            str: .
+        """
         try:
             resolved = self._resolver.resolve_agent_flow(
                 flow_id="scheduled_stock_analysis",
@@ -59,6 +76,11 @@ class RuntimeConfigBootstrapService:
             return version.version_id
 
     def _ensure_quant_profile(self) -> str:
+        """Process _ensure_quant_profile.
+
+        Returns:
+            str: .
+        """
         try:
             resolved = self._resolver.resolve_quant_agent_profile(
                 profile_key=SCHEDULED_QUANT_PROFILE_KEY,

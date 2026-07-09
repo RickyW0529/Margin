@@ -14,7 +14,7 @@ def test_sandbox_flags_missing_evidence():
     """Verify the sandbox flags a config with insufficient evidence requirements.
 
     Returns:
-        None.
+        Any: .
     """
     result = StrategySandbox().evaluate(StrategyConfig(evidence={"min_evidence_count": 0}))
     assert not result.validation_ok
@@ -24,7 +24,7 @@ def test_sandbox_passes_valid_config():
     """Verify the sandbox passes a valid default strategy configuration.
 
     Returns:
-        None.
+        Any: .
     """
     result = StrategySandbox().evaluate(StrategyConfig())
     assert result.validation_ok
@@ -36,7 +36,7 @@ def test_sandbox_fails_empty_universe():
     """Verify the sandbox fails a config with an empty universe.
 
     Returns:
-        None.
+        Any: .
     """
     result = StrategySandbox().evaluate(StrategyConfig(universe=[]))
     assert not result.validation_ok

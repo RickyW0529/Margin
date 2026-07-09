@@ -14,6 +14,11 @@ from margin.research.llm import DeterministicLLMProvider
 
 
 def _runtime() -> MainAgentRuntime:
+    """Helper runtime.
+
+    Returns:
+        MainAgentRuntime: .
+    """
     return MainAgentRuntime(
         context_store=MemoryAgentContextStore(),
         card_registry=default_agent_card_registry(),
@@ -22,6 +27,11 @@ def _runtime() -> MainAgentRuntime:
 
 
 def test_create_scheduled_plan_uses_fixed_json_steps() -> None:
+    """Test create_scheduled_plan_uses_fixed_json_steps.
+
+    Returns:
+        None: .
+    """
     result = _runtime().create_scheduled_stock_analysis_plan(
         run_id="ar_sched",
         user_intent_summary="daily scheduled research",
@@ -45,6 +55,11 @@ def test_create_scheduled_plan_uses_fixed_json_steps() -> None:
 
 
 def test_create_scheduled_plan_blocks_guaranteed_return_intent() -> None:
+    """Test create_scheduled_plan_blocks_guaranteed_return_intent.
+
+    Returns:
+        None: .
+    """
     result = _runtime().create_scheduled_stock_analysis_plan(
         run_id="ar_sched_blocked",
         user_intent_summary="每天推荐保证收益的股票",
@@ -55,6 +70,11 @@ def test_create_scheduled_plan_blocks_guaranteed_return_intent() -> None:
 
 
 def test_final_review_blocks_when_required_artifacts_missing() -> None:
+    """Test final_review_blocks_when_required_artifacts_missing.
+
+    Returns:
+        None: .
+    """
     runtime = _runtime()
     planned = runtime.create_scheduled_stock_analysis_plan(
         run_id="ar_sched_review",
@@ -68,6 +88,11 @@ def test_final_review_blocks_when_required_artifacts_missing() -> None:
 
 
 def test_final_review_completes_when_required_artifacts_exist() -> None:
+    """Test final_review_completes_when_required_artifacts_exist.
+
+    Returns:
+        None: .
+    """
     context_store = MemoryAgentContextStore()
     runtime = MainAgentRuntime(
         context_store=context_store,
@@ -110,6 +135,11 @@ def test_final_review_completes_when_required_artifacts_exist() -> None:
 
 
 def test_create_user_qna_plan_hides_sandbox_without_executor() -> None:
+    """Test create_user_qna_plan_hides_sandbox_without_executor.
+
+    Returns:
+        None: .
+    """
     provider = DeterministicLLMProvider(
         response={
             "plan_id": "plan_ar_qna_visual",
@@ -147,6 +177,11 @@ def test_create_user_qna_plan_hides_sandbox_without_executor() -> None:
 
 
 def test_create_user_qna_plan_uses_llm_card_selection_for_greeting() -> None:
+    """Test create_user_qna_plan_uses_llm_card_selection_for_greeting.
+
+    Returns:
+        None: .
+    """
     provider = DeterministicLLMProvider(
         response={
             "plan_id": "plan_ar_qna_greeting",
@@ -180,6 +215,11 @@ def test_create_user_qna_plan_uses_llm_card_selection_for_greeting() -> None:
 
 
 def test_create_user_qna_plan_rejects_llm_selected_write_agents() -> None:
+    """Test create_user_qna_plan_rejects_llm_selected_write_agents.
+
+    Returns:
+        None: .
+    """
     provider = DeterministicLLMProvider(
         response={
             "plan_id": "plan_ar_qna_bad",
@@ -211,6 +251,11 @@ def test_create_user_qna_plan_rejects_llm_selected_write_agents() -> None:
 
 
 def test_create_user_qna_plan_can_use_sandbox_after_executor_registration() -> None:
+    """Test create_user_qna_plan_can_use_sandbox_after_executor_registration.
+
+    Returns:
+        None: .
+    """
     provider = DeterministicLLMProvider(
         response={
             "plan_id": "plan_ar_qna_visual",
@@ -254,6 +299,11 @@ def test_create_user_qna_plan_can_use_sandbox_after_executor_registration() -> N
 
 
 def test_create_user_qna_plan_fails_when_llm_planner_unavailable() -> None:
+    """Test create_user_qna_plan_fails_when_llm_planner_unavailable.
+
+    Returns:
+        None: .
+    """
     provider = DeterministicLLMProvider(fail=True, error="planner down")
     runtime = MainAgentRuntime(
         context_store=MemoryAgentContextStore(),
@@ -270,6 +320,11 @@ def test_create_user_qna_plan_fails_when_llm_planner_unavailable() -> None:
 
 
 def test_create_user_qna_plan_blocks_guaranteed_return_question() -> None:
+    """Test create_user_qna_plan_blocks_guaranteed_return_question.
+
+    Returns:
+        None: .
+    """
     result = _runtime().create_user_qna_plan(
         run_id="ar_qna_blocked",
         user_input="今天推荐哪只股票可以保证收益？",

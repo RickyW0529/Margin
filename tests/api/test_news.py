@@ -17,7 +17,14 @@ from margin.settings import get_settings
 def test_news_refresh_status_returns_reconciliation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test that news refresh status returns reconciliation details."""
+    """Test that news refresh status returns reconciliation details.
+
+    Args:
+        monkeypatch: pytest.MonkeyPatch: .
+
+    Returns:
+        None: .
+    """
     get_settings.cache_clear()
     client = TestClient(create_app(news_service=_FakeNewsService()))
 
@@ -32,7 +39,14 @@ def test_news_refresh_status_returns_reconciliation(
 def test_news_refresh_submit_returns_accepted_run_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test that news refresh submit returns an accepted run id."""
+    """Test that news refresh submit returns an accepted run id.
+
+    Args:
+        monkeypatch: pytest.MonkeyPatch: .
+
+    Returns:
+        None: .
+    """
     get_settings.cache_clear()
     service = _FakeNewsService()
     client = TestClient(create_app(news_service=service))
@@ -65,12 +79,19 @@ def test_news_refresh_submit_returns_accepted_run_id(
 
 @dataclass
 class _FakeNewsService:
-    """Fake news service stub used by the API tests."""
+    """Fake news service stub used by the API tests.."""
 
     received_target_count: int = 0
 
     def start_refresh(self, **kwargs: object) -> NewsRefreshRun:
-        """Capture the refresh request and return a completed run."""
+        """Capture the refresh request and return a completed run.
+
+        Args:
+            **kwargs: object: .
+
+        Returns:
+            NewsRefreshRun: .
+        """
         targets = kwargs["targets"]
         self.received_target_count = len(targets)  # type: ignore[arg-type]
         return NewsRefreshRun(
@@ -84,7 +105,14 @@ class _FakeNewsService:
         )
 
     def get_run_status(self, run_id: str) -> NewsRunStatus:
-        """Return a fake completed run status for the given run id."""
+        """Return a fake completed run status for the given run id.
+
+        Args:
+            run_id: str: .
+
+        Returns:
+            NewsRunStatus: .
+        """
         return NewsRunStatus(
             run_id=run_id,
             status="completed",

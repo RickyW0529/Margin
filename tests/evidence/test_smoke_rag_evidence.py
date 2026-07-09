@@ -21,7 +21,10 @@ def test_rag_evidence_smoke_is_idempotent_and_outputs_only_contract_fields(
     """Test that the RAG evidence smoke script is idempotent and outputs only contract fields.
 
     Args:
-        database_url: Connection string for the PostgreSQL test server.
+        database_url: str: .
+
+    Returns:
+        None: .
     """
     url = make_url(database_url)
     database_name = f"{url.database}_rag_smoke"
@@ -31,9 +34,7 @@ def test_rag_evidence_smoke_is_idempotent_and_outputs_only_contract_fields(
         drop_existing=True,
         keep_database=True,
     )
-    smoke_database_url = url.set(database=database_name).render_as_string(
-        hide_password=False
-    )
+    smoke_database_url = url.set(database=database_name).render_as_string(hide_password=False)
     command = [
         sys.executable,
         "scripts/smoke_rag_evidence.py",
@@ -75,7 +76,14 @@ def test_rag_evidence_smoke_is_idempotent_and_outputs_only_contract_fields(
 
 
 def _run(command: list[str]) -> subprocess.CompletedProcess[str]:
-    """Run a subprocess command and capture its output."""
+    """Run a subprocess command and capture its output.
+
+    Args:
+        command: list[str]: .
+
+    Returns:
+        subprocess.CompletedProcess[str]: .
+    """
     return subprocess.run(
         command,
         cwd=Path(__file__).resolve().parents[2],

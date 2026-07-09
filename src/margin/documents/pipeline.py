@@ -19,7 +19,7 @@ from margin.documents.markdown import DoclingMarkdownConverter, MarkdownConversi
 
 
 class IssueSeverity(StrEnum):
-    """Severity of a document normalization issue."""
+    """Severity of a document normalization issue.."""
 
     INFO = "info"
     WARNING = "warning"
@@ -27,7 +27,7 @@ class IssueSeverity(StrEnum):
 
 
 class VerificationLevel(StrEnum):
-    """Level reached by document verification."""
+    """Level reached by document verification.."""
 
     TEXT_VERIFIED = "text_verified"
     VISUAL_VERIFIED = "visual_verified"
@@ -35,7 +35,7 @@ class VerificationLevel(StrEnum):
 
 
 class VisualVerificationStatus(StrEnum):
-    """Status of optional screenshot/page-image verification."""
+    """Status of optional screenshot/page-image verification.."""
 
     PASSED = "passed"
     FAILED = "failed"
@@ -44,7 +44,7 @@ class VisualVerificationStatus(StrEnum):
 
 
 class DocumentPipelineRequest(BaseModel):
-    """Input payload for the full document normalization pipeline."""
+    """Input payload for the full document normalization pipeline.."""
 
     document_id: str
     content: bytes
@@ -56,7 +56,7 @@ class DocumentPipelineRequest(BaseModel):
 
 
 class DocumentIssue(BaseModel):
-    """Issue found by the review agent."""
+    """Issue found by the review agent.."""
 
     issue_id: str
     kind: str
@@ -69,7 +69,7 @@ class DocumentIssue(BaseModel):
 
 
 class DocumentPatch(BaseModel):
-    """Local repair patch tied to a specific reviewed issue."""
+    """Local repair patch tied to a specific reviewed issue.."""
 
     issue_id: str
     span_start: int
@@ -82,7 +82,7 @@ class DocumentPatch(BaseModel):
 
 
 class TextVerificationResult(BaseModel):
-    """Text-only verification result."""
+    """Text-only verification result.."""
 
     passed: bool
     notes: tuple[str, ...] = Field(default_factory=tuple)
@@ -91,14 +91,18 @@ class TextVerificationResult(BaseModel):
 
 
 class VisualVerificationResult(BaseModel):
-    """Optional multimodal screenshot/page-image verification result."""
+    """Optional multimodal screenshot/page-image verification result.."""
 
     status: VisualVerificationStatus
     notes: tuple[str, ...] = Field(default_factory=tuple)
 
     @property
     def passed(self) -> bool:
-        """Return whether visual verification succeeded or was safely skipped."""
+        """Return whether visual verification succeeded or was safely skipped.
+
+        Returns:
+            bool: .
+        """
         return self.status in {
             VisualVerificationStatus.PASSED,
             VisualVerificationStatus.SKIPPED_NO_MULTIMODAL_MODEL,
@@ -109,7 +113,7 @@ class VisualVerificationResult(BaseModel):
 
 
 class RagChunk(BaseModel):
-    """Small RAG-ready chunk produced from final Markdown."""
+    """Small RAG-ready chunk produced from final Markdown.."""
 
     chunk_id: str
     document_id: str
@@ -122,7 +126,7 @@ class RagChunk(BaseModel):
 
 
 class DocumentPipelineAudit(BaseModel):
-    """Audit details for review, repair, and verification."""
+    """Audit details for review, repair, and verification.."""
 
     issues: tuple[DocumentIssue, ...] = Field(default_factory=tuple)
     patches: tuple[DocumentPatch, ...] = Field(default_factory=tuple)
@@ -139,7 +143,7 @@ class DocumentPipelineAudit(BaseModel):
 
 
 class DocumentPipelineResult(BaseModel):
-    """Final normalized document artifacts."""
+    """Final normalized document artifacts.."""
 
     document_id: str
     conversion: MarkdownConversionResult
@@ -151,28 +155,47 @@ class DocumentPipelineResult(BaseModel):
 
     @property
     def visual_verification(self) -> VisualVerificationResult:
-        """Return optional visual verification details."""
+        """Return optional visual verification details.
+
+        Returns:
+            VisualVerificationResult: .
+        """
         return self.audit.visual_verification
 
     model_config = {"frozen": True}
 
 
 class DocumentReviewAgent(Protocol):
-    """Review agent protocol."""
+    """Review agent protocol.."""
 
     def review(self, conversion: MarkdownConversionResult) -> tuple[DocumentIssue, ...]:
-        """Return issues in converted Markdown."""
+        """Return issues in converted Markdown.
+
+        Args:
+            conversion: MarkdownConversionResult: .
+
+        Returns:
+            tuple[DocumentIssue, ...]: .
+        """
 
 
 class DocumentRepairAgent(Protocol):
-    """Repair agent protocol."""
+    """Repair agent protocol.."""
 
     def repair(self, markdown: str, issues: tuple[DocumentIssue, ...]) -> tuple[DocumentPatch, ...]:
-        """Return local patches for reviewed issues."""
+        """Return local patches for reviewed issues.
+
+        Args:
+            markdown: str: .
+            issues: tuple[DocumentIssue, ...]: .
+
+        Returns:
+            tuple[DocumentPatch, ...]: .
+        """
 
 
 class DocumentVerifierAgent(Protocol):
-    """Verifier protocol with optional multimodal support."""
+    """Verifier protocol with optional multimodal support.."""
 
     supports_multimodal: bool
 
@@ -185,7 +208,18 @@ class DocumentVerifierAgent(Protocol):
         patches: tuple[DocumentPatch, ...],
         tables: tuple[dict[str, Any], ...],
     ) -> TextVerificationResult:
-        """Verify repaired Markdown with text-only artifacts."""
+        """Verify repaired Markdown with text-only artifacts.
+
+        Args:
+            raw_markdown: str: .
+            final_markdown: str: .
+            issues: tuple[DocumentIssue, ...]: .
+            patches: tuple[DocumentPatch, ...]: .
+            tables: tuple[dict[str, Any], ...]: .
+
+        Returns:
+            TextVerificationResult: .
+        """
 
     def verify_visual(
         self,
@@ -194,21 +228,44 @@ class DocumentVerifierAgent(Protocol):
         page_images: tuple[str, ...],
         json_document: dict[str, Any],
     ) -> VisualVerificationResult:
-        """Verify final Markdown against page images when available."""
+        """Verify final Markdown against page images when available.
+
+        Args:
+            final_markdown: str: .
+            page_images: tuple[str, ...]: .
+            json_document: dict[str, Any]: .
+
+        Returns:
+            VisualVerificationResult: .
+        """
 
 
 class DocumentSlimmingAgent(Protocol):
-    """Final Markdown slimming protocol."""
+    """Final Markdown slimming protocol.."""
 
     def slim(self, markdown: str) -> str:
-        """Remove non-useful formatting noise from verified Markdown."""
+        """Remove non-useful formatting noise from verified Markdown.
+
+        Args:
+            markdown: str: .
+
+        Returns:
+            str: .
+        """
 
 
 class HeuristicReviewAgent:
-    """Deterministic review agent for parser artifacts."""
+    """Deterministic review agent for parser artifacts.."""
 
     def review(self, conversion: MarkdownConversionResult) -> tuple[DocumentIssue, ...]:
-        """Find common Docling/OCR issues without calling an LLM."""
+        """Find common Docling/OCR issues without calling an LLM.
+
+        Args:
+            conversion: MarkdownConversionResult: .
+
+        Returns:
+            tuple[DocumentIssue, ...]: .
+        """
         markdown = conversion.markdown
         issues: list[DocumentIssue] = []
         issue_number = 1
@@ -270,10 +327,18 @@ class HeuristicReviewAgent:
 
 
 class HeuristicRepairAgent:
-    """Deterministic local repair agent."""
+    """Deterministic local repair agent.."""
 
     def repair(self, markdown: str, issues: tuple[DocumentIssue, ...]) -> tuple[DocumentPatch, ...]:
-        """Return issue-scoped patches without rewriting the whole document."""
+        """Return issue-scoped patches without rewriting the whole document.
+
+        Args:
+            markdown: str: .
+            issues: tuple[DocumentIssue, ...]: .
+
+        Returns:
+            tuple[DocumentPatch, ...]: .
+        """
         patches: list[DocumentPatch] = []
         for issue in issues:
             if issue.span_start is None or issue.span_end is None:
@@ -303,7 +368,7 @@ class HeuristicRepairAgent:
 
 
 class HeuristicVerifierAgent:
-    """Text-first verifier that skips visual checks without multimodal support."""
+    """Text-first verifier that skips visual checks without multimodal support.."""
 
     supports_multimodal = False
 
@@ -316,7 +381,18 @@ class HeuristicVerifierAgent:
         patches: tuple[DocumentPatch, ...],
         tables: tuple[dict[str, Any], ...],
     ) -> TextVerificationResult:
-        """Verify patch provenance and basic content integrity."""
+        """Verify patch provenance and basic content integrity.
+
+        Args:
+            raw_markdown: str: .
+            final_markdown: str: .
+            issues: tuple[DocumentIssue, ...]: .
+            patches: tuple[DocumentPatch, ...]: .
+            tables: tuple[dict[str, Any], ...]: .
+
+        Returns:
+            TextVerificationResult: .
+        """
         del issues, tables
         if not final_markdown.strip():
             return TextVerificationResult(passed=False, notes=("final_markdown_empty",))
@@ -340,7 +416,16 @@ class HeuristicVerifierAgent:
         page_images: tuple[str, ...],
         json_document: dict[str, Any],
     ) -> VisualVerificationResult:
-        """Skip visual verification for text-only providers."""
+        """Skip visual verification for text-only providers.
+
+        Args:
+            final_markdown: str: .
+            page_images: tuple[str, ...]: .
+            json_document: dict[str, Any]: .
+
+        Returns:
+            VisualVerificationResult: .
+        """
         del final_markdown, page_images, json_document
         return VisualVerificationResult(
             status=VisualVerificationStatus.SKIPPED_NO_MULTIMODAL_MODEL,
@@ -349,10 +434,17 @@ class HeuristicVerifierAgent:
 
 
 class HeuristicSlimmingAgent:
-    """Final deterministic Markdown slimming."""
+    """Final deterministic Markdown slimming.."""
 
     def slim(self, markdown: str) -> str:
-        """Normalize whitespace while preserving document content."""
+        """Normalize whitespace while preserving document content.
+
+        Args:
+            markdown: str: .
+
+        Returns:
+            str: .
+        """
         lines = [line.rstrip() for line in markdown.splitlines()]
         slimmed = "\n".join(lines)
         slimmed = re.sub(r"\n{3,}", "\n\n", slimmed)
@@ -360,7 +452,7 @@ class HeuristicSlimmingAgent:
 
 
 class DocumentNormalizationPipeline:
-    """Run conversion, review, repair, verification, slimming, and chunking."""
+    """Run conversion, review, repair, verification, slimming, and chunking.."""
 
     def __init__(
         self,
@@ -372,7 +464,19 @@ class DocumentNormalizationPipeline:
         slimmer: DocumentSlimmingAgent | None = None,
         max_chunk_chars: int = 1_200,
     ) -> None:
-        """Initialize the pipeline with replaceable agents."""
+        """Initialize the pipeline with replaceable agents.
+
+        Args:
+            converter: Any | None: .
+            reviewer: DocumentReviewAgent | None: .
+            repairer: DocumentRepairAgent | None: .
+            verifier: DocumentVerifierAgent | None: .
+            slimmer: DocumentSlimmingAgent | None: .
+            max_chunk_chars: int: .
+
+        Returns:
+            None: .
+        """
         self._converter = converter or DoclingMarkdownConverter()
         self._reviewer = reviewer or HeuristicReviewAgent()
         self._repairer = repairer or HeuristicRepairAgent()
@@ -381,7 +485,14 @@ class DocumentNormalizationPipeline:
         self._max_chunk_chars = max_chunk_chars
 
     def normalize(self, request: DocumentPipelineRequest) -> DocumentPipelineResult:
-        """Normalize one source document into final Markdown, JSON, and RAG chunks."""
+        """Normalize one source document into final Markdown, JSON, and RAG chunks.
+
+        Args:
+            request: DocumentPipelineRequest: .
+
+        Returns:
+            DocumentPipelineResult: .
+        """
         conversion = self._converter.convert(
             content=request.content,
             document_id=request.document_id,
@@ -406,9 +517,7 @@ class DocumentNormalizationPipeline:
         )
         verification_level = _verification_level(text_verification, visual_verification)
         final_markdown = (
-            slimmed
-            if verification_level != VerificationLevel.NEEDS_MANUAL_REVIEW
-            else ""
+            slimmed if verification_level != VerificationLevel.NEEDS_MANUAL_REVIEW else ""
         )
         chunks = _make_rag_chunks(
             document_id=request.document_id,
@@ -449,7 +558,15 @@ class DocumentNormalizationPipeline:
         final_markdown: str,
         conversion: MarkdownConversionResult,
     ) -> VisualVerificationResult:
-        """Run visual verification only when the verifier can consume images."""
+        """Run visual verification only when the verifier can consume images.
+
+        Args:
+            final_markdown: str: .
+            conversion: MarkdownConversionResult: .
+
+        Returns:
+            VisualVerificationResult: .
+        """
         if not self._verifier.supports_multimodal:
             return VisualVerificationResult(
                 status=VisualVerificationStatus.SKIPPED_NO_MULTIMODAL_MODEL,
@@ -468,7 +585,15 @@ class DocumentNormalizationPipeline:
 
 
 def _apply_patches(markdown: str, patches: tuple[DocumentPatch, ...]) -> str:
-    """Apply non-overlapping local patches from the end of the document."""
+    """Apply non-overlapping local patches from the end of the document.
+
+    Args:
+        markdown: str: .
+        patches: tuple[DocumentPatch, ...]: .
+
+    Returns:
+        str: .
+    """
     repaired = markdown
     for patch in sorted(patches, key=lambda item: item.span_start, reverse=True):
         repaired = repaired[: patch.span_start] + patch.after + repaired[patch.span_end :]
@@ -479,7 +604,15 @@ def _verification_level(
     text: TextVerificationResult,
     visual: VisualVerificationResult,
 ) -> VerificationLevel:
-    """Resolve the final verification level."""
+    """Resolve the final verification level.
+
+    Args:
+        text: TextVerificationResult: .
+        visual: VisualVerificationResult: .
+
+    Returns:
+        VerificationLevel: .
+    """
     if not text.passed or not visual.passed:
         return VerificationLevel.NEEDS_MANUAL_REVIEW
     if visual.status == VisualVerificationStatus.PASSED:
@@ -493,7 +626,16 @@ def _make_rag_chunks(
     markdown: str,
     max_chunk_chars: int,
 ) -> tuple[RagChunk, ...]:
-    """Split final Markdown into simple paragraph-preserving chunks."""
+    """Split final Markdown into simple paragraph-preserving chunks.
+
+    Args:
+        document_id: str: .
+        markdown: str: .
+        max_chunk_chars: int: .
+
+    Returns:
+        tuple[RagChunk, ...]: .
+    """
     if max_chunk_chars <= 0:
         raise ValueError("max_chunk_chars must be positive")
 
@@ -527,7 +669,15 @@ def _make_rag_chunks(
 
 
 def _split_long_block(block: str, max_chunk_chars: int) -> list[str]:
-    """Split one oversized Markdown block without dropping content."""
+    """Split one oversized Markdown block without dropping content.
+
+    Args:
+        block: str: .
+        max_chunk_chars: int: .
+
+    Returns:
+        list[str]: .
+    """
     if len(block) <= max_chunk_chars:
         return [block]
 
@@ -539,9 +689,7 @@ def _split_long_block(block: str, max_chunk_chars: int) -> list[str]:
     current = ""
     for line in lines:
         line_parts = (
-            _split_text_by_chars(line, max_chunk_chars)
-            if len(line) > max_chunk_chars
-            else [line]
+            _split_text_by_chars(line, max_chunk_chars) if len(line) > max_chunk_chars else [line]
         )
         for line_part in line_parts:
             candidate = f"{current}\n{line_part}" if current else line_part
@@ -557,7 +705,15 @@ def _split_long_block(block: str, max_chunk_chars: int) -> list[str]:
 
 
 def _split_text_by_chars(text: str, max_chunk_chars: int) -> list[str]:
-    """Hard-split an unbroken text span by character count."""
+    """Hard-split an unbroken text span by character count.
+
+    Args:
+        text: str: .
+        max_chunk_chars: int: .
+
+    Returns:
+        list[str]: .
+    """
     return [
         text[start : start + max_chunk_chars]
         for start in range(0, len(text), max_chunk_chars)
@@ -566,18 +722,41 @@ def _split_text_by_chars(text: str, max_chunk_chars: int) -> list[str]:
 
 
 def _rag_chunk_id(document_id: str, content: str, index: int) -> str:
-    """Create a deterministic pipeline chunk ID."""
+    """Create a deterministic pipeline chunk ID.
+
+    Args:
+        document_id: str: .
+        content: str: .
+        index: int: .
+
+    Returns:
+        str: .
+    """
     payload = f"{document_id}|{index}|{content}"
     return "rag_" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
 
 
 def _is_garbled_char(char: str) -> bool:
-    """Return whether a single character is parser/OCR garbage."""
+    """Return whether a single character is parser/OCR garbage.
+
+    Args:
+        char: str: .
+
+    Returns:
+        bool: .
+    """
     return char == "�" or unicodedata.category(char) == "Co"
 
 
 def _repeated_noise_lines(markdown: str) -> tuple[str, ...]:
-    """Return short repeated low-information lines."""
+    """Return short repeated low-information lines.
+
+    Args:
+        markdown: str: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     counts: dict[str, int] = {}
     for line in markdown.splitlines():
         normalized = line.strip()
@@ -590,7 +769,14 @@ def _repeated_noise_lines(markdown: str) -> tuple[str, ...]:
 
 
 def _looks_low_information(line: str) -> bool:
-    """Return whether a repeated line is likely page/header/footer noise."""
+    """Return whether a repeated line is likely page/header/footer noise.
+
+    Args:
+        line: str: .
+
+    Returns:
+        bool: .
+    """
     if re.fullmatch(r"\d{1,6}", line):
         return True
     if len(line) <= 12 and not re.search(r"[\u4e00-\u9fff]{4,}", line):

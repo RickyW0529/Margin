@@ -17,7 +17,7 @@ from margin.research.prompts.models import PromptSection, RenderedPrompt
 
 
 class DeterministicValidation(BaseModel):
-    """Result of mandatory non-LLM node output validation."""
+    """Result of mandatory non-LLM node output validation.."""
 
     valid: bool
     issues: tuple[str, ...] = Field(default_factory=tuple)
@@ -26,7 +26,7 @@ class DeterministicValidation(BaseModel):
 
 
 class OutputValidator(Protocol):
-    """Validator called after every draft or revision."""
+    """Validator called after every draft or revision.."""
 
     def validate(
         self,
@@ -35,18 +35,34 @@ class OutputValidator(Protocol):
         output: dict[str, Any],
         output_schema: dict[str, Any],
     ) -> DeterministicValidation:
-        """Validate one structured node output."""
+        """Validate one structured node output.
+
+        Args:
+            node_name: str: .
+            output: dict[str, Any]: .
+            output_schema: dict[str, Any]: .
+
+        Returns:
+            DeterministicValidation: .
+        """
 
 
 class StructuredLLM(Protocol):
-    """LLM boundary consumed by the runner."""
+    """LLM boundary consumed by the runner.."""
 
     def complete_structured(self, **kwargs: Any) -> StructuredLLMResponse:
-        """Return one structured completion."""
+        """Return one structured completion.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            StructuredLLMResponse: .
+        """
 
 
 class NodeExecutionResult(BaseModel):
-    """Bounded node execution result."""
+    """Bounded node execution result.."""
 
     output: dict[str, Any] = Field(default_factory=dict)
     validation: DeterministicValidation | None = None
@@ -61,14 +77,17 @@ class NodeExecutionResult(BaseModel):
 
 
 class NodeExecutionRunner:
-    """Run draft, validation, optional critic, and at most one revision."""
+    """Run draft, validation, optional critic, and at most one revision.."""
 
     def __init__(self, *, llm: StructuredLLM, validator: OutputValidator) -> None:
         """Initialize the runner.
 
         Args:
-            llm: Structured LLM boundary for draft and revision calls.
-            validator: Deterministic output validator called after each call.
+            llm: StructuredLLM: .
+            validator: OutputValidator: .
+
+        Returns:
+            None: .
         """
         self._llm = llm
         self._validator = validator
@@ -85,19 +104,16 @@ class NodeExecutionRunner:
     ) -> NodeExecutionResult:
         """Execute one bounded LLM node.
 
-        Runs a draft call, deterministic validation, an optional critic
-        reflection, and at most one revision.
-
         Args:
-            graph_run_id: Identifier of the parent graph run.
-            node_name: Name of the node being executed.
-            prompt: Rendered prompt for the draft call.
-            output_schema: JSON schema for structured output validation.
-            reflection_policy: One of ``"forced"``, ``"conditional"``, or ``"none"``.
-            deadline: Optional deadline for LLM calls.
+            graph_run_id: str: .
+            node_name: str: .
+            prompt: RenderedPrompt: .
+            output_schema: dict[str, Any]: .
+            reflection_policy: str: .
+            deadline: datetime | None: .
 
         Returns:
-            A ``NodeExecutionResult`` with output, validation, and reflection state.
+            NodeExecutionResult: .
         """
         draft = self._call(
             prompt=prompt,
@@ -194,11 +210,7 @@ class NodeExecutionRunner:
                 validation=validation,
                 reflection=reflection,
                 abstained=not validation.valid,
-                error_code=(
-                    None
-                    if validation.valid
-                    else "deterministic_validation_failed"
-                ),
+                error_code=(None if validation.valid else "deterministic_validation_failed"),
                 llm_call_ids=tuple(call_ids),
             )
 
@@ -245,16 +257,19 @@ class NodeExecutionRunner:
             reflection=reflection,
             revision_count=1,
             abstained=not revised_validation.valid,
-            error_code=(
-                None
-                if revised_validation.valid
-                else "deterministic_validation_failed"
-            ),
+            error_code=(None if revised_validation.valid else "deterministic_validation_failed"),
             llm_call_ids=tuple(call_ids),
         )
 
     def _call(self, **kwargs: Any) -> StructuredLLMResponse:
-        """Delegate to the structured LLM boundary."""
+        """Delegate to the structured LLM boundary.
+
+        Args:
+            **kwargs: Any: .
+
+        Returns:
+            StructuredLLMResponse: .
+        """
         return self._llm.complete_structured(**kwargs)
 
 
@@ -265,7 +280,17 @@ def _derive_prompt(
     draft: dict[str, Any],
     reflection: dict[str, Any] | None = None,
 ) -> RenderedPrompt:
-    """Create an explicit critic/revision prompt without changing safety order."""
+    """Create an explicit critic/revision prompt without changing safety order.
+
+    Args:
+        prompt: RenderedPrompt: .
+        kind: str: .
+        draft: dict[str, Any]: .
+        reflection: dict[str, Any] | None: .
+
+    Returns:
+        RenderedPrompt: .
+    """
     sections = list(prompt.sections)
     sections.append(
         PromptSection(
@@ -296,7 +321,14 @@ def _derive_prompt(
 
 
 def _render_json(value: dict[str, Any]) -> str:
-    """Render structured node state deterministically."""
+    """Render structured node state deterministically.
+
+    Args:
+        value: dict[str, Any]: .
+
+    Returns:
+        str: .
+    """
     import json
 
     return json.dumps(

@@ -26,71 +26,164 @@ from margin.valuation_discovery.models import (
 
 
 class QuantRepository(Protocol):
-    """Repository contract used by the quant service.
-
-    Loading cross-section data is deliberately abstract. Production callers wire
-    this to the PIT-safe warehouse adapter; the quant module never calls data
-    providers directly.
-    """
+    """Repository contract used by the quant service.."""
 
     def load_cross_section(self, snapshot: QuantInputSnapshot) -> pd.DataFrame:
-        """Return the PIT-safe quant cross-section for a frozen input snapshot."""
+        """Return the PIT-safe quant cross-section for a frozen input snapshot.
+
+        Args:
+            snapshot: QuantInputSnapshot: .
+
+        Returns:
+            pd.DataFrame: .
+        """
 
     def add_run(self, quant_run: QuantRun) -> None:
-        """Persist quant run metadata."""
+        """Persist quant run metadata.
+
+        Args:
+            quant_run: QuantRun: .
+
+        Returns:
+            None: .
+        """
 
     def add_results(self, quant_run_id: str, results: Iterable[QuantResult]) -> None:
-        """Persist all results for a quant run."""
+        """Persist all results for a quant run.
+
+        Args:
+            quant_run_id: str: .
+            results: Iterable[QuantResult]: .
+
+        Returns:
+            None: .
+        """
 
     def get_run(self, quant_run_id: str) -> QuantRun | None:
-        """Return one persisted quant run."""
+        """Return one persisted quant run.
+
+        Args:
+            quant_run_id: str: .
+
+        Returns:
+            QuantRun | None: .
+        """
 
     def list_results(self, quant_run_id: str) -> tuple[QuantResult, ...]:
-        """Return persisted results for a quant run."""
+        """Return persisted results for a quant run.
+
+        Args:
+            quant_run_id: str: .
+
+        Returns:
+            tuple[QuantResult, ...]: .
+        """
 
     def latest_result_for_security(self, security_id: str) -> QuantResult | None:
-        """Return the most recent quant result for a security, or None."""
+        """Return the most recent quant result for a security, or None.
+
+        Args:
+            security_id: str: .
+
+        Returns:
+            QuantResult | None: .
+        """
 
 
 class MemoryQuantRepository:
-    """In-memory quant repository for unit and local integration tests."""
+    """In-memory quant repository for unit and local integration tests.."""
 
     def __init__(self) -> None:
-        """Initialize an empty in-memory quant repository."""
+        """Initialize an empty in-memory quant repository.
+
+        Returns:
+            None: .
+        """
         self._cross_sections: dict[str, pd.DataFrame] = {}
         self._runs: dict[str, QuantRun] = {}
         self._results: dict[str, tuple[QuantResult, ...]] = {}
 
     def set_cross_section(self, snapshot_id: str, frame: pd.DataFrame) -> None:
-        """Register a cross-section returned for a snapshot ID."""
+        """Register a cross-section returned for a snapshot ID.
+
+        Args:
+            snapshot_id: str: .
+            frame: pd.DataFrame: .
+
+        Returns:
+            None: .
+        """
         self._cross_sections[snapshot_id] = frame.copy(deep=True)
 
     def load_cross_section(self, snapshot: QuantInputSnapshot) -> pd.DataFrame:
-        """Return the registered cross-section for the supplied snapshot."""
+        """Return the registered cross-section for the supplied snapshot.
+
+        Args:
+            snapshot: QuantInputSnapshot: .
+
+        Returns:
+            pd.DataFrame: .
+        """
         if snapshot.snapshot_id not in self._cross_sections:
             raise KeyError(f"cross-section not found for snapshot {snapshot.snapshot_id}")
         return self._cross_sections[snapshot.snapshot_id].copy(deep=True)
 
     def add_run(self, quant_run: QuantRun) -> None:
-        """Persist quant run metadata."""
+        """Persist quant run metadata.
+
+        Args:
+            quant_run: QuantRun: .
+
+        Returns:
+            None: .
+        """
         self._runs[quant_run.quant_run_id] = quant_run
 
     def add_results(self, quant_run_id: str, results: Iterable[QuantResult]) -> None:
-        """Persist results for one run."""
+        """Persist results for one run.
+
+        Args:
+            quant_run_id: str: .
+            results: Iterable[QuantResult]: .
+
+        Returns:
+            None: .
+        """
         stored = tuple(results)
         _validate_result_run_ids(quant_run_id, stored)
         self._results[quant_run_id] = stored
 
     def get_run(self, quant_run_id: str) -> QuantRun | None:
-        """Return one persisted quant run."""
+        """Return one persisted quant run.
+
+        Args:
+            quant_run_id: str: .
+
+        Returns:
+            QuantRun | None: .
+        """
         return self._runs.get(quant_run_id)
 
     def list_results(self, quant_run_id: str) -> tuple[QuantResult, ...]:
-        """Return persisted results for one run."""
+        """Return persisted results for one run.
+
+        Args:
+            quant_run_id: str: .
+
+        Returns:
+            tuple[QuantResult, ...]: .
+        """
         return self._results.get(quant_run_id, ())
 
     def latest_result_for_security(self, security_id: str) -> QuantResult | None:
-        """Return the most recent result for a security across all runs."""
+        """Return the most recent result for a security across all runs.
+
+        Args:
+            security_id: str: .
+
+        Returns:
+            QuantResult | None: .
+        """
         latest: QuantResult | None = None
         for results in self._results.values():
             for result in results:
@@ -102,7 +195,7 @@ class MemoryQuantRepository:
 
 
 class SQLAlchemyQuantRepository:
-    """PostgreSQL-backed quant run/result repository."""
+    """PostgreSQL-backed quant run/result repository.."""
 
     def __init__(
         self,
@@ -113,25 +206,50 @@ class SQLAlchemyQuantRepository:
         """Initialize the repository with a session factory and optional loader.
 
         Args:
-            session_factory: Callable that returns a SQLAlchemy ``Session``.
-            cross_section_loader: Optional PIT-safe cross-section loader.
+            session_factory: Callable[[], Session]: .
+            cross_section_loader: Callable[[QuantInputSnapshot], pd.DataFrame] | None: .
+
+        Returns:
+            None: .
         """
         self._session_factory = session_factory
         self._cross_section_loader = cross_section_loader
 
     def load_cross_section(self, snapshot: QuantInputSnapshot) -> pd.DataFrame:
-        """Load a cross-section through the caller-provided PIT-safe adapter."""
+        """Load a cross-section through the caller-provided PIT-safe adapter.
+
+        Args:
+            snapshot: QuantInputSnapshot: .
+
+        Returns:
+            pd.DataFrame: .
+        """
         if self._cross_section_loader is None:
             raise RuntimeError("SQLAlchemyQuantRepository requires a cross_section_loader")
         return self._cross_section_loader(snapshot).copy(deep=True)
 
     def add_run(self, quant_run: QuantRun) -> None:
-        """Persist quant run metadata append-only."""
+        """Persist quant run metadata append-only.
+
+        Args:
+            quant_run: QuantRun: .
+
+        Returns:
+            None: .
+        """
         with self._session_factory.begin() as session:  # type: ignore[attr-defined]
             session.add(_quant_run_to_row(quant_run))
 
     def add_results(self, quant_run_id: str, results: Iterable[QuantResult]) -> None:
-        """Persist quant results append-only."""
+        """Persist quant results append-only.
+
+        Args:
+            quant_run_id: str: .
+            results: Iterable[QuantResult]: .
+
+        Returns:
+            None: .
+        """
         stored = tuple(results)
         _validate_result_run_ids(quant_run_id, stored)
         with self._session_factory.begin() as session:  # type: ignore[attr-defined]
@@ -141,13 +259,27 @@ class SQLAlchemyQuantRepository:
                     session.add(factor_row)
 
     def get_run(self, quant_run_id: str) -> QuantRun | None:
-        """Return one persisted quant run."""
+        """Return one persisted quant run.
+
+        Args:
+            quant_run_id: str: .
+
+        Returns:
+            QuantRun | None: .
+        """
         with self._session_factory() as session:
             row = session.get(QuantScreenRunRow, quant_run_id)
         return _quant_run_from_row(row) if row is not None else None
 
     def list_results(self, quant_run_id: str) -> tuple[QuantResult, ...]:
-        """Return persisted results for a quant run ordered by creation time."""
+        """Return persisted results for a quant run ordered by creation time.
+
+        Args:
+            quant_run_id: str: .
+
+        Returns:
+            tuple[QuantResult, ...]: .
+        """
         with self._session_factory() as session:
             rows = session.scalars(
                 select(QuantScreenResultRow)
@@ -157,7 +289,14 @@ class SQLAlchemyQuantRepository:
         return tuple(_quant_result_from_row(row) for row in rows)
 
     def latest_result_for_security(self, security_id: str) -> QuantResult | None:
-        """Return the most recent persisted quant result for a security."""
+        """Return the most recent persisted quant result for a security.
+
+        Args:
+            security_id: str: .
+
+        Returns:
+            QuantResult | None: .
+        """
         with self._session_factory() as session:
             row = session.scalars(
                 select(QuantScreenResultRow)
@@ -172,16 +311,29 @@ def _validate_result_run_ids(
     quant_run_id: str,
     results: tuple[QuantResult, ...],
 ) -> None:
-    """Validate that all results belong to the supplied quant run ID."""
-    mismatches = [
-        result.result_id for result in results if result.quant_run_id != quant_run_id
-    ]
+    """Validate that all results belong to the supplied quant run ID.
+
+    Args:
+        quant_run_id: str: .
+        results: tuple[QuantResult, ...]: .
+
+    Returns:
+        None: .
+    """
+    mismatches = [result.result_id for result in results if result.quant_run_id != quant_run_id]
     if mismatches:
         raise ValueError(f"quant result run mismatch: {mismatches[0]}")
 
 
 def _quant_run_to_row(quant_run: QuantRun) -> QuantScreenRunRow:
-    """Convert a ``QuantRun`` to its database row."""
+    """Convert a ``QuantRun`` to its database row.
+
+    Args:
+        quant_run: QuantRun: .
+
+    Returns:
+        QuantScreenRunRow: .
+    """
     return QuantScreenRunRow(
         quant_run_id=quant_run.quant_run_id,
         input_snapshot_id=quant_run.input_snapshot_id,
@@ -195,7 +347,14 @@ def _quant_run_to_row(quant_run: QuantRun) -> QuantScreenRunRow:
 
 
 def _quant_run_from_row(row: QuantScreenRunRow) -> QuantRun:
-    """Convert one persisted run row to the immutable domain model."""
+    """Convert one persisted run row to the immutable domain model.
+
+    Args:
+        row: QuantScreenRunRow: .
+
+    Returns:
+        QuantRun: .
+    """
     return QuantRun(
         quant_run_id=row.quant_run_id,
         input_snapshot_id=row.input_snapshot_id,
@@ -209,7 +368,14 @@ def _quant_run_from_row(row: QuantScreenRunRow) -> QuantRun:
 
 
 def _quant_result_to_row(result: QuantResult) -> QuantScreenResultRow:
-    """Convert a ``QuantResult`` to its database row."""
+    """Convert a ``QuantResult`` to its database row.
+
+    Args:
+        result: QuantResult: .
+
+    Returns:
+        QuantScreenResultRow: .
+    """
     return QuantScreenResultRow(
         result_id=result.result_id,
         quant_run_id=result.quant_run_id,
@@ -235,7 +401,14 @@ def _quant_result_to_row(result: QuantResult) -> QuantScreenResultRow:
 
 
 def _quant_result_from_row(row: QuantScreenResultRow) -> QuantResult:
-    """Convert a result row to the immutable ``QuantResult`` model."""
+    """Convert a result row to the immutable ``QuantResult`` model.
+
+    Args:
+        row: QuantScreenResultRow: .
+
+    Returns:
+        QuantResult: .
+    """
     return QuantResult(
         result_id=row.result_id,
         quant_run_id=row.quant_run_id,
@@ -261,7 +434,14 @@ def _quant_result_from_row(row: QuantScreenResultRow) -> QuantResult:
 
 
 def _factor_rows_from_result(result: QuantResult) -> tuple[QuantFactorValueRow, ...]:
-    """Build factor value rows from group scores in a quant result."""
+    """Build factor value rows from group scores in a quant result.
+
+    Args:
+        result: QuantResult: .
+
+    Returns:
+        tuple[QuantFactorValueRow, ...]: .
+    """
     scores = {
         "final": result.final_score,
         "quality": result.quality_score,
@@ -293,6 +473,14 @@ def _factor_rows_from_result(result: QuantResult) -> tuple[QuantFactorValueRow, 
 
 
 def _factor_value_id(result_id: str, factor_name: str) -> str:
-    """Build a stable factor value ID from result ID and factor name."""
+    """Build a stable factor value ID from result ID and factor name.
+
+    Args:
+        result_id: str: .
+        factor_name: str: .
+
+    Returns:
+        str: .
+    """
     material = f"{result_id}:{factor_name}"
     return "qfv_" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]

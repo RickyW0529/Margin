@@ -28,6 +28,14 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
+    """Process __getattr__.
+
+    Args:
+        name: str: .
+
+    Returns:
+        Any: .
+    """
     if name in __all__:
         return importlib.import_module(f"{__name__}.{name}")
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

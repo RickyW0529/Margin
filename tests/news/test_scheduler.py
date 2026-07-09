@@ -22,7 +22,14 @@ from margin.storage.database import DatabaseSettings, create_database_engine, cr
 
 @pytest.fixture
 def news_repository(database_url):
-    """Create clean scheduler tables."""
+    """Create clean scheduler tables.
+
+    Args:
+        database_url: Any: .
+
+    Yields:
+        Any: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -35,24 +42,25 @@ def news_repository(database_url):
 
 
 class FakeConnector:
-    """Fake discovery connector that returns one document on the first call.
+    """Fake discovery connector that returns one document on the first call.."""
 
-    Attributes:
-        cursors: List of cursor values passed to each ``discover`` call.
-    """
     def __init__(self):
-        """Initialize the fake connector with an empty cursor list."""
+        """Initialize the fake connector with an empty cursor list.
+
+        Returns:
+            Any: .
+        """
         self.cursors: list[str | None] = []
 
     def discover(self, cursor: str | None, limit: int):
         """Return one discovered document or an empty list when cursor matches.
 
         Args:
-            cursor: The cursor to resume discovery from.
-            limit: Maximum number of documents to return.
+            cursor: str | None: .
+            limit: int: .
 
         Returns:
-            A list of ``DiscoveredDocument`` instances (zero or one).
+            Any: .
         """
         self.cursors.append(cursor)
         if cursor == "cursor-1":
@@ -69,18 +77,19 @@ class FakeConnector:
 
 
 class FakeAcquirer:
-    """Fake acquirer that returns a durable L1 document event."""
+    """Fake acquirer that returns a durable L1 document event.."""
+
     def acquire(self, source_name: str, url: str, title_override=None, published_at=None):
         """Return a document event with L1 source level for the given URL.
 
         Args:
-            source_name: The source name to assign to the event.
-            url: The source URL for the document.
-            title_override: Optional title override; defaults to ``"公告"``.
-            published_at: Optional publication timestamp.
+            source_name: str: .
+            url: str: .
+            title_override: Any: .
+            published_at: Any: .
 
         Returns:
-            A ``DocumentEvent`` with seeded content and symbols.
+            Any: .
         """
         return make_document_event(
             source_url=url,
@@ -93,7 +102,14 @@ class FakeAcquirer:
 
 
 def test_incremental_runner_advances_cursor_and_publishes_ready_events(news_repository):
-    """Runner must persist events, enqueue ready documents, and advance cursor once handled."""
+    """Runner must persist events, enqueue ready documents, and advance cursor once handled.
+
+    Args:
+        news_repository: Any: .
+
+    Returns:
+        Any: .
+    """
     connector = FakeConnector()
     runner = IncrementalAcquisitionRunner(
         repository=news_repository,
@@ -113,7 +129,14 @@ def test_incremental_runner_advances_cursor_and_publishes_ready_events(news_repo
 
 
 def test_publisher_persists_parse_failed_without_outbox(news_repository):
-    """Publisher must keep parse failures auditable but not indexable."""
+    """Publisher must keep parse failures auditable but not indexable.
+
+    Args:
+        news_repository: Any: .
+
+    Returns:
+        Any: .
+    """
     failed = make_document_event(
         source_url="https://example.com/fail",
         source_name="sse",

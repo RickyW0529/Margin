@@ -29,7 +29,7 @@ def valuation_repository() -> MemoryValuationDiscoveryRepository:
     """Return a fresh in-memory valuation discovery repository.
 
     Returns:
-        An empty MemoryValuationDiscoveryRepository instance.
+        MemoryValuationDiscoveryRepository: .
     """
     return MemoryValuationDiscoveryRepository()
 
@@ -38,7 +38,7 @@ def test_universe_membership_has_valid_and_system_time() -> None:
     """Verify a universe membership is visible at valid and system time boundaries.
 
     Returns:
-        None.
+        None: .
     """
     membership = UniverseMembership(
         universe_code=UniverseCode.CSI300,
@@ -70,10 +70,10 @@ def test_resolver_returns_members_known_at_system_time(
     """Verify the resolver returns only members known at the system time cutoff.
 
     Args:
-        valuation_repository: In-memory valuation discovery repository fixture.
+        valuation_repository: MemoryValuationDiscoveryRepository: .
 
     Returns:
-        None.
+        None: .
     """
     valuation_repository.add_universe_membership(
         UniverseMembership(
@@ -114,11 +114,8 @@ def test_resolver_returns_members_known_at_system_time(
 
 @dataclass(frozen=True)
 class FakeSecuritySource:
-    """Fake security listing source for ALL_A pool resolution tests.
+    """Fake security listing source for ALL_A pool resolution tests.."""
 
-    Attributes:
-        listings: Tuple of security listings to filter by visibility.
-    """
     listings: tuple[SecurityListing, ...]
 
     def list_listed_securities(
@@ -127,7 +124,15 @@ class FakeSecuritySource:
         business_at: datetime,
         known_at: datetime,
     ) -> Iterable[SecurityListing]:
-        """Return listings visible at the given business and system time."""
+        """Return listings visible at the given business and system time.
+
+        Args:
+            business_at: datetime: .
+            known_at: datetime: .
+
+        Returns:
+            Iterable[SecurityListing]: .
+        """
         return tuple(
             listing
             for listing in self.listings
@@ -141,10 +146,10 @@ def test_all_a_pool_accepts_new_listing_when_known(
     """Verify the ALL_A pool accepts a new listing only when it is known.
 
     Args:
-        valuation_repository: In-memory valuation discovery repository fixture.
+        valuation_repository: MemoryValuationDiscoveryRepository: .
 
     Returns:
-        None.
+        None: .
     """
     source = FakeSecuritySource(
         listings=(

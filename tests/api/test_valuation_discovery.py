@@ -16,7 +16,14 @@ from margin.settings import get_settings
 def test_start_valuation_discovery_refresh_returns_accepted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test that starting a valuation discovery refresh returns 202 Accepted."""
+    """Test that starting a valuation discovery refresh returns 202 Accepted.
+
+    Args:
+        monkeypatch: pytest.MonkeyPatch: .
+
+    Returns:
+        None: .
+    """
     get_settings.cache_clear()
     valuation_service = _FakeValuationService()
     client = TestClient(create_app(valuation_discovery_service=valuation_service))
@@ -42,7 +49,11 @@ def test_start_valuation_discovery_refresh_returns_accepted(
 
 
 def test_start_refresh_resolves_scope_current_alias_to_active_scope() -> None:
-    """Test that scope-current is resolved before the refresh run is created."""
+    """Test that scope-current is resolved before the refresh run is created.
+
+    Returns:
+        None: .
+    """
     valuation_service = _FakeValuationService()
     client = TestClient(
         create_app(
@@ -70,10 +81,21 @@ def test_start_refresh_resolves_scope_current_alias_to_active_scope() -> None:
 def test_valuation_discovery_dependency_maps_provider_config_error_to_503(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test that provider config errors are mapped to a 503 service error."""
+    """Test that provider config errors are mapped to a 503 service error.
+
+    Args:
+        monkeypatch: pytest.MonkeyPatch: .
+
+    Returns:
+        None: .
+    """
 
     def broken_service() -> object:
-        """Raise a LookupError simulating a missing active provider config."""
+        """Raise a LookupError simulating a missing active provider config.
+
+        Returns:
+            object: .
+        """
         raise LookupError("active provider config not found: tavily")
 
     monkeypatch.setattr(
@@ -90,29 +112,54 @@ def test_valuation_discovery_dependency_maps_provider_config_error_to_503(
 
 
 class _FakeValuationService:
-    """Fake valuation discovery service stub for API tests."""
+    """Fake valuation discovery service stub for API tests.."""
 
     def __init__(self) -> None:
-        """Initialize call recording."""
+        """Initialize call recording.
+
+        Returns:
+            None: .
+        """
         self.calls: list[dict[str, object]] = []
         self.wake_calls: list[dict[str, object]] = []
 
     def start_refresh(self, **kwargs: object) -> _FakeRefreshResponse:
-        """Return a fake accepted refresh response."""
+        """Return a fake accepted refresh response.
+
+        Args:
+            **kwargs: object: .
+
+        Returns:
+            _FakeRefreshResponse: .
+        """
         self.calls.append(kwargs)
         return _FakeRefreshResponse(run_id="vdr-api-1")
 
     def wake_refresh_worker(self, **kwargs: object) -> int:
-        """Record a best-effort background wake call."""
+        """Record a best-effort background wake call.
+
+        Args:
+            **kwargs: object: .
+
+        Returns:
+            int: .
+        """
         self.wake_calls.append(kwargs)
         return 1
 
 
 class _FakeStrategyService:
-    """Fake strategy config service exposing one active scope."""
+    """Fake strategy config service exposing one active scope.."""
 
     def ensure_current_research_scope(self, owner_id: str) -> SimpleNamespace:
-        """Return the reconciled current scope."""
+        """Return the reconciled current scope.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            SimpleNamespace: .
+        """
         return SimpleNamespace(
             owner_id=owner_id,
             version_id="scope-active",
@@ -120,7 +167,14 @@ class _FakeStrategyService:
         )
 
     def list_research_scopes(self, owner_id: str) -> list[SimpleNamespace]:
-        """Return active scope metadata."""
+        """Return active scope metadata.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[SimpleNamespace]: .
+        """
         return [
             SimpleNamespace(
                 owner_id=owner_id,
@@ -132,7 +186,7 @@ class _FakeStrategyService:
 
 @dataclass(frozen=True)
 class _FakeRefreshResponse:
-    """Fake refresh response returned by the valuation discovery stub."""
+    """Fake refresh response returned by the valuation discovery stub.."""
 
     run_id: str
     status: str = "accepted"

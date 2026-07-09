@@ -14,7 +14,7 @@ from margin.news.models import ensure_utc, utc_now
 
 
 class DataSyncStatus(StrEnum):
-    """Run/work-item status values for provider sync."""
+    """Run/work-item status values for provider sync.."""
 
     PENDING = "pending"
     RUNNING = "running"
@@ -29,7 +29,7 @@ class DataSyncStatus(StrEnum):
         """Return whether no automatic processing remains.
 
         Returns:
-            ``True`` for succeeded, partial, final-failure, and cancelled states.
+            bool: .
         """
         return self in {
             DataSyncStatus.SUCCEEDED,
@@ -40,7 +40,7 @@ class DataSyncStatus(StrEnum):
 
 
 class DataSyncRequest(BaseModel):
-    """Request to create a durable provider sync run."""
+    """Request to create a durable provider sync run.."""
 
     provider: str | None = None
     endpoint_codes: tuple[str, ...] = Field(default_factory=tuple)
@@ -63,7 +63,14 @@ class DataSyncRequest(BaseModel):
     )
     @classmethod
     def normalize_time(cls, value: datetime | None) -> datetime | None:
-        """Normalize optional request timestamps to UTC."""
+        """Normalize optional request timestamps to UTC.
+
+        Args:
+            value: datetime | None: .
+
+        Returns:
+            datetime | None: .
+        """
         return ensure_utc(value) if value is not None else None
 
     @property
@@ -71,7 +78,7 @@ class DataSyncRequest(BaseModel):
         """Return deterministic request hash for idempotency and audit.
 
         Returns:
-            A ``sha256:``-prefixed hex digest of the JSON-serialized request.
+            str: .
         """
         payload = self.model_dump(mode="json")
         encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
@@ -79,7 +86,7 @@ class DataSyncRequest(BaseModel):
 
 
 class DataSyncRun(BaseModel):
-    """Durable sync run summary."""
+    """Durable sync run summary.."""
 
     run_id: str
     request: DataSyncRequest
@@ -97,12 +104,19 @@ class DataSyncRun(BaseModel):
     @field_validator("created_at", "started_at", "finished_at")
     @classmethod
     def normalize_run_time(cls, value: datetime | None) -> datetime | None:
-        """Normalize run timestamps to UTC."""
+        """Normalize run timestamps to UTC.
+
+        Args:
+            value: datetime | None: .
+
+        Returns:
+            datetime | None: .
+        """
         return ensure_utc(value) if value is not None else None
 
 
 class EndpointWorkItem(BaseModel):
-    """Endpoint-level work item created before external provider calls."""
+    """Endpoint-level work item created before external provider calls.."""
 
     work_item_id: str
     run_id: str
@@ -122,12 +136,19 @@ class EndpointWorkItem(BaseModel):
     @field_validator("next_attempt_at", "claimed_at", "created_at")
     @classmethod
     def normalize_item_time(cls, value: datetime | None) -> datetime | None:
-        """Normalize work-item timestamps to UTC."""
+        """Normalize work-item timestamps to UTC.
+
+        Args:
+            value: datetime | None: .
+
+        Returns:
+            datetime | None: .
+        """
         return ensure_utc(value) if value is not None else None
 
 
 class EndpointSyncResult(BaseModel):
-    """Result of executing one endpoint work item."""
+    """Result of executing one endpoint work item.."""
 
     work_item_id: str
     status: DataSyncStatus
@@ -147,5 +168,12 @@ class EndpointSyncResult(BaseModel):
     @field_validator("finished_at")
     @classmethod
     def normalize_finished_at(cls, value: datetime) -> datetime:
-        """Normalize completion timestamp to UTC."""
+        """Normalize completion timestamp to UTC.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)

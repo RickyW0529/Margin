@@ -13,7 +13,11 @@ from margin.strategy.models import ConfigLifecycle, ProviderConfigVersion
 
 
 def test_health_returns_ok():
-    """Test that the health endpoint returns ok."""
+    """Test that the health endpoint returns ok.
+
+    Returns:
+        Any: .
+    """
     app = create_app()
     client = TestClient(app)
     response = client.get("/health")
@@ -22,7 +26,11 @@ def test_health_returns_ok():
 
 
 def test_ready_endpoint_checks_database():
-    """Test that the ready endpoint checks the database."""
+    """Test that the ready endpoint checks the database.
+
+    Returns:
+        Any: .
+    """
     app = create_app()
     client = TestClient(app)
     response = client.get("/health/ready")
@@ -30,7 +38,11 @@ def test_ready_endpoint_checks_database():
 
 
 def test_degraded_endpoint_returns_status():
-    """Test that the degraded endpoint returns status."""
+    """Test that the degraded endpoint returns status.
+
+    Returns:
+        Any: .
+    """
     app = create_app()
     client = TestClient(app)
     response = client.get("/health/degraded")
@@ -39,7 +51,11 @@ def test_degraded_endpoint_returns_status():
 
 
 def test_capabilities_endpoint_reports_feature_status_without_live_providers():
-    """Test that capability status is derived from config, not live provider calls."""
+    """Test that capability status is derived from config, not live provider calls.
+
+    Returns:
+        Any: .
+    """
     app = create_app(strategy_repository=_FakeStrategyRepository(()))
     client = TestClient(app)
 
@@ -56,7 +72,11 @@ def test_capabilities_endpoint_reports_feature_status_without_live_providers():
 
 
 def test_capabilities_endpoint_reports_enabled_features_from_active_configs():
-    """Test that active provider config metadata enables feature capability status."""
+    """Test that active provider config metadata enables feature capability status.
+
+    Returns:
+        Any: .
+    """
     app = create_app(
         strategy_repository=_FakeStrategyRepository(
             (
@@ -102,9 +122,25 @@ def test_capabilities_endpoint_reports_enabled_features_from_active_configs():
 
 
 def test_ready_endpoint_returns_valid_sanitized_json_on_database_failure(monkeypatch):
-    """Test that the ready endpoint returns sanitized JSON on database failure."""
+    """Test that the ready endpoint returns sanitized JSON on database failure.
+
+    Args:
+        monkeypatch: Any: .
+
+    Returns:
+        Any: .
+    """
+
     def fail_engine(*args, **kwargs):
-        """Raise a runtime error simulating database unavailability."""
+        """Raise a runtime error simulating database unavailability.
+
+        Args:
+            *args: Any: .
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
         del args, kwargs
         raise RuntimeError('database "secret" unavailable')
 
@@ -124,14 +160,30 @@ def test_ready_endpoint_returns_valid_sanitized_json_on_database_failure(monkeyp
 
 
 class _FakeStrategyRepository:
-    """Fake provider config repository for health capability tests."""
+    """Fake provider config repository for health capability tests.."""
 
     def __init__(self, configs: tuple[ProviderConfigVersion, ...]) -> None:
+        """Helper _init__.
+
+        Args:
+            configs: tuple[ProviderConfigVersion, ...]: .
+
+        Returns:
+            None: .
+        """
         self._configs = configs
 
     def list_active_provider_configs(
         self,
         owner_id: str,
     ) -> tuple[ProviderConfigVersion, ...]:
+        """Process list_active_provider_configs.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            tuple[ProviderConfigVersion, ...]: .
+        """
         del owner_id
         return self._configs

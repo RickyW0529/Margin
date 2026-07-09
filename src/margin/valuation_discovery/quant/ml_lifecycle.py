@@ -44,7 +44,7 @@ BASE_FEATURES = (
 
 @dataclass(frozen=True)
 class MLLifecycleConfig:
-    """Runtime ML lifecycle serving parameters."""
+    """Runtime ML lifecycle serving parameters.."""
 
     strategy_version: str = "ml-lifecycle-v1"
     max_stock_exposure: float = 0.8
@@ -64,14 +64,19 @@ class MLLifecycleConfig:
 
     @classmethod
     def from_metadata(cls, metadata: dict[str, Any]) -> MLLifecycleConfig:
-        """Build config from versioned strategy metadata."""
+        """Build config from versioned strategy metadata.
+
+        Args:
+            metadata: dict[str, Any]: .
+
+        Returns:
+            MLLifecycleConfig: .
+        """
         thresholds = metadata.get("thresholds")
         if not isinstance(thresholds, dict):
             thresholds = {}
         return cls(
-            strategy_version=str(
-                metadata.get("quant_strategy_version_id") or cls.strategy_version
-            ),
+            strategy_version=str(metadata.get("quant_strategy_version_id") or cls.strategy_version),
             max_stock_exposure=_clamp(
                 _number(thresholds.get("max_stock_exposure"), cls.max_stock_exposure),
                 0.0,
@@ -130,7 +135,15 @@ def score_ml_lifecycle(
     *,
     metadata: dict[str, Any],
 ) -> pd.DataFrame:
-    """Score a PIT-safe cross-section with the ML lifecycle serving contract."""
+    """Score a PIT-safe cross-section with the ML lifecycle serving contract.
+
+    Args:
+        frame: pd.DataFrame: .
+        metadata: dict[str, Any]: .
+
+    Returns:
+        pd.DataFrame: .
+    """
     config = MLLifecycleConfig.from_metadata(metadata)
     scored = frame.copy()
     if scored.empty:
@@ -153,9 +166,7 @@ def score_ml_lifecycle(
         + 0.16 * scored["ml_risk_health"]
         + 0.10 * scored["ml_lifecycle_stage_signal"]
     ).clip(0.0, 100.0)
-    scored["ml_risk_reasons"] = [
-        _risk_reasons(row, config=config) for _, row in scored.iterrows()
-    ]
+    scored["ml_risk_reasons"] = [_risk_reasons(row, config=config) for _, row in scored.iterrows()]
     scored["ml_risk_gate"] = [
         "watch" if reasons else "normal" for reasons in scored["ml_risk_reasons"]
     ]
@@ -170,12 +181,8 @@ def score_ml_lifecycle(
 
     coverage = [_feature_coverage(row) for _, row in scored.iterrows()]
     scored["ml_feature_coverage"] = coverage
-    scored["ml_fallback_used"] = [
-        item["coverage_ratio"] < 0.70 for item in coverage
-    ]
-    scored["ml_score_components"] = [
-        _score_components(row) for _, row in scored.iterrows()
-    ]
+    scored["ml_fallback_used"] = [item["coverage_ratio"] < 0.70 for item in coverage]
+    scored["ml_score_components"] = [_score_components(row) for _, row in scored.iterrows()]
     scored["ml_risk_controls"] = [
         {
             "risk_gate": row["ml_risk_gate"],
@@ -194,6 +201,14 @@ def score_ml_lifecycle(
 
 
 def _quality_signal(frame: pd.DataFrame) -> pd.Series:
+    """Process _quality_signal.
+
+    Args:
+        frame: pd.DataFrame: .
+
+    Returns:
+        pd.Series: .
+    """
     return _mean_columns(
         (
             _scale(frame, "roe_ttm", cap=0.20),
@@ -206,6 +221,14 @@ def _quality_signal(frame: pd.DataFrame) -> pd.Series:
 
 
 def _value_signal(frame: pd.DataFrame) -> pd.Series:
+    """Process _value_signal.
+
+    Args:
+        frame: pd.DataFrame: .
+
+    Returns:
+        pd.Series: .
+    """
     return _mean_columns(
         (
             _rank(frame, "pe_ttm", higher=False),
@@ -217,6 +240,14 @@ def _value_signal(frame: pd.DataFrame) -> pd.Series:
 
 
 def _growth_signal(frame: pd.DataFrame) -> pd.Series:
+    """Process _growth_signal.
+
+    Args:
+        frame: pd.DataFrame: .
+
+    Returns:
+        pd.Series: .
+    """
     parts = [
         _scale(frame, "revenue_yoy", cap=0.40),
         _scale(frame, "profit_yoy", cap=0.35),
@@ -227,6 +258,14 @@ def _growth_signal(frame: pd.DataFrame) -> pd.Series:
 
 
 def _momentum_signal(frame: pd.DataFrame) -> pd.Series:
+    """Process _momentum_signal.
+
+    Args:
+        frame: pd.DataFrame: .
+
+    Returns:
+        pd.Series: .
+    """
     parts = [
         _scale(frame, "return_6m_ex_1m", cap=0.30),
         _scale(frame, "return_12m_ex_1m", cap=0.45),
@@ -240,17 +279,21 @@ def _momentum_signal(frame: pd.DataFrame) -> pd.Series:
 
 
 def _risk_health(frame: pd.DataFrame, *, config: MLLifecycleConfig) -> pd.Series:
+    """Process _risk_health.
+
+    Args:
+        frame: pd.DataFrame: .
+        config: MLLifecycleConfig: .
+
+    Returns:
+        pd.Series: .
+    """
     volatility = 100.0 * (
-        1.0 - _numeric(frame, "volatility_120d").clip(0.0, config.high_volatility_threshold)
+        1.0
+        - _numeric(frame, "volatility_120d").clip(0.0, config.high_volatility_threshold)
         / config.high_volatility_threshold
     )
-    drawdown = 100.0 * (
-        1.0
-        - (
-            _numeric(frame, "max_drawdown_250d").abs().clip(0.0, 0.45)
-            / 0.45
-        )
-    )
+    drawdown = 100.0 * (1.0 - (_numeric(frame, "max_drawdown_250d").abs().clip(0.0, 0.45) / 0.45))
     short_return = _numeric(frame, "return_20d")
     overheat_penalty = short_return.gt(config.short_term_overheat_threshold).map(
         {True: 45.0, False: 100.0}
@@ -262,16 +305,31 @@ def _risk_health(frame: pd.DataFrame, *, config: MLLifecycleConfig) -> pd.Series
 
 
 def _lifecycle_signal(frame: pd.DataFrame) -> pd.Series:
+    """Process _lifecycle_signal.
+
+    Args:
+        frame: pd.DataFrame: .
+
+    Returns:
+        pd.Series: .
+    """
     if "industry_lifecycle_score" in frame.columns:
         return _numeric(frame, "industry_lifecycle_score").clip(0.0, 100.0)
     return _mean_columns((_growth_signal(frame), _momentum_signal(frame)))
 
 
 def _target_weights(frame: pd.DataFrame, *, config: MLLifecycleConfig) -> pd.Series:
+    """Process _target_weights.
+
+    Args:
+        frame: pd.DataFrame: .
+        config: MLLifecycleConfig: .
+
+    Returns:
+        pd.Series: .
+    """
     weights = pd.Series(0.0, index=frame.index, dtype="float64")
-    eligible = frame[
-        _numeric(frame, "ml_lifecycle_score").ge(config.watch_threshold)
-    ].copy()
+    eligible = frame[_numeric(frame, "ml_lifecycle_score").ge(config.watch_threshold)].copy()
     if eligible.empty:
         return weights
     eligible = eligible.assign(__security_id_sort=eligible["security_id"].astype(str))
@@ -287,6 +345,15 @@ def _target_weights(frame: pd.DataFrame, *, config: MLLifecycleConfig) -> pd.Ser
 
 
 def _risk_reasons(row: pd.Series, *, config: MLLifecycleConfig) -> tuple[str, ...]:
+    """Process _risk_reasons.
+
+    Args:
+        row: pd.Series: .
+        config: MLLifecycleConfig: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     reasons: list[str] = []
     ret20 = _row_number(row, "return_20d")
     if ret20 is not None and ret20 > config.short_term_overheat_threshold:
@@ -301,6 +368,14 @@ def _risk_reasons(row: pd.Series, *, config: MLLifecycleConfig) -> tuple[str, ..
 
 
 def _feature_coverage(row: pd.Series) -> dict[str, Any]:
+    """Process _feature_coverage.
+
+    Args:
+        row: pd.Series: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     missing = [
         feature
         for feature in BASE_FEATURES
@@ -316,6 +391,14 @@ def _feature_coverage(row: pd.Series) -> dict[str, Any]:
 
 
 def _score_components(row: pd.Series) -> dict[str, float]:
+    """Process _score_components.
+
+    Args:
+        row: pd.Series: .
+
+    Returns:
+        dict[str, float]: .
+    """
     return {
         "ml_lifecycle_score": float(row["ml_lifecycle_score"]),
         "quality_signal": float(row["ml_quality_signal"]),
@@ -328,7 +411,15 @@ def _score_components(row: pd.Series) -> dict[str, float]:
 
 
 def _softmax(scores: pd.Series, temperature: float) -> pd.Series:
-    """Return stable softmax weights for a ranked candidate set."""
+    """Return stable softmax weights for a ranked candidate set.
+
+    Args:
+        scores: pd.Series: .
+        temperature: float: .
+
+    Returns:
+        pd.Series: .
+    """
     values = pd.to_numeric(scores, errors="coerce").dropna()
     if values.empty:
         return pd.Series(dtype="float64")
@@ -346,7 +437,15 @@ def _softmax(scores: pd.Series, temperature: float) -> pd.Series:
 
 
 def _runtime_exposure(frame: pd.DataFrame, *, config: MLLifecycleConfig) -> float:
-    """Return the stock exposure allowed by runtime market-regime features."""
+    """Return the stock exposure allowed by runtime market-regime features.
+
+    Args:
+        frame: pd.DataFrame: .
+        config: MLLifecycleConfig: .
+
+    Returns:
+        float: .
+    """
     cap = min(config.max_stock_exposure, max(0.0, 1.0 - config.min_cash))
     for column in (
         "ml_market_regime_exposure",
@@ -362,11 +461,31 @@ def _runtime_exposure(frame: pd.DataFrame, *, config: MLLifecycleConfig) -> floa
 
 
 def _scale(frame: pd.DataFrame, column: str, *, cap: float) -> pd.Series:
+    """Process _scale.
+
+    Args:
+        frame: pd.DataFrame: .
+        column: str: .
+        cap: float: .
+
+    Returns:
+        pd.Series: .
+    """
     values = _numeric(frame, column)
     return ((values / cap) * 100.0).clip(0.0, 100.0)
 
 
 def _rank(frame: pd.DataFrame, column: str, *, higher: bool) -> pd.Series:
+    """Process _rank.
+
+    Args:
+        frame: pd.DataFrame: .
+        column: str: .
+        higher: bool: .
+
+    Returns:
+        pd.Series: .
+    """
     values = _numeric(frame, column)
     if values.notna().sum() == 0:
         return pd.Series(50.0, index=frame.index)
@@ -375,12 +494,29 @@ def _rank(frame: pd.DataFrame, column: str, *, higher: bool) -> pd.Series:
 
 
 def _numeric(frame: pd.DataFrame, column: str) -> pd.Series:
+    """Process _numeric.
+
+    Args:
+        frame: pd.DataFrame: .
+        column: str: .
+
+    Returns:
+        pd.Series: .
+    """
     if column not in frame.columns:
         return pd.Series(pd.NA, index=frame.index, dtype="Float64")
     return pd.to_numeric(frame[column], errors="coerce")
 
 
 def _mean_columns(columns: tuple[pd.Series, ...]) -> pd.Series:
+    """Process _mean_columns.
+
+    Args:
+        columns: tuple[pd.Series, ...]: .
+
+    Returns:
+        pd.Series: .
+    """
     if not columns:
         raise ValueError("at least one column is required")
     frame = pd.concat(columns, axis=1)
@@ -388,6 +524,15 @@ def _mean_columns(columns: tuple[pd.Series, ...]) -> pd.Series:
 
 
 def _row_number(row: pd.Series, column: str) -> float | None:
+    """Process _row_number.
+
+    Args:
+        row: pd.Series: .
+        column: str: .
+
+    Returns:
+        float | None: .
+    """
     try:
         value = float(row.get(column))
     except (TypeError, ValueError):
@@ -398,6 +543,15 @@ def _row_number(row: pd.Series, column: str) -> float | None:
 
 
 def _number(value: Any, fallback: float) -> float:
+    """Process _number.
+
+    Args:
+        value: Any: .
+        fallback: float: .
+
+    Returns:
+        float: .
+    """
     try:
         numeric = float(value)
     except (TypeError, ValueError):
@@ -408,4 +562,14 @@ def _number(value: Any, fallback: float) -> float:
 
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:
+    """Process _clamp.
+
+    Args:
+        value: float: .
+        minimum: float: .
+        maximum: float: .
+
+    Returns:
+        float: .
+    """
     return min(maximum, max(minimum, value))

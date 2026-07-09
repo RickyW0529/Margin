@@ -12,7 +12,7 @@ from margin.storage.base import Base
 
 
 class QuantInputSnapshotRow(Base):
-    """Frozen PIT-safe quant input snapshot."""
+    """Frozen PIT-safe quant input snapshot.."""
 
     __tablename__ = "quant_input_snapshots"
     __table_args__ = (
@@ -45,7 +45,7 @@ class QuantInputSnapshotRow(Base):
 
 
 class QuantInputSnapshotFactRow(Base):
-    """Lineage from a quant input snapshot to warehouse facts."""
+    """Lineage from a quant input snapshot to warehouse facts.."""
 
     __tablename__ = "quant_input_snapshot_facts"
     __table_args__ = (
@@ -62,7 +62,7 @@ class QuantInputSnapshotFactRow(Base):
 
 
 class QuantScreenRunRow(Base):
-    """Append-only quant screen run."""
+    """Append-only quant screen run.."""
 
     __tablename__ = "quant_screen_runs"
     __table_args__ = (
@@ -80,7 +80,7 @@ class QuantScreenRunRow(Base):
 
 
 class QuantScreenResultRow(Base):
-    """Single-security quant result."""
+    """Single-security quant result.."""
 
     __tablename__ = "quant_screen_results"
     __table_args__ = (
@@ -111,7 +111,7 @@ class QuantScreenResultRow(Base):
 
 
 class QuantFactorValueRow(Base):
-    """Individual factor values used to explain a quant result."""
+    """Individual factor values used to explain a quant result.."""
 
     __tablename__ = "quant_factor_values"
     __table_args__ = (Index("ix_quant_factor_values_result_group", "result_id", "factor_group"),)
@@ -128,7 +128,7 @@ class QuantFactorValueRow(Base):
 
 
 class ResearchContextSnapshotRow(Base):
-    """Frozen research context made available to AI/dashboard modules."""
+    """Frozen research context made available to AI/dashboard modules.."""
 
     __tablename__ = "research_context_snapshots"
     __table_args__ = (
@@ -145,7 +145,7 @@ class ResearchContextSnapshotRow(Base):
 
 
 class ValuationAssessmentRow(Base):
-    """Deterministic valuation assessment."""
+    """Deterministic valuation assessment.."""
 
     __tablename__ = "valuation_assessments"
     __table_args__ = (
@@ -166,7 +166,7 @@ class ValuationAssessmentRow(Base):
 
 
 class ValuationAssessmentEvidenceRow(Base):
-    """Evidence edge for a valuation assessment."""
+    """Evidence edge for a valuation assessment.."""
 
     __tablename__ = "valuation_assessment_evidence"
 
@@ -179,7 +179,7 @@ class ValuationAssessmentEvidenceRow(Base):
 
 
 class EffectiveAssessmentPointerRow(Base):
-    """Current effective assessment pointer."""
+    """Current effective assessment pointer.."""
 
     __tablename__ = "effective_assessment_pointers"
     __table_args__ = (
@@ -200,7 +200,7 @@ class EffectiveAssessmentPointerRow(Base):
 
 
 class QuantFeatureSnapshotRow(Base):
-    """Fourth-layer quant input feature snapshot materialized from layer 3."""
+    """Fourth-layer quant input feature snapshot materialized from layer 3.."""
 
     __tablename__ = "quant_feature_snapshots"
     __table_args__ = (
@@ -234,7 +234,7 @@ class QuantFeatureSnapshotRow(Base):
 
 
 class QuantFeatureRowRow(Base):
-    """One materialized feature row consumed by the quant layer."""
+    """One materialized feature row consumed by the quant layer.."""
 
     __tablename__ = "quant_feature_rows"
     __table_args__ = (
@@ -254,7 +254,7 @@ class QuantFeatureRowRow(Base):
 
 
 class AnalysisSnapshotRow(Base):
-    """Fourth-layer analysis snapshot exposed to upper services and AI tools."""
+    """Fourth-layer analysis snapshot exposed to upper services and AI tools.."""
 
     __tablename__ = "analysis_snapshots"
     __table_args__ = (
@@ -291,7 +291,7 @@ class AnalysisSnapshotRow(Base):
 
 
 class AnalysisMetricRow(Base):
-    """Structured metric materialized into the Analysis Mart."""
+    """Structured metric materialized into the Analysis Mart.."""
 
     __tablename__ = "analysis_metrics"
     __table_args__ = (
@@ -316,7 +316,7 @@ class AnalysisMetricRow(Base):
 
 
 class AnalysisFindingRow(Base):
-    """Structured analysis finding derived from quant, canonical, or AI outputs."""
+    """Structured analysis finding derived from quant, canonical, or AI outputs.."""
 
     __tablename__ = "analysis_findings"
     __table_args__ = (
@@ -337,7 +337,7 @@ class AnalysisFindingRow(Base):
 
 
 class AnalysisEvidenceLinkRow(Base):
-    """Evidence and lineage edge for one Analysis Mart snapshot."""
+    """Evidence and lineage edge for one Analysis Mart snapshot.."""
 
     __tablename__ = "analysis_evidence_links"
     __table_args__ = (

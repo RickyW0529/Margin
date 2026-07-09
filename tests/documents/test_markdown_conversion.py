@@ -25,30 +25,24 @@ from margin.documents.markdown import (
 
 
 class FakeDoclingBackend:
-    """Small fake backend that records conversion requests.
-
-    This backend mimics the Docling interface by recording each conversion
-    request and returning a deterministic ``MarkdownConversionResult``.
-
-    Attributes:
-        requests: List of conversion requests received by the backend.
-    """
+    """Small fake backend that records conversion requests.."""
 
     def __init__(self) -> None:
-        """Initialize the fake backend with an empty request list."""
+        """Initialize the fake backend with an empty request list.
+
+        Returns:
+            None: .
+        """
         self.requests: list[MarkdownConversionRequest] = []
 
     def convert(self, request: MarkdownConversionRequest) -> MarkdownConversionResult:
         """Return a deterministic Markdown conversion result.
 
-        Records the request and returns a result whose markdown, JSON document,
-        page images, and tables vary based on the request's document format.
-
         Args:
-            request: The markdown conversion request to process.
+            request: MarkdownConversionRequest: .
 
         Returns:
-            A ``MarkdownConversionResult`` with deterministic content.
+            MarkdownConversionResult: .
         """
         self.requests.append(request)
         return MarkdownConversionResult(
@@ -70,20 +64,18 @@ class FakeDoclingBackend:
 def test_document_format_router_detects_common_input_formats() -> None:
     """Verify the router detects all formats the shared Docling interface must support.
 
-    Asserts that the format router correctly identifies PDF, HTML, DOCX, XLSX,
-    CSV, JSON, and TEXT formats from content types and source URLs.
+    Returns:
+        None: .
     """
     router = DocumentFormatRouter()
 
     assert router.detect(content_type="application/pdf", source_url=None) == DocumentFormat.PDF
     assert router.detect(content_type="text/html", source_url=None) == DocumentFormat.HTML
     assert (
-        router.detect(content_type=None, source_url="https://x/report.docx")
-        == DocumentFormat.DOCX
+        router.detect(content_type=None, source_url="https://x/report.docx") == DocumentFormat.DOCX
     )
     assert (
-        router.detect(content_type=None, source_url="https://x/report.xlsx")
-        == DocumentFormat.XLSX
+        router.detect(content_type=None, source_url="https://x/report.xlsx") == DocumentFormat.XLSX
     )
     assert router.detect(content_type="text/csv", source_url=None) == DocumentFormat.CSV
     assert router.detect(content_type="application/json", source_url=None) == DocumentFormat.JSON
@@ -109,14 +101,13 @@ def test_docling_markdown_converter_routes_every_format_to_backend(
 ) -> None:
     """Verify the converter normalizes all supported inputs into Markdown through one backend.
 
-    Converts raw content through the Docling converter with a fake backend and
-    asserts that the result's document format, markdown prefix, parser name,
-    and backend request all match the expected format.
-
     Args:
-        content_type: The MIME content type of the input document.
-        source_url: The source URL of the input document.
-        expected_format: The expected detected ``DocumentFormat``.
+        content_type: str | None: .
+        source_url: str: .
+        expected_format: DocumentFormat: .
+
+    Returns:
+        None: .
     """
     backend = FakeDoclingBackend()
     converter = DoclingMarkdownConverter(backend=backend)
@@ -137,9 +128,8 @@ def test_docling_markdown_converter_routes_every_format_to_backend(
 def test_docling_markdown_converter_reports_missing_docling_without_fallback() -> None:
     """Verify production callers can fail closed when Docling is not installed.
 
-    Creates a converter with no backend and fallback disabled, attempts a
-    conversion, and asserts that a ``DoclingUnavailableError`` is raised
-    mentioning ``docling``.
+    Returns:
+        None: .
     """
     converter = DoclingMarkdownConverter(backend=None, allow_fallback=False)
 
@@ -157,26 +147,67 @@ def test_docling_backend_enables_pdf_ocr_with_onnxruntime_by_default(
 ) -> None:
     """Verify real Docling backend construction enables PDF OCR with onnxruntime.
 
-    This isolates the adapter wiring without requiring the optional Docling
-    package in the unit-test interpreter.
+    Args:
+        monkeypatch: pytest.MonkeyPatch: .
+
+    Returns:
+        None: .
     """
     captured: dict[str, object] = {}
 
     class FakeDocumentConverter:
+        """Class implementing FakeDocumentConverter.."""
+
         def __init__(self, **kwargs: object) -> None:
+            """Helper _init__.
+
+            Args:
+                **kwargs: object: .
+
+            Returns:
+                None: .
+            """
             captured["converter_kwargs"] = kwargs
 
     class FakePdfFormatOption:
+        """Class implementing FakePdfFormatOption.."""
+
         def __init__(self, *, pipeline_options: object) -> None:
+            """Helper _init__.
+
+            Args:
+                pipeline_options: object: .
+
+            Returns:
+                None: .
+            """
             captured["pipeline_options"] = pipeline_options
 
     class FakePdfPipelineOptions:
+        """Class implementing FakePdfPipelineOptions.."""
+
         def __init__(self) -> None:
+            """Helper _init__.
+
+            Returns:
+                None: .
+            """
             self.do_ocr = False
             self.ocr_options = None
 
     class FakeRapidOcrOptions:
+        """Class implementing FakeRapidOcrOptions.."""
+
         def __init__(self, *, backend: str, lang: list[str]) -> None:
+            """Helper _init__.
+
+            Args:
+                backend: str: .
+                lang: list[str]: .
+
+            Returns:
+                None: .
+            """
             self.backend = backend
             self.lang = lang
 

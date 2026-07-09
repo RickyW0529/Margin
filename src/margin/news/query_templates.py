@@ -11,15 +11,7 @@ from margin.news.models import NewsTarget
 
 
 class GeneratedSearchQuery(BaseModel):
-    """Concrete search query plus template audit metadata.
-
-    Attributes:
-        query: Search query string.
-        template_version: Version label of the query template that produced this query.
-        template_hash: Stable hash of the template configuration for audit.
-        target_dedupe_key: Deduplication key of the target this query was built for.
-        max_results: Maximum number of results to request for this query.
-    """
+    """Concrete search query plus template audit metadata.."""
 
     query: str
     template_version: str
@@ -31,14 +23,7 @@ class GeneratedSearchQuery(BaseModel):
 
 
 class QueryTemplateVersion(BaseModel):
-    """Versioned configuration for deterministic query generation.
-
-    Attributes:
-        version: Version label for the template configuration.
-        event_terms: Tuple of event keyword terms used to build queries.
-        lookback_days: Number of days to look back when scoping queries.
-        max_results_per_query: Maximum results to request per generated query.
-    """
+    """Versioned configuration for deterministic query generation.."""
 
     version: str = "news-query-v0.4.0"
     event_terms: tuple[str, ...] = (
@@ -60,21 +45,23 @@ class QueryTemplateVersion(BaseModel):
         """Stable hash of the template config.
 
         Returns:
-            SHA-256 hex digest of the serialized template configuration.
+            str: .
         """
         payload = json.dumps(self.model_dump(mode="json"), sort_keys=True)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 class QueryTemplateFactory:
-    """Build audited WebSearch queries for one refresh target."""
+    """Build audited WebSearch queries for one refresh target.."""
 
     def __init__(self, version: QueryTemplateVersion | None = None) -> None:
         """Initialize the instance.
 
         Args:
-            version: Optional template version configuration. Defaults to a new
-                ``QueryTemplateVersion``.
+            version: QueryTemplateVersion | None: .
+
+        Returns:
+            None: .
         """
         self.version = version or QueryTemplateVersion()
 
@@ -82,10 +69,10 @@ class QueryTemplateFactory:
         """Generate deterministic company/event queries for a target.
 
         Args:
-            target: News target to generate queries for.
+            target: NewsTarget: .
 
         Returns:
-            List of ``GeneratedSearchQuery`` objects with template audit metadata.
+            list[GeneratedSearchQuery]: .
         """
         company = target.name
         ticker = target.security_id.split(".", maxsplit=1)[0]
@@ -110,7 +97,14 @@ class QueryTemplateFactory:
 
 
 def _exchange_disclosure_domain(security_id: str) -> str:
-    """Return the exchange disclosure domain for a security id."""
+    """Return the exchange disclosure domain for a security id.
+
+    Args:
+        security_id: str: .
+
+    Returns:
+        str: .
+    """
     suffix = security_id.rsplit(".", maxsplit=1)[-1].upper()
     if suffix == "SH":
         return "sse.com.cn"

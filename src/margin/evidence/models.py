@@ -27,7 +27,7 @@ from margin.news.models import SourceLevel, ensure_utc, utc_now
 
 
 class ClaimType(StrEnum):
-    """Classification of claim types."""
+    """Classification of claim types.."""
 
     CASH_FLOW_IMPROVEMENT = "cash_flow_improvement"
     VALUATION_CHANGE = "valuation_change"
@@ -41,7 +41,7 @@ class ClaimType(StrEnum):
 
 
 class FactOrInference(StrEnum):
-    """Distinguish facts from inferences (architecture §10.1 goal)."""
+    """Distinguish facts from inferences (architecture §10.1 goal).."""
 
     FACT = "fact"
     INFERENCE = "inference"
@@ -49,7 +49,7 @@ class FactOrInference(StrEnum):
 
 
 class ConflictSeverity(StrEnum):
-    """Severity level of a conflict."""
+    """Severity level of a conflict.."""
 
     LOW = "low"
     MEDIUM = "medium"
@@ -57,7 +57,7 @@ class ConflictSeverity(StrEnum):
 
 
 class ClaimStatus(StrEnum):
-    """v0.2 validation status for a research claim."""
+    """v0.2 validation status for a research claim.."""
 
     SUPPORTED = "supported"
     PARTIALLY_SUPPORTED = "partially_supported"
@@ -67,7 +67,7 @@ class ClaimStatus(StrEnum):
 
 
 class ClaimEvidenceRole(StrEnum):
-    """Role of an evidence item relative to a claim."""
+    """Role of an evidence item relative to a claim.."""
 
     SUPPORTS = "supports"
     REFUTES = "refutes"
@@ -76,7 +76,7 @@ class ClaimEvidenceRole(StrEnum):
 
 
 class EvidencePackageQualityStatus(StrEnum):
-    """Aggregate quality status for a frozen evidence package."""
+    """Aggregate quality status for a frozen evidence package.."""
 
     USABLE = "usable"
     PARTIAL = "partial"
@@ -85,12 +85,7 @@ class EvidencePackageQualityStatus(StrEnum):
 
 
 class EvidencePackage(BaseModel):
-    """Frozen package of evidence/claim IDs served to one research decision.
-
-    Evidence packages are versioned snapshots. Downstream research nodes should
-    consume package IDs rather than mutable retrieval results so that an AI
-    assessment can be replayed and audited later.
-    """
+    """Frozen package of evidence/claim IDs served to one research decision.."""
 
     package_id: str
     version: int
@@ -112,15 +107,20 @@ class EvidencePackage(BaseModel):
 
     @field_validator("decision_at", "max_available_at")
     @classmethod
-    def normalize_package_timestamps(
-        cls, value: datetime | None
-    ) -> datetime | None:
-        """Normalize package timestamps to UTC."""
+    def normalize_package_timestamps(cls, value: datetime | None) -> datetime | None:
+        """Normalize package timestamps to UTC.
+
+        Args:
+            value: datetime | None: .
+
+        Returns:
+            datetime | None: .
+        """
         return ensure_utc(value) if value is not None else None
 
 
 class EvidenceConflict(BaseModel):
-    """Conflict between two evidence records within a frozen package."""
+    """Conflict between two evidence records within a frozen package.."""
 
     conflict_id: str
     package_id: str
@@ -137,12 +137,19 @@ class EvidenceConflict(BaseModel):
     @field_validator("created_at")
     @classmethod
     def normalize_created_at(cls, value: datetime) -> datetime:
-        """Normalize conflict creation timestamp to UTC."""
+        """Normalize conflict creation timestamp to UTC.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)
 
 
 class ClaimEvidenceLink(BaseModel):
-    """Append-only role link between a claim and an evidence record."""
+    """Append-only role link between a claim and an evidence record.."""
 
     claim_id: str
     evidence_id: str
@@ -155,7 +162,14 @@ class ClaimEvidenceLink(BaseModel):
     @field_validator("created_at")
     @classmethod
     def normalize_link_created_at(cls, value: datetime) -> datetime:
-        """Normalize link creation timestamp to UTC."""
+        """Normalize link creation timestamp to UTC.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)
 
 
@@ -165,36 +179,7 @@ class ClaimEvidenceLink(BaseModel):
 
 
 class Evidence(BaseModel):
-    """A single evidence record (maps to architecture §5.3 EVIDENCE_CLAIM entity).
-
-    Built from a Chunk produced by 04-text_indexing, carrying complete locator fields.
-    Immutable after persistence.
-
-    Attributes:
-        evidence_id: Unique identifier for this evidence record.
-        chunk_id: Identifier of the originating chunk.
-        document_id: Identifier of the originating document.
-        source_type: Source type string (e.g. filing_pdf, web_page, table, api_record,
-            user_file).
-        source_url: Optional URL of the original source.
-        source_name: Optional human-readable source name.
-        source_level: Source level priority (L1-L5).
-        content_hash: Hash of the evidence content.
-        content: Text content of the evidence.
-        symbol: Optional ticker symbol associated with the evidence.
-        quality_score: Optional explicit quality score in [0, 1].
-        published_at: Publication timestamp (UTC).
-        available_at: Availability timestamp (UTC).
-        retrieved_at: Retrieval timestamp (UTC).
-        page: Optional page number in the original document.
-        section: Optional section name in the original document.
-        paragraph_index: Optional paragraph index in the original document.
-        table_id: Optional table identifier.
-        row_id: Optional row identifier.
-        quote_span: Optional character span tuple (start, end).
-        snapshot_id: Optional snapshot identifier.
-        snapshot_hash: Optional snapshot content hash.
-    """
+    """A single evidence record (maps to architecture §5.3 EVIDENCE_CLAIM entity).."""
 
     evidence_id: str
     chunk_id: str
@@ -230,17 +215,24 @@ class Evidence(BaseModel):
         """Normalize timestamp fields to UTC.
 
         Args:
-            value: A datetime value to normalize.
+            value: datetime: .
 
         Returns:
-            The datetime normalized to UTC.
+            datetime: .
         """
         return ensure_utc(value)
 
     @field_validator("quality_score")
     @classmethod
     def validate_quality_score(cls, value: float | None) -> float | None:
-        """Validate that an optional quality score is within [0, 1]."""
+        """Validate that an optional quality score is within [0, 1].
+
+        Args:
+            value: float | None: .
+
+        Returns:
+            float | None: .
+        """
         if value is None:
             return None
         if not 0.0 <= value <= 1.0:
@@ -251,28 +243,30 @@ class Evidence(BaseModel):
     def can_change_research_state(self) -> bool:
         """Return whether this evidence may directly change research/position state.
 
-        Only L1-L3 sources can change state; L4/L5 cannot (architecture §6.2.1).
-
         Returns:
-            True if the evidence source level is L3 or higher priority, else False.
+            bool: .
         """
         return self.source_level <= SourceLevel.L3
 
     @property
     def effective_quality_score(self) -> float:
-        """Return the explicit quality score or the default score for the source level."""
-        return self.quality_score if self.quality_score is not None else quality_score_for_level(
-            self.source_level
+        """Return the explicit quality score or the default score for the source level.
+
+        Returns:
+            float: .
+        """
+        return (
+            self.quality_score
+            if self.quality_score is not None
+            else quality_score_for_level(self.source_level)
         )
 
     @property
     def is_locatable(self) -> bool:
         """Return whether the evidence can be located in the original source.
 
-        Requires at least a source_url plus one structural locator field.
-
         Returns:
-            True if both source_url and a structural locator are present.
+            bool: .
         """
         has_structural = (
             self.page is not None
@@ -296,11 +290,11 @@ class Evidence(BaseModel):
         """Build an Evidence instance from a Chunk of the text indexing module.
 
         Args:
-            chunk: A Chunk object containing locator fields and source level.
-            source_type: Source type; if None, inferred from chunk.doc_type.
+            chunk: Any: .
+            source_type: str | None: .
 
         Returns:
-            A new Evidence instance.
+            Evidence: .
         """
         inferred_type = source_type or _infer_source_type(chunk)
         locator = getattr(chunk, "locator", None)
@@ -340,10 +334,10 @@ def _infer_source_type(chunk: Any) -> str:
     """Infer source_type from a chunk's doc_type.
 
     Args:
-        chunk: A chunk object with a doc_type attribute.
+        chunk: Any: .
 
     Returns:
-        The inferred source type string.
+        str: .
     """
     doc_type = str(getattr(chunk, "doc_type", "unknown"))
     if doc_type in ("annual_report", "quarterly_report", "filing"):
@@ -363,10 +357,10 @@ def quality_score_for_level(source_level: SourceLevel) -> float:
     """Map a source level to a default evidence quality score.
 
     Args:
-        source_level: Source priority level.
+        source_level: SourceLevel: .
 
     Returns:
-        Default score in [0, 1] used when no explicit quality score is attached.
+        float: .
     """
     return {
         SourceLevel.L1: 1.0,
@@ -383,17 +377,7 @@ def quality_score_for_level(source_level: SourceLevel) -> float:
 
 
 class ConflictRecord(BaseModel):
-    """Conflict record (architecture §10.3 conflicts field).
-
-    Created when multiple pieces of evidence provide opposite support for the same claim.
-
-    Attributes:
-        conflict_id: Unique identifier for this conflict record.
-        claim_id: Identifier of the claim involved in the conflict.
-        conflicting_evidence_ids: IDs of the evidence that conflict with each other.
-        description: Human-readable description of the conflict.
-        severity: Severity level of the conflict.
-    """
+    """Conflict record (architecture §10.3 conflicts field).."""
 
     conflict_id: str
     claim_id: str
@@ -410,24 +394,7 @@ class ConflictRecord(BaseModel):
 
 
 class Claim(BaseModel):
-    """Evidence Claim (architecture §10.3).
-
-    Each key research conclusion is encapsulated as a Claim, including fact/inference marking,
-    evidence references, confidence, conflict list, effective timestamp, and citation locators.
-    Immutable after persistence.
-
-    Attributes:
-        claim_id: Unique identifier for this claim.
-        claim_type: Classification of the claim.
-        statement: Human-readable claim statement.
-        fact_or_inference: Whether the claim is a fact, inference, or unknown.
-        evidence_ids: List of referenced evidence IDs.
-        confidence: Confidence score in [0, 1].
-        conflicts: List of conflict records associated with the claim.
-        effective_at: Timestamp when the claim becomes effective (UTC).
-        locator: Optional primary citation locator snapshot.
-        symbol: Optional ticker symbol associated with the claim.
-    """
+    """Evidence Claim (architecture §10.3).."""
 
     claim_id: str
     claim_type: ClaimType = ClaimType.CUSTOM
@@ -449,10 +416,10 @@ class Claim(BaseModel):
         """Normalize the effective timestamp to UTC.
 
         Args:
-            value: A datetime value to normalize.
+            value: datetime: .
 
         Returns:
-            The datetime normalized to UTC.
+            datetime: .
         """
         return ensure_utc(value)
 
@@ -462,13 +429,10 @@ class Claim(BaseModel):
         """Validate that confidence is within the valid range [0, 1].
 
         Args:
-            value: A confidence score.
+            value: float: .
 
         Returns:
-            The validated confidence score.
-
-        Raises:
-            ValueError: If value is outside [0, 1].
+            float: .
         """
         if not 0.0 <= value <= 1.0:
             raise ValueError(f"confidence must be in [0, 1], got {value}")
@@ -479,7 +443,7 @@ class Claim(BaseModel):
         """Return whether the claim has any conflicts.
 
         Returns:
-            True if the claim has one or more conflicts.
+            bool: .
         """
         return len(self.conflicts) > 0
 
@@ -488,7 +452,7 @@ class Claim(BaseModel):
         """Return whether the claim references any evidence.
 
         Returns:
-            True if the claim has one or more evidence references.
+            bool: .
         """
         return len(self.evidence_ids) > 0
 
@@ -496,17 +460,12 @@ class Claim(BaseModel):
     def conflict_confidence_cap(self) -> float:
         """Return the confidence cap when conflicts exist (architecture §25).
 
-        When a claim has conflicts, its effective confidence is capped to reduce reliance on
-        disputed conclusions.
-
         Returns:
-            The original confidence if no conflicts exist; otherwise the capped value.
+            float: .
         """
         if not self.has_conflict:
             return self.confidence
-        high_severity = any(
-            c.severity == ConflictSeverity.HIGH for c in self.conflicts
-        )
+        high_severity = any(c.severity == ConflictSeverity.HIGH for c in self.conflicts)
         if high_severity:
             return min(self.confidence, 0.3)
         return min(self.confidence, 0.5)
@@ -516,7 +475,7 @@ class Claim(BaseModel):
         """Return whether the claim is marked as a fact (not an inference).
 
         Returns:
-            True if fact_or_inference is FACT.
+            bool: .
         """
         return self.fact_or_inference == FactOrInference.FACT
 
@@ -525,7 +484,7 @@ class Claim(BaseModel):
         """Return whether the claim is marked as an inference.
 
         Returns:
-            True if fact_or_inference is INFERENCE.
+            bool: .
         """
         return self.fact_or_inference == FactOrInference.INFERENCE
 
@@ -549,18 +508,18 @@ def make_claim(
     """Create a Claim with an auto-generated claim_id.
 
     Args:
-        statement: The claim statement text.
-        claim_type: The claim classification.
-        fact_or_inference: Whether the claim is a fact, inference, or unknown.
-        evidence_ids: Optional list of referenced evidence IDs.
-        confidence: Optional initial confidence score in [0, 1].
-        conflicts: Optional list of conflict records.
-        locator: Optional primary citation locator snapshot.
-        symbol: Optional associated ticker symbol.
-        effective_at: Optional effective timestamp; defaults to now (UTC).
+        statement: str: .
+        claim_type: ClaimType: .
+        fact_or_inference: FactOrInference: .
+        evidence_ids: list[str] | None: .
+        confidence: float: .
+        conflicts: list[ConflictRecord] | None: .
+        locator: dict[str, Any] | None: .
+        symbol: str | None: .
+        effective_at: datetime | None: .
 
     Returns:
-        A new Claim instance.
+        Claim: .
     """
     return Claim(
         claim_id=f"clm_{uuid.uuid4().hex[:12]}",
@@ -585,13 +544,13 @@ def make_conflict(
     """Create a ConflictRecord with an auto-generated conflict_id.
 
     Args:
-        claim_id: The ID of the claim involved in the conflict.
-        conflicting_evidence_ids: IDs of the evidence that conflict with each other.
-        description: Human-readable conflict description.
-        severity: Conflict severity level.
+        claim_id: str: .
+        conflicting_evidence_ids: list[str]: .
+        description: str: .
+        severity: ConflictSeverity: .
 
     Returns:
-        A new ConflictRecord instance.
+        ConflictRecord: .
     """
     return ConflictRecord(
         conflict_id=f"cfl_{uuid.uuid4().hex[:12]}",
@@ -613,26 +572,19 @@ def detect_conflicts(
 ) -> dict[str, list[ConflictRecord]]:
     """Detect conflicts among claims.
 
-    Rules:
-        - Same claim_type with opposite statement direction (support vs oppose) marks a conflict.
-        - Large source_level gap within the same claim's evidence (L1 vs L5) marks a conflict.
-
     Args:
-        claims: List of claims to check.
-        evidences: Mapping from evidence_id to Evidence.
+        claims: list[Claim]: .
+        evidences: dict[str, Evidence]: .
 
     Returns:
-        Mapping from claim_id to a list of ConflictRecord instances.
+        dict[str, list[ConflictRecord]]: .
     """
     conflicts_map: dict[str, list[ConflictRecord]] = {}
 
     for claim in claims:
         claim_conflicts: list[ConflictRecord] = []
 
-        claim_evidence = [
-            evidences[eid] for eid in claim.evidence_ids
-            if eid in evidences
-        ]
+        claim_evidence = [evidences[eid] for eid in claim.evidence_ids if eid in evidences]
 
         levels = [e.source_level for e in claim_evidence]
         if levels and max(levels) == SourceLevel.L5 and min(levels) <= SourceLevel.L2:
@@ -681,12 +633,11 @@ def _is_contradictory(stmt_a: str, stmt_b: str) -> bool:
     """Return whether two statements have opposite direction.
 
     Args:
-        stmt_a: First statement.
-        stmt_b: Second statement.
+        stmt_a: str: .
+        stmt_b: str: .
 
     Returns:
-        True if one statement contains a positive marker and the other contains the matching
-        negative marker.
+        bool: .
     """
     a_lower = stmt_a.lower()
     b_lower = stmt_b.lower()
@@ -704,21 +655,14 @@ def check_l5_restriction(
 ) -> bool:
     """Check the L5 usage restriction (plan 0501.4).
 
-    L5 evidence may only trigger investigation and must not change research/position state.
-    A claim supported solely by L5 evidence cannot directly change state.
-
     Args:
-        claim: The claim to check.
-        evidences: Mapping from evidence_id to Evidence.
+        claim: Claim: .
+        evidences: dict[str, Evidence]: .
 
     Returns:
-        True if the claim passes the L5 restriction (has at least one non-L5 evidence);
-        False if it relies only on L5 evidence or has no evidence.
+        bool: .
     """
-    claim_evidence = [
-        evidences[eid] for eid in claim.evidence_ids
-        if eid in evidences
-    ]
+    claim_evidence = [evidences[eid] for eid in claim.evidence_ids if eid in evidences]
     if not claim_evidence:
         return False
 

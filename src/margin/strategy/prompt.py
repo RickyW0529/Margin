@@ -6,16 +6,7 @@ from margin.strategy.models import PromptLayer, StrategyConfig
 
 
 class PromptLayerBuilder:
-    """Compose the final research prompt from immutable layered sources.
-
-    Layer order (outer to inner, per architecture §15.2):
-    1. System Guardrail Prompt
-    2. Platform Research Prompt
-    3. Strategy Template Prompt
-    4. User Custom Prompt
-    5. Current Task Context
-    6. Retrieved Evidence
-    """
+    """Compose the final research prompt from immutable layered sources.."""
 
     def build_layers(
         self,
@@ -28,18 +19,13 @@ class PromptLayerBuilder:
         """Return all prompt layers for audit and serialization.
 
         Args:
-            config: The strategy configuration driving the prompt content.
-            custom_instructions: Optional override for the user's custom
-                instructions. Falls back to ``config.ai.custom_instructions``
-                when omitted.
-            evidence_context: Optional retrieved evidence to append as the
-                final prompt layer.
-            task: Optional task description to include in the task context
-                layer. Falls back to a default task when omitted.
+            config: StrategyConfig: .
+            custom_instructions: str | None: .
+            evidence_context: str: .
+            task: str: .
 
         Returns:
-            An ordered tuple of :class:`PromptLayer` objects from outermost
-            guardrail to innermost evidence context.
+            tuple[PromptLayer, ...]: .
         """
         custom = (
             custom_instructions
@@ -94,18 +80,13 @@ class PromptLayerBuilder:
         """Return the final merged prompt string.
 
         Args:
-            config: The strategy configuration driving the prompt content.
-            custom_instructions: Optional override for the user's custom
-                instructions. Falls back to ``config.ai.custom_instructions``
-                when omitted.
-            evidence_context: Optional retrieved evidence to append as the
-                final prompt layer.
-            task: Optional task description to include in the task context
-                layer. Falls back to a default task when omitted.
+            config: StrategyConfig: .
+            custom_instructions: str | None: .
+            evidence_context: str: .
+            task: str: .
 
         Returns:
-            A single string containing all non-empty prompt layers joined by
-            blank lines.
+            str: .
         """
         layers = self.build_layers(
             config,
@@ -118,7 +99,11 @@ class PromptLayerBuilder:
         )
 
     def _guardrail_prompt(self) -> str:
-        """Return the immutable system guardrail prompt."""
+        """Return the immutable system guardrail prompt.
+
+        Returns:
+            str: .
+        """
         return (
             "You are a compliance-aware research assistant. You must: "
             "cite all factual claims with evidence references; "
@@ -131,7 +116,11 @@ class PromptLayerBuilder:
         )
 
     def _platform_prompt(self) -> str:
-        """Return the immutable platform research prompt."""
+        """Return the immutable platform research prompt.
+
+        Returns:
+            str: .
+        """
         return (
             "You are researching A-share listed companies for a local-first, "
             "evidence-driven investment research system. Use only the retrieved "
@@ -142,11 +131,10 @@ class PromptLayerBuilder:
         """Return the strategy-specific prompt derived from ``config``.
 
         Args:
-            config: The strategy configuration to summarize in the prompt.
+            config: StrategyConfig: .
 
         Returns:
-            A string describing the strategy horizon, universe, evidence
-            requirements, and risk limits.
+            str: .
         """
         return (
             f"Strategy horizon: {config.horizon} days. "
@@ -160,10 +148,10 @@ class PromptLayerBuilder:
         """Return the default task context for a strategy run.
 
         Args:
-            config: The strategy configuration (reserved for future use).
+            config: StrategyConfig: .
 
         Returns:
-            A default task instruction asking for a structured research signal.
+            str: .
         """
         return (
             "Analyze the given symbol according to the strategy above. "

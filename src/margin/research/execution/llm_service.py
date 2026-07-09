@@ -20,7 +20,7 @@ from margin.research.prompts.models import RenderedPrompt
 
 
 class StructuredLLMResponse(BaseModel):
-    """Sanitized structured completion returned to node code."""
+    """Sanitized structured completion returned to node code.."""
 
     call_id: str
     output: dict[str, Any]
@@ -36,7 +36,7 @@ class StructuredLLMResponse(BaseModel):
 
 
 class LLMCallAuditRecord(BaseModel):
-    """Hash-only audit metadata for a structured LLM call."""
+    """Hash-only audit metadata for a structured LLM call.."""
 
     call_id: str
     billing_key: str
@@ -67,31 +67,38 @@ class LLMCallAuditRecord(BaseModel):
 
 
 class LLMCallAuditRepository(Protocol):
-    """Persistence boundary for LLM call metadata."""
+    """Persistence boundary for LLM call metadata.."""
 
     def add(self, record: LLMCallAuditRecord) -> None:
         """Persist one immutable call audit.
 
         Args:
-            record: Hash-only audit record to persist.
+            record: LLMCallAuditRecord: .
+
+        Returns:
+            None: .
         """
 
 
 class MemoryLLMCallAuditRepository:
-    """Append-only in-memory LLM call audit repository."""
+    """Append-only in-memory LLM call audit repository.."""
 
     def __init__(self) -> None:
-        """Initialize the instance."""
+        """Initialize the instance.
+
+        Returns:
+            None: .
+        """
         self._records: dict[str, LLMCallAuditRecord] = {}
 
     def add(self, record: LLMCallAuditRecord) -> None:
         """Persist one immutable LLM call audit record.
 
         Args:
-            record: Hash-only audit record to persist.
+            record: LLMCallAuditRecord: .
 
-        Raises:
-            ValueError: If a conflicting record with the same call ID exists.
+        Returns:
+            None: .
         """
         current = self._records.get(record.call_id)
         if current is not None and current != record:
@@ -100,12 +107,16 @@ class MemoryLLMCallAuditRepository:
 
     @property
     def records(self) -> tuple[LLMCallAuditRecord, ...]:
-        """Return call audits in insertion order."""
+        """Return call audits in insertion order.
+
+        Returns:
+            tuple[LLMCallAuditRecord, ...]: .
+        """
         return tuple(self._records.values())
 
 
 class LLMService:
-    """Call existing providers/routers and validate structured output."""
+    """Call existing providers/routers and validate structured output.."""
 
     def __init__(
         self,
@@ -116,8 +127,11 @@ class LLMService:
         """Initialize the LLM service.
 
         Args:
-            provider: LLM provider or model router for completions.
-            audit_repository: Optional audit repository for call metadata.
+            provider: LLMProvider | ModelRouter: .
+            audit_repository: LLMCallAuditRepository | None: .
+
+        Returns:
+            None: .
         """
         self._provider = provider
         self._audit = audit_repository or MemoryLLMCallAuditRepository()
@@ -135,15 +149,15 @@ class LLMService:
         """Complete and validate one structured graph-node request.
 
         Args:
-            prompt: Rendered prompt to send to the LLM.
-            output_schema: JSON schema used to validate the response.
-            task_type: Node task type for routing and audit.
-            node_name: Name of the calling graph node.
-            graph_run_id: Identifier of the parent graph run.
-            deadline: Optional deadline; returns a failure if already exceeded.
+            prompt: RenderedPrompt: .
+            output_schema: dict[str, Any]: .
+            task_type: str: .
+            node_name: str: .
+            graph_run_id: str: .
+            deadline: datetime | None: .
 
         Returns:
-            A ``StructuredLLMResponse`` with validated output or error details.
+            StructuredLLMResponse: .
         """
         prompt_hash = prompt.prompt_hash
         schema_hash = _hash_json(output_schema)
@@ -243,7 +257,20 @@ class LLMService:
         request_hash: str,
         prompt_version: str,
     ) -> None:
-        """Record one LLM call audit entry with hash-only metadata."""
+        """Record one LLM call audit entry with hash-only metadata.
+
+        Args:
+            response: StructuredLLMResponse: .
+            graph_run_id: str: .
+            node_name: str: .
+            prompt_hash: str: .
+            schema_hash: str: .
+            request_hash: str: .
+            prompt_version: str: .
+
+        Returns:
+            None: .
+        """
         billing_key = request_hash
         provider_name, model_name, model_version = _provider_identity(
             self._provider,
@@ -264,11 +291,7 @@ class LLMService:
                 prompt_hash=prompt_hash,
                 schema_hash=schema_hash,
                 request_hash=request_hash,
-                response_hash=(
-                    _hash_json(response.output)
-                    if response.output
-                    else None
-                ),
+                response_hash=(_hash_json(response.output) if response.output else None),
                 latency_ms=response.latency_ms,
                 input_tokens=response.input_tokens,
                 output_tokens=response.output_tokens,
@@ -287,7 +310,14 @@ class LLMService:
 
 
 def _task_type(value: str) -> TaskType:
-    """Map a node task type string to a ModelRouter TaskType."""
+    """Map a node task type string to a ModelRouter TaskType.
+
+    Args:
+        value: str: .
+
+    Returns:
+        TaskType: .
+    """
     mapping = {
         "draft": TaskType.EVIDENCE,
         "reflection": TaskType.REFLECT,
@@ -300,7 +330,15 @@ def _provider_identity(
     provider: LLMProvider | ModelRouter,
     fallback_model: str,
 ) -> tuple[str, str, str]:
-    """Return safe provider/model labels for audit rows."""
+    """Return safe provider/model labels for audit rows.
+
+    Args:
+        provider: LLMProvider | ModelRouter: .
+        fallback_model: str: .
+
+    Returns:
+        tuple[str, str, str]: .
+    """
     descriptor = getattr(provider, "descriptor", None)
     if descriptor is not None:
         name = str(getattr(descriptor, "name", "unknown"))
@@ -310,7 +348,14 @@ def _provider_identity(
 
 
 def _hash_json(value: Any) -> str:
-    """Return a deterministic SHA-256 hash for a JSON-serializable value."""
+    """Return a deterministic SHA-256 hash for a JSON-serializable value.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        str: .
+    """
     encoded = json.dumps(
         value,
         sort_keys=True,

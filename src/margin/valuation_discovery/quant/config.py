@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class QuantConfig(BaseModel):
-    """Configurable thresholds for hard filters and scoring."""
+    """Configurable thresholds for hard filters and scoring.."""
 
     model_config = ConfigDict(frozen=True)
 

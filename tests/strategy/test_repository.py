@@ -14,7 +14,7 @@ def test_memory_repository_stores_profile():
     """Verify the memory repository stores and retrieves a strategy profile.
 
     Returns:
-        None.
+        Any: .
     """
     repo = MemoryStrategyRepository()
     profile = StrategyProfile(owner_id="user_1", name="Test")
@@ -26,7 +26,7 @@ def test_memory_repository_lists_profiles_for_owner():
     """Verify the memory repository lists profiles filtered by owner.
 
     Returns:
-        None.
+        Any: .
     """
     repo = MemoryStrategyRepository()
     p1 = StrategyProfile(owner_id="user_1", name="A")
@@ -43,7 +43,7 @@ def test_memory_repository_updates_profile():
     """Verify the memory repository updates an existing profile with new versions.
 
     Returns:
-        None.
+        Any: .
     """
     repo = MemoryStrategyRepository()
     profile = StrategyProfile(owner_id="user_1", name="Test")

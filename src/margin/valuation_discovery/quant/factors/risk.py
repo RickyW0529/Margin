@@ -8,7 +8,7 @@ from margin.valuation_discovery.quant.normalization import FactorNormalizer
 
 
 class RiskFactorCalculator:
-    """Calculate risk-health scores where higher means lower risk."""
+    """Calculate risk-health scores where higher means lower risk.."""
 
     WEIGHTS = {
         "volatility_120d": 0.20,
@@ -30,11 +30,25 @@ class RiskFactorCalculator:
     }
 
     def __init__(self, normalizer: FactorNormalizer | None = None) -> None:
-        """Initialize the calculator."""
+        """Initialize the calculator.
+
+        Args:
+            normalizer: FactorNormalizer | None: .
+
+        Returns:
+            None: .
+        """
         self._normalizer = normalizer or FactorNormalizer()
 
     def calculate(self, frame: pd.DataFrame) -> pd.DataFrame:
-        """Return a 0-100 health score using available risk dimensions."""
+        """Return a 0-100 health score using available risk dimensions.
+
+        Args:
+            frame: pd.DataFrame: .
+
+        Returns:
+            pd.DataFrame: .
+        """
         scored = frame.copy()
         if "industry_id" not in scored.columns:
             scored["industry_id"] = "__all__"
@@ -55,8 +69,6 @@ class RiskFactorCalculator:
             return scored
         result = 0.0
         for column, weight in available.items():
-            result = result + scored[f"{column}_risk_score"] * (
-                weight / total_weight
-            )
+            result = result + scored[f"{column}_risk_score"] * (weight / total_weight)
         scored["risk_score"] = result.clip(0.0, 100.0)
         return scored

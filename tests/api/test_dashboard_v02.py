@@ -16,7 +16,11 @@ DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 
 
 def test_research_list_returns_paged_items_and_facets() -> None:
-    """Test that the research list returns paged items and facets."""
+    """Test that the research list returns paged items and facets.
+
+    Returns:
+        None: .
+    """
     client, _, _ = _client_with_seeded_v2_data()
 
     response = client.get(
@@ -37,7 +41,11 @@ def test_research_list_returns_paged_items_and_facets() -> None:
 
 
 def test_research_list_resolves_scope_current_alias() -> None:
-    """Test that the dashboard list resolves scope-current before querying."""
+    """Test that the dashboard list resolves scope-current before querying.
+
+    Returns:
+        None: .
+    """
     client, _, _ = _client_with_seeded_v2_data(active_scope_id="scope-active")
 
     response = client.get(
@@ -56,7 +64,11 @@ def test_research_list_resolves_scope_current_alias() -> None:
 
 
 def test_research_item_detail_returns_current_and_effective_context() -> None:
-    """Test that v2 item detail separates current review from effective assessment."""
+    """Test that v2 item detail separates current review from effective assessment.
+
+    Returns:
+        None: .
+    """
     client, _, item_id = _client_with_seeded_v2_data()
 
     response = client.get(f"/api/v1/research/items/{item_id}")
@@ -83,7 +95,14 @@ def _client_with_seeded_v2_data(
     *,
     active_scope_id: str = "scope-1",
 ) -> tuple[TestClient, str, str]:
-    """Build a test client seeded with v2 dashboard data."""
+    """Build a test client seeded with v2 dashboard data.
+
+    Args:
+        active_scope_id: str: .
+
+    Returns:
+        tuple[TestClient, str, str]: .
+    """
     dashboard_repository = MemoryDashboardRepository()
     bundle = DashboardServiceBundle.in_memory(
         dashboard_repository=dashboard_repository,
@@ -119,14 +138,28 @@ def _client_with_seeded_v2_data(
 
 
 class _FakeStrategyService:
-    """Fake strategy service exposing one active research scope."""
+    """Fake strategy service exposing one active research scope.."""
 
     def __init__(self, active_scope_id: str) -> None:
-        """Store the active scope ID."""
+        """Store the active scope ID.
+
+        Args:
+            active_scope_id: str: .
+
+        Returns:
+            None: .
+        """
         self._active_scope_id = active_scope_id
 
     def ensure_current_research_scope(self, owner_id: str) -> SimpleNamespace:
-        """Return the reconciled current scope."""
+        """Return the reconciled current scope.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            SimpleNamespace: .
+        """
         return SimpleNamespace(
             owner_id=owner_id,
             version_id=self._active_scope_id,
@@ -134,7 +167,14 @@ class _FakeStrategyService:
         )
 
     def list_research_scopes(self, owner_id: str) -> list[SimpleNamespace]:
-        """Return active scope metadata."""
+        """Return active scope metadata.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            list[SimpleNamespace]: .
+        """
         return [
             SimpleNamespace(
                 owner_id=owner_id,

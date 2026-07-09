@@ -40,13 +40,11 @@ def test_finalize_outbox_is_idempotent_and_updates_graph_run(
 ) -> None:
     """Verify final review persistence is transactional and outbox-idempotent.
 
-    Seeds a graph run, persists the same final review twice, and asserts that
-    only one review and one outbox event are stored. Also verifies that the
-    graph run status is updated to ``completed`` with the correct outcome and
-    effective assessment ID.
-
     Args:
-        database_url: Fixture providing the PostgreSQL integration-test URL.
+        database_url: str: .
+
+    Returns:
+        None: .
     """
     session_factory = _session_factory(database_url)
     graph_run_id = "graph-delta-idempotent"
@@ -60,10 +58,13 @@ def test_finalize_outbox_is_idempotent_and_updates_graph_run(
 
     stored = repository.get_review(review.review_id)
     assert stored == review
-    assert repository.count_outbox_events(
-        graph_run_id,
-        "research_delta_published",
-    ) == 1
+    assert (
+        repository.count_outbox_events(
+            graph_run_id,
+            "research_delta_published",
+        )
+        == 1
+    )
     with session_factory() as session:
         run = session.get(AIGraphRunRow, graph_run_id)
         assert run is not None
@@ -86,12 +87,11 @@ def test_finalize_rejects_conflicting_replay_for_same_graph_run(
 ) -> None:
     """Verify final review persistence rejects conflicting idempotency replays.
 
-    Seeds a graph run, persists a final review, then attempts to persist a
-    conflicting review with a different ID and hash. Asserts that the second
-    call raises a ``ValueError`` and that only one outbox event exists.
-
     Args:
-        database_url: Fixture providing the PostgreSQL integration-test URL.
+        database_url: str: .
+
+    Returns:
+        None: .
     """
     session_factory = _session_factory(database_url)
     graph_run_id = "graph-delta-conflict"
@@ -112,16 +112,26 @@ def test_finalize_rejects_conflicting_replay_for_same_graph_run(
     with pytest.raises(ValueError, match="conflicting final review"):
         repository.persist_final_review(conflicting)
 
-    assert repository.count_outbox_events(
-        graph_run_id,
-        "research_delta_published",
-    ) == 1
+    assert (
+        repository.count_outbox_events(
+            graph_run_id,
+            "research_delta_published",
+        )
+        == 1
+    )
 
     _cleanup_graph_rows(session_factory, graph_run_id)
 
 
 def _review(*, graph_run_id: str) -> ResearchDeltaReview:
-    """Build a ``ResearchDeltaReview`` instance for the given graph run ID."""
+    """Build a ``ResearchDeltaReview`` instance for the given graph run ID.
+
+    Args:
+        graph_run_id: str: .
+
+    Returns:
+        ResearchDeltaReview: .
+    """
     return ResearchDeltaReview(
         review_id=f"review-{graph_run_id}",
         graph_run_id=graph_run_id,
@@ -147,14 +157,29 @@ def _review(*, graph_run_id: str) -> ResearchDeltaReview:
 
 
 def _session_factory(database_url: str):
-    """Create a session factory with all tables initialized on the test database."""
+    """Create a session factory with all tables initialized on the test database.
+
+    Args:
+        database_url: str: .
+
+    Returns:
+        Any: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     return create_session_factory(engine)
 
 
 def _seed_graph_run(session_factory, graph_run_id: str) -> None:
-    """Insert an initial ``AIGraphRunRow`` row for the given graph run ID."""
+    """Insert an initial ``AIGraphRunRow`` row for the given graph run ID.
+
+    Args:
+        session_factory: Any: .
+        graph_run_id: str: .
+
+    Returns:
+        None: .
+    """
     now = datetime.now(UTC)
     with session_factory.begin() as session:
         session.add(
@@ -182,7 +207,15 @@ def _seed_graph_run(session_factory, graph_run_id: str) -> None:
 
 
 def _cleanup_graph_rows(session_factory, graph_run_id: str) -> None:
-    """Delete all delta-related rows for the given graph run ID."""
+    """Delete all delta-related rows for the given graph run ID.
+
+    Args:
+        session_factory: Any: .
+        graph_run_id: str: .
+
+    Returns:
+        None: .
+    """
     with session_factory.begin() as session:
         for row in (
             ResearchDeltaOutboxRow,

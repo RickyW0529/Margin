@@ -30,7 +30,11 @@ from margin.strategy.repository import MemoryStrategyRepository
 
 
 def test_provider_status_providers_use_active_provider_configs() -> None:
-    """Test that provider status reads active provider DB configs, not env."""
+    """Test that provider status reads active provider DB configs, not env.
+
+    Returns:
+        None: .
+    """
     repository = MemoryStrategyRepository()
     repository.save_provider_config(
         ProviderConfigVersion(
@@ -45,10 +49,17 @@ def test_provider_status_providers_use_active_provider_configs() -> None:
     )
 
     class FakeHealthService:
-        """Minimal provider health service for status-probe tests."""
+        """Minimal provider health service for status-probe tests.."""
 
         def test_connection(self, version_id: str) -> ProviderHealth:
-            """Return a healthy DB-backed provider health result."""
+            """Return a healthy DB-backed provider health result.
+
+            Args:
+                version_id: str: .
+
+            Returns:
+                ProviderHealth: .
+            """
             return ProviderHealth(
                 provider_name="llm",
                 provider_config_version_id=version_id,
@@ -67,14 +78,19 @@ def test_provider_status_providers_use_active_provider_configs() -> None:
     assert statuses["llm"].status.value == "healthy"
     assert statuses["embedding"].status.value == "degraded"
     assert "provider_database" in providers[0].descriptor.secret_refs
-    assert all(
-        "MARGIN_" not in ",".join(provider.descriptor.secret_refs)
-        for provider in providers
-    )
+    assert all("MARGIN_" not in ",".join(provider.descriptor.secret_refs) for provider in providers)
 
 
 def test_build_data_warehouse_stack_uses_centralized_settings(database_url, tmp_path):
-    """Test that build_data_warehouse_stack uses centralized settings."""
+    """Test that build_data_warehouse_stack uses centralized settings.
+
+    Args:
+        database_url: Any: .
+        tmp_path: Any: .
+
+    Returns:
+        Any: .
+    """
     settings = MarginSettings(
         _env_file=None,
         database_url=database_url,
@@ -90,7 +106,15 @@ def test_runtime_factory_dependency_uses_active_versioned_config(
     database_url: str,
     monkeypatch,
 ) -> None:
-    """Test that production runtime construction reads versioned config, not env."""
+    """Test that production runtime construction reads versioned config, not env.
+
+    Args:
+        database_url: str: .
+        monkeypatch: Any: .
+
+    Returns:
+        None: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     secret_store = SecretStore(
@@ -133,7 +157,11 @@ def test_runtime_factory_dependency_uses_active_versioned_config(
 
 
 def test_get_main_agent_runtime_returns_cached_runtime() -> None:
-    """Test that the v0.4 MainAgent runtime dependency is cached."""
+    """Test that the v0.4 MainAgent runtime dependency is cached.
+
+    Returns:
+        None: .
+    """
     from margin.agent_runtime.context_store import SQLAlchemyAgentContextStore
     from margin.api.dependencies import get_main_agent_runtime
 

@@ -20,11 +20,11 @@ def build_keyword_writer_prompt(
     """Build the keyword writer prompt.
 
     Args:
-        target: News target to generate queries for.
-        revision_notes: Optional review notes from a previous review round.
+        target: NewsTarget: .
+        revision_notes: tuple[str, ...]: .
 
     Returns:
-        A ``RenderedPrompt`` for the keyword writer node.
+        RenderedPrompt: .
     """
     return _prompt(
         node_name="news_keyword_writer",
@@ -59,11 +59,11 @@ def build_keyword_review_prompt(
     """Build the keyword review prompt.
 
     Args:
-        target: News target the queries were generated for.
-        queries: Tuple of candidate query strings to review.
+        target: NewsTarget: .
+        queries: tuple[str, ...]: .
 
     Returns:
-        A ``RenderedPrompt`` for the keyword review node.
+        RenderedPrompt: .
     """
     return _prompt(
         node_name="news_keyword_review",
@@ -91,12 +91,12 @@ def build_article_writer_prompt(
     """Build the article extraction prompt.
 
     Args:
-        target: News target the event belongs to.
-        event: Persisted document event to extract findings from.
-        revision_notes: Optional review notes from a previous review round.
+        target: NewsTarget: .
+        event: DocumentEvent: .
+        revision_notes: tuple[str, ...]: .
 
     Returns:
-        A ``RenderedPrompt`` for the article writer node.
+        RenderedPrompt: .
     """
     return _prompt(
         node_name="news_article_writer",
@@ -121,12 +121,12 @@ def build_writing_review_prompt(
     """Build the article finding review prompt.
 
     Args:
-        target: News target the event belongs to.
-        event: Persisted document event the draft was extracted from.
-        draft: Draft finding dictionary to review.
+        target: NewsTarget: .
+        event: DocumentEvent: .
+        draft: dict[str, Any]: .
 
     Returns:
-        A ``RenderedPrompt`` for the writing review node.
+        RenderedPrompt: .
     """
     return _prompt(
         node_name="news_writing_review",
@@ -153,11 +153,11 @@ def build_brief_prompt(
     """Build the security brief prompt.
 
     Args:
-        target: News target the findings belong to.
-        findings: Tuple of approved article findings to summarize.
+        target: NewsTarget: .
+        findings: tuple[Any, ...]: .
 
     Returns:
-        A ``RenderedPrompt`` for the summary/brief node.
+        RenderedPrompt: .
     """
     return _prompt(
         node_name="news_summary_agent",
@@ -167,9 +167,7 @@ def build_brief_prompt(
         context={
             "target": target.model_dump(mode="json"),
             "findings": [
-                finding.model_dump(mode="json")
-                if hasattr(finding, "model_dump")
-                else dict(finding)
+                finding.model_dump(mode="json") if hasattr(finding, "model_dump") else dict(finding)
                 for finding in findings
             ],
         },
@@ -181,7 +179,7 @@ def keyword_writer_schema() -> dict[str, Any]:
     """Return the keyword writer JSON schema.
 
     Returns:
-        JSON schema dictionary describing the expected writer output.
+        dict[str, Any]: .
     """
     return {
         "type": "object",
@@ -201,7 +199,7 @@ def keyword_review_schema() -> dict[str, Any]:
     """Return the keyword review JSON schema.
 
     Returns:
-        JSON schema dictionary describing the expected review output.
+        dict[str, Any]: .
     """
     return {
         "type": "object",
@@ -220,7 +218,7 @@ def article_writer_schema() -> dict[str, Any]:
     """Return the article writer JSON schema.
 
     Returns:
-        JSON schema dictionary describing the expected article finding output.
+        dict[str, Any]: .
     """
     return {
         "type": "object",
@@ -241,7 +239,7 @@ def writing_review_schema() -> dict[str, Any]:
     """Return the writing review JSON schema.
 
     Returns:
-        JSON schema dictionary describing the expected review output.
+        dict[str, Any]: .
     """
     return keyword_review_schema()
 
@@ -250,7 +248,7 @@ def brief_schema() -> dict[str, Any]:
     """Return the news brief JSON schema.
 
     Returns:
-        JSON schema dictionary describing the expected brief output.
+        dict[str, Any]: .
     """
     return {
         "type": "object",
@@ -269,7 +267,20 @@ def _prompt(
     schema: dict[str, Any],
     untrusted_text: str = "",
 ) -> RenderedPrompt:
-    """Build a rendered prompt with stable section ordering."""
+    """Build a rendered prompt with stable section ordering.
+
+    Args:
+        node_name: str: .
+        kind: str: .
+        version: str: .
+        task: str: .
+        context: dict[str, Any]: .
+        schema: dict[str, Any]: .
+        untrusted_text: str: .
+
+    Returns:
+        RenderedPrompt: .
+    """
     return RenderedPrompt(
         node_name=node_name,
         kind=kind,
@@ -297,7 +308,14 @@ def _prompt(
 
 
 def _event_context(event: DocumentEvent) -> dict[str, Any]:
-    """Return metadata context for one document event without altering trust."""
+    """Return metadata context for one document event without altering trust.
+
+    Args:
+        event: DocumentEvent: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     return {
         "event_id": event.event_id,
         "snapshot_id": event.snapshot_id,

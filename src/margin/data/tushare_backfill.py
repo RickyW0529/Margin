@@ -43,45 +43,49 @@ _COMPANY_SYMBOL_ENDPOINTS = {
 
 
 class TushareClient(Protocol):
-    """Minimal dynamic Tushare Pro client contract."""
+    """Minimal dynamic Tushare Pro client contract.."""
 
     def query(self, api_name: str, **params: Any) -> Any:
         """Return a pandas-compatible frame.
 
         Args:
-            api_name: The Tushare API name to call.
-            **params: Additional request parameters.
+            api_name: str: .
+            **params: Any: .
 
         Returns:
-            A pandas DataFrame-like object.
+            Any: .
         """
 
 
 class TushareSourceRepository(Protocol):
-    """Persistence boundary used by the rolling backfill."""
+    """Persistence boundary used by the rolling backfill.."""
 
     def seed_catalog(self) -> None:
-        """Persist the versioned endpoint closure."""
+        """Persist the versioned endpoint closure.
+
+        Returns:
+            None: .
+        """
 
     def start_run(self, request: DataSyncRequest, *, endpoint_count: int) -> str:
         """Start an audited source run.
 
         Args:
-            request: The sync request describing the provider and scope.
-            endpoint_count: The number of endpoints included in the run.
+            request: DataSyncRequest: .
+            endpoint_count: int: .
 
         Returns:
-            The source-system run ID.
+            str: .
         """
 
     def insert_records(self, records: Iterable[TushareLandingRecord]) -> int:
         """Insert one endpoint batch.
 
         Args:
-            records: Landing records for a single endpoint.
+            records: Iterable[TushareLandingRecord]: .
 
         Returns:
-            The number of newly inserted rows.
+            int: .
         """
 
     def record_quality_decisions(
@@ -91,10 +95,10 @@ class TushareSourceRepository(Protocol):
         """Persist quality decisions.
 
         Args:
-            decisions: Quality decisions to persist.
+            decisions: Iterable[SourceQualityDecision]: .
 
         Returns:
-            The number of newly inserted decision rows.
+            int: .
         """
 
     def finish_run(
@@ -107,14 +111,17 @@ class TushareSourceRepository(Protocol):
         """Finish the audited source run.
 
         Args:
-            run_id: The sync run ID to finalize.
-            completed_count: The number of successfully completed endpoints.
-            failed_endpoints: Mapping of failed endpoint name to error message.
+            run_id: str: .
+            completed_count: int: .
+            failed_endpoints: dict[str, str]: .
+
+        Returns:
+            None: .
         """
 
 
 class TushareWarehousePublication(Protocol):
-    """Quality-to-warehouse publication boundary."""
+    """Quality-to-warehouse publication boundary.."""
 
     def publish(
         self,
@@ -127,18 +134,18 @@ class TushareWarehousePublication(Protocol):
         """Publish accepted rows and return inserted fact count.
 
         Args:
-            api_name: The Tushare API name being published.
-            records: Quality-accepted source rows to publish.
-            run_id: The source-system sync run ID.
-            decision_at: The point-in-time decision timestamp.
+            api_name: str: .
+            records: list[dict[str, Any]]: .
+            run_id: str: .
+            decision_at: datetime: .
 
         Returns:
-            The number of facts inserted into the warehouse.
+            int: .
         """
 
 
 class CompanyPoolMaterialization(Protocol):
-    """Warehouse-to-company-pool snapshot boundary."""
+    """Warehouse-to-company-pool snapshot boundary.."""
 
     def materialize(
         self,
@@ -150,17 +157,17 @@ class CompanyPoolMaterialization(Protocol):
         """Freeze the current non-ST serving view.
 
         Args:
-            source_run_id: The source run that produced the serving view.
-            business_at: The business date the snapshot represents.
-            known_at: The system time at which the snapshot became known.
+            source_run_id: str: .
+            business_at: datetime: .
+            known_at: datetime: .
 
         Returns:
-            The materialized company-pool snapshot.
+            Any: .
         """
 
 
 class TushareBackfillConfig(BaseModel):
-    """Frozen rolling-window source extraction policy."""
+    """Frozen rolling-window source extraction policy.."""
 
     window_start: datetime
     window_end: datetime
@@ -180,12 +187,19 @@ class TushareBackfillConfig(BaseModel):
     @field_validator("window_start", "window_end")
     @classmethod
     def normalize_time(cls, value: datetime) -> datetime:
-        """Normalize policy bounds to UTC."""
+        """Normalize policy bounds to UTC.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)
 
 
 class TushareEndpointCoverage(BaseModel):
-    """Per-endpoint extraction and quality counts."""
+    """Per-endpoint extraction and quality counts.."""
 
     api_name: str
     fetched_rows: int = 0
@@ -200,7 +214,7 @@ class TushareEndpointCoverage(BaseModel):
 
 
 class TushareBackfillReport(BaseModel):
-    """Auditable coverage report for one rolling source run."""
+    """Auditable coverage report for one rolling source run.."""
 
     run_id: str
     eligible_security_count: int
@@ -213,7 +227,7 @@ class TushareBackfillReport(BaseModel):
 
 
 class TushareBackfillService:
-    """Execute bounded All-A extraction, source persistence, and quality screening."""
+    """Execute bounded All-A extraction, source persistence, and quality screening.."""
 
     def __init__(
         self,
@@ -229,14 +243,16 @@ class TushareBackfillService:
         """Initialize source extraction dependencies.
 
         Args:
-            client: The Tushare Pro API client.
-            repository: The source-system persistence boundary.
-            quality_screen: Optional custom quality screen.
-            requirements: Optional custom quant requirement catalog.
-            queries: Optional custom Tushare query catalog.
-            warehouse_publisher: Optional warehouse publication boundary.
-            company_pool_repository: Optional company-pool materialization
-                boundary.
+            client: TushareClient: .
+            repository: TushareSourceRepository: .
+            quality_screen: TushareQualityScreen | None: .
+            requirements: QuantDataRequirementCatalog | None: .
+            queries: TushareQueryCatalog | None: .
+            warehouse_publisher: TushareWarehousePublication | None: .
+            company_pool_repository: CompanyPoolMaterialization | None: .
+
+        Returns:
+            None: .
         """
         self._client = client
         self._repository = repository
@@ -250,14 +266,10 @@ class TushareBackfillService:
         """Run the selected endpoint closure and continue safely after endpoint failures.
 
         Args:
-            config: The frozen rolling-window extraction policy.
+            config: TushareBackfillConfig: .
 
         Returns:
-            A ``TushareBackfillReport`` with per-endpoint coverage and exclusion
-            counts.
-
-        Raises:
-            ValueError: If the config references unknown Tushare endpoints.
+            TushareBackfillReport: .
         """
         started_at = datetime.now(UTC)
         endpoints = config.endpoints or self._queries.api_names()
@@ -295,9 +307,7 @@ class TushareBackfillService:
             stock_rows,
             as_of=config.window_end,
         )
-        eligible_symbols = {
-            str(row["ts_code"]).strip().upper() for row in eligible_rows
-        }
+        eligible_symbols = {str(row["ts_code"]).strip().upper() for row in eligible_rows}
         coverage["stock_basic"] = self._persist(
             "stock_basic",
             eligible_rows,
@@ -367,9 +377,7 @@ class TushareBackfillService:
                         )
                     if request_failures:
                         endpoint_coverage.status = (
-                            "partial"
-                            if endpoint_coverage.fetched_rows
-                            else "failed"
+                            "partial" if endpoint_coverage.fetched_rows else "failed"
                         )
                         endpoint_coverage.error = _summarize_request_failures(
                             request_failures,
@@ -457,7 +465,16 @@ class TushareBackfillService:
         *,
         page_size: int,
     ) -> tuple[list[dict[str, Any]], int]:
-        """Fetch and sanitize all pages for a bounded list of API requests."""
+        """Fetch and sanitize all pages for a bounded list of API requests.
+
+        Args:
+            api_name: str: .
+            requests: Iterable[dict[str, Any]]: .
+            page_size: int: .
+
+        Returns:
+            tuple[list[dict[str, Any]], int]: .
+        """
         fields = self._queries.get(api_name).fields_csv
         records: list[dict[str, Any]] = []
         request_count = 0
@@ -493,7 +510,20 @@ class TushareBackfillService:
         config: TushareBackfillConfig,
         eligible_symbols: set[str],
     ) -> TushareEndpointCoverage:
-        """Persist landing rows, screen quality, and optionally publish to warehouse."""
+        """Persist landing rows, screen quality, and optionally publish to warehouse.
+
+        Args:
+            api_name: str: .
+            rows: list[dict[str, Any]]: .
+            fetched_count: int: .
+            request_count: int: .
+            run_id: str: .
+            config: TushareBackfillConfig: .
+            eligible_symbols: set[str]: .
+
+        Returns:
+            TushareEndpointCoverage: .
+        """
         endpoint = self._requirements.endpoint("tushare", api_name)
         fetched_at = datetime.now(UTC)
         landing = [
@@ -551,7 +581,18 @@ class TushareBackfillService:
         industry_codes: tuple[str, ...],
         eligible_symbols: set[str],
     ) -> list[dict[str, Any]]:
-        """Build the bounded list of API request parameters for one endpoint."""
+        """Build the bounded list of API request parameters for one endpoint.
+
+        Args:
+            api_name: str: .
+            config: TushareBackfillConfig: .
+            open_dates: list[date]: .
+            industry_codes: tuple[str, ...]: .
+            eligible_symbols: set[str]: .
+
+        Returns:
+            list[dict[str, Any]]: .
+        """
         mode = self._queries.get(api_name).query_mode
         start = config.window_start.strftime("%Y%m%d")
         end = config.window_end.strftime("%Y%m%d")
@@ -563,8 +604,7 @@ class TushareBackfillService:
                 config.window_end.date(),
             )
             return [
-                {"trade_date": value.strftime("%Y%m%d")}
-                for value in sorted(dates, reverse=True)
+                {"trade_date": value.strftime("%Y%m%d")} for value in sorted(dates, reverse=True)
             ]
         if mode == "period_slice":
             comparison_start = config.window_start.date().replace(
@@ -581,9 +621,7 @@ class TushareBackfillService:
             symbols = sorted(eligible_symbols)
             return [
                 {
-                    "ts_code": ",".join(
-                        symbols[offset : offset + config.symbol_batch_size]
-                    ),
+                    "ts_code": ",".join(symbols[offset : offset + config.symbol_batch_size]),
                     "start_date": comparison_start.strftime("%Y%m%d"),
                     "end_date": end,
                 }
@@ -625,19 +663,33 @@ def _filter_company_rows(
     rows: list[dict[str, Any]],
     eligible_symbols: set[str],
 ) -> list[dict[str, Any]]:
-    """Filter endpoint rows to only those whose symbol is in the company pool."""
+    """Filter endpoint rows to only those whose symbol is in the company pool.
+
+    Args:
+        api_name: str: .
+        rows: list[dict[str, Any]]: .
+        eligible_symbols: set[str]: .
+
+    Returns:
+        list[dict[str, Any]]: .
+    """
     if api_name not in _COMPANY_SYMBOL_ENDPOINTS:
         return rows
     symbol_field = "con_code" if api_name in {"index_member", "index_weight"} else "ts_code"
     return [
-        row
-        for row in rows
-        if str(row.get(symbol_field) or "").strip().upper() in eligible_symbols
+        row for row in rows if str(row.get(symbol_field) or "").strip().upper() in eligible_symbols
     ]
 
 
 def _sanitize(value: Any) -> Any:
-    """Convert NaN floats and numpy scalars to plain Python values."""
+    """Convert NaN floats and numpy scalars to plain Python values.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        Any: .
+    """
     if value is None:
         return None
     if isinstance(value, float) and math.isnan(value):
@@ -648,7 +700,14 @@ def _sanitize(value: Any) -> Any:
 
 
 def _parse_date(value: Any) -> date | None:
-    """Parse a Tushare YYYYMMDD string into a date, or ``None``."""
+    """Parse a Tushare YYYYMMDD string into a date, or ``None``.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        date | None: .
+    """
     normalized = str(value or "").strip()
     if not normalized:
         return None
@@ -659,7 +718,15 @@ def _parse_date(value: Any) -> date | None:
 
 
 def _calendar_dates(start: date, end: date) -> list[date]:
-    """Return inclusive calendar dates between two dates."""
+    """Return inclusive calendar dates between two dates.
+
+    Args:
+        start: date: .
+        end: date: .
+
+    Returns:
+        list[date]: .
+    """
     values: list[date] = []
     current = start
     while current <= end:
@@ -669,7 +736,15 @@ def _calendar_dates(start: date, end: date) -> list[date]:
 
 
 def _quarter_ends(start: date, end: date) -> list[str]:
-    """Return quarter-end dates in YYYYMMDD format within the bounds."""
+    """Return quarter-end dates in YYYYMMDD format within the bounds.
+
+    Args:
+        start: date: .
+        end: date: .
+
+    Returns:
+        list[str]: .
+    """
     values: list[str] = []
     for year in range(start.year, end.year + 1):
         for month, day in ((3, 31), (6, 30), (9, 30), (12, 31)):
@@ -680,7 +755,15 @@ def _quarter_ends(start: date, end: date) -> list[str]:
 
 
 def _month_ranges(start: date, end: date) -> list[tuple[str, str]]:
-    """Return bounded month slices in provider date format."""
+    """Return bounded month slices in provider date format.
+
+    Args:
+        start: date: .
+        end: date: .
+
+    Returns:
+        list[tuple[str, str]]: .
+    """
     ranges: list[tuple[str, str]] = []
     current = date(start.year, start.month, 1)
     while current <= end:
@@ -702,7 +785,14 @@ def _month_ranges(start: date, end: date) -> list[tuple[str, str]]:
 
 
 def _ordered_endpoints(endpoints: tuple[str, ...]) -> tuple[str, ...]:
-    """Order endpoint dependencies before independent consumers."""
+    """Order endpoint dependencies before independent consumers.
+
+    Args:
+        endpoints: tuple[str, ...]: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     priority = {
         "stock_basic": 0,
         "trade_cal": 1,
@@ -721,7 +811,15 @@ def _merge_coverage(
     current: TushareEndpointCoverage,
     addition: TushareEndpointCoverage,
 ) -> TushareEndpointCoverage:
-    """Aggregate streamed request coverage without retaining source rows."""
+    """Aggregate streamed request coverage without retaining source rows.
+
+    Args:
+        current: TushareEndpointCoverage: .
+        addition: TushareEndpointCoverage: .
+
+    Returns:
+        TushareEndpointCoverage: .
+    """
     return TushareEndpointCoverage(
         api_name=current.api_name,
         fetched_rows=current.fetched_rows + addition.fetched_rows,
@@ -729,9 +827,7 @@ def _merge_coverage(
         accepted_rows=current.accepted_rows + addition.accepted_rows,
         quarantined_rows=current.quarantined_rows + addition.quarantined_rows,
         rejected_rows=current.rejected_rows + addition.rejected_rows,
-        published_fact_count=(
-            current.published_fact_count + addition.published_fact_count
-        ),
+        published_fact_count=(current.published_fact_count + addition.published_fact_count),
         request_count=current.request_count + addition.request_count,
         status="succeeded",
     )
@@ -742,7 +838,16 @@ def _request_failure_message(
     request_params: dict[str, Any],
     exc: Exception,
 ) -> str:
-    """Return a compact, secret-free partition failure message."""
+    """Return a compact, secret-free partition failure message.
+
+    Args:
+        api_name: str: .
+        request_params: dict[str, Any]: .
+        exc: Exception: .
+
+    Returns:
+        str: .
+    """
     key_fields = (
         "trade_date",
         "period",
@@ -752,16 +857,19 @@ def _request_failure_message(
         "start_date",
         "end_date",
     )
-    partition = {
-        key: request_params[key]
-        for key in key_fields
-        if key in request_params
-    }
+    partition = {key: request_params[key] for key in key_fields if key in request_params}
     return f"{api_name} {partition}: {str(exc)[:240]}"
 
 
 def _summarize_request_failures(messages: list[str]) -> str:
-    """Bound endpoint error text while preserving representative failed slices."""
+    """Bound endpoint error text while preserving representative failed slices.
+
+    Args:
+        messages: list[str]: .
+
+    Returns:
+        str: .
+    """
     if len(messages) <= 3:
         return "; ".join(messages)
     return "; ".join(messages[:3]) + f"; ... {len(messages) - 3} more slice failures"

@@ -29,11 +29,8 @@ DECISION_AT = datetime(2026, 6, 23, tzinfo=UTC)
 def test_analysis_handler_isolates_untrusted_evidence_and_uses_allowed_ids() -> None:
     """Verify the production prompt carries evidence as untrusted data only.
 
-    Builds a production analysis handler, invokes it with a fundamental
-    analysis request, and asserts that the output uses only allowed evidence
-    IDs and that the rendered prompt contains the untrusted data block
-    marker, the injected adversarial text, the analysis summary, and the
-    trading-order prohibition.
+    Returns:
+        None: .
     """
     llm = SequenceStructuredLLM(
         [
@@ -76,9 +73,8 @@ def test_analysis_handler_isolates_untrusted_evidence_and_uses_allowed_ids() -> 
 def test_decision_handler_abstains_when_llm_invents_evidence_id() -> None:
     """Verify unknown evidence IDs cannot survive deterministic validation.
 
-    Builds a production decision handler where the LLM invents an evidence ID
-    and the critic accepts it, then asserts that the handler abstains, returns
-    no evidence IDs, and records two LLM calls.
+    Returns:
+        None: .
     """
     llm = SequenceStructuredLLM(
         [
@@ -119,22 +115,16 @@ def test_decision_handler_abstains_when_llm_invents_evidence_id() -> None:
 
 
 class SequenceStructuredLLM:
-    """Fake LLM service that returns schema-specific outputs in sequence.
-
-    This service records rendered prompts for inspection and returns
-    pre-configured output dictionaries one at a time.
-
-    Attributes:
-        outputs: List of output dictionaries to return in sequence.
-        prompts: List of rendered prompt strings recorded from each call.
-        call_count: Number of times ``complete_structured`` was called.
-    """
+    """Fake LLM service that returns schema-specific outputs in sequence.."""
 
     def __init__(self, outputs: list[dict]) -> None:
         """Initialize the sequence LLM with a queue of outputs.
 
         Args:
-            outputs: List of output dictionaries to return in sequence.
+            outputs: list[dict]: .
+
+        Returns:
+            None: .
         """
         self.outputs = list(outputs)
         self.prompts: list[str] = []
@@ -144,10 +134,10 @@ class SequenceStructuredLLM:
         """Return the next pre-configured output and record the rendered prompt.
 
         Args:
-            **kwargs: Keyword arguments including ``prompt`` and ``task_type``.
+            **kwargs: Any: .
 
         Returns:
-            A ``StructuredLLMResponse`` with the next queued output.
+            StructuredLLMResponse: .
         """
         self.call_count += 1
         self.prompts.append(kwargs["prompt"].render())
@@ -162,7 +152,11 @@ class SequenceStructuredLLM:
 
 
 def _context() -> ResearchContextSnapshot:
-    """Build a research context snapshot with adversarial evidence for tests."""
+    """Build a research context snapshot with adversarial evidence for tests.
+
+    Returns:
+        ResearchContextSnapshot: .
+    """
     return ResearchContextSnapshot(
         context_snapshot_id="context-production",
         security_id="000001.SZ",
@@ -192,10 +186,10 @@ def _session(node_name: str):
     """Build a scoped tool session with no tools for the given node name.
 
     Args:
-        node_name: The name of the node the session is scoped to.
+        node_name: str: .
 
     Returns:
-        A ``ScopedToolSession`` with an empty tool registry and zero budget.
+        Any: .
     """
     factory = ScopedToolFactory(
         tool_registry=ToolDefinitionRegistry(),

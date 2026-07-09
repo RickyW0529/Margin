@@ -43,27 +43,17 @@ from margin.vector.models import (
 
 
 class VectorRepository:
-    """Persistent chunk/vector/audit boundary.
-
-    ``VectorRepository`` exposes CRUD and search methods that translate between
-    the domain models defined in ``margin.vector.models`` and the SQLAlchemy rows
-    defined in ``margin.vector.db_models``. All public methods use the supplied
-    session factory for transaction/connection management.
-
-    Attributes:
-        _session_factory: Callable that returns a new SQLAlchemy ``Session``.
-        _dimension: Expected dimensionality of stored and query vectors.
-    """
+    """Persistent chunk/vector/audit boundary.."""
 
     def __init__(self, session_factory: Callable[[], Session], *, dimension: int) -> None:
         """Initialize a new repository instance.
 
         Args:
-            session_factory: Callable that returns a configured SQLAlchemy
-                ``Session``. The callable is expected to support both ``begin()``
-                and direct call usage.
-            dimension: Expected vector dimension. Used to validate embeddings and
-                query vectors.
+            session_factory: Callable[[], Session]: .
+            dimension: int: .
+
+        Returns:
+            None: .
         """
         self._session_factory = session_factory
         self._dimension = dimension
@@ -76,13 +66,12 @@ class VectorRepository:
     ) -> int:
         """Persist chunk metadata idempotently.
 
-        Inserts new chunks or updates existing rows by ``chunk_id``.
-
         Args:
-            chunks: List of ``Chunk`` domain objects to persist.
+            chunks: list[Chunk]: .
+            links: list[ChunkSecurityLink] | None: .
 
         Returns:
-            The number of chunks processed.
+            int: .
         """
         with self._session_factory.begin() as session:
             for chunk in chunks:
@@ -111,49 +100,41 @@ class VectorRepository:
         """Return persisted chunk-security link count.
 
         Returns:
-            The total number of chunk-security link rows in the database.
+            int: .
         """
         with self._session_factory() as session:
-            return int(
-                session.scalar(count_chunk_security_links()) or 0
-            )
+            return int(session.scalar(count_chunk_security_links()) or 0)
 
     def chunk_has_security_link(self, chunk_id: str, security_id: str) -> bool:
         """Return whether a chunk is linked to a security through v0.2 links.
 
         Args:
-            chunk_id: Unique chunk identifier.
-            security_id: Security symbol to check.
+            chunk_id: str: .
+            security_id: str: .
 
         Returns:
-            True if a link row exists for the chunk and security.
+            bool: .
         """
         with self._session_factory() as session:
-            return (
-                session.scalar(
-                    chunk_security_link_count(chunk_id, security_id)
-                )
-                or 0
-            ) > 0
+            return (session.scalar(chunk_security_link_count(chunk_id, security_id)) or 0) > 0
 
     def count_embeddings(self) -> int:
         """Return persisted embedding row count.
 
         Returns:
-            The total number of embedding rows in the database.
+            int: .
         """
         with self._session_factory() as session:
-            return int(
-                session.scalar(count_embeddings()) or 0
-            )
+            return int(session.scalar(count_embeddings()) or 0)
 
     def upsert_indexed_document(self, document: IndexedDocument) -> None:
         """Persist parser/chunker/indexing audit for a document.
 
-        Inserts a new audit row or updates an existing one by ``document_id``.
-
         Args:
-            document: The indexed document audit record to persist.
+            document: IndexedDocument: .
+
+        Returns:
+            None: .
         """
         with self._session_factory.begin() as session:
             row = session.get(IndexedDocumentRow, document.document_id)
@@ -180,10 +161,10 @@ class VectorRepository:
         """Fetch indexed document audit by document id.
 
         Args:
-            document_id: Unique document identifier.
+            document_id: str: .
 
         Returns:
-            The indexed document audit record if found, otherwise None.
+            IndexedDocument | None: .
         """
         with self._session_factory() as session:
             row = session.get(IndexedDocumentRow, document_id)
@@ -209,21 +190,14 @@ class VectorRepository:
     ) -> int:
         """Persist model-versioned embeddings idempotently.
 
-        Inserts or updates embedding rows keyed by ``chunk_id``, ``provider_name``,
-        ``model_name``, and ``model_version``. Each vector is validated against the
-        configured dimension.
-
         Args:
-            items: Tuples of ``(chunk_id, vector)`` to persist.
-            provider_name: Name of the embedding provider.
-            model_name: Name of the embedding model.
-            model_version: Version of the embedding model.
+            items: list[tuple[str, list[float]]]: .
+            provider_name: str: .
+            model_name: str: .
+            model_version: str: .
 
         Returns:
-            The number of embedding rows processed.
-
-        Raises:
-            ValueError: If an embedding vector does not match ``self._dimension``.
+            int: .
         """
         with self._session_factory.begin() as session:
             count = 0
@@ -263,23 +237,16 @@ class VectorRepository:
     ) -> list[tuple[Chunk, float]]:
         """Search stored embeddings with metadata and point-in-time filters.
 
-        Computes cosine similarity between ``query_vector`` and every stored
-        embedding, then returns the top-k chunks sorted by similarity. Optional
-        filters narrow results by symbol, availability timestamp, and document type.
-
         Args:
-            query_vector: Dense query vector to compare against stored embeddings.
-            top_k: Maximum number of results to return.
-            symbol: Optional ticker/security symbol filter.
-            decision_at: Optional point-in-time filter; only chunks with
-                ``available_at <= decision_at`` are returned.
-            doc_types: Optional tuple of document type values to include.
+            query_vector: list[float]: .
+            top_k: int: .
+            symbol: str | None: .
+            security_ids: tuple[str, ...] | None: .
+            decision_at: datetime | None: .
+            doc_types: tuple[str, ...] | None: .
 
         Returns:
-            A list of ``(Chunk, score)`` tuples sorted by descending similarity.
-
-        Raises:
-            ValueError: If ``query_vector`` does not match ``self._dimension``.
+            list[tuple[Chunk, float]]: .
         """
         if len(query_vector) != self._dimension:
             raise ValueError(
@@ -305,10 +272,10 @@ class VectorRepository:
         """Fetch a chunk by its stable identifier.
 
         Args:
-            chunk_id: Unique chunk identifier.
+            chunk_id: str: .
 
         Returns:
-            The matching ``Chunk`` domain object, or ``None`` if not found.
+            Chunk | None: .
         """
         with self._session_factory() as session:
             row = session.get(ChunkRow, chunk_id)
@@ -325,14 +292,13 @@ class VectorRepository:
         """Return persisted chunks for keyword fallback retrieval.
 
         Args:
-            symbol: Optional ticker/security symbol filter.
-            security_ids: Optional tuple of security IDs to filter by link table.
-            doc_types: Optional tuple of document type values to include.
-            decision_at: Optional point-in-time filter; only chunks with
-                ``available_at <= decision_at`` are returned.
+            symbol: str | None: .
+            security_ids: tuple[str, ...] | None: .
+            doc_types: tuple[str, ...] | None: .
+            decision_at: datetime | None: .
 
         Returns:
-            A list of ``Chunk`` domain objects matching the filters.
+            list[Chunk]: .
         """
         statement = list_chunks_statement(
             symbol=symbol,
@@ -341,10 +307,7 @@ class VectorRepository:
             decision_at=decision_at,
         )
         with self._session_factory() as session:
-            return [
-                _chunk_from_row(row)
-                for row in session.scalars(statement).all()
-            ]
+            return [_chunk_from_row(row) for row in session.scalars(statement).all()]
 
     def record_index_audit(
         self,
@@ -362,18 +325,18 @@ class VectorRepository:
         """Persist an indexing audit record.
 
         Args:
-            operation: Name of the indexing operation performed.
-            provider_name: Name of the embedding provider used.
-            model_name: Name of the embedding model used.
-            model_version: Version of the embedding model used.
-            chunk_count: Number of chunks touched.
-            vector_count: Number of vectors written.
-            keyword_count: Number of keyword entries written.
-            degraded: Whether the operation completed in a degraded state.
-            error: Optional error message if the operation failed.
+            operation: str: .
+            provider_name: str: .
+            model_name: str: .
+            model_version: str: .
+            chunk_count: int: .
+            vector_count: int: .
+            keyword_count: int: .
+            degraded: bool: .
+            error: str | None: .
 
         Returns:
-            The generated ``audit_id``.
+            int: .
         """
         with self._session_factory.begin() as session:
             row = IndexAuditRecordRow(
@@ -402,12 +365,12 @@ class VectorRepository:
         """Persist replayable retrieval candidates and component scores.
 
         Args:
-            query: Original plain-text query.
-            constraints: Query constraints used during retrieval.
-            results: List of ``RetrievalResult`` candidates to record.
+            query: str: .
+            constraints: dict: .
+            results: list[RetrievalResult]: .
 
         Returns:
-            The generated ``audit_id``.
+            int: .
         """
         payload = [
             {
@@ -422,9 +385,10 @@ class VectorRepository:
             }
             for result in results
         ]
-        result_hash = "sha256:" + hashlib.sha256(
-            repr((query, constraints, payload)).encode("utf-8")
-        ).hexdigest()
+        result_hash = (
+            "sha256:"
+            + hashlib.sha256(repr((query, constraints, payload)).encode("utf-8")).hexdigest()
+        )
         with self._session_factory.begin() as session:
             row = RetrievalAuditRecordRow(
                 query=query,
@@ -440,19 +404,11 @@ class VectorRepository:
     def replay_retrieval(self, audit_id: int) -> list[RetrievalResult]:
         """Replay a retrieval audit using recorded immutable candidates.
 
-        Reconstructs the original result list by looking up each recorded chunk ID.
-        The returned ``RetrievalResult`` objects preserve the component scores that
-        were stored at audit time.
-
         Args:
-            audit_id: Primary key of the retrieval audit record.
+            audit_id: int: .
 
         Returns:
-            The ordered list of ``RetrievalResult`` objects recorded for the audit.
-
-        Raises:
-            KeyError: If the audit record is missing or if a referenced chunk cannot
-                be found.
+            list[RetrievalResult]: .
         """
         with self._session_factory() as session:
             audit = session.get(RetrievalAuditRecordRow, audit_id)
@@ -482,10 +438,10 @@ def _chunk_to_row(chunk: Chunk) -> ChunkRow:
     """Convert a ``Chunk`` domain object into a new ``ChunkRow``.
 
     Args:
-        chunk: The domain object to convert.
+        chunk: Chunk: .
 
     Returns:
-        A populated ``ChunkRow`` instance.
+        ChunkRow: .
     """
     return ChunkRow(
         chunk_id=chunk.chunk_id,
@@ -519,11 +475,12 @@ def _chunk_to_row(chunk: Chunk) -> ChunkRow:
 def _update_chunk_row(row: ChunkRow, chunk: Chunk) -> None:
     """Update an existing ``ChunkRow`` in place from a ``Chunk`` domain object.
 
-    All columns except the primary key ``chunk_id`` are overwritten.
-
     Args:
-        row: The existing database row to update.
-        chunk: The domain object containing the latest values.
+        row: ChunkRow: .
+        chunk: Chunk: .
+
+    Returns:
+        None: .
     """
     new = _chunk_to_row(chunk)
     for column in ChunkRow.__table__.columns:
@@ -535,10 +492,10 @@ def _chunk_from_row(row: ChunkRow) -> Chunk:
     """Convert a ``ChunkRow`` into a ``Chunk`` domain object.
 
     Args:
-        row: The database row to convert.
+        row: ChunkRow: .
 
     Returns:
-        A frozen ``Chunk`` instance reconstructed from the row.
+        Chunk: .
     """
     return Chunk(
         chunk_id=row.chunk_id,
@@ -573,16 +530,11 @@ def _cosine(a: list[float], b: list[float]) -> float:
     """Compute cosine similarity between two equal-length vectors.
 
     Args:
-        a: First vector.
-        b: Second vector.
+        a: list[float]: .
+        b: list[float]: .
 
     Returns:
-        Cosine similarity in the range [-1.0, 1.0], or ``0.0`` if either
-        vector has zero norm.
-
-    Raises:
-        ValueError: If the input vectors have different lengths. The error is
-            raised by ``zip(..., strict=True)``.
+        float: .
     """
     dot = sum(x * y for x, y in zip(a, b, strict=True))
     norm_a = math.sqrt(sum(x * x for x in a))

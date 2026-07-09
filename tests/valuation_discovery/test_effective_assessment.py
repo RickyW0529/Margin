@@ -18,7 +18,7 @@ def test_review_deferred_keeps_previous_effective_assessment() -> None:
     """Verify a deferred review keeps the previous effective assessment as stale.
 
     Returns:
-        None.
+        None: .
     """
     service = EffectiveAssessmentService()
 
@@ -40,7 +40,7 @@ def test_invalidate_creates_new_effective_assessment() -> None:
     """Verify an invalidate outcome creates a new current effective assessment.
 
     Returns:
-        None.
+        None: .
     """
     service = EffectiveAssessmentService()
 
@@ -59,10 +59,10 @@ def test_invalidate_creates_new_effective_assessment() -> None:
 
 
 def test_carry_forward_verified_keeps_previous_and_updates_checks_independently() -> None:
-    """Verify carry-forward-verified keeps the previous assessment and updates check timestamps.
+    """Verify carry-forward-verified keeps the previous assessment and updates check.
 
     Returns:
-        None.
+        None: .
     """
     service = EffectiveAssessmentService()
     data_check_at = datetime(2026, 6, 22, 9, 30, tzinfo=UTC)
@@ -89,7 +89,7 @@ def test_update_outcome_requires_new_assessment_id() -> None:
     """Verify an update outcome requires a new assessment ID.
 
     Returns:
-        None.
+        None: .
     """
     service = EffectiveAssessmentService()
 
@@ -108,7 +108,7 @@ def test_first_abstention_cannot_create_an_effective_pointer() -> None:
     """Verify abstaining without a previous conclusion cannot invent one.
 
     Returns:
-        None.
+        None: .
     """
     service = EffectiveAssessmentService()
 

@@ -21,7 +21,7 @@ from margin.news.target_queue import NewsTargetQueue
 
 
 class ProviderRateLimited(RuntimeError):
-    """Provider-wide rate limit; target coverage must remain intact."""
+    """Provider-wide rate limit; target coverage must remain intact.."""
 
     def __init__(
         self,
@@ -33,9 +33,12 @@ class ProviderRateLimited(RuntimeError):
         """Initialize the instance.
 
         Args:
-            provider_name: Name of the rate-limited provider.
-            retry_after_seconds: Optional seconds to wait before retrying.
-            message: Optional human-readable error message.
+            provider_name: str: .
+            retry_after_seconds: int | None: .
+            message: str | None: .
+
+        Returns:
+            None: .
         """
         self.provider_name = provider_name
         self.retry_after_seconds = retry_after_seconds
@@ -43,7 +46,7 @@ class ProviderRateLimited(RuntimeError):
 
 
 class WebSearchServiceLike(Protocol):
-    """Small protocol used by refresh orchestration."""
+    """Small protocol used by refresh orchestration.."""
 
     def search_and_acquire(
         self,
@@ -53,16 +56,16 @@ class WebSearchServiceLike(Protocol):
         """Search, verify originals, persist query audit, and return document events.
 
         Args:
-            query: Search query string.
-            max_results: Maximum number of results to acquire.
+            query: str: .
+            max_results: int: .
 
         Returns:
-            Tuple of (search query record, list of acquired document events).
+            tuple[object, list[object]]: .
         """
 
 
 class NewsRefreshService:
-    """Orchestrate one complete target-driven WebSearch refresh run."""
+    """Orchestrate one complete target-driven WebSearch refresh run.."""
 
     def __init__(
         self,
@@ -77,15 +80,15 @@ class NewsRefreshService:
         """Initialize the instance.
 
         Args:
-            queue: Durable target queue that owns refresh target completeness.
-            websearch_provider: WebSearch service used to search and acquire content.
-            query_factory: Optional query template factory. Defaults to a new
-                ``QueryTemplateFactory``.
-            retry_backoff: Backoff duration applied when a target fails and is marked retry.
-            repository: Optional repository for persisting document/security links and
-                materiality scores.
-            materiality_service: Optional materiality scoring service. Defaults to a new
-                ``DocumentMaterialityService``.
+            queue: NewsTargetQueue: .
+            websearch_provider: WebSearchServiceLike: .
+            query_factory: QueryTemplateFactory | None: .
+            retry_backoff: timedelta: .
+            repository: NewsRepository | None: .
+            materiality_service: DocumentMaterialityService | None: .
+
+        Returns:
+            None: .
         """
         self._queue = queue
         self._websearch = websearch_provider
@@ -106,14 +109,14 @@ class NewsRefreshService:
         """Persist all targets first, then process them in bounded batches.
 
         Args:
-            scope_version_id: Identifier of the scope version that produced the quant run.
-            quant_run_id: Identifier of the quant run being refreshed.
-            decision_at: Decision timestamp used to scope the quant run.
-            targets: Sequence of news targets to process.
-            batch_size: Maximum number of targets to claim per batch.
+            scope_version_id: str: .
+            quant_run_id: str: .
+            decision_at: datetime: .
+            targets: Sequence[NewsTarget]: .
+            batch_size: int: .
 
         Returns:
-            A ``NewsRefreshRun`` describing the final run status and target counts.
+            NewsRefreshRun: .
         """
         run_id = self._queue.create_run(scope_version_id, quant_run_id, decision_at)
         self._queue.enqueue_all(run_id, list(targets))
@@ -142,9 +145,7 @@ class NewsRefreshService:
                         error_code="provider_429",
                         error_message=str(exc),
                         next_attempt_at=utc_now()
-                        + timedelta(
-                            seconds=exc.retry_after_seconds or 60
-                        ),
+                        + timedelta(seconds=exc.retry_after_seconds or 60),
                     )
                     self._mark_run_status(
                         run_id,
@@ -180,9 +181,7 @@ class NewsRefreshService:
                             run_id,
                             NewsRefreshStatus.WAITING_BUDGET,
                             {
-                                "provider": str(
-                                    getattr(exc, "provider_name", "websearch")
-                                ),
+                                "provider": str(getattr(exc, "provider_name", "websearch")),
                                 "error_code": str(
                                     getattr(
                                         exc,
@@ -201,9 +200,7 @@ class NewsRefreshService:
                             status=NewsRefreshStatus.WAITING_BUDGET,
                             reconciliation=reconciliation,
                             error_summary={
-                                "provider": str(
-                                    getattr(exc, "provider_name", "websearch")
-                                ),
+                                "provider": str(getattr(exc, "provider_name", "websearch")),
                                 "error_code": str(
                                     getattr(
                                         exc,
@@ -243,7 +240,16 @@ class NewsRefreshService:
         status: NewsRefreshStatus,
         error_summary: dict[str, object],
     ) -> None:
-        """mark run status."""
+        """mark run status.
+
+        Args:
+            run_id: str: .
+            status: NewsRefreshStatus: .
+            error_summary: dict[str, object]: .
+
+        Returns:
+            None: .
+        """
         marker = getattr(self._queue, "mark_run_status", None)
         if callable(marker):
             marker(run_id, status=status, error_summary=error_summary)
@@ -259,7 +265,20 @@ class NewsRefreshService:
         reconciliation: TargetReconciliation,
         error_summary: dict[str, object] | None = None,
     ) -> NewsRefreshRun:
-        """run from reconciliation."""
+        """run from reconciliation.
+
+        Args:
+            run_id: str: .
+            scope_version_id: str: .
+            quant_run_id: str: .
+            decision_at: datetime: .
+            status: NewsRefreshStatus: .
+            reconciliation: TargetReconciliation: .
+            error_summary: dict[str, object] | None: .
+
+        Returns:
+            NewsRefreshRun: .
+        """
         return NewsRefreshRun(
             run_id=run_id,
             scope_version_id=scope_version_id,
@@ -277,7 +296,15 @@ class NewsRefreshService:
         target: NewsTarget,
         events: list[object],
     ) -> None:
-        """Persist deterministic document/security links and materiality."""
+        """Persist deterministic document/security links and materiality.
+
+        Args:
+            target: NewsTarget: .
+            events: list[object]: .
+
+        Returns:
+            None: .
+        """
         if self._repository is None:
             return
         for event in events:
@@ -306,7 +333,14 @@ class NewsRefreshService:
 
 
 def _is_provider_budget_error(exc: Exception) -> bool:
-    """Return whether a Provider error represents an account budget wait."""
+    """Return whether a Provider error represents an account budget wait.
+
+    Args:
+        exc: Exception: .
+
+    Returns:
+        bool: .
+    """
     return str(getattr(exc, "code", "")) in {
         "provider_budget_exceeded",
         "provider_paygo_limit_exceeded",

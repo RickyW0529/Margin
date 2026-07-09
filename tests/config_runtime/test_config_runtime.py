@@ -32,7 +32,11 @@ from margin.storage.database import (
 
 
 def test_memory_resolver_picks_agent_flow_by_decision_time() -> None:
-    """Agent flow config versions are resolved PIT-safely from their own table."""
+    """Agent flow config versions are resolved PIT-safely from their own table.
+
+    Returns:
+        None: .
+    """
     repository = MemoryConfigRepository()
     admin = ConfigAdminService(repository)
     resolver = ConfigResolver(repository)
@@ -77,7 +81,11 @@ def test_memory_resolver_picks_agent_flow_by_decision_time() -> None:
 
 
 def test_quant_profile_and_resolution_snapshot_store_references_only() -> None:
-    """Resolved runtime snapshots record version lineage, not copied config bodies."""
+    """Resolved runtime snapshots record version lineage, not copied config bodies.
+
+    Returns:
+        None: .
+    """
     repository = MemoryConfigRepository()
     admin = ConfigAdminService(repository)
     resolver = ConfigResolver(repository)
@@ -100,9 +108,7 @@ def test_quant_profile_and_resolution_snapshot_store_references_only() -> None:
     snapshot = resolver.create_resolution_snapshot(
         run_id="ar_sched_20260708_0830",
         decision_at=_dt(2026, 7, 8, 0, 30),
-        references=(
-            ConfigReference.from_version("quant_agent_profile", resolved),
-        ),
+        references=(ConfigReference.from_version("quant_agent_profile", resolved),),
     )
 
     assert resolved.version_id == profile_version.version_id
@@ -114,7 +120,11 @@ def test_quant_profile_and_resolution_snapshot_store_references_only() -> None:
 
 
 def test_runtime_config_bootstrap_is_idempotent() -> None:
-    """Bootstrap can run repeatedly without overwriting active config versions."""
+    """Bootstrap can run repeatedly without overwriting active config versions.
+
+    Returns:
+        None: .
+    """
     repository = MemoryConfigRepository()
     admin = ConfigAdminService(repository)
     resolver = ConfigResolver(repository)
@@ -136,7 +146,14 @@ def test_runtime_config_bootstrap_is_idempotent() -> None:
 def test_sqlalchemy_repository_round_trips_domain_config_tables(
     database_url: str,
 ) -> None:
-    """Domain-specific config tables persist flow/profile versions and snapshots."""
+    """Domain-specific config tables persist flow/profile versions and snapshots.
+
+    Args:
+        database_url: str: .
+
+    Returns:
+        None: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -199,5 +216,16 @@ def _dt(
     hour: int = 0,
     minute: int = 0,
 ) -> datetime:
-    """Return a UTC datetime."""
+    """Return a UTC datetime.
+
+    Args:
+        year: int: .
+        month: int: .
+        day: int: .
+        hour: int: .
+        minute: int: .
+
+    Returns:
+        datetime: .
+    """
     return datetime(year, month, day, hour, minute, tzinfo=UTC)

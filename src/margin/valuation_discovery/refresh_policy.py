@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class RefreshPolicyEvent:
-    """Deterministic action flags emitted by refresh policy classification."""
+    """Deterministic action flags emitted by refresh policy classification.."""
 
     security_id: str | None = None
     recalculate_discount: bool = False
@@ -19,7 +19,7 @@ class RefreshPolicyEvent:
 
 
 class RefreshPolicy:
-    """Classify changes and failures into downstream refresh actions."""
+    """Classify changes and failures into downstream refresh actions.."""
 
     def classify_price_move(
         self,
@@ -31,9 +31,14 @@ class RefreshPolicy:
     ) -> RefreshPolicyEvent:
         """Classify valuation discount movement.
 
-        Ordinary price moves only require deterministic discount recalculation.
-        Entering the observation band creates a news target; AI refresh is still
-        reserved for evidence/review events.
+        Args:
+            security_id: str: .
+            old_discount: float: .
+            new_discount: float: .
+            watch_band: tuple[float, float]: .
+
+        Returns:
+            RefreshPolicyEvent: .
         """
         lower, upper = watch_band
         was_in_band = lower <= old_discount <= upper
@@ -51,7 +56,14 @@ class RefreshPolicy:
         )
 
     def classify_step_failure(self, *, step: str) -> RefreshPolicyEvent:
-        """Classify refresh step failures into safe downstream behavior."""
+        """Classify refresh step failures into safe downstream behavior.
+
+        Args:
+            step: str: .
+
+        Returns:
+            RefreshPolicyEvent: .
+        """
         if step == "run_quant":
             return RefreshPolicyEvent(
                 stop_downstream=True,

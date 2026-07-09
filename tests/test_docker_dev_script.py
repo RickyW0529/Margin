@@ -9,7 +9,14 @@ from scripts import docker_dev
 
 
 def test_choose_ports_skips_busy_defaults(monkeypatch) -> None:
-    """Docker startup should pick free localhost ports when defaults are busy."""
+    """Docker startup should pick free localhost ports when defaults are busy.
+
+    Args:
+        monkeypatch: Any: .
+
+    Returns:
+        None: .
+    """
     busy = {5432, 8000, 3000, 9090, 3002}
 
     monkeypatch.setattr(docker_dev, "current_compose_ports", lambda *_args, **_kwargs: {})
@@ -38,24 +45,48 @@ def test_choose_ports_skips_busy_defaults(monkeypatch) -> None:
 
 
 def test_parse_published_port_supports_compose_output() -> None:
-    """Existing Compose mappings should be reusable across repeated starts."""
+    """Existing Compose mappings should be reusable across repeated starts.
+
+    Returns:
+        None: .
+    """
     assert docker_dev.parse_published_port("127.0.0.1:8000") == 8000
     assert docker_dev.parse_published_port("0.0.0.0:3000") == 3000
     assert docker_dev.parse_published_port("") is None
 
 
 def test_run_compose_up_uses_detached_mode_for_managed_progress() -> None:
-    """The helper should not attach to noisy Compose logs during normal startup."""
+    """The helper should not attach to noisy Compose logs during normal startup.
+
+    Returns:
+        None: .
+    """
     captured: dict[str, object] = {}
 
     class FakeProcess:
+        """Class implementing FakeProcess.."""
+
         stdout: TextIO | None = None
         returncode = 0
 
         def poll(self) -> int:
+            """Process poll.
+
+            Returns:
+                int: .
+            """
             return 0
 
     def fake_popen(command, **kwargs):  # noqa: ANN001
+        """Process fake_popen.
+
+        Args:
+            command: Any: .
+            **kwargs: Any: .
+
+        Returns:
+            Any: .
+        """
         captured["command"] = command
         captured["kwargs"] = kwargs
         return FakeProcess()
@@ -72,7 +103,11 @@ def test_run_compose_up_uses_detached_mode_for_managed_progress() -> None:
 
 
 def test_progress_line_reports_pending_health_status() -> None:
-    """Startup progress should show completed milestones and pending services."""
+    """Startup progress should show completed milestones and pending services.
+
+    Returns:
+        None: .
+    """
     statuses = docker_dev.parse_compose_ps_json(
         "\n".join(
             [
@@ -97,7 +132,11 @@ def test_progress_line_reports_pending_health_status() -> None:
 
 
 def test_startup_complete_requires_one_shot_exit_zero_and_healthy_services() -> None:
-    """Readiness should distinguish completed one-shot jobs and healthchecks."""
+    """Readiness should distinguish completed one-shot jobs and healthchecks.
+
+    Returns:
+        None: .
+    """
     statuses = {
         "postgres": docker_dev.ComposeServiceStatus(
             service="postgres",

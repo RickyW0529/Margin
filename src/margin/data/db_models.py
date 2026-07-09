@@ -27,7 +27,7 @@ from margin.storage.base import Base
 
 
 class DataAcquisitionPolicyVersionRow(Base):
-    """Append-only rolling-window data acquisition policy."""
+    """Append-only rolling-window data acquisition policy.."""
 
     __tablename__ = "data_acquisition_policy_versions"
     __table_args__ = (
@@ -60,7 +60,7 @@ class DataAcquisitionPolicyVersionRow(Base):
 
 
 class ProviderEndpointRow(Base):
-    """Registered provider endpoint and its versioned sync policy."""
+    """Registered provider endpoint and its versioned sync policy.."""
 
     __tablename__ = "provider_endpoints"
     __table_args__ = (
@@ -82,7 +82,7 @@ class ProviderEndpointRow(Base):
 
 
 class DataSyncRunRow(Base):
-    """Durable data sync run covering one or more provider endpoints."""
+    """Durable data sync run covering one or more provider endpoints.."""
 
     __tablename__ = "data_sync_runs"
     __table_args__ = (
@@ -110,7 +110,7 @@ class DataSyncRunRow(Base):
 
 
 class DataSyncWorkItemRow(Base):
-    """Endpoint-level work item claimed by workers."""
+    """Endpoint-level work item claimed by workers.."""
 
     __tablename__ = "data_sync_work_items"
     __table_args__ = (
@@ -139,7 +139,7 @@ class DataSyncWorkItemRow(Base):
 
 
 class RawDataSnapshotRow(Base):
-    """Immutable raw provider payload snapshot metadata."""
+    """Immutable raw provider payload snapshot metadata.."""
 
     __tablename__ = "raw_data_snapshots"
     __table_args__ = (
@@ -162,7 +162,7 @@ class RawDataSnapshotRow(Base):
 
 
 class SourceSchemaFieldRow(Base):
-    """Observed source-field lifecycle for schema drift detection."""
+    """Observed source-field lifecycle for schema drift detection.."""
 
     __tablename__ = "source_schema_fields"
     __table_args__ = (
@@ -184,7 +184,7 @@ class SourceSchemaFieldRow(Base):
 
 
 class StandardizedIndicatorFactRow(Base):
-    """Append-only provider fact normalized to a canonical indicator."""
+    """Append-only provider fact normalized to a canonical indicator.."""
 
     __tablename__ = "standardized_indicator_facts"
     __table_args__ = (
@@ -227,7 +227,7 @@ class StandardizedIndicatorFactRow(Base):
 
 
 class CanonicalIndicatorValueRow(Base):
-    """Selected canonical indicator value with all candidate facts preserved by reference."""
+    """Selected canonical indicator value with all candidate facts preserved by reference.."""
 
     __tablename__ = "canonical_indicator_values"
     __table_args__ = (
@@ -262,7 +262,7 @@ class CanonicalIndicatorValueRow(Base):
 
 
 class SecurityMasterRow(Base):
-    """Bitemporal security master record."""
+    """Bitemporal security master record.."""
 
     __tablename__ = "securities"
     __table_args__ = (Index("ix_securities_symbol", "symbol"),)
@@ -280,7 +280,7 @@ class SecurityMasterRow(Base):
 
 
 class CompanyPoolSnapshotRow(Base):
-    """Immutable materialization of the non-ST All-A serving view."""
+    """Immutable materialization of the non-ST All-A serving view.."""
 
     __tablename__ = "company_pool_snapshots"
     __table_args__ = (
@@ -312,7 +312,7 @@ class CompanyPoolSnapshotRow(Base):
 
 
 class CompanyPoolMemberRow(Base):
-    """One member frozen into a company-pool snapshot."""
+    """One member frozen into a company-pool snapshot.."""
 
     __tablename__ = "company_pool_members"
     __table_args__ = (
@@ -357,12 +357,15 @@ class CompanyPoolMemberRow(Base):
 
 
 class SecurityProviderIdentifierRow(Base):
-    """Provider-specific identifier for a security with PIT validity."""
+    """Provider-specific identifier for a security with PIT validity.."""
 
     __tablename__ = "security_provider_identifiers"
     __table_args__ = (
         UniqueConstraint(
-            "provider", "provider_symbol", "valid_from", "system_from",
+            "provider",
+            "provider_symbol",
+            "valid_from",
+            "system_from",
             name="uq_security_provider_identifier",
         ),
         Index("ix_security_provider_identifiers_security", "security_id"),
@@ -381,7 +384,7 @@ class SecurityProviderIdentifierRow(Base):
 
 
 class SecurityIndustryMembershipRow(Base):
-    """Bitemporal industry/taxonomy membership."""
+    """Bitemporal industry/taxonomy membership.."""
 
     __tablename__ = "security_industry_memberships"
     __table_args__ = (
@@ -418,7 +421,7 @@ class SecurityIndustryMembershipRow(Base):
 
 
 class CorporateActionRow(Base):
-    """Corporate action available at a point in time."""
+    """Corporate action available at a point in time.."""
 
     __tablename__ = "corporate_actions"
     __table_args__ = (
@@ -453,7 +456,7 @@ class CorporateActionRow(Base):
 
 
 class AdjustedPriceSeriesRow(Base):
-    """As-of adjusted price value keyed by adjustment policy version."""
+    """As-of adjusted price value keyed by adjustment policy version.."""
 
     __tablename__ = "adjusted_price_series"
     __table_args__ = (
@@ -482,7 +485,7 @@ class AdjustedPriceSeriesRow(Base):
 
 
 class DataQualityEventRow(Base):
-    """Append-only quality issue detected during data ingestion or canonicalization."""
+    """Append-only quality issue detected during data ingestion or canonicalization.."""
 
     __tablename__ = "data_quality_events"
     __table_args__ = (Index("ix_data_quality_events_security", "security_id", "created_at"),)
@@ -498,7 +501,7 @@ class DataQualityEventRow(Base):
 
 
 class DataFreshnessStateRow(Base):
-    """Expected and observed freshness by endpoint/domain."""
+    """Expected and observed freshness by endpoint/domain.."""
 
     __tablename__ = "data_freshness_states"
     __table_args__ = (
@@ -518,7 +521,7 @@ class DataFreshnessStateRow(Base):
 
 
 class RetentionDeletionAuditRow(Base):
-    """Append-only audit for reference-aware data retention decisions."""
+    """Append-only audit for reference-aware data retention decisions.."""
 
     __tablename__ = "retention_deletion_audits"
 

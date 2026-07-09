@@ -28,7 +28,7 @@ DEFAULT_WEIGHTS: dict[str, float] = {
 
 @dataclass(frozen=True)
 class ManualAllAConfig:
-    """Config for the broad All-A manual-rebalance quant pass."""
+    """Config for the broad All-A manual-rebalance quant pass.."""
 
     score_threshold: float = 52.0
     min_avg_amount_20d: float = 50_000_000.0
@@ -42,15 +42,12 @@ def score_manual_all_a(
 ) -> pd.DataFrame:
     """Return ``frame`` with broad All-A manual strategy scores.
 
-    The function intentionally does not require or filter by ``market_cap``.
-    ``market_cap`` can still be included in the AI profile as context.
-
     Args:
-        frame: Source DataFrame with quant feature columns.
-        config: Optional manual strategy configuration.
+        frame: pd.DataFrame: .
+        config: ManualAllAConfig | None: .
 
     Returns:
-        DataFrame with manual strategy scores, candidate flag, and rank.
+        pd.DataFrame: .
     """
     cfg = config or ManualAllAConfig()
     scored = frame.copy()
@@ -95,9 +92,9 @@ def score_manual_all_a(
         + weights["risk_health"] * scored["manual_risk_health_score"]
         + theme_weight * scored["manual_theme_hotness_score"]
     ).clip(0.0, 100.0)
-    scored["manual_all_a_candidate"] = (
-        scored["manual_all_a_score"] >= cfg.score_threshold
-    ) & (avg_amount >= cfg.min_avg_amount_20d)
+    scored["manual_all_a_candidate"] = (scored["manual_all_a_score"] >= cfg.score_threshold) & (
+        avg_amount >= cfg.min_avg_amount_20d
+    )
     scored["__security_id_for_sort"] = scored["security_id"].astype(str)
     scored = scored.sort_values(
         ["manual_all_a_score", "__security_id_for_sort"],
@@ -114,15 +111,12 @@ def select_ai_quant_candidates(
 ) -> pd.DataFrame:
     """Return all broad quant candidates sorted by score.
 
-    This intentionally has no ``top_n`` parameter. The AI research layer should
-    make the second-stage company-count and allocation decision.
-
     Args:
-        scored: DataFrame with manual strategy scores.
-        config: Optional manual strategy configuration.
+        scored: pd.DataFrame: .
+        config: ManualAllAConfig | None: .
 
     Returns:
-        DataFrame of candidate rows sorted by score descending.
+        pd.DataFrame: .
     """
     if "manual_all_a_score" not in scored.columns:
         scored = score_manual_all_a(scored, config=config)
@@ -130,9 +124,9 @@ def select_ai_quant_candidates(
         cfg = config or ManualAllAConfig()
         avg_amount = _first_numeric(scored, ("avg_amount_20d",))
         scored = scored.copy()
-        scored["manual_all_a_candidate"] = (
-            scored["manual_all_a_score"] >= cfg.score_threshold
-        ) & (avg_amount >= cfg.min_avg_amount_20d)
+        scored["manual_all_a_candidate"] = (scored["manual_all_a_score"] >= cfg.score_threshold) & (
+            avg_amount >= cfg.min_avg_amount_20d
+        )
     candidates = scored.loc[scored["manual_all_a_candidate"]].copy()
     candidates["__security_id_for_sort"] = candidates["security_id"].astype(str)
     return candidates.sort_values(
@@ -145,10 +139,10 @@ def build_ai_quant_profile(row: pd.Series | dict[str, Any]) -> dict[str, Any]:
     """Build the quant payload consumed by downstream AI research.
 
     Args:
-        row: A scored Series or dict with manual strategy fields.
+        row: pd.Series | dict[str, Any]: .
 
     Returns:
-        A dict with strategy profile, scores, raw factors, and research hints.
+        dict[str, Any]: .
     """
     data = row if isinstance(row, pd.Series) else pd.Series(row)
     return {
@@ -162,22 +156,16 @@ def build_ai_quant_profile(row: pd.Series | dict[str, Any]) -> dict[str, Any]:
             "dividend": _optional_float(data.get("manual_dividend_score")),
             "reversal": _optional_float(data.get("manual_reversal_score")),
             "liquidity": _optional_float(data.get("manual_liquidity_score")),
-            "volume_sentiment": _optional_float(
-                data.get("manual_volume_sentiment_score")
-            ),
+            "volume_sentiment": _optional_float(data.get("manual_volume_sentiment_score")),
             "momentum": _optional_float(data.get("manual_momentum_score")),
             "risk_health": _optional_float(data.get("manual_risk_health_score")),
-            "theme_hotness": _optional_float(
-                data.get("manual_theme_hotness_score")
-            ),
+            "theme_hotness": _optional_float(data.get("manual_theme_hotness_score")),
         },
         "raw_factors": {
             "pe_ttm": _optional_float(data.get("pe_ttm")),
             "pb": _optional_float(data.get("pb")),
             "ps": _optional_float(data.get("ps", data.get("ps_ttm"))),
-            "dividend_yield": _optional_float(
-                data.get("dividend_yield", data.get("dv_ttm"))
-            ),
+            "dividend_yield": _optional_float(data.get("dividend_yield", data.get("dv_ttm"))),
             "return_20d": _optional_float(data.get("return_20d")),
             "return_6m_ex_1m": _optional_float(data.get("return_6m_ex_1m")),
             "avg_amount_20d": _optional_float(data.get("avg_amount_20d")),
@@ -187,39 +175,32 @@ def build_ai_quant_profile(row: pd.Series | dict[str, Any]) -> dict[str, Any]:
             "volume_ratio": _optional_float(data.get("volume_ratio")),
             "volatility_120d": _optional_float(data.get("volatility_120d")),
             "max_drawdown_250d": _optional_float(data.get("max_drawdown_250d")),
-            "market_cap": _optional_float(
-                data.get("market_cap", data.get("total_mv"))
-            ),
+            "market_cap": _optional_float(data.get("market_cap", data.get("total_mv"))),
             "theme_code": _optional_string(data.get("theme_code")),
             "theme_name": _optional_string(data.get("theme_name")),
             "theme_source": _optional_string(data.get("theme_source")),
             "theme_hot_score": _optional_float(data.get("theme_hot_score")),
-            "theme_member_confidence": _optional_float(
-                data.get("theme_member_confidence")
-            ),
-            "theme_signal_confirmed": _optional_bool(
-                data.get("theme_signal_confirmed")
-            ),
-            "theme_relative_strength_20d": _optional_float(
-                data.get("theme_relative_strength_20d")
-            ),
-            "theme_relative_strength_60d": _optional_float(
-                data.get("theme_relative_strength_60d")
-            ),
-            "theme_amount_ratio_20d": _optional_float(
-                data.get("theme_amount_ratio_20d")
-            ),
+            "theme_member_confidence": _optional_float(data.get("theme_member_confidence")),
+            "theme_signal_confirmed": _optional_bool(data.get("theme_signal_confirmed")),
+            "theme_relative_strength_20d": _optional_float(data.get("theme_relative_strength_20d")),
+            "theme_relative_strength_60d": _optional_float(data.get("theme_relative_strength_60d")),
+            "theme_amount_ratio_20d": _optional_float(data.get("theme_amount_ratio_20d")),
             "theme_breadth_20d": _optional_float(data.get("theme_breadth_20d")),
-            "theme_drawdown_60d": _optional_float(
-                data.get("theme_drawdown_60d")
-            ),
+            "theme_drawdown_60d": _optional_float(data.get("theme_drawdown_60d")),
         },
         "research_hints": _research_hints(data),
     }
 
 
 def _empty_scored_frame(frame: pd.DataFrame) -> pd.DataFrame:
-    """Return a copy of frame with empty score columns for the empty case."""
+    """Return a copy of frame with empty score columns for the empty case.
+
+    Args:
+        frame: pd.DataFrame: .
+
+    Returns:
+        pd.DataFrame: .
+    """
     scored = frame.copy()
     for column in (
         "manual_value_score",
@@ -239,21 +220,45 @@ def _empty_scored_frame(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def _string_column(frame: pd.DataFrame, column: str) -> pd.Series:
-    """Return a string Series for a column, falling back to the index."""
+    """Return a string Series for a column, falling back to the index.
+
+    Args:
+        frame: pd.DataFrame: .
+        column: str: .
+
+    Returns:
+        pd.Series: .
+    """
     if column not in frame.columns:
         return frame.index.astype(str).to_series(index=frame.index)
     return frame[column].astype(str)
 
 
 def _numeric(frame: pd.DataFrame, column: str) -> pd.Series:
-    """Return a numeric Series for a column, or NaN if absent."""
+    """Return a numeric Series for a column, or NaN if absent.
+
+    Args:
+        frame: pd.DataFrame: .
+        column: str: .
+
+    Returns:
+        pd.Series: .
+    """
     if column not in frame.columns:
         return pd.Series(np.nan, index=frame.index, dtype=float)
     return pd.to_numeric(frame[column], errors="coerce")
 
 
 def _first_numeric(frame: pd.DataFrame, columns: tuple[str, ...]) -> pd.Series:
-    """Return the first available numeric column from a list of candidates."""
+    """Return the first available numeric column from a list of candidates.
+
+    Args:
+        frame: pd.DataFrame: .
+        columns: tuple[str, ...]: .
+
+    Returns:
+        pd.Series: .
+    """
     result = pd.Series(np.nan, index=frame.index, dtype=float)
     for column in columns:
         if column not in frame.columns:
@@ -264,7 +269,15 @@ def _first_numeric(frame: pd.DataFrame, columns: tuple[str, ...]) -> pd.Series:
 
 
 def _percentile(values: pd.Series, *, higher: bool) -> pd.Series:
-    """Return winsorized 0-100 percentile scores for a numeric Series."""
+    """Return winsorized 0-100 percentile scores for a numeric Series.
+
+    Args:
+        values: pd.Series: .
+        higher: bool: .
+
+    Returns:
+        pd.Series: .
+    """
     numeric = pd.to_numeric(values, errors="coerce")
     if numeric.notna().sum() == 0:
         return pd.Series(0.0, index=numeric.index, dtype=float)
@@ -275,7 +288,14 @@ def _percentile(values: pd.Series, *, higher: bool) -> pd.Series:
 
 
 def _volume_sentiment_score(frame: pd.DataFrame) -> pd.Series:
-    """Return a 0-100 volume sentiment score from turnover and volume ratio."""
+    """Return a 0-100 volume sentiment score from turnover and volume ratio.
+
+    Args:
+        frame: pd.DataFrame: .
+
+    Returns:
+        pd.Series: .
+    """
     turnover = _first_numeric(frame, ("turnover_rate", "turnover_rate_f"))
     turnover_score = _percentile(turnover.fillna(turnover.median()), higher=True)
     volume_ratio = _first_numeric(frame, ("volume_ratio",)).fillna(1.0).clip(0.0, 5.0)
@@ -286,7 +306,14 @@ def _volume_sentiment_score(frame: pd.DataFrame) -> pd.Series:
 
 
 def _risk_health_score(frame: pd.DataFrame) -> pd.Series:
-    """Return a 0-100 risk-health score from volatility, drawdown, and liquidity."""
+    """Return a 0-100 risk-health score from volatility, drawdown, and liquidity.
+
+    Args:
+        frame: pd.DataFrame: .
+
+    Returns:
+        pd.Series: .
+    """
     volatility = _first_numeric(frame, ("volatility_120d",))
     max_drawdown = _first_numeric(frame, ("max_drawdown_250d",))
     avg_amount = _first_numeric(frame, ("avg_amount_20d",))
@@ -298,13 +325,16 @@ def _risk_health_score(frame: pd.DataFrame) -> pd.Series:
 
 
 def _theme_hotness_score(frame: pd.DataFrame) -> pd.Series:
-    """Return a 0-100 theme hotness score from theme signal columns."""
+    """Return a 0-100 theme hotness score from theme signal columns.
+
+    Args:
+        frame: pd.DataFrame: .
+
+    Returns:
+        pd.Series: .
+    """
     hot_score = _first_numeric(frame, ("theme_hot_score",)).clip(0.0, 100.0)
-    confidence = (
-        _first_numeric(frame, ("theme_member_confidence",))
-        .fillna(0.0)
-        .clip(0.0, 1.0)
-    )
+    confidence = _first_numeric(frame, ("theme_member_confidence",)).fillna(0.0).clip(0.0, 1.0)
     confirmed = _bool_series(frame, "theme_signal_confirmed")
     return (hot_score.fillna(0.0) * confidence * confirmed.astype(float)).clip(
         0.0,
@@ -313,7 +343,14 @@ def _theme_hotness_score(frame: pd.DataFrame) -> pd.Series:
 
 
 def _normalized_weights(weights: dict[str, float]) -> dict[str, float]:
-    """Return weights normalized to sum to 1.0, falling back to defaults."""
+    """Return weights normalized to sum to 1.0, falling back to defaults.
+
+    Args:
+        weights: dict[str, float]: .
+
+    Returns:
+        dict[str, float]: .
+    """
     merged = {**DEFAULT_WEIGHTS, **weights}
     total = sum(max(0.0, float(value)) for value in merged.values())
     if total <= 0:
@@ -322,22 +359,33 @@ def _normalized_weights(weights: dict[str, float]) -> dict[str, float]:
 
 
 def _base_and_theme_weights(weights: dict[str, float]) -> tuple[dict[str, float], float]:
-    """Split weights into normalized base weights and a separate theme weight."""
+    """Split weights into normalized base weights and a separate theme weight.
+
+    Args:
+        weights: dict[str, float]: .
+
+    Returns:
+        tuple[dict[str, float], float]: .
+    """
     merged = {**DEFAULT_WEIGHTS, **weights}
     theme_weight = max(0.0, float(merged.pop("theme_hotness", 0.0)))
     total = sum(max(0.0, float(value)) for value in merged.values())
     if total <= 0:
         base_weights = {key: 0.0 for key in DEFAULT_WEIGHTS if key != "theme_hotness"}
     else:
-        base_weights = {
-            key: max(0.0, float(value)) / total
-            for key, value in merged.items()
-        }
+        base_weights = {key: max(0.0, float(value)) / total for key, value in merged.items()}
     return base_weights, theme_weight
 
 
 def _optional_float(value: Any) -> float | None:
-    """Convert a value to float, returning None for NaN or non-numeric."""
+    """Convert a value to float, returning None for NaN or non-numeric.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        float | None: .
+    """
     if value is None:
         return None
     try:
@@ -350,27 +398,55 @@ def _optional_float(value: Any) -> float | None:
 
 
 def _optional_int(value: Any) -> int | None:
-    """Convert a value to int, returning None for NaN or non-numeric."""
+    """Convert a value to int, returning None for NaN or non-numeric.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        int | None: .
+    """
     numeric = _optional_float(value)
     return None if numeric is None else int(numeric)
 
 
 def _bool_value(value: Any) -> bool:
-    """Convert a value to bool, returning False for None or NaN."""
+    """Convert a value to bool, returning False for None or NaN.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        bool: .
+    """
     if value is None or bool(pd.isna(value)):
         return False
     return bool(value)
 
 
 def _optional_bool(value: Any) -> bool | None:
-    """Convert a value to bool, returning None for None or NaN."""
+    """Convert a value to bool, returning None for None or NaN.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        bool | None: .
+    """
     if value is None or bool(pd.isna(value)):
         return None
     return bool(value)
 
 
 def _optional_string(value: Any) -> str | None:
-    """Convert a value to a stripped string, returning None for empty or NaN."""
+    """Convert a value to a stripped string, returning None for empty or NaN.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        str | None: .
+    """
     if value is None or bool(pd.isna(value)):
         return None
     text = str(value).strip()
@@ -378,14 +454,29 @@ def _optional_string(value: Any) -> str | None:
 
 
 def _bool_series(frame: pd.DataFrame, column: str) -> pd.Series:
-    """Return a bool Series for a column, defaulting to False if absent."""
+    """Return a bool Series for a column, defaulting to False if absent.
+
+    Args:
+        frame: pd.DataFrame: .
+        column: str: .
+
+    Returns:
+        pd.Series: .
+    """
     if column not in frame.columns:
         return pd.Series(False, index=frame.index, dtype=bool)
     return frame[column].map(lambda value: False if pd.isna(value) else bool(value))
 
 
 def _research_hints(data: pd.Series) -> tuple[str, ...]:
-    """Derive structured research hint tags from scored row data."""
+    """Derive structured research hint tags from scored row data.
+
+    Args:
+        data: pd.Series: .
+
+    Returns:
+        tuple[str, ...]: .
+    """
     hints: list[str] = []
     return_20d = _optional_float(data.get("return_20d"))
     dividend = _optional_float(data.get("dividend_yield", data.get("dv_ttm")))

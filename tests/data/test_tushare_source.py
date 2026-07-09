@@ -21,7 +21,11 @@ from margin.data.tushare_source import (
 
 
 def test_source_catalog_has_one_table_per_admitted_api() -> None:
-    """Every admitted API owns an independent landing table."""
+    """Every admitted API owns an independent landing table.
+
+    Returns:
+        None: .
+    """
     catalog = TushareSourceCatalog(QuantDataRequirementCatalog.default())
 
     table_names = set(catalog.table_names())
@@ -37,7 +41,11 @@ def test_source_catalog_has_one_table_per_admitted_api() -> None:
 
 
 def test_landing_table_contract_supports_pit_quality_and_index_access() -> None:
-    """Dedicated tables expose the shared lineage and query-access columns."""
+    """Dedicated tables expose the shared lineage and query-access columns.
+
+    Returns:
+        None: .
+    """
     columns = set(landing_table_columns("daily"))
 
     assert {
@@ -54,7 +62,11 @@ def test_landing_table_contract_supports_pit_quality_and_index_access() -> None:
 
 
 def test_landing_insert_values_contain_only_physical_columns() -> None:
-    """Logical endpoint routing metadata must not leak into SQL INSERT columns."""
+    """Logical endpoint routing metadata must not leak into SQL INSERT columns.
+
+    Returns:
+        None: .
+    """
     record = TushareLandingRecord.from_payload(
         endpoint=QuantDataRequirementCatalog.default().endpoint("tushare", "daily"),
         payload={
@@ -73,7 +85,11 @@ def test_landing_insert_values_contain_only_physical_columns() -> None:
 
 
 def test_landing_batches_stay_below_postgres_parameter_limit() -> None:
-    """Large All-A pages are split before SQL parameter compilation."""
+    """Large All-A pages are split before SQL parameter compilation.
+
+    Returns:
+        None: .
+    """
     records = list(range(5312))
 
     batches = list(chunk_landing_records(records, batch_size=1000))
@@ -82,7 +98,11 @@ def test_landing_batches_stay_below_postgres_parameter_limit() -> None:
 
 
 def test_quality_decision_batches_stay_below_postgres_parameter_limit() -> None:
-    """Large benchmark-weight pages split quality INSERT statements too."""
+    """Large benchmark-weight pages split quality INSERT statements too.
+
+    Returns:
+        None: .
+    """
     decisions = list(range(6000))
 
     batches = list(chunk_quality_decisions(decisions, batch_size=1000))
@@ -91,7 +111,11 @@ def test_quality_decision_batches_stay_below_postgres_parameter_limit() -> None:
 
 
 def test_landing_record_is_idempotent_by_natural_key_and_revision() -> None:
-    """Same business row/revision is stable while corrected payload is append-only."""
+    """Same business row/revision is stable while corrected payload is append-only.
+
+    Returns:
+        None: .
+    """
     fetched_at = datetime(2026, 6, 23, 8, tzinfo=UTC)
     first = TushareLandingRecord.from_payload(
         endpoint=QuantDataRequirementCatalog.default().endpoint("tushare", "daily"),
@@ -145,5 +169,13 @@ def test_landing_record_is_idempotent_by_natural_key_and_revision() -> None:
     ],
 )
 def test_st_name_detection(name: str, expected: bool) -> None:
-    """Current ST variants are excluded before business-detail persistence."""
+    """Current ST variants are excluded before business-detail persistence.
+
+    Args:
+        name: str: .
+        expected: bool: .
+
+    Returns:
+        None: .
+    """
     assert is_st_security_name(name) is expected

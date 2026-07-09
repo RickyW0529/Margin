@@ -12,7 +12,7 @@ from margin.valuation_discovery.quant.normalization import FactorNormalizer
 
 @dataclass(frozen=True)
 class FactorGroupScores:
-    """Input group scores for final score composition."""
+    """Input group scores for final score composition.."""
 
     security_id: str
     quality_score: float
@@ -24,14 +24,14 @@ class FactorGroupScores:
 
 @dataclass(frozen=True)
 class CombinedFactorScore(FactorGroupScores):
-    """Combined score with final weighted score."""
+    """Combined score with final weighted score.."""
 
     final_score: float
 
 
 @dataclass(frozen=True)
 class QuantStatusDecision:
-    """Orthogonal screening status and guardrail decision."""
+    """Orthogonal screening status and guardrail decision.."""
 
     screening_status: ScreeningStatus
     research_guardrail: ResearchGuardrail
@@ -40,7 +40,7 @@ class QuantStatusDecision:
 
 
 class FactorScorer:
-    """Score value factors and combine factor groups."""
+    """Score value factors and combine factor groups.."""
 
     GROUP_WEIGHTS = {
         "quality_score": 0.35,
@@ -51,11 +51,25 @@ class FactorScorer:
     }
 
     def __init__(self, normalizer: FactorNormalizer | None = None) -> None:
-        """Initialize the scorer with an optional custom normalizer."""
+        """Initialize the scorer with an optional custom normalizer.
+
+        Args:
+            normalizer: FactorNormalizer | None: .
+
+        Returns:
+            None: .
+        """
         self._normalizer = normalizer or FactorNormalizer()
 
     def score_value(self, frame: pd.DataFrame) -> pd.DataFrame:
-        """Score valuation factors, treating negative PE as invalid."""
+        """Score valuation factors, treating negative PE as invalid.
+
+        Args:
+            frame: pd.DataFrame: .
+
+        Returns:
+            pd.DataFrame: .
+        """
         scored = frame.copy()
         valid_pe = pd.to_numeric(scored["pe_ttm"], errors="coerce")
         scored["__pe_for_rank"] = valid_pe.where(valid_pe > 0)
@@ -85,14 +99,19 @@ class FactorScorer:
         else:
             scored["fcf_yield_score"] = 0.0
         scored["value_score"] = (
-            0.45 * scored["pe_score"]
-            + 0.25 * scored["pb_score"]
-            + 0.30 * scored["fcf_yield_score"]
+            0.45 * scored["pe_score"] + 0.25 * scored["pb_score"] + 0.30 * scored["fcf_yield_score"]
         ).clip(0.0, 100.0)
         return scored.drop(columns=["__pe_for_rank"])
 
     def combine(self, scores: FactorGroupScores) -> CombinedFactorScore:
-        """Combine group scores using configured v0.2 weights."""
+        """Combine group scores using configured v0.2 weights.
+
+        Args:
+            scores: FactorGroupScores: .
+
+        Returns:
+            CombinedFactorScore: .
+        """
         final_score = (
             self.GROUP_WEIGHTS["quality_score"] * scores.quality_score
             + self.GROUP_WEIGHTS["value_score"] * scores.value_score
@@ -118,7 +137,17 @@ class FactorScorer:
         risk_flags: tuple[str, ...],
         short_term_overheat: bool,
     ) -> QuantStatusDecision:
-        """Determine screening status and research guardrail from factor scores."""
+        """Determine screening status and research guardrail from factor scores.
+
+        Args:
+            scores: CombinedFactorScore: .
+            data_status: DataStatus: .
+            risk_flags: tuple[str, ...]: .
+            short_term_overheat: bool: .
+
+        Returns:
+            QuantStatusDecision: .
+        """
         if data_status != DataStatus.OK:
             return QuantStatusDecision(
                 screening_status=ScreeningStatus.REJECT,
@@ -147,11 +176,7 @@ class FactorScorer:
             if short_term_overheat
             else ResearchGuardrail.RESEARCH_ALLOWED
         )
-        if (
-            scores.final_score >= 80
-            and scores.quality_score >= 60
-            and scores.risk_score >= 50
-        ):
+        if scores.final_score >= 80 and scores.quality_score >= 60 and scores.risk_score >= 50:
             return QuantStatusDecision(
                 screening_status=ScreeningStatus.PASS,
                 research_guardrail=guardrail,

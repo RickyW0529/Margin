@@ -11,7 +11,7 @@ MODEL_VERSION = "valuation-v0.2.0"
 
 @dataclass(frozen=True)
 class ValuationModelResult:
-    """Deterministic valuation model output."""
+    """Deterministic valuation model output.."""
 
     security_id: str
     industry_family: str
@@ -27,7 +27,7 @@ class ValuationModelResult:
 
 @dataclass(frozen=True)
 class IndustryValuationModel:
-    """Valuation model metadata and callable implementation."""
+    """Valuation model metadata and callable implementation.."""
 
     model_name: str
     required_inputs: tuple[str, ...]
@@ -40,12 +40,17 @@ class IndustryValuationModel:
         industry_family: str,
         inputs: dict[str, Any],
     ) -> ValuationModelResult:
-        """Evaluate this model or return unavailable reasons."""
-        missing = tuple(
-            field
-            for field in self.required_inputs
-            if inputs.get(field) is None
-        )
+        """Evaluate this model or return unavailable reasons.
+
+        Args:
+            security_id: str: .
+            industry_family: str: .
+            inputs: dict[str, Any]: .
+
+        Returns:
+            ValuationModelResult: .
+        """
+        missing = tuple(field for field in self.required_inputs if inputs.get(field) is None)
         if missing:
             return ValuationModelResult(
                 security_id=security_id,
@@ -60,15 +65,26 @@ class IndustryValuationModel:
 
 
 class IndustryValuationRegistry:
-    """Registry mapping industry families to appropriate valuation models."""
+    """Registry mapping industry families to appropriate valuation models.."""
 
     def __init__(self, models: dict[str, IndustryValuationModel]) -> None:
-        """Initialize the registry with industry-family to model mappings."""
+        """Initialize the registry with industry-family to model mappings.
+
+        Args:
+            models: dict[str, IndustryValuationModel]: .
+
+        Returns:
+            None: .
+        """
         self._models = models
 
     @classmethod
     def default(cls) -> IndustryValuationRegistry:
-        """Return the v0.2 default industry valuation registry."""
+        """Return the v0.2 default industry valuation registry.
+
+        Returns:
+            IndustryValuationRegistry: .
+        """
         bank = IndustryValuationModel(
             model_name="bank_pb_roe",
             required_inputs=(
@@ -126,7 +142,14 @@ class IndustryValuationRegistry:
         )
 
     def model_for(self, industry_family: str) -> IndustryValuationModel:
-        """Return the model configured for an industry family."""
+        """Return the model configured for an industry family.
+
+        Args:
+            industry_family: str: .
+
+        Returns:
+            IndustryValuationModel: .
+        """
         normalized = industry_family.strip().lower()
         if normalized not in self._models:
             return self._models["consumer"]
@@ -139,7 +162,16 @@ class IndustryValuationRegistry:
         industry_family: str,
         inputs: dict[str, Any],
     ) -> ValuationModelResult:
-        """Evaluate the configured model for a security."""
+        """Evaluate the configured model for a security.
+
+        Args:
+            security_id: str: .
+            industry_family: str: .
+            inputs: dict[str, Any]: .
+
+        Returns:
+            ValuationModelResult: .
+        """
         model = self.model_for(industry_family)
         return model.value(
             security_id=security_id,
@@ -153,7 +185,16 @@ def _bank_pb_roe(
     industry_family: str,
     inputs: dict[str, Any],
 ) -> ValuationModelResult:
-    """Evaluate a bank PB-ROE valuation model."""
+    """Evaluate a bank PB-ROE valuation model.
+
+    Args:
+        security_id: str: .
+        industry_family: str: .
+        inputs: dict[str, Any]: .
+
+    Returns:
+        ValuationModelResult: .
+    """
     book_value = _float(inputs["book_value_per_share"])
     roe = _float(inputs["roe_ttm"])
     pb_floor = _float(inputs["pb_floor"])
@@ -181,7 +222,16 @@ def _insurance_ev_yield(
     industry_family: str,
     inputs: dict[str, Any],
 ) -> ValuationModelResult:
-    """Evaluate an insurance embedded-value yield valuation model."""
+    """Evaluate an insurance embedded-value yield valuation model.
+
+    Args:
+        security_id: str: .
+        industry_family: str: .
+        inputs: dict[str, Any]: .
+
+    Returns:
+        ValuationModelResult: .
+    """
     embedded_value = _float(inputs["embedded_value_per_share"])
     investment_yield = _float(inputs["investment_yield"])
     multiple_floor = _float(inputs.get("ev_multiple_floor", 0.75))
@@ -205,7 +255,16 @@ def _mid_cycle_earnings(
     industry_family: str,
     inputs: dict[str, Any],
 ) -> ValuationModelResult:
-    """Evaluate a mid-cycle earnings valuation model for cyclicals."""
+    """Evaluate a mid-cycle earnings valuation model for cyclicals.
+
+    Args:
+        security_id: str: .
+        industry_family: str: .
+        inputs: dict[str, Any]: .
+
+    Returns:
+        ValuationModelResult: .
+    """
     eps = _float(inputs["mid_cycle_eps"])
     pe_floor = _float(inputs["pe_floor"])
     pe_ceiling = _float(inputs["pe_ceiling"])
@@ -226,7 +285,16 @@ def _normalized_earnings(
     industry_family: str,
     inputs: dict[str, Any],
 ) -> ValuationModelResult:
-    """Evaluate a normalized earnings valuation model."""
+    """Evaluate a normalized earnings valuation model.
+
+    Args:
+        security_id: str: .
+        industry_family: str: .
+        inputs: dict[str, Any]: .
+
+    Returns:
+        ValuationModelResult: .
+    """
     eps = _float(inputs["normalized_eps"])
     pe_floor = _float(inputs["pe_floor"])
     pe_ceiling = _float(inputs["pe_ceiling"])
@@ -247,7 +315,16 @@ def _growth_fcf_path(
     industry_family: str,
     inputs: dict[str, Any],
 ) -> ValuationModelResult:
-    """Evaluate a growth FCF path valuation model."""
+    """Evaluate a growth FCF path valuation model.
+
+    Args:
+        security_id: str: .
+        industry_family: str: .
+        inputs: dict[str, Any]: .
+
+    Returns:
+        ValuationModelResult: .
+    """
     fcf = _float(inputs["fcf_per_share_forward"])
     multiple_floor = _float(inputs["fcf_multiple_floor"])
     multiple_ceiling = _float(inputs["fcf_multiple_ceiling"])
@@ -273,7 +350,16 @@ def _dividend_regulated_return(
     industry_family: str,
     inputs: dict[str, Any],
 ) -> ValuationModelResult:
-    """Evaluate a dividend-regulated return valuation model."""
+    """Evaluate a dividend-regulated return valuation model.
+
+    Args:
+        security_id: str: .
+        industry_family: str: .
+        inputs: dict[str, Any]: .
+
+    Returns:
+        ValuationModelResult: .
+    """
     dividend = _float(inputs["dividend_per_share"])
     yield_floor = _float(inputs["dividend_yield_floor"])
     yield_ceiling = _float(inputs["dividend_yield_ceiling"])
@@ -304,7 +390,20 @@ def _available_result(
     sensitivity: dict[str, float],
     data_requirements: tuple[str, ...],
 ) -> ValuationModelResult:
-    """Build an available ``ValuationModelResult`` with sorted value range."""
+    """Build an available ``ValuationModelResult`` with sorted value range.
+
+    Args:
+        security_id: str: .
+        industry_family: str: .
+        model_name: str: .
+        value_range: tuple[float, float]: .
+        key_assumptions: dict[str, float]: .
+        sensitivity: dict[str, float]: .
+        data_requirements: tuple[str, ...]: .
+
+    Returns:
+        ValuationModelResult: .
+    """
     low, high = sorted(value_range)
     return ValuationModelResult(
         security_id=security_id,
@@ -320,5 +419,12 @@ def _available_result(
 
 
 def _float(value: Any) -> float:
-    """Convert a value to float."""
+    """Convert a value to float.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        float: .
+    """
     return float(value)

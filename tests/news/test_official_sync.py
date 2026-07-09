@@ -27,7 +27,14 @@ from margin.storage.database import (
 
 @pytest.fixture
 def news_repository(database_url: str) -> Iterator[NewsRepository]:
-    """Create a clean repository for official sync tests."""
+    """Create a clean repository for official sync tests.
+
+    Args:
+        database_url: str: .
+
+    Yields:
+        Any: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -40,7 +47,14 @@ def news_repository(database_url: str) -> Iterator[NewsRepository]:
 
 
 def filing_record(cursor: str) -> DiscoveredDocument:
-    """Build a discovered filing fixture."""
+    """Build a discovered filing fixture.
+
+    Args:
+        cursor: str: .
+
+    Returns:
+        DiscoveredDocument: .
+    """
     return DiscoveredDocument(
         external_id="filing-1",
         title="平安银行公告",
@@ -51,13 +65,16 @@ def filing_record(cursor: str) -> DiscoveredDocument:
 
 
 class FakeOfficialDiscovery:
-    """Discovery fake returning preconfigured records."""
+    """Discovery fake returning preconfigured records.."""
 
     def __init__(self, records: list[DiscoveredDocument]) -> None:
         """Initialize the fake discovery with preconfigured records.
 
         Args:
-            records: The discovered documents to return from ``discover``.
+            records: list[DiscoveredDocument]: .
+
+        Returns:
+            None: .
         """
         self.records = records
         self.seen_cursor: str | None = None
@@ -66,29 +83,29 @@ class FakeOfficialDiscovery:
         """Return up to ``limit`` preconfigured records and record the cursor.
 
         Args:
-            cursor: The cursor passed by the caller.
-            limit: Maximum number of records to return.
+            cursor: str | None: .
+            limit: int: .
 
         Returns:
-            A slice of the preconfigured records list.
+            list[DiscoveredDocument]: .
         """
         self.seen_cursor = cursor
         return self.records[:limit]
 
 
 class FakeAcquirer:
-    """Acquirer fake that returns a durable document event."""
+    """Acquirer fake that returns a durable document event.."""
 
     def acquire(self, source_name: str, url: str, **kwargs):
         """Return a durable L1 document event for the given URL.
 
         Args:
-            source_name: The source name to assign to the event.
-            url: The source URL for the document.
-            **kwargs: Optional ``title_override`` and ``published_at`` overrides.
+            source_name: str: .
+            url: str: .
+            **kwargs: Any: .
 
         Returns:
-            A ``DocumentEvent`` with L1 source level and seeded symbols.
+            Any: .
         """
         return make_document_event(
             source_url=url,
@@ -102,18 +119,18 @@ class FakeAcquirer:
 
 
 class FailingAcquirer:
-    """Acquirer fake that simulates a download/persist failure before event creation."""
+    """Acquirer fake that simulates a download/persist failure before event creation.."""
 
     def acquire(self, source_name: str, url: str, **kwargs):
         """Always raise a runtime error to simulate a download failure.
 
         Args:
-            source_name: The source name (ignored).
-            url: The source URL (ignored).
-            **kwargs: Additional acquire arguments (ignored).
+            source_name: str: .
+            url: str: .
+            **kwargs: Any: .
 
-        Raises:
-            RuntimeError: Always, to simulate a download or persist failure.
+        Returns:
+            Any: .
         """
         raise RuntimeError("download failed")
 
@@ -121,7 +138,14 @@ class FailingAcquirer:
 def test_official_cursor_advances_only_after_event_persisted(
     news_repository: NewsRepository,
 ) -> None:
-    """official cursor advances only after event persisted."""
+    """official cursor advances only after event persisted.
+
+    Args:
+        news_repository: NewsRepository: .
+
+    Returns:
+        None: .
+    """
     discovery = FakeOfficialDiscovery(records=[filing_record(cursor="page-2")])
     service = OfficialFilingSyncService(news_repository, discovery, FakeAcquirer())
 
@@ -134,7 +158,14 @@ def test_official_cursor_advances_only_after_event_persisted(
 def test_official_cursor_stays_put_when_persist_fails(
     news_repository: NewsRepository,
 ) -> None:
-    """official cursor stays put when persist fails."""
+    """official cursor stays put when persist fails.
+
+    Args:
+        news_repository: NewsRepository: .
+
+    Returns:
+        None: .
+    """
     discovery = FakeOfficialDiscovery(records=[filing_record(cursor="page-2")])
     service = OfficialFilingSyncService(news_repository, discovery, FailingAcquirer())
 

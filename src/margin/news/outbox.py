@@ -7,13 +7,16 @@ from margin.news.repository import NewsRepository, OutboxMessage
 
 
 class DocumentEventPublisher:
-    """Persist document events and enqueue ready documents atomically."""
+    """Persist document events and enqueue ready documents atomically.."""
 
     def __init__(self, repository: NewsRepository) -> None:
         """Initialize the publisher.
 
         Args:
-            repository: Repository used to persist events and outbox rows.
+            repository: NewsRepository: .
+
+        Returns:
+            None: .
         """
         self._repository = repository
 
@@ -21,19 +24,25 @@ class DocumentEventPublisher:
         """Persist one event and create an outbox row only when it is indexable.
 
         Args:
-            event: Document event to persist and enqueue.
+            event: DocumentEvent: .
+
+        Returns:
+            None: .
         """
         self._repository.add_document_event(event, publishable=True)
 
 
 class OutboxConsumer:
-    """Small consumer facade over the repository outbox methods."""
+    """Small consumer facade over the repository outbox methods.."""
 
     def __init__(self, repository: NewsRepository) -> None:
         """Initialize the consumer.
 
         Args:
-            repository: Repository used to claim and update outbox rows.
+            repository: NewsRepository: .
+
+        Returns:
+            None: .
         """
         self._repository = repository
 
@@ -41,11 +50,11 @@ class OutboxConsumer:
         """Claim pending messages.
 
         Args:
-            topic: Destination topic to claim messages for.
-            limit: Maximum number of messages to claim.
+            topic: str: .
+            limit: int: .
 
         Returns:
-            List of claimed outbox messages.
+            list[OutboxMessage]: .
         """
         return self._repository.claim_outbox(topic, limit)
 
@@ -53,7 +62,10 @@ class OutboxConsumer:
         """Mark a message delivered.
 
         Args:
-            outbox_id: Primary key of the outbox row to update.
+            outbox_id: int: .
+
+        Returns:
+            None: .
         """
         self._repository.mark_outbox_delivered(outbox_id)
 
@@ -61,7 +73,10 @@ class OutboxConsumer:
         """Mark a message failed.
 
         Args:
-            outbox_id: Primary key of the outbox row to update.
-            error: Error message to record for audit.
+            outbox_id: int: .
+            error: str: .
+
+        Returns:
+            None: .
         """
         self._repository.mark_outbox_failed(outbox_id, error)

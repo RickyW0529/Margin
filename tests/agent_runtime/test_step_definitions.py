@@ -9,6 +9,11 @@ from margin.agent_runtime.step_definitions import load_scheduled_stock_analysis_
 
 
 def test_scheduled_flow_is_fixed_and_ordered() -> None:
+    """Test scheduled_flow_is_fixed_and_ordered.
+
+    Returns:
+        None: .
+    """
     flow = load_scheduled_stock_analysis_flow()
 
     assert flow.flow_id == "scheduled_stock_analysis"
@@ -27,23 +32,24 @@ def test_scheduled_flow_is_fixed_and_ordered() -> None:
 
 
 def test_scheduled_flow_declares_artifact_dependencies() -> None:
+    """Test scheduled_flow_declares_artifact_dependencies.
+
+    Returns:
+        None: .
+    """
     flow = load_scheduled_stock_analysis_flow()
     by_id = {step.step_id: step for step in flow.steps}
 
     assert by_id["quant_analysis"].required_artifacts == ("data_readiness",)
     assert "news_context_bundle" not in by_id["quant_analysis"].required_artifacts
     assert by_id["performance_growth_scout"].required_artifacts == ("data_readiness",)
-    assert by_id["rag_coverage_gate"].required_artifacts == (
-        "fundamental_target_pool",
-    )
+    assert by_id["rag_coverage_gate"].required_artifacts == ("fundamental_target_pool",)
     assert by_id["fundamental_analysis"].required_artifacts == (
         "fundamental_target_pool",
         "rag_coverage_report",
         "indexed_document_batch",
     )
-    assert by_id["sentiment_monitor"].required_artifacts == (
-        "fundamental_thesis_snapshot",
-    )
+    assert by_id["sentiment_monitor"].required_artifacts == ("fundamental_thesis_snapshot",)
     assert by_id["fusion_research"].required_artifacts == (
         "quant_result",
         "analysis_mart_snapshot",
@@ -55,12 +61,14 @@ def test_scheduled_flow_declares_artifact_dependencies() -> None:
 
 
 def test_scheduled_flow_has_parallel_quant_and_fundamental_branches() -> None:
+    """Test scheduled_flow_has_parallel_quant_and_fundamental_branches.
+
+    Returns:
+        None: .
+    """
     flow = load_scheduled_stock_analysis_flow()
 
-    waves = [
-        tuple(step.step_id for step in wave)
-        for wave in flow.dependency_waves()
-    ]
+    waves = [tuple(step.step_id for step in wave) for wave in flow.dependency_waves()]
 
     assert waves[:3] == [
         ("data_inspection",),
@@ -71,15 +79,18 @@ def test_scheduled_flow_has_parallel_quant_and_fundamental_branches() -> None:
 
 
 def test_scheduled_flow_bundles_json_schema_resource() -> None:
+    """Test scheduled_flow_bundles_json_schema_resource.
+
+    Returns:
+        None: .
+    """
     scheduled = json.loads(
         files("margin.agent_runtime.flows")
         .joinpath("scheduled_stock_analysis_steps.json")
         .read_text(encoding="utf-8")
     )
     schema = json.loads(
-        files("margin.agent_runtime.flows")
-        .joinpath("step_schema.json")
-        .read_text(encoding="utf-8")
+        files("margin.agent_runtime.flows").joinpath("step_schema.json").read_text(encoding="utf-8")
     )
 
     assert scheduled["$schema"] == "./step_schema.json"

@@ -22,7 +22,11 @@ from margin.vector.models import DocType, RetrievalResult, SourceLocator, make_c
 
 
 def test_evidence_package_is_frozen_and_tracks_max_available_at() -> None:
-    """Test that an evidence package is frozen and tracks max available_at."""
+    """Test that an evidence package is frozen and tracks max available_at.
+
+    Returns:
+        None: .
+    """
     package = EvidencePackage(
         package_id="pkg-1",
         version=1,
@@ -47,7 +51,11 @@ def test_evidence_package_is_frozen_and_tracks_max_available_at() -> None:
 
 
 def test_builder_rejects_future_available_evidence() -> None:
-    """Test that the builder rejects evidence available after the decision time."""
+    """Test that the builder rejects evidence available after the decision time.
+
+    Returns:
+        None: .
+    """
     evidence_repository = FakeEvidenceRepository()
     builder = EvidencePackageBuilder(
         FakeVectorRepository({("future", "000001.SZ")}),
@@ -74,7 +82,11 @@ def test_builder_rejects_future_available_evidence() -> None:
 
 
 def test_builder_links_news_context_to_evidence() -> None:
-    """Test that the builder links news context bundles to evidence items."""
+    """Test that the builder links news context bundles to evidence items.
+
+    Returns:
+        None: .
+    """
     evidence_repository = FakeEvidenceRepository()
     builder = EvidencePackageBuilder(
         FakeVectorRepository({("chunk-1", "000001.SZ")}),
@@ -102,7 +114,11 @@ def test_builder_links_news_context_to_evidence() -> None:
 
 
 def test_builder_is_idempotent_for_the_same_persisted_chunk() -> None:
-    """Test that the builder is idempotent when building from the same persisted chunk."""
+    """Test that the builder is idempotent when building from the same persisted chunk.
+
+    Returns:
+        None: .
+    """
     evidence_repository = FakeEvidenceRepository()
     builder = EvidencePackageBuilder(
         FakeVectorRepository({("chunk-1", "000001.SZ")}),
@@ -130,43 +146,91 @@ def test_builder_is_idempotent_for_the_same_persisted_chunk() -> None:
 
 
 class FakeVectorRepository:
-    """Fake vector repository that checks chunk-security links by membership."""
+    """Fake vector repository that checks chunk-security links by membership.."""
 
     def __init__(self, links: set[tuple[str, str]]) -> None:
-        """Initialize the fake repository with a set of known chunk-security links."""
+        """Initialize the fake repository with a set of known chunk-security links.
+
+        Args:
+            links: set[tuple[str, str]]: .
+
+        Returns:
+            None: .
+        """
         self.links = links
 
     def chunk_has_security_link(self, chunk_id: str, security_id: str) -> bool:
-        """Return whether the given chunk is linked to the given security."""
+        """Return whether the given chunk is linked to the given security.
+
+        Args:
+            chunk_id: str: .
+            security_id: str: .
+
+        Returns:
+            bool: .
+        """
         return (chunk_id, security_id) in self.links
 
 
 class FakeEvidenceRepository:
-    """Fake evidence repository that stores evidences, packages, and news links in memory."""
+    """Fake evidence repository that stores evidences, packages, and news links in memory.."""
 
     def __init__(self) -> None:
-        """Initialize the fake repository with empty stores."""
+        """Initialize the fake repository with empty stores.
+
+        Returns:
+            None: .
+        """
         self.evidences = {}
         self.packages = []
         self.news_links = []
 
     def add_evidence(self, evidence) -> None:
-        """Store an evidence item, rejecting mutation of an existing one."""
+        """Store an evidence item, rejecting mutation of an existing one.
+
+        Args:
+            evidence: Any: .
+
+        Returns:
+            None: .
+        """
         existing = self.evidences.get(evidence.evidence_id)
         if existing is not None and existing != evidence:
             raise ValueError("evidence is immutable")
         self.evidences[evidence.evidence_id] = evidence
 
     def add_evidence_package(self, package: EvidencePackage) -> None:
-        """Append an evidence package to the in-memory store."""
+        """Append an evidence package to the in-memory store.
+
+        Args:
+            package: EvidencePackage: .
+
+        Returns:
+            None: .
+        """
         self.packages.append(package)
 
     def link_news_context_evidence(self, bundle_id: str, evidence_id: str) -> None:
-        """Record a news-context to evidence link."""
+        """Record a news-context to evidence link.
+
+        Args:
+            bundle_id: str: .
+            evidence_id: str: .
+
+        Returns:
+            None: .
+        """
         self.news_links.append((bundle_id, evidence_id))
 
     def list_news_context_evidence(self, bundle_id: str):
-        """List evidence links for the given news-context bundle."""
+        """List evidence links for the given news-context bundle.
+
+        Args:
+            bundle_id: str: .
+
+        Returns:
+            Any: .
+        """
         return [
             SimpleNamespace(bundle_id=stored_bundle_id, evidence_id=evidence_id)
             for stored_bundle_id, evidence_id in self.news_links
@@ -175,7 +239,15 @@ class FakeEvidenceRepository:
 
 
 def retrieval_result(chunk_id: str, *, available_at: datetime) -> RetrievalResult:
-    """Build a deterministic retrieval result fixture for the given chunk ID."""
+    """Build a deterministic retrieval result fixture for the given chunk ID.
+
+    Args:
+        chunk_id: str: .
+        available_at: datetime: .
+
+    Returns:
+        RetrievalResult: .
+    """
     content = f"{chunk_id} 公司公告内容"
     chunk = make_chunk(
         document_id=f"doc-{chunk_id}",

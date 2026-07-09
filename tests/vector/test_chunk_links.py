@@ -14,8 +14,8 @@ from margin.vector.parsers.base import ParsedBlock
 def test_chunk_id_is_stable_and_symbol_independent() -> None:
     """Chunk ID must be stable and independent of linked security IDs.
 
-    Verifies that chunking the same content with different sets of security IDs
-    produces the same chunk ID, while the security links reflect the full set.
+    Returns:
+        None: .
     """
     chunker = StructuredChunker(parser_version="html-v0.2.0", max_chars=200)
     blocks = [
@@ -48,8 +48,8 @@ def test_chunk_id_is_stable_and_symbol_independent() -> None:
 def test_chunk_does_not_cross_table_boundary() -> None:
     """Chunks must not cross table-row to paragraph boundaries.
 
-    Verifies that a table-row block and a paragraph block produce separate chunks
-    rather than being merged into a single chunk.
+    Returns:
+        None: .
     """
     chunker = StructuredChunker(parser_version="csv-v0.2.0", max_chars=1_000)
     blocks = [

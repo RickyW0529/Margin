@@ -6,7 +6,11 @@ from pathlib import Path
 
 
 def test_backend_dockerfile_installs_from_uv_lock() -> None:
-    """Docker image builds must use the committed lockfile, not open-ended pip resolution."""
+    """Docker image builds must use the committed lockfile, not open-ended pip resolution.
+
+    Returns:
+        None: .
+    """
     dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
 
     assert "COPY pyproject.toml uv.lock README.md ./" in dockerfile
@@ -15,7 +19,11 @@ def test_backend_dockerfile_installs_from_uv_lock() -> None:
 
 
 def test_compose_does_not_default_grafana_to_margin_password() -> None:
-    """Compose must not encode the old public Grafana default password."""
+    """Compose must not encode the old public Grafana default password.
+
+    Returns:
+        None: .
+    """
     compose = Path("docker-compose.yml").read_text(encoding="utf-8")
     env_example = Path(".env.example").read_text(encoding="utf-8")
 
@@ -24,7 +32,11 @@ def test_compose_does_not_default_grafana_to_margin_password() -> None:
 
 
 def test_ci_runs_api_openapi_contract_smoke() -> None:
-    """CI must catch API import or critical route contract regressions."""
+    """CI must catch API import or critical route contract regressions.
+
+    Returns:
+        None: .
+    """
     ci = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
 
     assert "API import and route smoke" in ci

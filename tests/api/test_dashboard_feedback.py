@@ -10,7 +10,11 @@ from margin.dashboard.service import DashboardServiceBundle
 
 
 def test_dashboard_feedback_requires_idempotency_key() -> None:
-    """Feedback creation is a mutation and must require an idempotency key."""
+    """Feedback creation is a mutation and must require an idempotency key.
+
+    Returns:
+        None: .
+    """
     client = TestClient(
         create_app(
             dashboard_services=DashboardServiceBundle.in_memory(

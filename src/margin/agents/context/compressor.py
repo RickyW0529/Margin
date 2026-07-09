@@ -15,7 +15,7 @@ COMPRESSION_POLICY_VERSION = "domain-capsule-v1"
 
 
 class DeterministicDomainCompressor:
-    """Build a structured capsule from worker artifact references."""
+    """Build a structured capsule from worker artifact references.."""
 
     def compress(
         self,
@@ -24,29 +24,28 @@ class DeterministicDomainCompressor:
         worker_artifacts: tuple[ContextArtifact, ...],
         token_budget: int,
     ) -> DomainContextCapsule:
-        """Compress worker artifacts into an auditable domain capsule."""
+        """Compress worker artifacts into an auditable domain capsule.
+
+        Args:
+            domain_task: DomainTaskRequest: .
+            worker_artifacts: tuple[ContextArtifact, ...]: .
+            token_budget: int: .
+
+        Returns:
+            DomainContextCapsule: .
+        """
         del token_budget
         artifact_refs = tuple(artifact.artifact_id for artifact in worker_artifacts)
         evidence_refs = tuple(
-            dict.fromkeys(
-                ref
-                for artifact in worker_artifacts
-                for ref in artifact.evidence_refs
-            )
+            dict.fromkeys(ref for artifact in worker_artifacts for ref in artifact.evidence_refs)
         )
         source_refs = tuple(
-            dict.fromkeys(
-                ref
-                for artifact in worker_artifacts
-                for ref in artifact.source_refs
-            )
+            dict.fromkeys(ref for artifact in worker_artifacts for ref in artifact.source_refs)
         )
         facts = tuple(
             ContextFact(
                 fact_id=f"fact_{artifact.artifact_id}",
-                statement=(
-                    f"{artifact.artifact_type} produced by {artifact.producer_agent}"
-                ),
+                statement=(f"{artifact.artifact_type} produced by {artifact.producer_agent}"),
                 confidence=1.0,
                 fact_type="metric",
                 artifact_refs=(artifact.artifact_id,),
@@ -57,9 +56,7 @@ class DeterministicDomainCompressor:
             for artifact in worker_artifacts
         )
         status = (
-            AgentExecutionStatus.SUCCEEDED
-            if worker_artifacts
-            else AgentExecutionStatus.BLOCKED
+            AgentExecutionStatus.SUCCEEDED if worker_artifacts else AgentExecutionStatus.BLOCKED
         )
         input_hash = stable_json_hash(
             {
@@ -75,9 +72,7 @@ class DeterministicDomainCompressor:
             domain=domain_task.domain,
             purpose=domain_task.task_goal,
             status=status,
-            summary=(
-                f"{domain_task.domain} domain produced {len(worker_artifacts)} artifacts."
-            ),
+            summary=(f"{domain_task.domain} domain produced {len(worker_artifacts)} artifacts."),
             key_facts=facts,
             evidence_refs=evidence_refs,
             source_refs=source_refs,

@@ -13,14 +13,16 @@ from margin.news.repository import NewsRepository
 
 
 class NewsContextBundleBuilder:
-    """Select ranked documents and encode whether news refresh is complete."""
+    """Select ranked documents and encode whether news refresh is complete.."""
 
     def __init__(self, repository: NewsRepository) -> None:
         """Initialize the bundle builder.
 
         Args:
-            repository: Repository used to read target statuses and context documents and
-                to persist bundles.
+            repository: NewsRepository: .
+
+        Returns:
+            None: .
         """
         self._repository = repository
 
@@ -34,12 +36,12 @@ class NewsContextBundleBuilder:
         """Build and persist one security-specific news context bundle.
 
         Args:
-            run_id: Identifier of the news refresh run.
-            security_id: Identifier of the security to build the bundle for.
-            max_documents: Maximum number of ranked documents to include.
+            run_id: str: .
+            security_id: str: .
+            max_documents: int: .
 
         Returns:
-            A persisted ``NewsContextBundle`` with target-completion semantics.
+            NewsContextBundle: .
         """
         statuses = self._repository.list_target_statuses_for_security(
             run_id=run_id,
@@ -52,10 +54,7 @@ class NewsContextBundleBuilder:
         )
         bundle_material = f"{run_id}|{security_id}"
         bundle = NewsContextBundle(
-            bundle_id=(
-                "ncb_"
-                + hashlib.sha256(bundle_material.encode("utf-8")).hexdigest()[:24]
-            ),
+            bundle_id=("ncb_" + hashlib.sha256(bundle_material.encode("utf-8")).hexdigest()[:24]),
             run_id=run_id,
             security_id=security_id,
             target_completion_state=target_completion_state,
@@ -71,14 +70,20 @@ class NewsContextBundleBuilder:
     def _completion_state(
         statuses: list[NewsTargetStatus],
     ) -> tuple[str, bool, list[str]]:
-        """completion state."""
+        """completion state.
+
+        Args:
+            statuses: list[NewsTargetStatus]: .
+
+        Returns:
+            tuple[str, bool, list[str]]: .
+        """
         if not statuses:
             return "failed", False, ["target_missing"]
         if any(status == NewsTargetStatus.RETRY for status in statuses):
             return "partial", False, ["target_retry_pending"]
         if any(
-            status in {NewsTargetStatus.PENDING, NewsTargetStatus.CLAIMED}
-            for status in statuses
+            status in {NewsTargetStatus.PENDING, NewsTargetStatus.CLAIMED} for status in statuses
         ):
             return "partial", False, ["target_incomplete"]
         if any(status == NewsTargetStatus.FAILED_FINAL for status in statuses):

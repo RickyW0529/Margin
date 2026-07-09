@@ -48,11 +48,10 @@ def evidence_repository(database_url: str) -> Iterator[EvidenceRepository]:
     """Yield a clean evidence repository backed by PostgreSQL.
 
     Args:
-        database_url: Connection string for the PostgreSQL test server.
+        database_url: str: .
 
     Yields:
-        An ``EvidenceRepository`` instance with pre-seeded news refresh run
-        and context bundle rows.
+        Any: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -109,7 +108,10 @@ def test_repository_persists_package_and_news_context_link(
     """Test that the repository persists an evidence package and news-context link.
 
     Args:
-        evidence_repository: Clean evidence repository fixture.
+        evidence_repository: EvidenceRepository: .
+
+    Returns:
+        None: .
     """
     evidence = _evidence()
     package = _package(evidence.evidence_id)
@@ -130,7 +132,10 @@ def test_repository_round_trips_structured_locator_fields(
     """Test that structured locator fields round-trip through the repository.
 
     Args:
-        evidence_repository: Clean evidence repository fixture.
+        evidence_repository: EvidenceRepository: .
+
+    Returns:
+        None: .
     """
     evidence = _evidence().model_copy(
         update={
@@ -152,16 +157,17 @@ def test_repository_rejects_package_mutation(
     """Test that the repository rejects mutation of an existing package.
 
     Args:
-        evidence_repository: Clean evidence repository fixture.
+        evidence_repository: EvidenceRepository: .
+
+    Returns:
+        None: .
     """
     package = _package("ev-1")
 
     evidence_repository.add_evidence_package(package)
 
     with pytest.raises(ValueError, match="immutable"):
-        evidence_repository.add_evidence_package(
-            package.model_copy(update={"coverage": 0.5})
-        )
+        evidence_repository.add_evidence_package(package.model_copy(update={"coverage": 0.5}))
 
 
 def test_repository_creates_append_only_package_revision(
@@ -170,7 +176,10 @@ def test_repository_creates_append_only_package_revision(
     """Test that the repository creates an append-only package revision.
 
     Args:
-        evidence_repository: Clean evidence repository fixture.
+        evidence_repository: EvidenceRepository: .
+
+    Returns:
+        None: .
     """
     first_evidence = _evidence()
     second_evidence = _evidence().model_copy(update={"evidence_id": "ev-2"})
@@ -202,7 +211,10 @@ def test_repository_persists_claim_status_and_claim_evidence_link(
     """Test that the repository persists claim status and claim-evidence links.
 
     Args:
-        evidence_repository: Clean evidence repository fixture.
+        evidence_repository: EvidenceRepository: .
+
+    Returns:
+        None: .
     """
     evidence = _evidence()
     claim = make_claim(
@@ -237,11 +249,12 @@ def test_repository_persists_evidence_conflicts(
     """Test that the repository persists evidence conflicts.
 
     Args:
-        evidence_repository: Clean evidence repository fixture.
+        evidence_repository: EvidenceRepository: .
+
+    Returns:
+        None: .
     """
-    package = _package("ev-positive").model_copy(
-        update={"conflict_ids": ("conf-1",)}
-    )
+    package = _package("ev-positive").model_copy(update={"conflict_ids": ("conf-1",)})
     conflict = EvidenceConflict(
         conflict_id="conf-1",
         package_id=package.package_id,
@@ -254,12 +267,8 @@ def test_repository_persists_evidence_conflicts(
         created_at=DECISION_AT,
     )
 
-    evidence_repository.add_evidence(
-        _evidence().model_copy(update={"evidence_id": "ev-positive"})
-    )
-    evidence_repository.add_evidence(
-        _evidence().model_copy(update={"evidence_id": "ev-negative"})
-    )
+    evidence_repository.add_evidence(_evidence().model_copy(update={"evidence_id": "ev-positive"}))
+    evidence_repository.add_evidence(_evidence().model_copy(update={"evidence_id": "ev-negative"}))
     evidence_repository.add_evidence_package(package)
     evidence_repository.add_evidence_conflict(conflict)
 
@@ -267,7 +276,11 @@ def test_repository_persists_evidence_conflicts(
 
 
 def _evidence() -> Evidence:
-    """Build a deterministic L1 filing evidence fixture."""
+    """Build a deterministic L1 filing evidence fixture.
+
+    Returns:
+        Evidence: .
+    """
     chunk = make_chunk(
         document_id="doc-1",
         content="经营现金流改善",
@@ -284,7 +297,14 @@ def _evidence() -> Evidence:
 
 
 def _package(evidence_id: str) -> EvidencePackage:
-    """Build a deterministic evidence package fixture with one evidence item."""
+    """Build a deterministic evidence package fixture with one evidence item.
+
+    Args:
+        evidence_id: str: .
+
+    Returns:
+        EvidencePackage: .
+    """
     return EvidencePackage(
         package_id="pkg-1",
         version=1,

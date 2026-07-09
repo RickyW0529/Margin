@@ -15,12 +15,23 @@ from margin.settings import get_settings
 
 
 def test_trace_id_header_propagates():
-    """Test that the trace-id header propagates through the request lifecycle."""
+    """Test that the trace-id header propagates through the request lifecycle.
+
+    Returns:
+        Any: .
+    """
     app = create_app()
 
     @app.get("/echo-trace")
     def echo_trace(request: Request):
-        """Return the trace id extracted from the request."""
+        """Return the trace id extracted from the request.
+
+        Args:
+            request: Request: .
+
+        Returns:
+            Any: .
+        """
         return {"trace_id": _get_trace_id(request)}
 
     client = TestClient(app)
@@ -30,7 +41,14 @@ def test_trace_id_header_propagates():
 
 
 def test_cors_preflight_allows_loopback_alias(monkeypatch):
-    """Test that local frontend aliases share the same CORS allowlist."""
+    """Test that local frontend aliases share the same CORS allowlist.
+
+    Args:
+        monkeypatch: Any: .
+
+    Returns:
+        Any: .
+    """
     monkeypatch.setenv("MARGIN_WEB_ORIGIN", "http://localhost:3000")
     get_settings.cache_clear()
 
@@ -48,7 +66,4 @@ def test_cors_preflight_allows_loopback_alias(monkeypatch):
         get_settings.cache_clear()
 
     assert response.status_code == 200
-    assert (
-        response.headers["access-control-allow-origin"]
-        == "http://127.0.0.1:3000"
-    )
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:3000"

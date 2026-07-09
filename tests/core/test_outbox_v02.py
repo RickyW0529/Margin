@@ -23,12 +23,20 @@ from margin.storage.database import (
 
 
 def _now() -> datetime:
-    """Return a fixed datetime for test determinism."""
+    """Return a fixed datetime for test determinism.
+
+    Returns:
+        datetime: .
+    """
     return datetime(2026, 6, 22, 12, 0, tzinfo=UTC)
 
 
 def test_outbox_enqueue_is_idempotent() -> None:
-    """Test that outbox enqueue is idempotent."""
+    """Test that outbox enqueue is idempotent.
+
+    Returns:
+        None: .
+    """
     repository = MemoryOutboxRepository()
     outbox = TransactionalOutbox(repository, clock=_now)
 
@@ -48,7 +56,11 @@ def test_outbox_enqueue_is_idempotent() -> None:
 
 
 def test_outbox_reclaims_expired_lease_and_requires_owner_to_ack() -> None:
-    """Test that expired leases are reclaimed and only the owner can ack."""
+    """Test that expired leases are reclaimed and only the owner can ack.
+
+    Returns:
+        None: .
+    """
     repository = MemoryOutboxRepository()
     outbox = TransactionalOutbox(repository, clock=_now)
     queued = outbox.enqueue_once(
@@ -89,17 +101,20 @@ def test_outbox_reclaims_expired_lease_and_requires_owner_to_ack() -> None:
 
 
 def test_postgres_outbox_is_idempotent_and_recoverable(database_url: str) -> None:
-    """Test that the PostgreSQL outbox is idempotent and recoverable."""
+    """Test that the PostgreSQL outbox is idempotent and recoverable.
+
+    Args:
+        database_url: str: .
+
+    Returns:
+        None: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
     topic = "test-v02-outbox"
     with session_factory.begin() as session:
-        session.execute(
-            delete(TransactionalOutboxRow).where(
-                TransactionalOutboxRow.topic == topic
-            )
-        )
+        session.execute(delete(TransactionalOutboxRow).where(TransactionalOutboxRow.topic == topic))
     outbox = TransactionalOutbox(
         SQLAlchemyOutboxRepository(session_factory),
         clock=_now,
@@ -142,21 +157,22 @@ def test_postgres_outbox_is_idempotent_and_recoverable(database_url: str) -> Non
             )
             == []
         )
-        assert len(
-            outbox.claim_batch(
-                topic=topic,
-                worker_id="worker-2",
-                lease_seconds=30,
-                limit=10,
-                now=_now() + timedelta(seconds=10),
+        assert (
+            len(
+                outbox.claim_batch(
+                    topic=topic,
+                    worker_id="worker-2",
+                    lease_seconds=30,
+                    limit=10,
+                    now=_now() + timedelta(seconds=10),
+                )
             )
-        ) == 1
+            == 1
+        )
     finally:
         with session_factory.begin() as session:
             session.execute(
-                delete(TransactionalOutboxRow).where(
-                    TransactionalOutboxRow.topic == topic
-                )
+                delete(TransactionalOutboxRow).where(TransactionalOutboxRow.topic == topic)
             )
         engine.dispose()
 
@@ -164,7 +180,14 @@ def test_postgres_outbox_is_idempotent_and_recoverable(database_url: str) -> Non
 def test_postgres_outbox_joins_business_transaction_and_rolls_back(
     database_url: str,
 ) -> None:
-    """Test that the PostgreSQL outbox joins business transactions and rolls back."""
+    """Test that the PostgreSQL outbox joins business transactions and rolls back.
+
+    Args:
+        database_url: str: .
+
+    Returns:
+        None: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -172,14 +195,8 @@ def test_postgres_outbox_joins_business_transaction_and_rolls_back(
     run_id = "run-outbox-rollback"
     repository = SQLAlchemyOutboxRepository(session_factory)
     with session_factory.begin() as session:
-        session.execute(
-            delete(TransactionalOutboxRow).where(
-                TransactionalOutboxRow.topic == topic
-            )
-        )
-        session.execute(
-            delete(OrchestrationRunRow).where(OrchestrationRunRow.run_id == run_id)
-        )
+        session.execute(delete(TransactionalOutboxRow).where(TransactionalOutboxRow.topic == topic))
+        session.execute(delete(OrchestrationRunRow).where(OrchestrationRunRow.run_id == run_id))
 
     try:
         with pytest.raises(RuntimeError, match="force rollback"):
@@ -210,13 +227,7 @@ def test_postgres_outbox_joins_business_transaction_and_rolls_back(
     finally:
         with session_factory.begin() as session:
             session.execute(
-                delete(TransactionalOutboxRow).where(
-                    TransactionalOutboxRow.topic == topic
-                )
+                delete(TransactionalOutboxRow).where(TransactionalOutboxRow.topic == topic)
             )
-            session.execute(
-                delete(OrchestrationRunRow).where(
-                    OrchestrationRunRow.run_id == run_id
-                )
-            )
+            session.execute(delete(OrchestrationRunRow).where(OrchestrationRunRow.run_id == run_id))
         engine.dispose()

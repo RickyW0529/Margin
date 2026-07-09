@@ -29,10 +29,10 @@ def _fmt_date(d: datetime) -> str:
     """Format a ``datetime`` as an 8-digit date string.
 
     Args:
-        d: The datetime to format.
+        d: datetime: .
 
     Returns:
-        The formatted date string in ``YYYYMMDD`` format.
+        str: .
     """
     return d.strftime("%Y%m%d")
 
@@ -40,20 +40,24 @@ def _fmt_date(d: datetime) -> str:
 def _tushare_symbol(symbol: str) -> str:
     """Convert an internal symbol to the Tushare ts_code format.
 
-    Tushare already uses the ``000001.SZ`` style, so this function is a
-    pass-through that preserves compatibility with the rest of the provider.
-
     Args:
-        symbol: Internal symbol, e.g. ``000001.SZ``.
+        symbol: str: .
 
     Returns:
-        The same symbol in Tushare format.
+        str: .
     """
     return symbol
 
 
 def _optional_float(value: Any) -> float | None:
-    """Return a finite numeric provider value or ``None`` when unavailable."""
+    """Return a finite numeric provider value or ``None`` when unavailable.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        float | None: .
+    """
     if value is None or value == "":
         return None
     try:
@@ -64,7 +68,14 @@ def _optional_float(value: Any) -> float | None:
 
 
 def _ratio(value: Any) -> float | None:
-    """Normalize Tushare percentage fields to decimal ratios."""
+    """Normalize Tushare percentage fields to decimal ratios.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        float | None: .
+    """
     numeric = _optional_float(value)
     if numeric is None:
         return None
@@ -72,7 +83,15 @@ def _ratio(value: Any) -> float | None:
 
 
 def _calendar_days(start: datetime, end: datetime) -> list[datetime]:
-    """Return inclusive calendar days for bounded cross-section requests."""
+    """Return inclusive calendar days for bounded cross-section requests.
+
+    Args:
+        start: datetime: .
+        end: datetime: .
+
+    Returns:
+        list[datetime]: .
+    """
     if end < start:
         return []
     days = (end.date() - start.date()).days
@@ -89,7 +108,17 @@ def _map_bar_row(
     fetched_at: datetime,
     frequency: str,
 ) -> dict[str, Any]:
-    """Map one Tushare ``daily`` row to the canonical market-bar contract."""
+    """Map one Tushare ``daily`` row to the canonical market-bar contract.
+
+    Args:
+        row: Any: .
+        ts_code: str: .
+        fetched_at: datetime: .
+        frequency: str: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     trade_date = datetime.strptime(str(row["trade_date"]), "%Y%m%d")
     return {
         "symbol": ts_code,
@@ -113,7 +142,16 @@ def _map_adjustment_row(
     ts_code: str,
     fetched_at: datetime,
 ) -> dict[str, Any]:
-    """Map one Tushare ``adj_factor`` row."""
+    """Map one Tushare ``adj_factor`` row.
+
+    Args:
+        row: Any: .
+        ts_code: str: .
+        fetched_at: datetime: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     trade_date = datetime.strptime(str(row["trade_date"]), "%Y%m%d")
     return {
         "symbol": ts_code,
@@ -131,18 +169,21 @@ def _map_financial_row(
     ts_code: str,
     fetched_at: datetime,
 ) -> dict[str, Any]:
-    """Map one Tushare ``fina_indicator`` row to canonical factor names."""
+    """Map one Tushare ``fina_indicator`` row to canonical factor names.
+
+    Args:
+        row: Any: .
+        ts_code: str: .
+        fetched_at: datetime: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     ann_date_value = row.get("ann_date") or row.get("end_date")
-    ann_date = (
-        datetime.strptime(str(ann_date_value), "%Y%m%d")
-        if ann_date_value
-        else fetched_at
-    )
+    ann_date = datetime.strptime(str(ann_date_value), "%Y%m%d") if ann_date_value else fetched_at
     report_date_value = row.get("end_date") or ann_date_value
     report_date = (
-        datetime.strptime(str(report_date_value), "%Y%m%d")
-        if report_date_value
-        else ann_date
+        datetime.strptime(str(report_date_value), "%Y%m%d") if report_date_value else ann_date
     )
     gross_margin = row.get("grossprofit_margin")
     if gross_margin is None:
@@ -169,7 +210,14 @@ def _map_financial_row(
 
 
 def _parse_tushare_date(value: Any) -> date | None:
-    """Parse an optional Tushare YYYYMMDD value."""
+    """Parse an optional Tushare YYYYMMDD value.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        date | None: .
+    """
     if value is None or value == "":
         return None
     try:
@@ -183,12 +231,11 @@ def _latest_income_profit_by_period(
 ) -> dict[tuple[str, str], float]:
     """Return the latest-announced raw ``n_income_attr_p`` per period.
 
-    The raw per-period net profit attributable to parent is landed as a
-    canonical fact so the Feature Mart ETL can derive prior annual profits
-    (``net_profit_y1``/``net_profit_y2``) with PIT safety and without relying
-    on provider-time derivation. ``net_profit_ttm`` is intentionally not
-    derived here: it is not consumed by any factor and deriving it inline
-    was the source of unstable, unrecoverable gaps.
+    Args:
+        rows: list[Any]: .
+
+    Returns:
+        dict[tuple[str, str], float]: .
     """
     latest_by_period: dict[tuple[str, date], tuple[date, float]] = {}
     for row in rows:
@@ -218,7 +265,16 @@ def _map_valuation_row(
     ts_code: str,
     fetched_at: datetime,
 ) -> dict[str, Any]:
-    """Map one Tushare ``daily_basic`` row."""
+    """Map one Tushare ``daily_basic`` row.
+
+    Args:
+        row: Any: .
+        ts_code: str: .
+        fetched_at: datetime: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     trade_date = datetime.strptime(str(row["trade_date"]), "%Y%m%d")
     total_mv = _optional_float(row.get("total_mv"))
     circ_mv = _optional_float(row.get("circ_mv"))
@@ -244,14 +300,11 @@ def _map_valuation_row(
 def _market_bar_available_at(trade_date: datetime) -> datetime:
     """Compute the earliest availability time for a daily market bar.
 
-    Daily OHLCV bars are typically finalized after the market closes at
-    15:00.
-
     Args:
-        trade_date: The trading date for which the bar is available.
+        trade_date: datetime: .
 
     Returns:
-        A datetime combining the trading date with 15:00.
+        datetime: .
     """
     return datetime.combine(trade_date.date(), time(hour=15))
 
@@ -259,41 +312,27 @@ def _market_bar_available_at(trade_date: datetime) -> datetime:
 def _next_market_open_after(value: datetime) -> datetime:
     """Return the next market open after a given datetime.
 
-    Financial announcements released after market close become actionable
-    at the next market open (09:30).
-
     Args:
-        value: The reference datetime.
+        value: datetime: .
 
     Returns:
-        The next calendar day's market open at 09:30.
+        datetime: .
     """
     return datetime.combine((value + timedelta(days=1)).date(), time(hour=9, minute=30))
 
 
 class TushareProvider(BaseProvider):
-    """A-share market data provider backed by the Tushare Pro API.
-
-    This provider exposes securities metadata, daily bars, adjustment
-    factors, financial indicators, and index constituent weights. The
-    Tushare token is resolved externally via SecretManager and injected
-    through :meth:`configure_secrets` or :meth:`set_token`.
-
-    Attributes:
-        _token: The Tushare API token, or ``None`` if not yet configured.
-        _pro: The lazily-initialized Tushare ``pro_api`` client.
-        _descriptor: Provider metadata and capabilities descriptor.
-    """
+    """A-share market data provider backed by the Tushare Pro API.."""
 
     def __init__(self, token: str | None = None, http_url: str | None = None) -> None:
         """Initialize a new ``TushareProvider`` instance.
 
         Args:
-            token: Optional Tushare API token. When omitted, the token
-                must be injected later via :meth:`set_token` or
-                :meth:`configure_secrets`.
-            http_url: Optional Tushare-compatible API endpoint URL. This is
-                useful for licensed proxies such as TeaJoin.
+            token: str | None: .
+            http_url: str | None: .
+
+        Returns:
+            None: .
         """
         self._token = token
         self._http_url = http_url
@@ -319,24 +358,15 @@ class TushareProvider(BaseProvider):
         """Return the provider descriptor.
 
         Returns:
-            A :class:`ProviderDescriptor` describing this provider's name,
-            version, type, capabilities, and secret references.
+            ProviderDescriptor: .
         """
         return self._descriptor
 
     def _ensure_pro(self) -> Any:
         """Lazily initialize and return the Tushare Pro API client.
 
-        If a token has not been set, an empty string is passed to
-        ``pro_api``, which relies on the environment or prior global
-        configuration.
-
         Returns:
-            The initialized Tushare Pro API client.
-
-        Raises:
-            Exception: If the ``tushare`` package cannot be imported or the
-                client fails to initialize.
+            Any: .
         """
         if self._pro is not None:
             return self._pro
@@ -350,11 +380,11 @@ class TushareProvider(BaseProvider):
     def set_token(self, token: str) -> None:
         """Set or update the Tushare API token.
 
-        Resetting the token clears any previously initialized API client so
-        the next call to :meth:`_ensure_pro` creates a fresh client.
-
         Args:
-            token: The Tushare API token string.
+            token: str: .
+
+        Returns:
+            None: .
         """
         self._token = token
         self._pro = None
@@ -363,8 +393,10 @@ class TushareProvider(BaseProvider):
         """Inject resolved secret references from the provider registry.
 
         Args:
-            secrets: Mapping of secret reference names to resolved values.
-                The ``tushare_token`` key is used when present.
+            secrets: dict[str, str]: .
+
+        Returns:
+            None: .
         """
         token = secrets.get("tushare_token")
         if token:
@@ -374,13 +406,7 @@ class TushareProvider(BaseProvider):
         """Verify connectivity to Tushare by calling ``stock_basic``.
 
         Returns:
-            A :class:`HealthCheckResult` indicating ``HEALTHY`` if the test
-            request succeeds, or ``UNHEALTHY`` with the error message
-            otherwise.
-
-        Note:
-            This method does not raise exceptions; errors are captured in
-            the returned result.
+            HealthCheckResult: .
         """
         try:
             pro = self._ensure_pro()
@@ -403,16 +429,10 @@ class TushareProvider(BaseProvider):
         """Fetch the list of currently listed A-share securities.
 
         Args:
-            as_of: Reference datetime for the request. The underlying data
-                is the latest available from Tushare.
+            as_of: datetime: .
 
         Returns:
-            A list of dictionaries, each containing ``symbol``, ``name``,
-            ``industry``, ``market``, ``list_date``, ``fetched_at``,
-            ``available_at``, and ``source``.
-
-        Raises:
-            Exception: If the Tushare request fails.
+            list[dict[str, Any]]: .
         """
         pro = self._ensure_pro()
         df = pro.stock_basic(exchange="", list_status="L")
@@ -443,20 +463,13 @@ class TushareProvider(BaseProvider):
         """Fetch daily OHLCV bars for the requested symbols.
 
         Args:
-            symbols: List of internal symbols to fetch.
-            start: Start of the requested date range (inclusive).
-            end: End of the requested date range (inclusive).
-            frequency: Bar frequency; defaults to ``"1d"``. Currently only
-                daily bars are supported.
+            symbols: list[str]: .
+            start: datetime: .
+            end: datetime: .
+            frequency: str: .
 
         Returns:
-            A list of dictionaries, each containing ``symbol``, ``date``,
-            ``open``, ``close``, ``high``, ``low``, ``volume``, ``amount``,
-            ``frequency``, ``fetched_at``, ``available_at``, and ``source``.
-
-        Raises:
-            Exception: If the Tushare request fails or the response cannot
-                be parsed.
+            list[dict[str, Any]]: .
         """
         pro = self._ensure_pro()
         fetched_at = datetime.now()
@@ -505,17 +518,12 @@ class TushareProvider(BaseProvider):
         """Fetch adjustment factors for the requested symbols.
 
         Args:
-            symbols: List of internal symbols to fetch.
-            start: Start of the requested date range (inclusive).
-            end: End of the requested date range (inclusive).
+            symbols: list[str]: .
+            start: datetime: .
+            end: datetime: .
 
         Returns:
-            A list of dictionaries, each containing ``symbol``, ``date``,
-            ``adj_factor``, ``fetched_at``, ``available_at``, and ``source``.
-
-        Raises:
-            Exception: If the Tushare request fails or the response cannot
-                be parsed.
+            list[dict[str, Any]]: .
         """
         pro = self._ensure_pro()
         fetched_at = datetime.now()
@@ -562,21 +570,12 @@ class TushareProvider(BaseProvider):
         """Fetch financial indicators for the requested symbols.
 
         Args:
-            symbols: List of internal symbols to fetch.
-            start: Start of the requested report/announcement date range
-                (inclusive).
-            end: End of the requested report/announcement date range
-                (inclusive).
+            symbols: list[str]: .
+            start: datetime: .
+            end: datetime: .
 
         Returns:
-            A list of dictionaries, each containing ``symbol``,
-            ``report_date``, ``ann_date``, ``roe``, ``eps``,
-            ``gross_profit_margin``, ``fetched_at``, ``available_at``, and
-            ``source``.
-
-        Raises:
-            Exception: If the Tushare request fails or the response cannot
-                be parsed.
+            list[dict[str, Any]]: .
         """
         pro = self._ensure_pro()
         fetched_at = datetime.now()
@@ -586,10 +585,7 @@ class TushareProvider(BaseProvider):
             "ts_code,ann_date,end_date,roe,eps,grossprofit_margin,"
             "netprofit_margin,debt_to_assets,tr_yoy,netprofit_yoy"
         )
-        income_fields = (
-            "ts_code,ann_date,f_ann_date,end_date,report_type,"
-            "n_income_attr_p"
-        )
+        income_fields = "ts_code,ann_date,f_ann_date,end_date,report_type,n_income_attr_p"
         if len(symbols) > 20:
             allowed = {_tushare_symbol(symbol) for symbol in symbols}
             offset = 0
@@ -620,11 +616,7 @@ class TushareProvider(BaseProvider):
                     fields=income_fields,
                 )
                 rows = list(df.iterrows())
-                income_rows.extend(
-                    row
-                    for _, row in rows
-                    if str(row.get("ts_code", "")) in allowed
-                )
+                income_rows.extend(row for _, row in rows if str(row.get("ts_code", "")) in allowed)
                 if len(rows) < limit:
                     break
                 offset += limit
@@ -675,14 +667,20 @@ class TushareProvider(BaseProvider):
         start: datetime,
         end: datetime,
     ) -> list[dict[str, Any]]:
-        """Fetch PIT-safe daily valuation metrics from ``daily_basic``."""
+        """Fetch PIT-safe daily valuation metrics from ``daily_basic``.
+
+        Args:
+            symbols: list[str]: .
+            start: datetime: .
+            end: datetime: .
+
+        Returns:
+            list[dict[str, Any]]: .
+        """
         pro = self._ensure_pro()
         fetched_at = datetime.now()
         result: list[dict[str, Any]] = []
-        fields = (
-            "ts_code,trade_date,turnover_rate,pe_ttm,pb,ps_ttm,"
-            "dv_ttm,total_mv"
-        )
+        fields = "ts_code,trade_date,turnover_rate,pe_ttm,pb,ps_ttm,dv_ttm,total_mv"
         if len(symbols) > 20:
             allowed = {_tushare_symbol(symbol) for symbol in symbols}
             for trade_day in _calendar_days(start, end):
@@ -724,17 +722,11 @@ class TushareProvider(BaseProvider):
         """Fetch index constituent weights as of a given date.
 
         Args:
-            index_code: The Tushare index code, e.g. ``000001.SH``.
-            as_of: The reference date for constituent weights.
+            index_code: str: .
+            as_of: datetime: .
 
         Returns:
-            A list of dictionaries, each containing ``symbol``,
-            ``index_code``, ``weight``, ``as_of``, ``fetched_at``,
-            ``available_at``, and ``source``.
-
-        Raises:
-            Exception: If the Tushare request fails or the response cannot
-                be parsed.
+            list[dict[str, Any]]: .
         """
         pro = self._ensure_pro()
         fetched_at = datetime.now()

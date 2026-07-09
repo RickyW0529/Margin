@@ -22,7 +22,7 @@ def quant_frame() -> pd.DataFrame:
     """Return a deterministic single-row quant cross-section DataFrame.
 
     Returns:
-        A pandas DataFrame indexed by security_id with one valid company row.
+        pd.DataFrame: .
     """
     frame = pd.DataFrame(
         [
@@ -52,10 +52,10 @@ def test_st_stock_is_rejected_with_structured_reason(quant_frame: pd.DataFrame) 
     """Verify an ST stock is rejected with a structured blocker reason.
 
     Args:
-        quant_frame: Deterministic quant cross-section DataFrame fixture.
+        quant_frame: pd.DataFrame: .
 
     Returns:
-        None.
+        None: .
     """
     quant_frame.loc["000001.SZ", "is_st"] = True
     result = HardFilterEngine(QuantConfig()).apply(quant_frame)
@@ -70,10 +70,10 @@ def test_low_turnover_keeps_company_in_result_with_reason(quant_frame: pd.DataFr
     """Verify low turnover keeps the company in results with a structured reason.
 
     Args:
-        quant_frame: Deterministic quant cross-section DataFrame fixture.
+        quant_frame: pd.DataFrame: .
 
     Returns:
-        None.
+        None: .
     """
     quant_frame.loc["000001.SZ", "avg_amount_20d"] = 10_000_000
     result = HardFilterEngine(QuantConfig(min_avg_amount_20d=50_000_000)).apply(quant_frame)
@@ -88,10 +88,10 @@ def test_required_financial_missing_marks_data_insufficient(quant_frame: pd.Data
     """Verify a missing required financial field marks data as insufficient.
 
     Args:
-        quant_frame: Deterministic quant cross-section DataFrame fixture.
+        quant_frame: pd.DataFrame: .
 
     Returns:
-        None.
+        None: .
     """
     quant_frame.loc["000001.SZ", "roe_ttm"] = None
     result = HardFilterEngine(QuantConfig()).apply(quant_frame)
@@ -108,10 +108,10 @@ def test_legacy_ttm_profit_missing_is_not_a_critical_financial(
     """Verify the old net_profit_ttm canary no longer blocks a valid row.
 
     Args:
-        quant_frame: Deterministic quant cross-section DataFrame fixture.
+        quant_frame: pd.DataFrame: .
 
     Returns:
-        None.
+        None: .
     """
     quant_frame.loc["000001.SZ", "net_profit_ttm"] = None
     result = HardFilterEngine(QuantConfig()).apply(quant_frame)

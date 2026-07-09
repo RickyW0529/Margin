@@ -10,7 +10,7 @@ from margin.research.tools.definitions import ToolCapability
 
 
 class ToolManifestEntry(BaseModel):
-    """One tool visible to a specific graph node."""
+    """One tool visible to a specific graph node.."""
 
     name: str
     capability: ToolCapability
@@ -22,7 +22,7 @@ class ToolManifestEntry(BaseModel):
 
 
 class ToolManifest(BaseModel):
-    """Versioned node-scoped manifest."""
+    """Versioned node-scoped manifest.."""
 
     graph_run_id: str
     node_name: str

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ThemeSignalConfig:
-    """Hysteresis and scaling config for theme hotness signals."""
+    """Hysteresis and scaling config for theme hotness signals.."""
 
     entry_score: float = 70.0
     entry_confirmation_periods: int = 2
@@ -27,14 +27,14 @@ def score_theme_components(
     """Return a 0-100 theme hotness score from PIT market components.
 
     Args:
-        relative_strength_20d: 20-day relative strength signal.
-        relative_strength_60d: 60-day relative strength signal.
-        amount_ratio_20d: 20-day amount ratio signal.
-        breadth_20d: 20-day breadth signal (0-1).
-        drawdown_60d: 60-day drawdown (negative value).
+        relative_strength_20d: float: .
+        relative_strength_60d: float: .
+        amount_ratio_20d: float: .
+        breadth_20d: float: .
+        drawdown_60d: float: .
 
     Returns:
-        A clamped 0-100 theme hotness score.
+        float: .
     """
     strength_20d = _linear_score(relative_strength_20d, low=-0.05, high=0.20)
     strength_60d = _linear_score(relative_strength_60d, low=-0.10, high=0.40)
@@ -59,11 +59,11 @@ def confirmation_states(
     """Return active states after entry/exit hysteresis over ordered scores.
 
     Args:
-        scores: Ordered iterable of (key, score) pairs.
-        config: Optional hysteresis thresholds.
+        scores: Iterable[tuple[Hashable, float]]: .
+        config: ThemeSignalConfig | None: .
 
     Returns:
-        Dict mapping each key to its active state after hysteresis.
+        dict[Hashable, bool]: .
     """
     cfg = config or ThemeSignalConfig()
     active = False
@@ -92,12 +92,30 @@ def confirmation_states(
 
 
 def _linear_score(value: float, *, low: float, high: float) -> float:
-    """Return a 0-100 linear interpolation score between low and high bounds."""
+    """Return a 0-100 linear interpolation score between low and high bounds.
+
+    Args:
+        value: float: .
+        low: float: .
+        high: float: .
+
+    Returns:
+        float: .
+    """
     if high <= low:
         raise ValueError("high must be greater than low")
     return _clip((float(value) - low) / (high - low) * 100.0, 0.0, 100.0)
 
 
 def _clip(value: float, low: float, high: float) -> float:
-    """Clamp a value to the [low, high] range."""
+    """Clamp a value to the [low, high] range.
+
+    Args:
+        value: float: .
+        low: float: .
+        high: float: .
+
+    Returns:
+        float: .
+    """
     return min(high, max(low, float(value)))

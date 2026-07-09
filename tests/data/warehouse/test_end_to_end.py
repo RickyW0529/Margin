@@ -30,7 +30,7 @@ DECISION = datetime(2026, 6, 22, tzinfo=UTC)
 
 
 class FakeDailyBarProvider:
-    """Provider double with the same daily bar method shape as AKShare/Tushare."""
+    """Provider double with the same daily bar method shape as AKShare/Tushare.."""
 
     name = "fake_provider"
 
@@ -41,7 +41,17 @@ class FakeDailyBarProvider:
         end: datetime,
         frequency: str = "1d",
     ) -> list[dict]:
-        """Return one daily bar for the requested symbol and date range."""
+        """Return one daily bar for the requested symbol and date range.
+
+        Args:
+            symbols: list[str]: .
+            start: datetime: .
+            end: datetime: .
+            frequency: str: .
+
+        Returns:
+            list[dict]: .
+        """
         assert symbols == ["000001.SZ"]
         assert start == DECISION
         assert end == DECISION
@@ -65,7 +75,15 @@ class FakeDailyBarProvider:
 
 @pytest.fixture
 def data_stack(database_url: str, tmp_path):
-    """Provision a clean data warehouse stack."""
+    """Provision a clean data warehouse stack.
+
+    Args:
+        database_url: str: .
+        tmp_path: Any: .
+
+    Yields:
+        Any: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -85,7 +103,14 @@ def data_stack(database_url: str, tmp_path):
 
 
 def test_provider_payload_reaches_canonical_value(data_stack: DataWarehouseIngestionStack) -> None:
-    """Test that a provider payload flows through to a persisted canonical value."""
+    """Test that a provider payload flows through to a persisted canonical value.
+
+    Args:
+        data_stack: DataWarehouseIngestionStack: .
+
+    Returns:
+        None: .
+    """
     result = data_stack.sync_daily_bars(
         FakeDailyBarProvider(),
         symbols=("000001.SZ",),
@@ -112,7 +137,14 @@ def test_provider_payload_reaches_canonical_value(data_stack: DataWarehouseInges
 def test_text_indicator_reaches_canonical_value(
     data_stack: DataWarehouseIngestionStack,
 ) -> None:
-    """Audit opinions and status labels remain typed text in the warehouse."""
+    """Audit opinions and status labels remain typed text in the warehouse.
+
+    Args:
+        data_stack: DataWarehouseIngestionStack: .
+
+    Returns:
+        None: .
+    """
     item = EndpointWorkItem(
         work_item_id="audit-work",
         run_id="audit-run",
@@ -152,7 +184,14 @@ def test_text_indicator_reaches_canonical_value(
 def test_index_weight_keeps_index_code_metadata(
     data_stack: DataWarehouseIngestionStack,
 ) -> None:
-    """Index constituent facts preserve the owning index code."""
+    """Index constituent facts preserve the owning index code.
+
+    Args:
+        data_stack: DataWarehouseIngestionStack: .
+
+    Returns:
+        None: .
+    """
     item = EndpointWorkItem(
         work_item_id="index-weight-work",
         run_id="index-weight-run",
@@ -193,7 +232,14 @@ def test_index_weight_keeps_index_code_metadata(
 def test_indicator_history_can_limit_recent_points_per_indicator(
     data_stack: DataWarehouseIngestionStack,
 ) -> None:
-    """Quant history reads can cap per-security points while keeping latest facts."""
+    """Quant history reads can cap per-security points while keeping latest facts.
+
+    Args:
+        data_stack: DataWarehouseIngestionStack: .
+
+    Returns:
+        None: .
+    """
     item = EndpointWorkItem(
         work_item_id="history-work",
         run_id="history-run",

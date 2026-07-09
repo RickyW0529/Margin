@@ -31,7 +31,11 @@ DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 
 
 def test_user_qna_agent_run_returns_main_agent_trace() -> None:
-    """Test that user Q&A goes through the MainAgent runtime."""
+    """Test that user Q&A goes through the MainAgent runtime.
+
+    Returns:
+        None: .
+    """
     llm_provider = _PlannerAndAnswerLLMProvider(
         plan_response={
             "plan_id": "plan_ar_qna_recommendation",
@@ -69,7 +73,11 @@ def test_user_qna_agent_run_returns_main_agent_trace() -> None:
 
 
 def test_user_qna_greeting_runs_general_llm_agent() -> None:
-    """Test that a greeting is planned by MainAgent and answered by the LLM agent."""
+    """Test that a greeting is planned by MainAgent and answered by the LLM agent.
+
+    Returns:
+        None: .
+    """
     llm_provider = _PlannerAndAnswerLLMProvider(
         plan_response={
             "plan_id": "plan_ar_qna_greeting",
@@ -108,7 +116,11 @@ def test_user_qna_greeting_runs_general_llm_agent() -> None:
 
 
 def test_user_qna_persists_chat_session_and_uses_context_for_followup() -> None:
-    """Test that follow-up questions restore DB-backed chat context."""
+    """Test that follow-up questions restore DB-backed chat context.
+
+    Returns:
+        None: .
+    """
     llm_provider = _PlannerAndAnswerLLMProvider(
         plan_response={
             "plan_id": "plan_ar_qna_context",
@@ -167,14 +179,17 @@ def test_user_qna_persists_chat_session_and_uses_context_for_followup() -> None:
     assert sessions_response.status_code == 200
     assert sessions_response.json()["items"][0]["session_id"] == session_id
     assert any(
-        "今日推荐股票是什么？" in prompt
-        and "LLM 基于当前推荐数据回答：000001.SZ。" in prompt
+        "今日推荐股票是什么？" in prompt and "LLM 基于当前推荐数据回答：000001.SZ。" in prompt
         for prompt in llm_provider.prompts
     )
 
 
 def test_user_qna_persists_context_pack_artifact() -> None:
-    """Test that L1 planning receives a persisted ContextPack instead of raw context."""
+    """Test that L1 planning receives a persisted ContextPack instead of raw context.
+
+    Returns:
+        None: .
+    """
     context_store = MemoryAgentContextStore()
     client = _client_with_agent_runtime(context_store=context_store)
 
@@ -194,7 +209,11 @@ def test_user_qna_persists_context_pack_artifact() -> None:
 
 
 def test_user_qna_rejects_unknown_chat_session() -> None:
-    """Test that clients cannot append to a missing chat session."""
+    """Test that clients cannot append to a missing chat session.
+
+    Returns:
+        None: .
+    """
     client = _client_with_agent_runtime()
 
     response = client.post(
@@ -212,7 +231,11 @@ def test_user_qna_rejects_unknown_chat_session() -> None:
 
 
 def test_agent_artifact_detail_returns_persisted_payload() -> None:
-    """Test that chat artifact refs can be expanded through a scoped read API."""
+    """Test that chat artifact refs can be expanded through a scoped read API.
+
+    Returns:
+        None: .
+    """
     context_store = MemoryAgentContextStore()
     artifact = make_context_artifact(
         artifact_id="ctx_test_table",
@@ -250,7 +273,11 @@ def test_agent_artifact_detail_returns_persisted_payload() -> None:
 
 
 def test_agent_artifact_detail_returns_404_for_missing_artifact() -> None:
-    """Test that missing artifact IDs are explicit 404s."""
+    """Test that missing artifact IDs are explicit 404s.
+
+    Returns:
+        None: .
+    """
     client = _client_with_agent_runtime()
 
     response = client.get("/api/v1/agent-artifacts/ctx_missing")
@@ -260,7 +287,11 @@ def test_agent_artifact_detail_returns_404_for_missing_artifact() -> None:
 
 
 def test_user_qna_execution_tracks_step_status_by_step_id() -> None:
-    """Test that repeated agent names cannot collapse execution status."""
+    """Test that repeated agent names cannot collapse execution status.
+
+    Returns:
+        None: .
+    """
     llm_provider = _PlannerAndAnswerLLMProvider(
         plan_response={"steps": []},
         answer="你好，我是 Margin。",
@@ -316,7 +347,11 @@ def test_user_qna_execution_tracks_step_status_by_step_id() -> None:
 
 
 def test_stock_analysis_schedule_can_be_saved_and_read() -> None:
-    """Test that the automatic stock-analysis schedule is persisted by the API."""
+    """Test that the automatic stock-analysis schedule is persisted by the API.
+
+    Returns:
+        None: .
+    """
     client = _client_with_agent_runtime()
 
     put_response = client.put(
@@ -344,7 +379,11 @@ def test_stock_analysis_schedule_can_be_saved_and_read() -> None:
 
 
 def test_agent_runtime_mutations_require_idempotency_key() -> None:
-    """Test that mutating agent runtime endpoints require an idempotency key."""
+    """Test that mutating agent runtime endpoints require an idempotency key.
+
+    Returns:
+        None: .
+    """
     client = _client_with_agent_runtime()
 
     qna_response = client.post(
@@ -370,7 +409,11 @@ def test_agent_runtime_mutations_require_idempotency_key() -> None:
 
 
 def test_user_qna_guardrail_blocks_guaranteed_return_claims() -> None:
-    """Test that financial guarantee requests are blocked before expert routing."""
+    """Test that financial guarantee requests are blocked before expert routing.
+
+    Returns:
+        None: .
+    """
     client = _client_with_agent_runtime()
 
     response = client.post(
@@ -390,7 +433,16 @@ def _client_with_agent_runtime(
     chat_repository: AgentChatRepository | None = None,
     context_store: MemoryAgentContextStore | None = None,
 ) -> TestClient:
-    """Build a test client with in-memory agent runtime dependencies."""
+    """Build a test client with in-memory agent runtime dependencies.
+
+    Args:
+        llm_provider: DeterministicLLMProvider | None: .
+        chat_repository: AgentChatRepository | None: .
+        context_store: MemoryAgentContextStore | None: .
+
+    Returns:
+        TestClient: .
+    """
     dashboard_repository = MemoryDashboardRepository()
     bundle = DashboardServiceBundle.in_memory(
         dashboard_repository=dashboard_repository,
@@ -433,6 +485,11 @@ def _client_with_agent_runtime(
     )
 
     def llm_provider_factory() -> DeterministicLLMProvider:
+        """Process llm_provider_factory.
+
+        Returns:
+            DeterministicLLMProvider: .
+        """
         return fallback_llm_provider
 
     return TestClient(
@@ -453,15 +510,29 @@ def _client_with_agent_runtime(
 
 
 def _idempotency_headers(key: str) -> dict[str, str]:
-    """Return headers required by mutating API endpoints."""
+    """Return headers required by mutating API endpoints.
+
+    Args:
+        key: str: .
+
+    Returns:
+        dict[str, str]: .
+    """
     return {"Idempotency-Key": key}
 
 
 class _FakeStrategyService:
-    """Fake strategy service exposing one active research scope."""
+    """Fake strategy service exposing one active research scope.."""
 
     def ensure_current_research_scope(self, owner_id: str) -> SimpleNamespace:
-        """Return the active scope."""
+        """Return the active scope.
+
+        Args:
+            owner_id: str: .
+
+        Returns:
+            SimpleNamespace: .
+        """
         return SimpleNamespace(
             owner_id=owner_id,
             version_id="scope-1",
@@ -470,9 +541,18 @@ class _FakeStrategyService:
 
 
 class _PlannerAndAnswerLLMProvider(DeterministicLLMProvider):
-    """Test LLM that returns a structured plan first and free-form answer later."""
+    """Test LLM that returns a structured plan first and free-form answer later.."""
 
     def __init__(self, *, plan_response: dict[str, object], answer: str) -> None:
+        """Helper _init__.
+
+        Args:
+            plan_response: dict[str, object]: .
+            answer: str: .
+
+        Returns:
+            None: .
+        """
         super().__init__(response={})
         self._plan_response = plan_response
         self._answer = answer
@@ -486,6 +566,16 @@ class _PlannerAndAnswerLLMProvider(DeterministicLLMProvider):
         response_schema: dict[str, object] | None = None,
         temperature: float = 0.0,
     ) -> LLMResult:
+        """Process complete.
+
+        Args:
+            prompt: str: .
+            response_schema: dict[str, object] | None: .
+            temperature: float: .
+
+        Returns:
+            LLMResult: .
+        """
         del temperature
         self.prompts.append(prompt)
         if response_schema:

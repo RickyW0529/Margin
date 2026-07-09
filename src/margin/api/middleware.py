@@ -22,26 +22,29 @@ _TRACE_KEY = "margin_trace_id"
 
 
 def _get_trace_id(request: Request) -> str:
-    """Read the trace id attached by ``TraceIdMiddleware`` from request scope."""
+    """Read the trace id attached by ``TraceIdMiddleware`` from request scope.
+
+    Args:
+        request: Request: .
+
+    Returns:
+        str: .
+    """
     return request.scope.get(_TRACE_KEY, "")
 
 
 class TraceIdMiddleware(BaseHTTPMiddleware):
-    """Populate trace_id from header or generate a new one.
-
-    Attaches a request-scoped trace identifier to the request scope and
-    response headers so that distributed callers can correlate requests.
-    """
+    """Populate trace_id from header or generate a new one.."""
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Attach a trace id to the request scope and response headers.
 
         Args:
-            request: Incoming HTTP request.
-            call_next: Next middleware or route handler in the chain.
+            request: Request: .
+            call_next: Callable: .
 
         Returns:
-            The HTTP response with the trace id header set.
+            Response: .
         """
         settings = get_settings()
         # Prefer the incoming header so distributed callers can correlate requests.
@@ -53,22 +56,17 @@ class TraceIdMiddleware(BaseHTTPMiddleware):
 
 
 class MetricsMiddleware(BaseHTTPMiddleware):
-    """Record HTTP request counts and durations.
-
-    Observes request count and latency using the route path template
-    (when available) to keep label cardinality low.
-    """
+    """Record HTTP request counts and durations.."""
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Record HTTP request count and duration for each processed request.
 
         Args:
-            request: Incoming HTTP request.
-            call_next: Next middleware or route handler in the chain.
+            request: Request: .
+            call_next: Callable: .
 
         Returns:
-            The HTTP response from the downstream handler. If the handler
-            raises an unhandled exception, a 500 status is recorded.
+            Response: .
         """
         start = time.perf_counter()
         status_code = 500  # Default used if call_next raises an unhandled exception.

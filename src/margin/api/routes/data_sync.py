@@ -34,16 +34,7 @@ PolicyService = Annotated[
 
 
 class DataSyncTriggerRequest(BaseModel):
-    """Request body for triggering a manual data sync run.
-
-    Attributes:
-        provider: Optional provider name to sync with.
-        endpoint_codes: Tuple of endpoint codes to sync.
-        requested_by: Identifier of the requester.
-        backfill_start: Optional start of the backfill window.
-        backfill_end: Optional end of the backfill window.
-        force_full_refresh: Whether to force a full refresh ignoring deltas.
-    """
+    """Request body for triggering a manual data sync run.."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -56,25 +47,14 @@ class DataSyncTriggerRequest(BaseModel):
 
 
 class DataSyncResponse(BaseModel):
-    """Manual data sync trigger response.
-
-    Attributes:
-        sync_run_id: Unique identifier of the created sync run.
-        status: Initial status of the sync run.
-    """
+    """Manual data sync trigger response.."""
 
     sync_run_id: str
     status: str
 
 
 class CreateDataPolicyRequest(BaseModel):
-    """Frontend request for a new immutable rolling-window policy.
-
-    Attributes:
-        rolling_window_months: Duration of the rolling window in months (12-60).
-        revision_lookback_days: Lookback period for revision comparisons (0-365).
-        financial_comparison_years: Number of years for financial comparisons (1-3).
-    """
+    """Frontend request for a new immutable rolling-window policy.."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -84,21 +64,7 @@ class CreateDataPolicyRequest(BaseModel):
 
 
 class DataPolicyResponse(BaseModel):
-    """Safe policy response including a current window preview.
-
-    Attributes:
-        version_id: Unique identifier of the policy version.
-        owner_id: Identifier of the policy owner.
-        rolling_window_months: Duration of the rolling window in months.
-        revision_lookback_days: Lookback period for revision comparisons.
-        financial_comparison_years: Number of years for financial comparisons.
-        lifecycle: Lifecycle status (e.g. ``draft``, ``active``).
-        config_hash: Hash of the policy configuration.
-        created_at: UTC timestamp when the version was created.
-        activated_at: UTC timestamp when the version was activated, if active.
-        window_start: Start of the current rolling window.
-        window_end: End of the current rolling window.
-    """
+    """Safe policy response including a current window preview.."""
 
     version_id: str
     owner_id: str
@@ -122,12 +88,11 @@ class DataPolicyResponse(BaseModel):
         """Render one immutable policy and its current rolling window.
 
         Args:
-            version: The policy version to render.
-            now: Optional override for the current timestamp used to compute
-                the rolling window.
+            version: DataAcquisitionPolicyVersion: .
+            now: datetime | None: .
 
         Returns:
-            A DataPolicyResponse with the policy fields and window boundaries.
+            DataPolicyResponse: .
         """
         observed_at = now or datetime.now().astimezone()
         window = version.window_for(observed_at)
@@ -147,12 +112,7 @@ class DataPolicyResponse(BaseModel):
 
 
 class DataPolicyListResponse(BaseModel):
-    """List response consumed by the frontend Data Policy page.
-
-    Attributes:
-        active_version_id: Identifier of the currently active policy version.
-        versions: List of all policy version responses.
-    """
+    """List response consumed by the frontend Data Policy page.."""
 
     active_version_id: str
     versions: list[DataPolicyResponse]
@@ -163,11 +123,10 @@ def list_data_policies(service: PolicyService) -> DataPolicyListResponse:
     """List versions and identify the effective active/default policy.
 
     Args:
-        service: Data acquisition policy service used to query versions.
+        service: PolicyService: .
 
     Returns:
-        DataPolicyListResponse containing the active version id and all version
-        summaries.
+        DataPolicyListResponse: .
     """
     active = service.get_active()
     versions = service.list_versions()
@@ -193,13 +152,13 @@ def create_data_policy(
     """Create an append-only draft policy from frontend settings.
 
     Args:
-        request: Validated policy creation request.
-        service: Data acquisition policy service used to create the version.
-        actor_id: Authenticated actor identifier.
-        idempotency_key: Idempotency key for the mutation.
+        request: CreateDataPolicyRequest: .
+        service: PolicyService: .
+        actor_id: str: .
+        idempotency_key: str: .
 
     Returns:
-        DataPolicyResponse describing the newly created draft policy.
+        DataPolicyResponse: .
     """
     version = service.create(
         rolling_window_months=request.rolling_window_months,
@@ -224,16 +183,13 @@ def activate_data_policy(
     """Activate one policy version without running a synchronous backfill.
 
     Args:
-        version_id: Unique identifier of the policy version to activate.
-        service: Data acquisition policy service used to activate the version.
-        actor_id: Authenticated actor identifier.
-        idempotency_key: Idempotency key for the mutation.
+        version_id: str: .
+        service: PolicyService: .
+        actor_id: str: .
+        idempotency_key: str: .
 
     Returns:
-        DataPolicyResponse describing the activated policy.
-
-    Raises:
-        HTTPException: 404 if the policy version cannot be found.
+        DataPolicyResponse: .
     """
     try:
         version = service.activate(
@@ -260,25 +216,15 @@ def trigger_data_sync(
 ) -> DataSyncResponse:
     """Trigger a manual data sync run.
 
-    Creates a durable sync run in the ``pending`` state and returns its
-    identifier. The run is executed asynchronously by data sync workers.
-
     Args:
-        request: Validated sync trigger request describing the provider and
-            optional backfill window.
-        stack: Data warehouse ingestion stack used to persist the sync run.
-        policy_service: Data acquisition policy service used to resolve the
-            active rolling window.
-        actor_id: Authenticated actor identifier.
-        idempotency_key: Idempotency key for the mutation.
+        request: DataSyncTriggerRequest: .
+        stack: Stack: .
+        policy_service: PolicyService: .
+        actor_id: str: .
+        idempotency_key: str: .
 
     Returns:
-        DataSyncResponse: The created sync run identifier together with its
-        initial ``pending`` status.
-
-    Raises:
-        HTTPException: 422 when the requested backfill range does not overlap
-            the active data window.
+        DataSyncResponse: .
     """
     policy = policy_service.get_active()
     window = policy.window_for(datetime.now().astimezone())

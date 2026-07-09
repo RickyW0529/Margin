@@ -18,9 +18,10 @@ DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 
 def test_critical_claim_with_only_l4_evidence_can_abstain_under_v02_policy() -> None:
     """Test that a critical claim with only L4 evidence can abstain under v0.2 policy.
+    Returns:.
 
-    A risk-event claim backed solely by L4 evidence without cross-validation should
-    be abstained rather than passed, per the v0.2 citation policy.
+    Returns:
+        None: .
     """
     evidence = _evidence("ev-1", source_level=SourceLevel.L4)
     claim = make_claim(
@@ -44,7 +45,15 @@ def test_critical_claim_with_only_l4_evidence_can_abstain_under_v02_policy() -> 
 
 
 def _evidence(evidence_id: str, *, source_level: SourceLevel) -> Evidence:
-    """Build a deterministic evidence fixture with the given source level."""
+    """Build a deterministic evidence fixture with the given source level.
+
+    Args:
+        evidence_id: str: .
+        source_level: SourceLevel: .
+
+    Returns:
+        Evidence: .
+    """
     chunk = make_chunk(
         document_id=f"doc-{evidence_id}",
         content="存在重大风险事件",

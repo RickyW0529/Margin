@@ -10,7 +10,7 @@ from margin.valuation_discovery.models import QuantResult, ResearchGuardrail, Sc
 
 @dataclass(frozen=True)
 class SelectorConfig:
-    """Configurable candidate selector parameters."""
+    """Configurable candidate selector parameters.."""
 
     top_n: int = 50
     min_score: float = 70.0
@@ -18,20 +18,32 @@ class SelectorConfig:
         ScreeningStatus.PASS,
         ScreeningStatus.NEAR_THRESHOLD,
     )
-    excluded_guardrails: tuple[ResearchGuardrail, ...] = (
-        ResearchGuardrail.RESEARCH_BLOCKED,
-    )
+    excluded_guardrails: tuple[ResearchGuardrail, ...] = (ResearchGuardrail.RESEARCH_BLOCKED,)
 
 
 class MultiFactorSelector:
-    """Select research candidates from quant results."""
+    """Select research candidates from quant results.."""
 
     def __init__(self, config: SelectorConfig) -> None:
-        """Initialize the selector with candidate filtering configuration."""
+        """Initialize the selector with candidate filtering configuration.
+
+        Args:
+            config: SelectorConfig: .
+
+        Returns:
+            None: .
+        """
         self._config = config
 
     def select(self, results: Iterable[QuantResult]) -> tuple[QuantResult, ...]:
-        """Return sorted quant candidates eligible for research/news refresh."""
+        """Return sorted quant candidates eligible for research/news refresh.
+
+        Args:
+            results: Iterable[QuantResult]: .
+
+        Returns:
+            tuple[QuantResult, ...]: .
+        """
         filtered = [
             result
             for result in results

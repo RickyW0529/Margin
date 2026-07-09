@@ -17,9 +17,8 @@ from margin.research.snapshot import ResearchSnapshotBuilder
 def test_memory_repository_persists_terminal_snapshot() -> None:
     """Verify the memory repository persists and retrieves a terminal snapshot.
 
-    Builds a snapshot with an aborted state and error, adds it to the
-    repository, and asserts that it can be retrieved by both snapshot ID and
-    run ID.
+    Returns:
+        None: .
     """
     repository = MemoryResearchRepository()
     snapshot = (
@@ -39,16 +38,12 @@ def test_memory_repository_persists_terminal_snapshot() -> None:
 def test_memory_repository_rejects_snapshot_mutation() -> None:
     """Verify the memory repository rejects mutations to an immutable snapshot.
 
-    Adds a snapshot to the repository, creates a copy with a changed output
-    hash, and asserts that adding the mutated copy raises a ``ValueError``
-    mentioning immutability.
+    Returns:
+        None: .
     """
     repository = MemoryResearchRepository()
     snapshot = (
-        ResearchSnapshotBuilder()
-        .for_run("run-1")
-        .with_state(WorkflowState.ABSTAINED)
-        .build()
+        ResearchSnapshotBuilder().for_run("run-1").with_state(WorkflowState.ABSTAINED).build()
     )
     repository.add_snapshot(snapshot)
     changed = snapshot.model_copy(update={"output_hash": "changed"})

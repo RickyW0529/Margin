@@ -31,10 +31,10 @@ def vector_repository(database_url):
     """Yield a clean ``VectorRepository`` backed by a temporary PostgreSQL database.
 
     Args:
-        database_url: pytest fixture providing the connection URL for the test database.
+        database_url: Any: .
 
     Yields:
-        VectorRepository: repository instance with dimension 3 and empty vector tables.
+        Any: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     with engine.begin() as connection:
@@ -60,12 +60,12 @@ def _chunk(chunk_id: str, symbol: str, available_at: datetime):
     """Build a minimal ``Chunk`` for repository tests.
 
     Args:
-        chunk_id: identifier assigned to the generated chunk.
-        symbol: stock symbol stored on the chunk.
-        available_at: timestamp controlling search availability.
+        chunk_id: str: .
+        symbol: str: .
+        available_at: datetime: .
 
     Returns:
-        Chunk: a filing chunk with the requested overrides.
+        Any: .
     """
     chunk = make_chunk(
         document_id=f"doc_{chunk_id}",
@@ -84,12 +84,11 @@ def _chunk(chunk_id: str, symbol: str, available_at: datetime):
 def test_vector_repository_upserts_chunks_vectors_filters_and_replays(vector_repository):
     """End-to-end repository flow must persist and retrieve chunks correctly.
 
-    Verifies that:
-      - upserting chunks stores them,
-      - upserting embeddings stores 3-D vectors,
-      - vector search filters by symbol and decision time,
-      - retrieval audit records are persisted,
-      - replaying an audit returns the same result.
+    Args:
+        vector_repository: Any: .
+
+    Returns:
+        Any: .
     """
     early = _chunk("chk_early", "000001.SZ", datetime(2026, 6, 1, tzinfo=UTC))
     late = _chunk("chk_late", "000001.SZ", datetime(2026, 7, 1, tzinfo=UTC))
@@ -135,7 +134,14 @@ def test_vector_repository_upserts_chunks_vectors_filters_and_replays(vector_rep
 
 
 def test_vector_repository_persists_chunk_security_links(vector_repository):
-    """vector repository persists chunk security links."""
+    """vector repository persists chunk security links.
+
+    Args:
+        vector_repository: Any: .
+
+    Returns:
+        Any: .
+    """
     chunk = _chunk("chk_linked", "000001.SZ", datetime(2026, 6, 1, tzinfo=UTC))
 
     vector_repository.upsert_chunks(

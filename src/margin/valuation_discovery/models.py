@@ -17,23 +17,48 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 def _utc_now() -> datetime:
-    """Return the current UTC datetime."""
+    """Return the current UTC datetime.
+
+    Returns:
+        datetime: .
+    """
     return datetime.now(UTC)
 
 
 def _new_id(prefix: str) -> str:
-    """Generate a prefixed unique ID from a truncated UUID4 hex."""
+    """Generate a prefixed unique ID from a truncated UUID4 hex.
+
+    Args:
+        prefix: str: .
+
+    Returns:
+        str: .
+    """
     return f"{prefix}_{uuid4().hex[:16]}"
 
 
 def _hash_payload(payload: Any) -> str:
-    """Hash a payload to a deterministic SHA-256 digest string."""
+    """Hash a payload to a deterministic SHA-256 digest string.
+
+    Args:
+        payload: Any: .
+
+    Returns:
+        str: .
+    """
     rendered = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
     return "sha256:" + hashlib.sha256(rendered.encode("utf-8")).hexdigest()
 
 
 def _normalize_datetime(value: datetime | None) -> datetime | None:
-    """Normalize a datetime to timezone-aware UTC, or return None."""
+    """Normalize a datetime to timezone-aware UTC, or return None.
+
+    Args:
+        value: datetime | None: .
+
+    Returns:
+        datetime | None: .
+    """
     if value is None:
         return None
     if value.tzinfo is None:
@@ -42,11 +67,7 @@ def _normalize_datetime(value: datetime | None) -> datetime | None:
 
 
 class UniverseCode(StrEnum):
-    """Built-in universe codes.
-
-    New custom pools should be stored as data/rule versions. They do not require
-    changing this enum unless they become first-class built-ins.
-    """
+    """Built-in universe codes.."""
 
     CSI300 = "CSI300"
     CSI500 = "CSI500"
@@ -54,7 +75,7 @@ class UniverseCode(StrEnum):
 
 
 class ScreeningStatus(StrEnum):
-    """Quant screening result, independent from data/risk/review state."""
+    """Quant screening result, independent from data/risk/review state.."""
 
     PASS = "pass"
     NEAR_THRESHOLD = "near_threshold"
@@ -63,7 +84,7 @@ class ScreeningStatus(StrEnum):
 
 
 class DataStatus(StrEnum):
-    """Data quality and PIT status for a quant result."""
+    """Data quality and PIT status for a quant result.."""
 
     OK = "ok"
     INSUFFICIENT = "insufficient"
@@ -71,10 +92,7 @@ class DataStatus(StrEnum):
 
 
 class ResearchGuardrail(StrEnum):
-    """Research and trading-discipline guardrails.
-
-    These values are not direct buy/sell instructions.
-    """
+    """Research and trading-discipline guardrails.."""
 
     RESEARCH_ALLOWED = "research_allowed"
     LIMITED_RESEARCH = "limited_research"
@@ -85,7 +103,7 @@ class ResearchGuardrail(StrEnum):
 
 
 class RefreshStep(StrEnum):
-    """Durable refresh state machine steps."""
+    """Durable refresh state machine steps.."""
 
     RESOLVE_SCOPE = "resolve_scope"
     SNAPSHOT_UNIVERSE = "snapshot_universe"
@@ -101,13 +119,13 @@ class RefreshStep(StrEnum):
 
 
 class FrozenModel(BaseModel):
-    """Base class for immutable domain records."""
+    """Base class for immutable domain records.."""
 
     model_config = ConfigDict(frozen=True)
 
 
 class UniverseDefinition(FrozenModel):
-    """Versioned universe definition header."""
+    """Versioned universe definition header.."""
 
     definition_id: str = Field(default_factory=lambda: _new_id("univ_def"))
     universe_code: UniverseCode | str
@@ -122,7 +140,7 @@ class UniverseDefinition(FrozenModel):
 
 
 class UniverseVersion(FrozenModel):
-    """Immutable universe rule/materialization version."""
+    """Immutable universe rule/materialization version.."""
 
     universe_version_id: str = Field(default_factory=lambda: _new_id("univ_ver"))
     definition_id: str
@@ -143,7 +161,7 @@ class UniverseVersion(FrozenModel):
 
 
 class UniverseMembership(FrozenModel):
-    """Bitemporal security membership inside a universe."""
+    """Bitemporal security membership inside a universe.."""
 
     membership_id: str = Field(default_factory=lambda: _new_id("univ_mem"))
     universe_code: UniverseCode | str
@@ -166,7 +184,15 @@ class UniverseMembership(FrozenModel):
     _normalize_system_to = field_validator("system_to")(_normalize_datetime)
 
     def is_visible_at(self, *, business_at: datetime, known_at: datetime) -> bool:
-        """Return whether this membership is valid and known at the supplied times."""
+        """Return whether this membership is valid and known at the supplied times.
+
+        Args:
+            business_at: datetime: .
+            known_at: datetime: .
+
+        Returns:
+            bool: .
+        """
         business = _normalize_datetime(business_at)
         known = _normalize_datetime(known_at)
         assert business is not None
@@ -177,7 +203,7 @@ class UniverseMembership(FrozenModel):
 
 
 class UniverseSnapshot(FrozenModel):
-    """Frozen universe membership list used by downstream quant."""
+    """Frozen universe membership list used by downstream quant.."""
 
     snapshot_id: str = Field(default_factory=lambda: _new_id("univ_snap"))
     universe_code: UniverseCode | str
@@ -194,7 +220,14 @@ class UniverseSnapshot(FrozenModel):
     _normalize_created_at = field_validator("created_at")(_normalize_datetime)
 
     def model_post_init(self, __context: Any) -> None:
-        """Compute the deterministic input hash after model initialization."""
+        """Compute the deterministic input hash after model initialization.
+
+        Args:
+            __context: Any: .
+
+        Returns:
+            None: .
+        """
         if self.input_hash:
             return
         payload = {
@@ -209,7 +242,7 @@ class UniverseSnapshot(FrozenModel):
 
 
 class QuantInputSnapshot(FrozenModel):
-    """Frozen PIT-safe input contract consumed by quant screening."""
+    """Frozen PIT-safe input contract consumed by quant screening.."""
 
     snapshot_id: str = Field(default_factory=lambda: _new_id("qis"))
     scope_version_id: str
@@ -243,7 +276,14 @@ class QuantInputSnapshot(FrozenModel):
     _normalize_created_at = field_validator("created_at")(_normalize_datetime)
 
     def model_post_init(self, __context: Any) -> None:
-        """Derive data status and input hash after model initialization."""
+        """Derive data status and input hash after model initialization.
+
+        Args:
+            __context: Any: .
+
+        Returns:
+            None: .
+        """
         if self.missing_required and self.data_status == DataStatus.OK:
             object.__setattr__(self, "data_status", DataStatus.INSUFFICIENT)
         if not self.input_hash:
@@ -267,17 +307,25 @@ class QuantInputSnapshot(FrozenModel):
 
     @property
     def is_valid(self) -> bool:
-        """Return whether this snapshot can feed publishable quant runs."""
+        """Return whether this snapshot can feed publishable quant runs.
+
+        Returns:
+            bool: .
+        """
         return self.data_status == DataStatus.OK and not self.missing_required
 
     @property
     def missing_required_indicators(self) -> tuple[str, ...]:
-        """Compatibility alias for required indicator gaps."""
+        """Compatibility alias for required indicator gaps.
+
+        Returns:
+            tuple[str, ...]: .
+        """
         return self.missing_required
 
 
 class QuantRun(FrozenModel):
-    """Append-only quant run metadata."""
+    """Append-only quant run metadata.."""
 
     quant_run_id: str = Field(default_factory=lambda: _new_id("qr"))
     input_snapshot_id: str
@@ -293,7 +341,7 @@ class QuantRun(FrozenModel):
 
 
 class QuantResult(FrozenModel):
-    """Single-security quant result with orthogonal status dimensions."""
+    """Single-security quant result with orthogonal status dimensions.."""
 
     result_id: str = Field(default_factory=lambda: _new_id("qres"))
     quant_run_id: str
@@ -320,7 +368,7 @@ class QuantResult(FrozenModel):
 
 
 class ValuationAssessment(FrozenModel):
-    """Deterministic valuation assessment record."""
+    """Deterministic valuation assessment record.."""
 
     assessment_id: str = Field(default_factory=lambda: _new_id("va"))
     security_id: str
@@ -338,7 +386,7 @@ class ValuationAssessment(FrozenModel):
 
 
 class ValuationAssessmentEvidence(FrozenModel):
-    """Immutable evidence edge supporting one valuation assessment."""
+    """Immutable evidence edge supporting one valuation assessment.."""
 
     edge_id: str = Field(default_factory=lambda: _new_id("vae"))
     assessment_id: str
@@ -351,7 +399,7 @@ class ValuationAssessmentEvidence(FrozenModel):
 
 
 class ConfidenceComponent(FrozenModel):
-    """Deterministic confidence contribution used for calibration."""
+    """Deterministic confidence contribution used for calibration.."""
 
     component_id: str = Field(default_factory=lambda: _new_id("conf"))
     assessment_id: str
@@ -362,7 +410,7 @@ class ConfidenceComponent(FrozenModel):
 
 
 class EffectiveAssessmentPointer(FrozenModel):
-    """Current effective assessment pointer for one security/scope."""
+    """Current effective assessment pointer for one security/scope.."""
 
     pointer_id: str = Field(default_factory=lambda: _new_id("eap"))
     security_id: str
@@ -377,17 +425,17 @@ class EffectiveAssessmentPointer(FrozenModel):
     created_at: datetime = Field(default_factory=_utc_now)
 
     _normalize_effective_from = field_validator("effective_from")(_normalize_datetime)
-    _normalize_last_successful_data_check_at = field_validator(
-        "last_successful_data_check_at"
-    )(_normalize_datetime)
-    _normalize_last_successful_news_check_at = field_validator(
-        "last_successful_news_check_at"
-    )(_normalize_datetime)
+    _normalize_last_successful_data_check_at = field_validator("last_successful_data_check_at")(
+        _normalize_datetime
+    )
+    _normalize_last_successful_news_check_at = field_validator("last_successful_news_check_at")(
+        _normalize_datetime
+    )
     _normalize_created_at = field_validator("created_at")(_normalize_datetime)
 
 
 class RefreshRun(FrozenModel):
-    """Durable valuation discovery refresh run header."""
+    """Durable valuation discovery refresh run header.."""
 
     refresh_run_id: str = Field(default_factory=lambda: _new_id("vrr"))
     scope_version_id: str
@@ -400,7 +448,7 @@ class RefreshRun(FrozenModel):
 
 
 class RefreshStepRecord(FrozenModel):
-    """Durable valuation discovery refresh step event."""
+    """Durable valuation discovery refresh step event.."""
 
     step_event_id: str = Field(default_factory=lambda: _new_id("vrs"))
     refresh_run_id: str

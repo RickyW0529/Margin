@@ -36,23 +36,26 @@ from margin.sql.dashboard_queries import (
 
 
 class DashboardRepository(Protocol):
-    """Repository contract consumed by dashboard query and orchestration services."""
+    """Repository contract consumed by dashboard query and orchestration services.."""
 
     def add_run(self, run: ResearchRun) -> None:
         """Persist a dashboard run.
 
         Args:
-            run: The research run to persist.
+            run: ResearchRun: .
+
+        Returns:
+            None: .
         """
 
     def get_run(self, run_id: str) -> ResearchRun | None:
         """Return one run by identifier.
 
         Args:
-            run_id: Unique identifier of the run.
+            run_id: str: .
 
         Returns:
-            The matching research run, or None if not found.
+            ResearchRun | None: .
         """
 
     def list_runs(
@@ -65,56 +68,62 @@ class DashboardRepository(Protocol):
         """Return dashboard runs sorted newest first.
 
         Args:
-            strategy_id: Optional strategy filter.
-            status: Optional status filter.
-            limit: Maximum number of runs to return.
+            strategy_id: str | None: .
+            status: str | None: .
+            limit: int: .
 
         Returns:
-            A list of matching research runs.
+            list[ResearchRun]: .
         """
 
     def add_items(self, items: list[ResearchItem]) -> None:
         """Persist run items.
 
         Args:
-            items: Research items to persist.
+            items: list[ResearchItem]: .
+
+        Returns:
+            None: .
         """
 
     def get_item(self, item_id: str) -> ResearchItem | None:
         """Return one item by identifier.
 
         Args:
-            item_id: Unique identifier of the item.
+            item_id: str: .
 
         Returns:
-            The matching research item, or None if not found.
+            ResearchItem | None: .
         """
 
     def list_items(self, run_id: str) -> list[ResearchItem]:
         """Return all items for a run.
 
         Args:
-            run_id: Identifier of the parent research run.
+            run_id: str: .
 
         Returns:
-            All research items belonging to the run.
+            list[ResearchItem]: .
         """
 
     def add_feedback(self, feedback: FeedbackRecord) -> None:
         """Append user feedback.
 
         Args:
-            feedback: Feedback record to persist.
+            feedback: FeedbackRecord: .
+
+        Returns:
+            None: .
         """
 
     def list_feedback(self, item_id: str) -> list[FeedbackRecord]:
         """Return feedback for one item.
 
         Args:
-            item_id: Identifier of the research item.
+            item_id: str: .
 
         Returns:
-            A list of feedback records for the item.
+            list[FeedbackRecord]: .
         """
 
     def list_research_candidates_v2(
@@ -127,14 +136,30 @@ class DashboardRepository(Protocol):
         cursor: str | None,
         limit: int,
     ) -> ResearchCandidateListResponse:
-        """Return one cursor page of v0.2 research candidate list items."""
+        """Return one cursor page of v0.2 research candidate list items.
+
+        Args:
+            scope_version_id: str: .
+            universe_code: str: .
+            filters: DashboardFilters: .
+            sort: DashboardSort: .
+            cursor: str | None: .
+            limit: int: .
+
+        Returns:
+            ResearchCandidateListResponse: .
+        """
 
 
 class MemoryDashboardRepository:
-    """In-memory dashboard repository for tests and local usage."""
+    """In-memory dashboard repository for tests and local usage.."""
 
     def __init__(self) -> None:
-        """Initialize empty in-memory stores for runs, items, and feedback."""
+        """Initialize empty in-memory stores for runs, items, and feedback.
+
+        Returns:
+            None: .
+        """
         self._runs: dict[str, ResearchRun] = {}
         self._items: dict[str, ResearchItem] = {}
         self._feedback: dict[str, list[FeedbackRecord]] = {}
@@ -143,7 +168,10 @@ class MemoryDashboardRepository:
         """Persist a dashboard run in memory.
 
         Args:
-            run: The research run to store.
+            run: ResearchRun: .
+
+        Returns:
+            None: .
         """
         self._runs[run.run_id] = run
 
@@ -151,10 +179,10 @@ class MemoryDashboardRepository:
         """Return one run by identifier.
 
         Args:
-            run_id: Unique identifier of the run.
+            run_id: str: .
 
         Returns:
-            The matching research run, or None if not found.
+            ResearchRun | None: .
         """
         return self._runs.get(run_id)
 
@@ -168,12 +196,12 @@ class MemoryDashboardRepository:
         """Return dashboard runs sorted newest first.
 
         Args:
-            strategy_id: Optional strategy filter.
-            status: Optional status filter.
-            limit: Maximum number of runs to return.
+            strategy_id: str | None: .
+            status: str | None: .
+            limit: int: .
 
         Returns:
-            A list of matching research runs.
+            list[ResearchRun]: .
         """
         runs = list(self._runs.values())
         if strategy_id:
@@ -187,7 +215,10 @@ class MemoryDashboardRepository:
         """Persist run items in memory.
 
         Args:
-            items: Research items to store.
+            items: list[ResearchItem]: .
+
+        Returns:
+            None: .
         """
         for item in items:
             self._items[item.item_id] = item
@@ -196,10 +227,10 @@ class MemoryDashboardRepository:
         """Return one item by identifier.
 
         Args:
-            item_id: Unique identifier of the item.
+            item_id: str: .
 
         Returns:
-            The matching research item, or None if not found.
+            ResearchItem | None: .
         """
         return self._items.get(item_id)
 
@@ -207,10 +238,10 @@ class MemoryDashboardRepository:
         """Return all items for a run.
 
         Args:
-            run_id: Identifier of the parent research run.
+            run_id: str: .
 
         Returns:
-            All research items belonging to the run, sorted by created_at.
+            list[ResearchItem]: .
         """
         items = [item for item in self._items.values() if item.run_id == run_id]
         items.sort(key=lambda item: item.created_at)
@@ -220,7 +251,10 @@ class MemoryDashboardRepository:
         """Append user feedback in memory.
 
         Args:
-            feedback: Feedback record to store.
+            feedback: FeedbackRecord: .
+
+        Returns:
+            None: .
         """
         self._feedback.setdefault(feedback.item_id, []).append(feedback)
 
@@ -228,10 +262,10 @@ class MemoryDashboardRepository:
         """Return feedback for one item.
 
         Args:
-            item_id: Identifier of the research item.
+            item_id: str: .
 
         Returns:
-            A list of feedback records for the item.
+            list[FeedbackRecord]: .
         """
         return list(self._feedback.get(item_id, []))
 
@@ -245,11 +279,21 @@ class MemoryDashboardRepository:
         cursor: str | None,
         limit: int,
     ) -> ResearchCandidateListResponse:
-        """Return one cursor page of v0.2 research candidate list items."""
+        """Return one cursor page of v0.2 research candidate list items.
+
+        Args:
+            scope_version_id: str: .
+            universe_code: str: .
+            filters: DashboardFilters: .
+            sort: DashboardSort: .
+            cursor: str | None: .
+            limit: int: .
+
+        Returns:
+            ResearchCandidateListResponse: .
+        """
         del universe_code
-        runs = [
-            run for run in self._runs.values() if run.version_id == scope_version_id
-        ]
+        runs = [run for run in self._runs.values() if run.version_id == scope_version_id]
         runs.sort(key=lambda run: (run.decision_at, run.created_at), reverse=True)
         runs = runs[:1]
         run_by_id = {run.run_id: run for run in runs}
@@ -269,13 +313,16 @@ class MemoryDashboardRepository:
 
 
 class SQLAlchemyDashboardRepository:
-    """PostgreSQL-backed dashboard repository."""
+    """PostgreSQL-backed dashboard repository.."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
         """Initialize the repository with a SQLAlchemy session factory.
 
         Args:
-            session_factory: Callable that returns a new SQLAlchemy session.
+            session_factory: Callable[[], Session]: .
+
+        Returns:
+            None: .
         """
         self._session_factory = session_factory
 
@@ -283,7 +330,10 @@ class SQLAlchemyDashboardRepository:
         """Persist a dashboard run to PostgreSQL.
 
         Args:
-            run: The research run to persist.
+            run: ResearchRun: .
+
+        Returns:
+            None: .
         """
         with self._session_factory.begin() as session:
             session.merge(_run_to_row(run))
@@ -292,10 +342,10 @@ class SQLAlchemyDashboardRepository:
         """Return one run by identifier.
 
         Args:
-            run_id: Unique identifier of the run.
+            run_id: str: .
 
         Returns:
-            The matching research run, or None if not found.
+            ResearchRun | None: .
         """
         with self._session_factory() as session:
             row = session.get(DashboardRunRow, run_id)
@@ -311,12 +361,12 @@ class SQLAlchemyDashboardRepository:
         """Return dashboard runs sorted newest first.
 
         Args:
-            strategy_id: Optional strategy filter.
-            status: Optional status filter.
-            limit: Maximum number of runs to return.
+            strategy_id: str | None: .
+            status: str | None: .
+            limit: int: .
 
         Returns:
-            A list of matching research runs.
+            list[ResearchRun]: .
         """
         with self._session_factory() as session:
             statement = dashboard_runs(
@@ -331,7 +381,10 @@ class SQLAlchemyDashboardRepository:
         """Persist run items to PostgreSQL.
 
         Args:
-            items: Research items to persist.
+            items: list[ResearchItem]: .
+
+        Returns:
+            None: .
         """
         with self._session_factory.begin() as session:
             for item in items:
@@ -341,10 +394,10 @@ class SQLAlchemyDashboardRepository:
         """Return one item by identifier.
 
         Args:
-            item_id: Unique identifier of the item.
+            item_id: str: .
 
         Returns:
-            The matching research item, or None if not found.
+            ResearchItem | None: .
         """
         with self._session_factory() as session:
             row = session.get(DashboardItemRow, item_id)
@@ -354,22 +407,23 @@ class SQLAlchemyDashboardRepository:
         """Return all items for a run.
 
         Args:
-            run_id: Identifier of the parent research run.
+            run_id: str: .
 
         Returns:
-            All research items belonging to the run, sorted by created_at.
+            list[ResearchItem]: .
         """
         with self._session_factory() as session:
-            rows = session.scalars(
-                dashboard_items_by_run(run_id)
-            ).all()
+            rows = session.scalars(dashboard_items_by_run(run_id)).all()
             return [_item_from_row(row) for row in rows]
 
     def add_feedback(self, feedback: FeedbackRecord) -> None:
         """Append user feedback to PostgreSQL.
 
         Args:
-            feedback: Feedback record to persist.
+            feedback: FeedbackRecord: .
+
+        Returns:
+            None: .
         """
         with self._session_factory.begin() as session:
             session.add(
@@ -386,15 +440,13 @@ class SQLAlchemyDashboardRepository:
         """Return feedback for one item.
 
         Args:
-            item_id: Identifier of the research item.
+            item_id: str: .
 
         Returns:
-            A list of feedback records for the item.
+            list[FeedbackRecord]: .
         """
         with self._session_factory() as session:
-            rows = session.scalars(
-                dashboard_feedback_by_item(item_id)
-            ).all()
+            rows = session.scalars(dashboard_feedback_by_item(item_id)).all()
             return [
                 FeedbackRecord(
                     feedback_id=row.feedback_id,
@@ -416,12 +468,22 @@ class SQLAlchemyDashboardRepository:
         cursor: str | None,
         limit: int,
     ) -> ResearchCandidateListResponse:
-        """Return one cursor page of v0.2 research candidate list items."""
+        """Return one cursor page of v0.2 research candidate list items.
+
+        Args:
+            scope_version_id: str: .
+            universe_code: str: .
+            filters: DashboardFilters: .
+            sort: DashboardSort: .
+            cursor: str | None: .
+            limit: int: .
+
+        Returns:
+            ResearchCandidateListResponse: .
+        """
         del universe_code
         with self._session_factory() as session:
-            run_rows = session.scalars(
-                dashboard_runs_by_scope(scope_version_id)
-            ).all()[:1]
+            run_rows = session.scalars(dashboard_runs_by_scope(scope_version_id)).all()[:1]
             run_by_id = {row.run_id: _run_from_row(row) for row in run_rows}
             if not run_by_id:
                 return ResearchCandidateListResponse(
@@ -431,12 +493,9 @@ class SQLAlchemyDashboardRepository:
                     as_of=datetime.now(UTC),
                     scope_version_id=scope_version_id,
                 )
-            item_rows = session.scalars(
-                dashboard_items_by_run_ids(tuple(run_by_id))
-            ).all()
+            item_rows = session.scalars(dashboard_items_by_run_ids(tuple(run_by_id))).all()
         candidates = [
-            _candidate_from_item(_item_from_row(row), run_by_id[row.run_id])
-            for row in item_rows
+            _candidate_from_item(_item_from_row(row), run_by_id[row.run_id]) for row in item_rows
         ]
         return _candidate_page(
             candidates,
@@ -449,7 +508,14 @@ class SQLAlchemyDashboardRepository:
 
 
 def _run_to_row(run: ResearchRun) -> DashboardRunRow:
-    """run to row."""
+    """run to row.
+
+    Args:
+        run: ResearchRun: .
+
+    Returns:
+        DashboardRunRow: .
+    """
     return DashboardRunRow(
         run_id=run.run_id,
         decision_at=run.decision_at,
@@ -467,7 +533,14 @@ def _run_to_row(run: ResearchRun) -> DashboardRunRow:
 
 
 def _item_to_row(item: ResearchItem) -> DashboardItemRow:
-    """item to row."""
+    """item to row.
+
+    Args:
+        item: ResearchItem: .
+
+    Returns:
+        DashboardItemRow: .
+    """
     return DashboardItemRow(
         item_id=item.item_id,
         run_id=item.run_id,
@@ -492,7 +565,14 @@ def _item_to_row(item: ResearchItem) -> DashboardItemRow:
 
 
 def _run_from_row(row: DashboardRunRow) -> ResearchRun:
-    """run from row."""
+    """run from row.
+
+    Args:
+        row: DashboardRunRow: .
+
+    Returns:
+        ResearchRun: .
+    """
     return ResearchRun(
         run_id=row.run_id,
         decision_at=row.decision_at,
@@ -510,7 +590,14 @@ def _run_from_row(row: DashboardRunRow) -> ResearchRun:
 
 
 def _item_from_row(row: DashboardItemRow) -> ResearchItem:
-    """item from row."""
+    """item from row.
+
+    Args:
+        row: DashboardItemRow: .
+
+    Returns:
+        ResearchItem: .
+    """
     return ResearchItem(
         item_id=row.item_id,
         run_id=row.run_id,
@@ -538,7 +625,15 @@ def _candidate_from_item(
     item: ResearchItem,
     run: ResearchRun,
 ) -> ResearchCandidateListItemV2:
-    """Build a v0.2 candidate list item from a research item and its run."""
+    """Build a v0.2 candidate list item from a research item and its run.
+
+    Args:
+        item: ResearchItem: .
+        run: ResearchRun: .
+
+    Returns:
+        ResearchCandidateListItemV2: .
+    """
     screening_status = _screening_status_from_item(item)
     data_status = "complete" if item.status == ItemStatus.PUBLISHED else "partial"
     return ResearchCandidateListItemV2(
@@ -552,14 +647,10 @@ def _candidate_from_item(
         risk_flags=tuple(item.rejection_reasons),
         review_required=item.status != ItemStatus.PUBLISHED,
         research_guardrail=(
-            "allow_research"
-            if item.status == ItemStatus.PUBLISHED
-            else "review_required"
+            "allow_research" if item.status == ItemStatus.PUBLISHED else "review_required"
         ),
         current_review_outcome=(
-            "update_assessment"
-            if item.status == ItemStatus.PUBLISHED
-            else "abstain"
+            "update_assessment" if item.status == ItemStatus.PUBLISHED else "abstain"
         ),
         effective_assessment_id=item.snapshot_id,
         assessment_freshness="current" if item.status == ItemStatus.PUBLISHED else "stale",
@@ -575,7 +666,14 @@ def _candidate_from_item(
 
 
 def _screening_status_from_item(item: ResearchItem) -> str:
-    """Return the quant screening status carried by a dashboard item."""
+    """Return the quant screening status carried by a dashboard item.
+
+    Args:
+        item: ResearchItem: .
+
+    Returns:
+        str: .
+    """
     prefix = "quant_screen:"
     if item.signal_type.startswith(prefix):
         return item.signal_type.removeprefix(prefix)
@@ -591,7 +689,19 @@ def _candidate_page(
     cursor: str | None,
     limit: int,
 ) -> ResearchCandidateListResponse:
-    """Filter, sort, and paginate candidates into a cursor-paged response."""
+    """Filter, sort, and paginate candidates into a cursor-paged response.
+
+    Args:
+        candidates: list[ResearchCandidateListItemV2]: .
+        scope_version_id: str: .
+        filters: DashboardFilters: .
+        sort: DashboardSort: .
+        cursor: str | None: .
+        limit: int: .
+
+    Returns:
+        ResearchCandidateListResponse: .
+    """
     page_size = max(1, min(limit, 200))
     filtered = _apply_filters(candidates, filters)
     ordered = _sort_candidates(filtered, sort)
@@ -617,23 +727,25 @@ def _apply_filters(
     candidates: list[ResearchCandidateListItemV2],
     filters: DashboardFilters,
 ) -> list[ResearchCandidateListItemV2]:
-    """Filter candidates by screening status, data status, freshness, and query text."""
+    """Filter candidates by screening status, data status, freshness, and query text.
+
+    Args:
+        candidates: list[ResearchCandidateListItemV2]: .
+        filters: DashboardFilters: .
+
+    Returns:
+        list[ResearchCandidateListItemV2]: .
+    """
     result = candidates
     if filters.screening_status:
-        result = [
-            item for item in result if item.screening_status == filters.screening_status
-        ]
+        result = [item for item in result if item.screening_status == filters.screening_status]
     if filters.data_status:
         result = [item for item in result if item.data_status == filters.data_status]
     if filters.review_required is not None:
-        result = [
-            item for item in result if item.review_required == filters.review_required
-        ]
+        result = [item for item in result if item.review_required == filters.review_required]
     if filters.assessment_freshness:
         result = [
-            item
-            for item in result
-            if item.assessment_freshness == filters.assessment_freshness
+            item for item in result if item.assessment_freshness == filters.assessment_freshness
         ]
     if filters.query:
         query = filters.query.lower()
@@ -651,11 +763,26 @@ def _sort_candidates(
     candidates: list[ResearchCandidateListItemV2],
     sort: DashboardSort,
 ) -> list[ResearchCandidateListItemV2]:
-    """Sort candidates by the requested field and direction with a stable tiebreaker."""
+    """Sort candidates by the requested field and direction with a stable tiebreaker.
+
+    Args:
+        candidates: list[ResearchCandidateListItemV2]: .
+        sort: DashboardSort: .
+
+    Returns:
+        list[ResearchCandidateListItemV2]: .
+    """
     reverse = sort.direction == "desc"
 
     def key(item: ResearchCandidateListItemV2):
-        """Return a sort key treating missing values as extremes."""
+        """Return a sort key treating missing values as extremes.
+
+        Args:
+            item: ResearchCandidateListItemV2: .
+
+        Returns:
+            Any: .
+        """
         value = getattr(item, sort.field)
         if value is None:
             value = -1 if reverse else float("inf")
@@ -668,7 +795,15 @@ def _cursor_offset(
     ordered: list[ResearchCandidateListItemV2],
     cursor: str | None,
 ) -> int:
-    """Return the start index for the next page based on a decoded cursor."""
+    """Return the start index for the next page based on a decoded cursor.
+
+    Args:
+        ordered: list[ResearchCandidateListItemV2]: .
+        cursor: str | None: .
+
+    Returns:
+        int: .
+    """
     if not cursor:
         return 0
     decoded = _decode_cursor(cursor)
@@ -680,7 +815,15 @@ def _cursor_offset(
 
 
 def _encode_cursor(item: ResearchCandidateListItemV2, sort: DashboardSort) -> str:
-    """Base64-encode a cursor payload identifying the last item of a page."""
+    """Base64-encode a cursor payload identifying the last item of a page.
+
+    Args:
+        item: ResearchCandidateListItemV2: .
+        sort: DashboardSort: .
+
+    Returns:
+        str: .
+    """
     payload = {
         "item_id": item.item_id,
         "sort_field": sort.field,
@@ -692,7 +835,14 @@ def _encode_cursor(item: ResearchCandidateListItemV2, sort: DashboardSort) -> st
 
 
 def _decode_cursor(cursor: str) -> dict[str, object]:
-    """Decode a base64 cursor payload, returning an empty dict on failure."""
+    """Decode a base64 cursor payload, returning an empty dict on failure.
+
+    Args:
+        cursor: str: .
+
+    Returns:
+        dict[str, object]: .
+    """
     padded = cursor + "=" * (-len(cursor) % 4)
     try:
         decoded = base64.urlsafe_b64decode(padded.encode("ascii"))
@@ -705,7 +855,14 @@ def _decode_cursor(cursor: str) -> dict[str, object]:
 def _facets(
     candidates: list[ResearchCandidateListItemV2],
 ) -> dict[str, dict[str, int]]:
-    """Aggregate facet counts for screening status, data status, and freshness."""
+    """Aggregate facet counts for screening status, data status, and freshness.
+
+    Args:
+        candidates: list[ResearchCandidateListItemV2]: .
+
+    Returns:
+        dict[str, dict[str, int]]: .
+    """
     facets: dict[str, dict[str, int]] = {
         "screening_status": {},
         "data_status": {},
@@ -720,5 +877,13 @@ def _facets(
 
 
 def _increment(values: dict[str, int], key: str) -> None:
-    """Increment the count for a facet key, initializing to 1 when absent."""
+    """Increment the count for a facet key, initializing to 1 when absent.
+
+    Args:
+        values: dict[str, int]: .
+        key: str: .
+
+    Returns:
+        None: .
+    """
     values[key] = values.get(key, 0) + 1

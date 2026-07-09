@@ -71,7 +71,7 @@ IdempotencyKey = Annotated[str, Depends(require_idempotency_key)]
 
 
 class UserQnaRunRequest(BaseModel):
-    """User Q&A request routed through MainAgent."""
+    """User Q&A request routed through MainAgent.."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -83,7 +83,7 @@ class UserQnaRunRequest(BaseModel):
 
 
 class GuardrailSummaryResponse(BaseModel):
-    """Safe guardrail summary returned to the frontend."""
+    """Safe guardrail summary returned to the frontend.."""
 
     allowed: bool
     decision: str
@@ -92,7 +92,7 @@ class GuardrailSummaryResponse(BaseModel):
 
 
 class AgentTraceStepResponse(BaseModel):
-    """One user-visible expert-agent trace row."""
+    """One user-visible expert-agent trace row.."""
 
     step_id: str
     expert_agent_name: str
@@ -101,13 +101,13 @@ class AgentTraceStepResponse(BaseModel):
 
 
 class AgentTraceResponse(BaseModel):
-    """User-visible MainAgent trace."""
+    """User-visible MainAgent trace.."""
 
     steps: list[AgentTraceStepResponse]
 
 
 class ContextArtifactSummaryResponse(BaseModel):
-    """Short Context Store artifact summary safe for the frontend."""
+    """Short Context Store artifact summary safe for the frontend.."""
 
     artifact_id: str
     artifact_type: str
@@ -116,7 +116,7 @@ class ContextArtifactSummaryResponse(BaseModel):
 
 
 class ContextArtifactDetailResponse(BaseModel):
-    """Full persisted Context Store artifact detail."""
+    """Full persisted Context Store artifact detail.."""
 
     artifact_id: str
     run_id: str
@@ -130,7 +130,7 @@ class ContextArtifactDetailResponse(BaseModel):
 
 
 class UserQnaRunResponse(BaseModel):
-    """Response returned by the MainAgent-backed Q&A endpoint."""
+    """Response returned by the MainAgent-backed Q&A endpoint.."""
 
     session_id: str
     user_message_id: str
@@ -144,7 +144,7 @@ class UserQnaRunResponse(BaseModel):
 
 
 class AgentChatSessionResponse(BaseModel):
-    """One persisted chat session for the sidebar."""
+    """One persisted chat session for the sidebar.."""
 
     session_id: str
     title: str
@@ -156,7 +156,7 @@ class AgentChatSessionResponse(BaseModel):
 
 
 class AgentChatMessageResponse(BaseModel):
-    """One persisted chat message for restoring a conversation."""
+    """One persisted chat message for restoring a conversation.."""
 
     message_id: str
     session_id: str
@@ -168,20 +168,20 @@ class AgentChatMessageResponse(BaseModel):
 
 
 class AgentChatSessionListResponse(BaseModel):
-    """Recent chat session list."""
+    """Recent chat session list.."""
 
     items: list[AgentChatSessionResponse]
 
 
 class AgentChatSessionDetailResponse(BaseModel):
-    """One chat session plus messages."""
+    """One chat session plus messages.."""
 
     session: AgentChatSessionResponse
     messages: list[AgentChatMessageResponse]
 
 
 class StockAnalysisScheduleUpdate(BaseModel):
-    """Request body for updating the daily stock-analysis schedule."""
+    """Request body for updating the daily stock-analysis schedule.."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -194,7 +194,7 @@ class StockAnalysisScheduleUpdate(BaseModel):
 
 
 class StockAnalysisScheduleResponse(BaseModel):
-    """Persisted stock-analysis schedule returned to the frontend."""
+    """Persisted stock-analysis schedule returned to the frontend.."""
 
     schedule_id: str
     run_type: str
@@ -211,6 +211,8 @@ class StockAnalysisScheduleResponse(BaseModel):
 
 @dataclass(frozen=True)
 class _UserQnaExecution:
+    """Class implementing _UserQnaExecution.."""
+
     answer: str
     step_statuses: dict[str, AgentExecutionStatus]
     artifacts: tuple[ContextArtifact, ...]
@@ -227,7 +229,20 @@ def run_user_qna_agent(
     llm_provider_factory: LLMProviderFactory,
     _idempotency_key: IdempotencyKey,
 ) -> UserQnaRunResponse:
-    """Run a read-only user Q&A request through MainAgent-planned ExpertAgents."""
+    """Run a read-only user Q&A request through MainAgent-planned ExpertAgents.
+
+    Args:
+        request: UserQnaRunRequest: .
+        runtime: RuntimeDep: .
+        chat_repository: ChatRepo: .
+        services: DashboardServices: .
+        strategy_service: StrategyServices: .
+        llm_provider_factory: LLMProviderFactory: .
+        _idempotency_key: IdempotencyKey: .
+
+    Returns:
+        UserQnaRunResponse: .
+    """
     session_id = request.session_id or f"acs_{uuid4().hex}"
     session = chat_repository.get_session(session_id)
     now = datetime.now(UTC)
@@ -370,10 +385,7 @@ def run_user_qna_agent(
             )
             for artifact in execution.artifacts
         ],
-        references=[
-            dict(reference)
-            for reference in execution.references
-        ],
+        references=[dict(reference) for reference in execution.references],
     )
     chat_repository.add_message(
         new_chat_message(
@@ -399,7 +411,21 @@ def _execute_user_qna_plan(
     llm_provider_factory: Callable[[], LLMProvider],
     conversation_context: list[dict[str, str]],
 ) -> _UserQnaExecution:
-    """Execute ExpertAgents selected by MainAgent for a user Q&A run."""
+    """Execute ExpertAgents selected by MainAgent for a user Q&A run.
+
+    Args:
+        request: UserQnaRunRequest: .
+        run_id: str: .
+        plan_steps: tuple[AgentStep, ...]: .
+        runtime: MainAgentRuntime: .
+        services: DashboardServiceBundle: .
+        strategy_service: StrategyService: .
+        llm_provider_factory: Callable[[], LLMProvider]: .
+        conversation_context: list[dict[str, str]]: .
+
+    Returns:
+        _UserQnaExecution: .
+    """
     answer = ""
     step_statuses: dict[str, AgentExecutionStatus] = {}
     artifacts: list[ContextArtifact] = []
@@ -491,7 +517,15 @@ def get_agent_artifact(
     artifact_id: str,
     runtime: RuntimeDep,
 ) -> ContextArtifactDetailResponse:
-    """Return one persisted Context Store artifact for chat-side expansion."""
+    """Return one persisted Context Store artifact for chat-side expansion.
+
+    Args:
+        artifact_id: str: .
+        runtime: RuntimeDep: .
+
+    Returns:
+        ContextArtifactDetailResponse: .
+    """
     artifact = runtime.get_context_artifact(artifact_id)
     if artifact is None:
         raise HTTPException(
@@ -519,12 +553,16 @@ def get_agent_artifact(
     response_model=AgentChatSessionListResponse,
 )
 def list_agent_chat_sessions(repository: ChatRepo) -> AgentChatSessionListResponse:
-    """Return recent persisted user chat sessions."""
+    """Return recent persisted user chat sessions.
+
+    Args:
+        repository: ChatRepo: .
+
+    Returns:
+        AgentChatSessionListResponse: .
+    """
     return AgentChatSessionListResponse(
-        items=[
-            _chat_session_to_response(session)
-            for session in repository.list_sessions(limit=20)
-        ]
+        items=[_chat_session_to_response(session) for session in repository.list_sessions(limit=20)]
     )
 
 
@@ -536,7 +574,15 @@ def get_agent_chat_session(
     session_id: str,
     repository: ChatRepo,
 ) -> AgentChatSessionDetailResponse:
-    """Return one persisted user chat session and its messages."""
+    """Return one persisted user chat session and its messages.
+
+    Args:
+        session_id: str: .
+        repository: ChatRepo: .
+
+    Returns:
+        AgentChatSessionDetailResponse: .
+    """
     detail = repository.get_session_detail(session_id)
     if detail is None:
         raise HTTPException(
@@ -568,7 +614,14 @@ def get_agent_chat_session(
     response_model=StockAnalysisScheduleResponse,
 )
 def get_stock_analysis_schedule(repository: ScheduleRepo) -> StockAnalysisScheduleResponse:
-    """Return the persisted daily stock-analysis schedule."""
+    """Return the persisted daily stock-analysis schedule.
+
+    Args:
+        repository: ScheduleRepo: .
+
+    Returns:
+        StockAnalysisScheduleResponse: .
+    """
     return _schedule_to_response(repository.get_stock_analysis_schedule())
 
 
@@ -582,7 +635,17 @@ def update_stock_analysis_schedule(
     _idempotency_key: IdempotencyKey,
     _actor_id: Annotated[str, Depends(require_local_admin)],
 ) -> StockAnalysisScheduleResponse:
-    """Update the persisted daily stock-analysis schedule."""
+    """Update the persisted daily stock-analysis schedule.
+
+    Args:
+        request: StockAnalysisScheduleUpdate: .
+        repository: ScheduleRepo: .
+        _idempotency_key: IdempotencyKey: .
+        _actor_id: Annotated[str, Depends(require_local_admin)]: .
+
+    Returns:
+        StockAnalysisScheduleResponse: .
+    """
     now = datetime.now(UTC)
     schedule = StockAnalysisSchedule(
         enabled=request.enabled,
@@ -599,7 +662,14 @@ def update_stock_analysis_schedule(
 def _schedule_to_response(
     schedule: StockAnalysisSchedule,
 ) -> StockAnalysisScheduleResponse:
-    """Convert a schedule model to HTTP response."""
+    """Convert a schedule model to HTTP response.
+
+    Args:
+        schedule: StockAnalysisSchedule: .
+
+    Returns:
+        StockAnalysisScheduleResponse: .
+    """
     return StockAnalysisScheduleResponse(
         schedule_id=schedule.schedule_id,
         run_type=schedule.run_type,
@@ -621,7 +691,16 @@ def _resolve_scope_alias(
     strategy_service: StrategyService,
     owner_id: str = "local-admin",
 ) -> str:
-    """Resolve user-facing scope aliases to persisted scope version IDs."""
+    """Resolve user-facing scope aliases to persisted scope version IDs.
+
+    Args:
+        scope_version_id: str: .
+        strategy_service: StrategyService: .
+        owner_id: str: .
+
+    Returns:
+        str: .
+    """
     if scope_version_id != "scope-current":
         return scope_version_id
     try:
@@ -638,13 +717,27 @@ def _resolve_scope_alias(
 
 
 def _chat_title(message: str) -> str:
-    """Return a compact session title from the first user message."""
+    """Return a compact session title from the first user message.
+
+    Args:
+        message: str: .
+
+    Returns:
+        str: .
+    """
     title = " ".join(message.strip().split())
     return title[:80] or "Untitled research chat"
 
 
 def _chat_session_to_response(session) -> AgentChatSessionResponse:
-    """Convert a chat session model to an API response."""
+    """Convert a chat session model to an API response.
+
+    Args:
+        session: Any: .
+
+    Returns:
+        AgentChatSessionResponse: .
+    """
     return AgentChatSessionResponse(
         session_id=session.session_id,
         title=session.title,
@@ -657,11 +750,27 @@ def _chat_session_to_response(session) -> AgentChatSessionResponse:
 
 
 def _safe_artifact_payload(payload: dict) -> dict:
-    """Return a frontend-safe artifact payload view."""
+    """Return a frontend-safe artifact payload view.
+
+    Args:
+        payload: dict: .
+
+    Returns:
+        dict: .
+    """
     return {key: _redact_payload_value(key, value) for key, value in payload.items()}
 
 
 def _redact_payload_value(key: str, value):  # noqa: ANN001, ANN202
+    """Process _redact_payload_value.
+
+    Args:
+        key: str: .
+        value: Any: .
+
+    Returns:
+        Any: .
+    """
     lowered = key.lower()
     if any(marker in lowered for marker in _SENSITIVE_PAYLOAD_KEYS):
         return "[redacted]"

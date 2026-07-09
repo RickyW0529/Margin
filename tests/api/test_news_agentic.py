@@ -18,7 +18,14 @@ from margin.settings import get_settings
 def test_agentic_news_refresh_starts_from_quant_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test that the agentic news endpoint starts a PASS-only quant-run refresh."""
+    """Test that the agentic news endpoint starts a PASS-only quant-run refresh.
+
+    Args:
+        monkeypatch: pytest.MonkeyPatch: .
+
+    Returns:
+        None: .
+    """
     get_settings.cache_clear()
     fake_service = FakeAgenticNewsService()
     app = create_app()
@@ -58,11 +65,24 @@ def test_agentic_news_refresh_starts_from_quant_run(
 def test_agentic_provider_builder_requires_active_runtime_providers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test that agentic news does not fall back to env provider settings."""
+    """Test that agentic news does not fall back to env provider settings.
+
+    Args:
+        monkeypatch: pytest.MonkeyPatch: .
+
+    Returns:
+        None: .
+    """
 
     class MissingRuntimeFactory:
+        """Class implementing MissingRuntimeFactory.."""
+
         def build_llm(self) -> Any:
-            """Raise an error simulating missing active provider configuration."""
+            """Raise an error simulating missing active provider configuration.
+
+            Returns:
+                Any: .
+            """
             raise LookupError("active provider config not found: llm")
 
     monkeypatch.setattr(
@@ -76,16 +96,25 @@ def test_agentic_provider_builder_requires_active_runtime_providers(
 
 
 def test_agentic_llm_service_uses_non_graph_audit() -> None:
-    """Test that agentic news LLM calls are not forced through LangGraph audit FKs."""
+    """Test that agentic news LLM calls are not forced through LangGraph audit FKs.
+
+    Returns:
+        None: .
+    """
     service = dependency_module._build_agentic_news_llm_service("provider")
 
     assert service._audit.__class__.__name__ == "MemoryLLMCallAuditRepository"
 
 
 class FakeAgenticNewsService:
-    """Fake agentic news service used by the API test."""
+    """Fake agentic news service used by the API test.."""
 
     def __init__(self) -> None:
+        """Helper _init__.
+
+        Returns:
+            None: .
+        """
         self.request: dict[str, object] = {}
 
     def run_for_quant_run(
@@ -101,14 +130,15 @@ class FakeAgenticNewsService:
         """Capture the request and return a completed run.
 
         Args:
-            scope_version_id: The research scope version identifier.
-            quant_run_id: The quant run to refresh news for.
-            decision_at: The decision timestamp for the refresh.
-            include_near_threshold: Whether to include near-threshold candidates.
-            max_workers: Maximum number of parallel workers.
+            scope_version_id: str: .
+            quant_run_id: str: .
+            decision_at: datetime: .
+            include_near_threshold: bool: .
+            max_workers: int: .
+            idempotency_key: str | None: .
 
         Returns:
-            A completed ``NewsAgentRun`` instance.
+            NewsAgentRun: .
         """
         self.request = {
             "scope_version_id": scope_version_id,

@@ -24,8 +24,7 @@ TERMINATE_DATABASE_CONNECTIONS = text(
 )
 
 OUTBOX_PENDING_COUNT = text(
-    "SELECT count(*) FROM transactional_outbox "
-    "WHERE state IN ('pending', 'failed_retryable')"
+    "SELECT count(*) FROM transactional_outbox WHERE state IN ('pending', 'failed_retryable')"
 )
 
 ACTIVE_PROVIDER_CONFIG_COUNT = text(
@@ -39,23 +38,18 @@ RETRYABLE_STEP_COUNT = text(
 )
 
 WAITING_BUDGET_COUNT = text(
-    "SELECT count(*) FROM orchestration_step_attempts "
-    "WHERE state = 'waiting_budget'"
+    "SELECT count(*) FROM orchestration_step_attempts WHERE state = 'waiting_budget'"
 )
 
 WAITING_RATE_LIMIT_COUNT = text(
-    "SELECT count(*) FROM orchestration_step_attempts "
-    "WHERE state = 'waiting_rate_limit'"
+    "SELECT count(*) FROM orchestration_step_attempts WHERE state = 'waiting_rate_limit'"
 )
 
 FAILED_RETRYABLE_COUNT = text(
-    "SELECT count(*) FROM orchestration_step_attempts "
-    "WHERE state = 'failed_retryable'"
+    "SELECT count(*) FROM orchestration_step_attempts WHERE state = 'failed_retryable'"
 )
 
-SECURITY_NAMES_ACTIVE = text(
-    "select security_id, name from securities where system_to is null"
-)
+SECURITY_NAMES_ACTIVE = text("select security_id, name from securities where system_to is null")
 
 INDEX_WEIGHT_MATCH = text(
     """

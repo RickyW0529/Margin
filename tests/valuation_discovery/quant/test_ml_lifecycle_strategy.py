@@ -19,7 +19,11 @@ DECISION_AT = datetime(2026, 6, 30, 15, 0, tzinfo=UTC)
 
 
 def test_ml_lifecycle_strategy_routes_from_snapshot_metadata() -> None:
-    """The ML strategy family should produce ML metadata and 80% total stock weights."""
+    """The ML strategy family should produce ML metadata and 80% total stock weights.
+
+    Returns:
+        None: .
+    """
     snapshot = _ml_snapshot(("strong.SZ", "steady.SZ", "overheated.SZ"))
     repository = MemoryQuantRepository()
     repository.set_cross_section(
@@ -74,27 +78,29 @@ def test_ml_lifecycle_strategy_routes_from_snapshot_metadata() -> None:
     assert strong.factor_details["ml_strategy"]["profile_id"] == (
         "liquid-large-mid-lgbm-recent-trend80-ddstop-v1"
     )
-    assert strong.factor_details["ml_strategy"]["portfolio_construction"][
-        "score_temperature"
-    ] == 0.2
-    assert strong.factor_details["ml_strategy"]["execution_boundary"] == (
-        "research_only_no_order"
+    assert (
+        strong.factor_details["ml_strategy"]["portfolio_construction"]["score_temperature"] == 0.2
     )
+    assert strong.factor_details["ml_strategy"]["execution_boundary"] == ("research_only_no_order")
     assert strong.factor_details["ml_strategy"]["fallback_used"] is False
     assert strong.factor_details["ml_strategy"]["feature_coverage"]["coverage_ratio"] >= 0.7
-    assert strong.factor_details["ml_strategy"]["target_weight"] > steady.factor_details[
-        "ml_strategy"
-    ]["target_weight"]
+    assert (
+        strong.factor_details["ml_strategy"]["target_weight"]
+        > steady.factor_details["ml_strategy"]["target_weight"]
+    )
     assert sum(
-        result.factor_details["ml_strategy"]["target_weight"]
-        for result in results
+        result.factor_details["ml_strategy"]["target_weight"] for result in results
     ) == pytest.approx(0.8)
     assert overheated.review_required is True
     assert "short_term_overheat" in overheated.review_reasons
 
 
 def test_default_strategy_does_not_emit_ml_strategy_metadata() -> None:
-    """The existing multi-factor path must stay compatible when no ML family is selected."""
+    """The existing multi-factor path must stay compatible when no ML family is selected.
+
+    Returns:
+        None: .
+    """
     snapshot = QuantInputSnapshot(
         snapshot_id="qis-default-strategy",
         scope_version_id="scope-v1",
@@ -123,6 +129,14 @@ def test_default_strategy_does_not_emit_ml_strategy_metadata() -> None:
 
 
 def _ml_snapshot(security_ids: tuple[str, ...]) -> QuantInputSnapshot:
+    """Helper ml_snapshot.
+
+    Args:
+        security_ids: tuple[str, ...]: .
+
+    Returns:
+        QuantInputSnapshot: .
+    """
     return QuantInputSnapshot(
         snapshot_id="qis-ml-lifecycle",
         scope_version_id="scope-v1",
@@ -164,6 +178,21 @@ def _row(
     volatility_120d: float = 0.26,
     max_drawdown_250d: float = -0.14,
 ) -> dict[str, object]:
+    """Helper row.
+
+    Args:
+        security_id: str: .
+        revenue_yoy: float: .
+        profit_yoy: float: .
+        return_6m_ex_1m: float: .
+        return_20d: float: .
+        industry_lifecycle_score: float: .
+        volatility_120d: float: .
+        max_drawdown_250d: float: .
+
+    Returns:
+        dict[str, object]: .
+    """
     return {
         "security_id": security_id,
         "name": security_id,

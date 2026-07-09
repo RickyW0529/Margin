@@ -14,7 +14,7 @@ from margin.agent_runtime.db_models import AgentChatMessageRow, AgentChatSession
 
 
 class AgentChatSession(BaseModel):
-    """One user-facing chat session."""
+    """One user-facing chat session.."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -28,7 +28,7 @@ class AgentChatSession(BaseModel):
 
 
 class AgentChatMessage(BaseModel):
-    """One persisted chat message."""
+    """One persisted chat message.."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -42,7 +42,7 @@ class AgentChatMessage(BaseModel):
 
 
 class AgentChatSessionDetail(BaseModel):
-    """A session plus ordered messages."""
+    """A session plus ordered messages.."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -51,19 +51,47 @@ class AgentChatSessionDetail(BaseModel):
 
 
 class AgentChatRepository(Protocol):
-    """Persistence contract for user-facing Agent chat history."""
+    """Persistence contract for user-facing Agent chat history.."""
 
     def get_session(self, session_id: str) -> AgentChatSession | None:
-        """Return one session by ID."""
+        """Return one session by ID.
+
+        Args:
+            session_id: str: .
+
+        Returns:
+            AgentChatSession | None: .
+        """
 
     def list_sessions(self, *, limit: int = 20) -> list[AgentChatSession]:
-        """List recent sessions newest first."""
+        """List recent sessions newest first.
+
+        Args:
+            limit: int: .
+
+        Returns:
+            list[AgentChatSession]: .
+        """
 
     def upsert_session(self, session: AgentChatSession) -> AgentChatSession:
-        """Create or update a session."""
+        """Create or update a session.
+
+        Args:
+            session: AgentChatSession: .
+
+        Returns:
+            AgentChatSession: .
+        """
 
     def add_message(self, message: AgentChatMessage) -> AgentChatMessage:
-        """Persist a chat message idempotently."""
+        """Persist a chat message idempotently.
+
+        Args:
+            message: AgentChatMessage: .
+
+        Returns:
+            AgentChatMessage: .
+        """
 
     def list_messages(
         self,
@@ -71,24 +99,60 @@ class AgentChatRepository(Protocol):
         *,
         limit: int | None = None,
     ) -> list[AgentChatMessage]:
-        """List messages oldest first."""
+        """List messages oldest first.
+
+        Args:
+            session_id: str: .
+            limit: int | None: .
+
+        Returns:
+            list[AgentChatMessage]: .
+        """
 
     def get_session_detail(self, session_id: str) -> AgentChatSessionDetail | None:
-        """Return a session with ordered messages."""
+        """Return a session with ordered messages.
+
+        Args:
+            session_id: str: .
+
+        Returns:
+            AgentChatSessionDetail | None: .
+        """
 
 
 class MemoryAgentChatRepository:
-    """In-memory chat repository for deterministic tests."""
+    """In-memory chat repository for deterministic tests.."""
 
     def __init__(self) -> None:
+        """Process __init__.
+
+        Returns:
+            None: .
+        """
         self._sessions: dict[str, AgentChatSession] = {}
         self._messages: dict[str, AgentChatMessage] = {}
         self._message_order: list[str] = []
 
     def get_session(self, session_id: str) -> AgentChatSession | None:
+        """Process get_session.
+
+        Args:
+            session_id: str: .
+
+        Returns:
+            AgentChatSession | None: .
+        """
         return self._sessions.get(session_id)
 
     def list_sessions(self, *, limit: int = 20) -> list[AgentChatSession]:
+        """Process list_sessions.
+
+        Args:
+            limit: int: .
+
+        Returns:
+            list[AgentChatSession]: .
+        """
         return sorted(
             self._sessions.values(),
             key=lambda session: session.updated_at,
@@ -96,10 +160,26 @@ class MemoryAgentChatRepository:
         )[:limit]
 
     def upsert_session(self, session: AgentChatSession) -> AgentChatSession:
+        """Process upsert_session.
+
+        Args:
+            session: AgentChatSession: .
+
+        Returns:
+            AgentChatSession: .
+        """
         self._sessions[session.session_id] = session
         return session
 
     def add_message(self, message: AgentChatMessage) -> AgentChatMessage:
+        """Process add_message.
+
+        Args:
+            message: AgentChatMessage: .
+
+        Returns:
+            AgentChatMessage: .
+        """
         current = self._messages.get(message.message_id)
         if current is not None and current != message:
             raise ValueError(f"chat message '{message.message_id}' is immutable")
@@ -119,6 +199,15 @@ class MemoryAgentChatRepository:
         *,
         limit: int | None = None,
     ) -> list[AgentChatMessage]:
+        """Process list_messages.
+
+        Args:
+            session_id: str: .
+            limit: int | None: .
+
+        Returns:
+            list[AgentChatMessage]: .
+        """
         messages = [
             self._messages[message_id]
             for message_id in self._message_order
@@ -129,6 +218,14 @@ class MemoryAgentChatRepository:
         return messages[-limit:]
 
     def get_session_detail(self, session_id: str) -> AgentChatSessionDetail | None:
+        """Process get_session_detail.
+
+        Args:
+            session_id: str: .
+
+        Returns:
+            AgentChatSessionDetail | None: .
+        """
         session = self.get_session(session_id)
         if session is None:
             return None
@@ -139,17 +236,41 @@ class MemoryAgentChatRepository:
 
 
 class SQLAlchemyAgentChatRepository:
-    """SQLAlchemy-backed chat repository."""
+    """SQLAlchemy-backed chat repository.."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
+        """Process __init__.
+
+        Args:
+            session_factory: Callable[[], Session]: .
+
+        Returns:
+            None: .
+        """
         self._session_factory = session_factory
 
     def get_session(self, session_id: str) -> AgentChatSession | None:
+        """Process get_session.
+
+        Args:
+            session_id: str: .
+
+        Returns:
+            AgentChatSession | None: .
+        """
         with self._session_factory() as session:
             row = session.get(AgentChatSessionRow, session_id)
             return _session_from_row(row) if row else None
 
     def list_sessions(self, *, limit: int = 20) -> list[AgentChatSession]:
+        """Process list_sessions.
+
+        Args:
+            limit: int: .
+
+        Returns:
+            list[AgentChatSession]: .
+        """
         with self._session_factory() as session:
             rows = session.scalars(
                 select(AgentChatSessionRow)
@@ -159,6 +280,14 @@ class SQLAlchemyAgentChatRepository:
             return [_session_from_row(row) for row in rows]
 
     def upsert_session(self, chat_session: AgentChatSession) -> AgentChatSession:
+        """Process upsert_session.
+
+        Args:
+            chat_session: AgentChatSession: .
+
+        Returns:
+            AgentChatSession: .
+        """
         with self._session_factory.begin() as session:
             current = session.get(AgentChatSessionRow, chat_session.session_id)
             if current is None:
@@ -172,6 +301,14 @@ class SQLAlchemyAgentChatRepository:
             return chat_session
 
     def add_message(self, message: AgentChatMessage) -> AgentChatMessage:
+        """Process add_message.
+
+        Args:
+            message: AgentChatMessage: .
+
+        Returns:
+            AgentChatMessage: .
+        """
         with self._session_factory.begin() as session:
             current = session.get(AgentChatMessageRow, message.message_id)
             if current is None:
@@ -189,6 +326,15 @@ class SQLAlchemyAgentChatRepository:
         *,
         limit: int | None = None,
     ) -> list[AgentChatMessage]:
+        """Process list_messages.
+
+        Args:
+            session_id: str: .
+            limit: int | None: .
+
+        Returns:
+            list[AgentChatMessage]: .
+        """
         statement = (
             select(AgentChatMessageRow)
             .where(AgentChatMessageRow.session_id == session_id)
@@ -202,6 +348,14 @@ class SQLAlchemyAgentChatRepository:
         return messages[-limit:]
 
     def get_session_detail(self, session_id: str) -> AgentChatSessionDetail | None:
+        """Process get_session_detail.
+
+        Args:
+            session_id: str: .
+
+        Returns:
+            AgentChatSessionDetail | None: .
+        """
         session = self.get_session(session_id)
         if session is None:
             return None
@@ -220,7 +374,19 @@ def new_chat_session(
     language: str,
     now: datetime | None = None,
 ) -> AgentChatSession:
-    """Build a new chat session model."""
+    """Build a new chat session model.
+
+    Args:
+        session_id: str: .
+        title: str: .
+        scope_version_id: str: .
+        universe: str: .
+        language: str: .
+        now: datetime | None: .
+
+    Returns:
+        AgentChatSession: .
+    """
     timestamp = now or datetime.now(UTC)
     return AgentChatSession(
         session_id=session_id,
@@ -243,7 +409,20 @@ def new_chat_message(
     payload: dict | None = None,
     now: datetime | None = None,
 ) -> AgentChatMessage:
-    """Build a new chat message model."""
+    """Build a new chat message model.
+
+    Args:
+        message_id: str: .
+        session_id: str: .
+        role: str: .
+        content: str: .
+        run_id: str | None: .
+        payload: dict | None: .
+        now: datetime | None: .
+
+    Returns:
+        AgentChatMessage: .
+    """
     return AgentChatMessage(
         message_id=message_id,
         session_id=session_id,
@@ -256,7 +435,14 @@ def new_chat_message(
 
 
 def summarize_messages_for_prompt(messages: list[AgentChatMessage]) -> list[dict[str, str]]:
-    """Return compact context rows safe for prompt rendering."""
+    """Return compact context rows safe for prompt rendering.
+
+    Args:
+        messages: list[AgentChatMessage]: .
+
+    Returns:
+        list[dict[str, str]]: .
+    """
     return [
         {
             "role": message.role,
@@ -268,6 +454,14 @@ def summarize_messages_for_prompt(messages: list[AgentChatMessage]) -> list[dict
 
 
 def _session_to_row(session: AgentChatSession) -> AgentChatSessionRow:
+    """Process _session_to_row.
+
+    Args:
+        session: AgentChatSession: .
+
+    Returns:
+        AgentChatSessionRow: .
+    """
     return AgentChatSessionRow(
         session_id=session.session_id,
         title=session.title,
@@ -280,6 +474,14 @@ def _session_to_row(session: AgentChatSession) -> AgentChatSessionRow:
 
 
 def _session_from_row(row: AgentChatSessionRow) -> AgentChatSession:
+    """Process _session_from_row.
+
+    Args:
+        row: AgentChatSessionRow: .
+
+    Returns:
+        AgentChatSession: .
+    """
     return AgentChatSession(
         session_id=row.session_id,
         title=row.title,
@@ -292,6 +494,14 @@ def _session_from_row(row: AgentChatSessionRow) -> AgentChatSession:
 
 
 def _message_to_row(message: AgentChatMessage) -> AgentChatMessageRow:
+    """Process _message_to_row.
+
+    Args:
+        message: AgentChatMessage: .
+
+    Returns:
+        AgentChatMessageRow: .
+    """
     return AgentChatMessageRow(
         message_id=message.message_id,
         session_id=message.session_id,
@@ -304,6 +514,14 @@ def _message_to_row(message: AgentChatMessage) -> AgentChatMessageRow:
 
 
 def _message_from_row(row: AgentChatMessageRow) -> AgentChatMessage:
+    """Process _message_from_row.
+
+    Args:
+        row: AgentChatMessageRow: .
+
+    Returns:
+        AgentChatMessage: .
+    """
     return AgentChatMessage(
         message_id=row.message_id,
         session_id=row.session_id,

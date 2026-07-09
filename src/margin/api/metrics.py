@@ -19,7 +19,6 @@ def metrics() -> Response:
     """Return the current metrics payload in Prometheus exposition format.
 
     Returns:
-        A Response with Prometheus-formatted metrics content and the
-        appropriate content type.
+        Response: .
     """
     return Response(content=generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)

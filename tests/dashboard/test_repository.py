@@ -36,7 +36,14 @@ from margin.storage.database import (
 
 
 def _run(run_id: str = "dr_repo") -> ResearchRun:
-    """Build a deterministic research run fixture."""
+    """Build a deterministic research run fixture.
+
+    Args:
+        run_id: str: .
+
+    Returns:
+        ResearchRun: .
+    """
     return ResearchRun(
         run_id=run_id,
         decision_at=datetime(2026, 6, 19, tzinfo=UTC),
@@ -49,7 +56,14 @@ def _run(run_id: str = "dr_repo") -> ResearchRun:
 
 
 def _item(run_id: str = "dr_repo") -> ResearchItem:
-    """Build a deterministic research item fixture."""
+    """Build a deterministic research item fixture.
+
+    Args:
+        run_id: str: .
+
+    Returns:
+        ResearchItem: .
+    """
     return ResearchItem(
         item_id="di_repo",
         run_id=run_id,
@@ -72,7 +86,11 @@ def _item(run_id: str = "dr_repo") -> ResearchItem:
 
 
 def test_memory_repository_round_trips_run_items_and_feedback():
-    """Test that the memory repository round-trips runs, items, and feedback."""
+    """Test that the memory repository round-trips runs, items, and feedback.
+
+    Returns:
+        Any: .
+    """
     repo = MemoryDashboardRepository()
     run = _run()
     item = _item(run.run_id)
@@ -97,7 +115,10 @@ def test_sqlalchemy_repository_round_trips_run_items_and_feedback(database_url):
     """Test that the SQLAlchemy repository round-trips runs, items, and feedback.
 
     Args:
-        database_url: Connection string for the PostgreSQL test server.
+        database_url: Any: .
+
+    Returns:
+        Any: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -131,7 +152,14 @@ def test_sqlalchemy_repository_round_trips_run_items_and_feedback(database_url):
 
 
 def test_sqlalchemy_candidate_list_prefers_complete_run_for_same_decision_time(database_url):
-    """Candidate queries choose the newer complete projection when PIT times tie."""
+    """Candidate queries choose the newer complete projection when PIT times tie.
+
+    Args:
+        database_url: Any: .
+
+    Returns:
+        Any: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -156,16 +184,10 @@ def test_sqlalchemy_candidate_list_prefers_complete_run_for_same_decision_time(d
             "created_at": datetime(2026, 6, 22, tzinfo=UTC),
         }
     )
-    old_item = _item(old_run.run_id).model_copy(
-        update={"item_id": "di_old", "symbol": "000001.SZ"}
-    )
+    old_item = _item(old_run.run_id).model_copy(update={"item_id": "di_old", "symbol": "000001.SZ"})
     new_items = [
-        _item(new_run.run_id).model_copy(
-            update={"item_id": "di_new_1", "symbol": "002416.SZ"}
-        ),
-        _item(new_run.run_id).model_copy(
-            update={"item_id": "di_new_2", "symbol": "600740.SH"}
-        ),
+        _item(new_run.run_id).model_copy(update={"item_id": "di_new_1", "symbol": "002416.SZ"}),
+        _item(new_run.run_id).model_copy(update={"item_id": "di_new_2", "symbol": "600740.SH"}),
     ]
 
     try:
@@ -195,7 +217,14 @@ def test_sqlalchemy_candidate_list_prefers_complete_run_for_same_decision_time(d
 def test_sqlalchemy_candidate_list_prefers_stock_analyst_adjusted_projection(
     database_url,
 ) -> None:
-    """Adjusted StockAnalyst projections are the dashboard-visible latest run."""
+    """Adjusted StockAnalyst projections are the dashboard-visible latest run.
+
+    Args:
+        database_url: Any: .
+
+    Returns:
+        None: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -293,12 +322,8 @@ def test_sqlalchemy_candidate_list_prefers_stock_analyst_adjusted_projection(
             "000002.SZ",
         ]
         assert [item.adjusted_weight for item in response.items] == [0.4, 0.4]
-        assert {
-            item.agent_adjustment["source"] for item in response.items
-        } == {"StockAnalystAgent"}
-        artifact = context_store.get_artifact(
-            "ctx_ar_sql_projection_portfolio_adjustment"
-        )
+        assert {item.agent_adjustment["source"] for item in response.items} == {"StockAnalystAgent"}
+        artifact = context_store.get_artifact("ctx_ar_sql_projection_portfolio_adjustment")
         assert artifact is not None
         assert artifact.payload_json["removed_security_ids"] == ["000003.SZ"]
     finally:

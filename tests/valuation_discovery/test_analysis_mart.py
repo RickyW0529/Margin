@@ -52,7 +52,7 @@ def test_memory_feature_mart_persists_snapshot_idempotently() -> None:
     """Verify fourth-layer quant feature snapshots can be replayed safely.
 
     Returns:
-        None.
+        None: .
     """
     repository = MemoryAnalysisMartRepository()
     snapshot, rows = _feature_snapshot()
@@ -61,10 +61,13 @@ def test_memory_feature_mart_persists_snapshot_idempotently() -> None:
     repository.upsert_feature_snapshot(snapshot, rows)
 
     assert repository.get_feature_snapshot("qfsnap-1") == snapshot
-    assert repository.latest_feature_snapshot(
-        scope_version_id="scope-v1",
-        as_of=DECISION_AT,
-    ) == snapshot
+    assert (
+        repository.latest_feature_snapshot(
+            scope_version_id="scope-v1",
+            as_of=DECISION_AT,
+        )
+        == snapshot
+    )
     assert repository.list_feature_rows("qfsnap-1") == list(rows)
 
 
@@ -72,7 +75,7 @@ def test_memory_feature_mart_rejects_conflicting_snapshot_replay() -> None:
     """Verify feature mart rows are append-only and cannot be overwritten.
 
     Returns:
-        None.
+        None: .
     """
     repository = MemoryAnalysisMartRepository()
     snapshot, rows = _feature_snapshot()
@@ -92,10 +95,10 @@ def test_postgres_feature_mart_persists_snapshot(database_url: str) -> None:
     """Verify the PostgreSQL repository stores feature snapshots and rows.
 
     Args:
-        database_url: PostgreSQL connection URL for the isolated test database.
+        database_url: str: .
 
     Returns:
-        None.
+        None: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -124,19 +127,17 @@ def test_postgres_feature_mart_rolls_back_partial_child_conflict(
     """Verify feature ETL never leaves a snapshot header without its rows.
 
     Args:
-        database_url: PostgreSQL connection URL for the isolated test database.
+        database_url: str: .
 
     Returns:
-        None.
+        None: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
     snapshot, rows = _feature_snapshot(snapshot_id="qfsnap-rollback")
     existing_snapshot, existing_rows = _feature_snapshot(snapshot_id="qfsnap-existing")
-    existing_snapshot = QuantFeatureSnapshot(
-        **{**existing_snapshot.__dict__, "row_count": 1}
-    )
+    existing_snapshot = QuantFeatureSnapshot(**{**existing_snapshot.__dict__, "row_count": 1})
     existing_row = QuantFeatureRow(
         **{
             **existing_rows[0].__dict__,
@@ -169,7 +170,7 @@ def test_memory_analysis_mart_persists_bundle_idempotently() -> None:
     """Verify a complete fourth-layer bundle can be replayed without duplication.
 
     Returns:
-        None.
+        None: .
     """
     repository = MemoryAnalysisMartRepository()
     bundle = _bundle()
@@ -178,11 +179,14 @@ def test_memory_analysis_mart_persists_bundle_idempotently() -> None:
     repository.upsert_bundle(bundle)
 
     assert repository.get_snapshot("asnap-1") == bundle.snapshot
-    assert repository.latest_snapshot(
-        security_id="000001.SZ",
-        scope_version_id="scope-v1",
-        as_of=DECISION_AT,
-    ) == bundle.snapshot
+    assert (
+        repository.latest_snapshot(
+            security_id="000001.SZ",
+            scope_version_id="scope-v1",
+            as_of=DECISION_AT,
+        )
+        == bundle.snapshot
+    )
     assert repository.list_metrics("asnap-1") == list(bundle.metrics)
     assert repository.list_findings("asnap-1") == list(bundle.findings)
     assert repository.list_evidence_links("asnap-1") == list(bundle.evidence_links)
@@ -192,7 +196,7 @@ def test_memory_analysis_mart_rejects_conflicting_replay() -> None:
     """Verify append-only Analysis Mart rows cannot be overwritten with new content.
 
     Returns:
-        None.
+        None: .
     """
     repository = MemoryAnalysisMartRepository()
     bundle = _bundle()
@@ -212,7 +216,7 @@ def test_memory_analysis_mart_latest_snapshot_uses_decision_time() -> None:
     """Verify the latest effective analysis snapshot is selected by decision time.
 
     Returns:
-        None.
+        None: .
     """
     repository = MemoryAnalysisMartRepository()
     older = _bundle(snapshot_id="asnap-old", decision_at=datetime(2026, 6, 23, tzinfo=UTC))
@@ -220,26 +224,32 @@ def test_memory_analysis_mart_latest_snapshot_uses_decision_time() -> None:
     repository.upsert_bundle(newer)
     repository.upsert_bundle(older)
 
-    assert repository.latest_snapshot(
-        security_id="000001.SZ",
-        scope_version_id="scope-v1",
-        as_of=DECISION_AT,
-    ) == newer.snapshot
-    assert repository.latest_snapshot(
-        security_id="000001.SZ",
-        scope_version_id="scope-v1",
-        as_of=datetime(2026, 6, 23, 12, 0, tzinfo=UTC),
-    ) == older.snapshot
+    assert (
+        repository.latest_snapshot(
+            security_id="000001.SZ",
+            scope_version_id="scope-v1",
+            as_of=DECISION_AT,
+        )
+        == newer.snapshot
+    )
+    assert (
+        repository.latest_snapshot(
+            security_id="000001.SZ",
+            scope_version_id="scope-v1",
+            as_of=datetime(2026, 6, 23, 12, 0, tzinfo=UTC),
+        )
+        == older.snapshot
+    )
 
 
 def test_postgres_analysis_mart_persists_bundle(database_url: str) -> None:
     """Verify the PostgreSQL repository stores snapshots, metrics, findings, and links.
 
     Args:
-        database_url: PostgreSQL connection URL for the isolated test database.
+        database_url: str: .
 
     Returns:
-        None.
+        None: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -270,10 +280,10 @@ def test_postgres_analysis_mart_rolls_back_partial_child_conflict(
     """Verify analysis-result ETL commits snapshot and child rows atomically.
 
     Args:
-        database_url: PostgreSQL connection URL for the isolated test database.
+        database_url: str: .
 
     Returns:
-        None.
+        None: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
@@ -317,7 +327,7 @@ def test_analysis_mart_publisher_materializes_quant_result() -> None:
     """Verify quant output is transformed into AI-ready fourth-layer analysis rows.
 
     Returns:
-        None.
+        None: .
     """
     repository = MemoryAnalysisMartRepository()
     publisher = AnalysisMartPublisher(repository)
@@ -397,7 +407,11 @@ def test_analysis_mart_publisher_materializes_quant_result() -> None:
 
 
 def test_analysis_mart_publisher_materializes_ml_strategy_details() -> None:
-    """Verify ML lifecycle strategy output becomes Analysis Mart metrics and finding detail."""
+    """Verify ML lifecycle strategy output becomes Analysis Mart metrics and finding detail.
+
+    Returns:
+        None: .
+    """
     repository = MemoryAnalysisMartRepository()
     publisher = AnalysisMartPublisher(repository)
     result = QuantResult(
@@ -482,7 +496,15 @@ def _bundle(
     snapshot_id: str = "asnap-1",
     decision_at: datetime = DECISION_AT,
 ) -> AnalysisMartBundle:
-    """Build a deterministic Analysis Mart bundle with snapshot, metrics, and findings."""
+    """Build a deterministic Analysis Mart bundle with snapshot, metrics, and findings.
+
+    Args:
+        snapshot_id: str: .
+        decision_at: datetime: .
+
+    Returns:
+        AnalysisMartBundle: .
+    """
     snapshot = AnalysisSnapshot(
         analysis_snapshot_id=snapshot_id,
         security_id="000001.SZ",
@@ -573,7 +595,15 @@ def _feature_snapshot(
     snapshot_id: str = "qfsnap-1",
     decision_at: datetime = DECISION_AT,
 ) -> tuple[QuantFeatureSnapshot, tuple[QuantFeatureRow, ...]]:
-    """Build a deterministic quant feature snapshot with two rows."""
+    """Build a deterministic quant feature snapshot with two rows.
+
+    Args:
+        snapshot_id: str: .
+        decision_at: datetime: .
+
+    Returns:
+        tuple[QuantFeatureSnapshot, tuple[QuantFeatureRow, ...]]: .
+    """
     snapshot = QuantFeatureSnapshot(
         feature_snapshot_id=snapshot_id,
         scope_version_id="scope-v1",
@@ -645,26 +675,30 @@ def _feature_snapshot(
 
 
 def _delete_bundle_rows(session, snapshot_id: str) -> None:
-    """Delete all Analysis Mart child rows for a given snapshot ID."""
-    session.query(AnalysisEvidenceLinkRow).filter_by(
-        analysis_snapshot_id=snapshot_id
-    ).delete()
-    session.query(AnalysisFindingRow).filter_by(
-        analysis_snapshot_id=snapshot_id
-    ).delete()
-    session.query(AnalysisMetricRow).filter_by(
-        analysis_snapshot_id=snapshot_id
-    ).delete()
-    session.query(AnalysisSnapshotRow).filter_by(
-        analysis_snapshot_id=snapshot_id
-    ).delete()
+    """Delete all Analysis Mart child rows for a given snapshot ID.
+
+    Args:
+        session: Any: .
+        snapshot_id: str: .
+
+    Returns:
+        None: .
+    """
+    session.query(AnalysisEvidenceLinkRow).filter_by(analysis_snapshot_id=snapshot_id).delete()
+    session.query(AnalysisFindingRow).filter_by(analysis_snapshot_id=snapshot_id).delete()
+    session.query(AnalysisMetricRow).filter_by(analysis_snapshot_id=snapshot_id).delete()
+    session.query(AnalysisSnapshotRow).filter_by(analysis_snapshot_id=snapshot_id).delete()
 
 
 def _delete_feature_rows(session, snapshot_id: str) -> None:
-    """Delete all quant feature rows and snapshot header for a given snapshot ID."""
-    session.query(QuantFeatureRowRow).filter_by(
-        feature_snapshot_id=snapshot_id
-    ).delete()
-    session.query(QuantFeatureSnapshotRow).filter_by(
-        feature_snapshot_id=snapshot_id
-    ).delete()
+    """Delete all quant feature rows and snapshot header for a given snapshot ID.
+
+    Args:
+        session: Any: .
+        snapshot_id: str: .
+
+    Returns:
+        None: .
+    """
+    session.query(QuantFeatureRowRow).filter_by(feature_snapshot_id=snapshot_id).delete()
+    session.query(QuantFeatureSnapshotRow).filter_by(feature_snapshot_id=snapshot_id).delete()

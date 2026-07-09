@@ -38,29 +38,14 @@ T = TypeVar("T")
 
 
 class WriteProviderSecretRequest(BaseModel):
-    """Write-only provider secret request.
-
-    Attributes:
-        secret_name: Name of the secret to write.
-        secret_value: Plaintext value to encrypt and store.
-    """
+    """Write-only provider secret request.."""
 
     secret_name: str
     secret_value: str
 
 
 class SecretMetadataResponse(BaseModel):
-    """Safe provider secret metadata response.
-
-    Attributes:
-        configured: Whether the secret is currently active.
-        last_four: Last four characters of the plaintext for display.
-        version_id: Unique identifier of the secret version.
-        status: Lifecycle status (e.g. ``active``, ``deactivated``).
-        updated_at: UTC timestamp of the last status change.
-        provider_name: Name of the provider the secret belongs to.
-        secret_name: Name of the secret within the provider.
-    """
+    """Safe provider secret metadata response.."""
 
     configured: bool
     last_four: str
@@ -75,10 +60,10 @@ class SecretMetadataResponse(BaseModel):
         """Build a response without plaintext, ciphertext, nonce, or key material.
 
         Args:
-            metadata: Internal secret metadata to project into a safe response.
+            metadata: SecretMetadata: .
 
         Returns:
-            A SecretMetadataResponse with no sensitive material exposed.
+            SecretMetadataResponse: .
         """
         return cls(
             configured=metadata.configured,
@@ -92,22 +77,7 @@ class SecretMetadataResponse(BaseModel):
 
 
 class ProviderConfigResponse(BaseModel):
-    """Safe provider config summary for the settings UI.
-
-    Attributes:
-        version_id: Unique identifier of the provider config version.
-        provider_name: Name of the provider.
-        provider_type: Capability category of the provider.
-        enabled: Whether the provider config is enabled.
-        lifecycle: Lifecycle status (e.g. ``draft``, ``active``, ``deprecated``).
-        base_url: Optional base URL for the provider API.
-    model_name: Optional model name used by the provider.
-        provider_category: Normalized UI/runtime category.
-        detected_provider: Provider id detected from URL within the category.
-        detected_label: Short label safe to display next to the category title.
-        is_custom_provider: Whether URL detection fell back to Custom.
-        secret_metadata: Optional safe metadata for the bound secret.
-    """
+    """Safe provider config summary for the settings UI.."""
 
     version_id: str
     provider_name: str
@@ -131,13 +101,11 @@ class ProviderConfigResponse(BaseModel):
         """Build a safe response with optional write-only secret metadata.
 
         Args:
-            version: Provider config version to render.
-            secret_store: Optional secret store for resolving bound secret
-                metadata. When None, secret_metadata is omitted.
+            version: ProviderConfigVersion: .
+            secret_store: SecretStore | None: .
 
         Returns:
-            A ProviderConfigResponse with safe fields and optional secret
-            metadata.
+            ProviderConfigResponse: .
         """
         secret_metadata = None
         if version.secret_version_id and secret_store is not None:
@@ -170,12 +138,12 @@ def list_provider_configs(
     """List provider config versions without returning secret contents.
 
     Args:
-        owner_id: Identifier of the owner whose configs should be listed.
-        service: Strategy service used to query provider configs.
-        secret_store: Optional secret store for resolving secret metadata.
+        owner_id: str: .
+        service: StrategyService: .
+        secret_store: SecretStore | None: .
 
     Returns:
-        A list of ProviderConfigResponse objects with safe metadata.
+        list[ProviderConfigResponse]: .
     """
     return [
         ProviderConfigResponse.from_version(version, secret_store)
@@ -193,13 +161,13 @@ def create_provider_config(
     """Create an append-only provider configuration version.
 
     Args:
-        version: Provider config version to create.
-        actor_id: Authenticated actor identifier.
-        idempotency_key: Idempotency key for the mutation.
-        service: Strategy service used to create the version.
+        version: ProviderConfigVersion: .
+        actor_id: str: .
+        idempotency_key: str: .
+        service: StrategyService: .
 
     Returns:
-        The created ProviderConfigVersion.
+        ProviderConfigVersion: .
     """
     return _call_service(
         lambda: service.create_provider_config(
@@ -222,15 +190,15 @@ def write_provider_secret(
     """Encrypt and bind a provider secret, returning metadata only.
 
     Args:
-        version_id: Provider config version to bind the secret to.
-        request: Write-only secret request containing the secret name and value.
-        actor_id: Authenticated actor identifier.
-        idempotency_key: Idempotency key for the mutation.
-        service: Strategy service used to write the secret.
-        secret_store: Encrypted secret store for persisting the secret.
+        version_id: str: .
+        request: WriteProviderSecretRequest: .
+        actor_id: str: .
+        idempotency_key: str: .
+        service: StrategyService: .
+        secret_store: SecretStore: .
 
     Returns:
-        SecretMetadataResponse with safe metadata for the stored secret.
+        SecretMetadataResponse: .
     """
     metadata = _call_service(
         lambda: service.write_provider_secret(
@@ -250,25 +218,21 @@ def test_provider_config(
     version_id: str,
     _actor_id: str = Depends(require_local_admin),
     _idempotency_key: str = Depends(require_idempotency_key),
-    health_service: ProviderConfigHealthService = Depends(
-        get_provider_config_health_service
-    ),
+    health_service: ProviderConfigHealthService = Depends(get_provider_config_health_service),
 ) -> ProviderHealth:
     """Run a read-only health check for a frozen provider config version.
 
     Args:
-        version_id: Provider config version to test.
-        _actor_id: Authenticated actor identifier (unused).
-        _idempotency_key: Idempotency key for the mutation (unused).
-        health_service: Provider health service used to run the check.
+        version_id: str: .
+        _actor_id: str: .
+        _idempotency_key: str: .
+        health_service: ProviderConfigHealthService: .
 
     Returns:
-        ProviderHealth result of the health check.
+        ProviderHealth: .
     """
     return _call_service(
-        lambda: health_service.test_connection(
-            provider_config_version_id=version_id
-        )
+        lambda: health_service.test_connection(provider_config_version_id=version_id)
     )
 
 
@@ -278,21 +242,19 @@ def activate_provider_config(
     actor_id: str = Depends(require_local_admin),
     idempotency_key: str = Depends(require_idempotency_key),
     service: StrategyService = Depends(get_strategy_service),
-    health_service: ProviderConfigHealthService = Depends(
-        get_provider_config_health_service
-    ),
+    health_service: ProviderConfigHealthService = Depends(get_provider_config_health_service),
 ) -> ProviderConfigVersion:
     """Activate a provider config version.
 
     Args:
-        version_id: Provider config version to activate.
-        actor_id: Authenticated actor identifier.
-        idempotency_key: Idempotency key for the mutation.
-        service: Strategy service used to activate the version.
-        health_service: Provider health service used to validate the connection.
+        version_id: str: .
+        actor_id: str: .
+        idempotency_key: str: .
+        service: StrategyService: .
+        health_service: ProviderConfigHealthService: .
 
     Returns:
-        The activated ProviderConfigVersion.
+        ProviderConfigVersion: .
     """
     activated = _call_service(
         lambda: service.activate_provider_config(
@@ -314,11 +276,11 @@ def list_universe_configs(
     """List universe definition versions.
 
     Args:
-        owner_id: Identifier of the owner whose universe configs should be listed.
-        service: Strategy service used to query universe definitions.
+        owner_id: str: .
+        service: StrategyService: .
 
     Returns:
-        A list of UniverseDefinitionVersion objects.
+        list[UniverseDefinitionVersion]: .
     """
     return service.list_universe_definitions(owner_id)
 
@@ -333,13 +295,13 @@ def create_universe_config(
     """Create an append-only universe definition version.
 
     Args:
-        version: Universe definition version to create.
-        actor_id: Authenticated actor identifier.
-        idempotency_key: Idempotency key for the mutation.
-        service: Strategy service used to create the version.
+        version: UniverseDefinitionVersion: .
+        actor_id: str: .
+        idempotency_key: str: .
+        service: StrategyService: .
 
     Returns:
-        The created UniverseDefinitionVersion.
+        UniverseDefinitionVersion: .
     """
     return _call_service(
         lambda: service.create_universe_definition(
@@ -360,13 +322,13 @@ def activate_universe_config(
     """Activate a universe definition version.
 
     Args:
-        version_id: Universe definition version to activate.
-        actor_id: Authenticated actor identifier.
-        idempotency_key: Idempotency key for the mutation.
-        service: Strategy service used to activate the version.
+        version_id: str: .
+        actor_id: str: .
+        idempotency_key: str: .
+        service: StrategyService: .
 
     Returns:
-        The activated UniverseDefinitionVersion.
+        UniverseDefinitionVersion: .
     """
     return _call_service(
         lambda: service.activate_universe_definition(
@@ -385,11 +347,11 @@ def list_indicator_views(
     """List indicator view versions.
 
     Args:
-        owner_id: Identifier of the owner whose indicator views should be listed.
-        service: Strategy service used to query indicator views.
+        owner_id: str: .
+        service: StrategyService: .
 
     Returns:
-        A list of IndicatorViewVersion objects.
+        list[IndicatorViewVersion]: .
     """
     return service.list_indicator_views(owner_id)
 
@@ -404,13 +366,13 @@ def create_indicator_view(
     """Create an append-only indicator view version.
 
     Args:
-        version: Indicator view version to create.
-        actor_id: Authenticated actor identifier.
-        idempotency_key: Idempotency key for the mutation.
-        service: Strategy service used to create the version.
+        version: IndicatorViewVersion: .
+        actor_id: str: .
+        idempotency_key: str: .
+        service: StrategyService: .
 
     Returns:
-        The created IndicatorViewVersion.
+        IndicatorViewVersion: .
     """
     return _call_service(
         lambda: service.create_indicator_view(
@@ -431,13 +393,13 @@ def activate_indicator_view(
     """Activate an indicator view version.
 
     Args:
-        version_id: Indicator view version to activate.
-        actor_id: Authenticated actor identifier.
-        idempotency_key: Idempotency key for the mutation.
-        service: Strategy service used to activate the version.
+        version_id: str: .
+        actor_id: str: .
+        idempotency_key: str: .
+        service: StrategyService: .
 
     Returns:
-        The activated IndicatorViewVersion.
+        IndicatorViewVersion: .
     """
     return _call_service(
         lambda: service.activate_indicator_view(
@@ -456,11 +418,11 @@ def list_quant_feature_sets(
     """List quant feature set versions.
 
     Args:
-        owner_id: Identifier of the owner whose quant feature sets should be listed.
-        service: Strategy service used to query quant feature sets.
+        owner_id: str: .
+        service: StrategyService: .
 
     Returns:
-        A list of QuantFeatureSetVersion objects.
+        list[QuantFeatureSetVersion]: .
     """
     return service.list_quant_feature_sets(owner_id)
 
@@ -475,13 +437,13 @@ def create_quant_feature_set(
     """Create an append-only quant feature set version.
 
     Args:
-        version: Quant feature set version to create.
-        actor_id: Authenticated actor identifier.
-        idempotency_key: Idempotency key for the mutation.
-        service: Strategy service used to create the version.
+        version: QuantFeatureSetVersion: .
+        actor_id: str: .
+        idempotency_key: str: .
+        service: StrategyService: .
 
     Returns:
-        The created QuantFeatureSetVersion.
+        QuantFeatureSetVersion: .
     """
     return _call_service(
         lambda: service.create_quant_feature_set(
@@ -502,13 +464,13 @@ def activate_quant_feature_set(
     """Activate a quant feature set version.
 
     Args:
-        version_id: Quant feature set version to activate.
-        actor_id: Authenticated actor identifier.
-        idempotency_key: Idempotency key for the mutation.
-        service: Strategy service used to activate the version.
+        version_id: str: .
+        actor_id: str: .
+        idempotency_key: str: .
+        service: StrategyService: .
 
     Returns:
-        The activated QuantFeatureSetVersion.
+        QuantFeatureSetVersion: .
     """
     return _call_service(
         lambda: service.activate_quant_feature_set(
@@ -527,11 +489,11 @@ def list_quant_strategies(
     """List quant strategy versions.
 
     Args:
-        owner_id: Identifier of the owner whose quant strategies should be listed.
-        service: Strategy service used to query quant strategies.
+        owner_id: str: .
+        service: StrategyService: .
 
     Returns:
-        A list of QuantStrategyVersion objects.
+        list[QuantStrategyVersion]: .
     """
     return service.list_quant_strategies(owner_id)
 
@@ -541,7 +503,7 @@ def get_quant_strategy_defaults() -> dict[str, Any]:
     """Return built-in monthly manual strategy presets for supported pools.
 
     Returns:
-        A dictionary mapping pool names to their default strategy payloads.
+        dict[str, Any]: .
     """
     return quant_strategy_defaults_payload()
 
@@ -556,13 +518,13 @@ def create_quant_strategy(
     """Create an append-only quant strategy version.
 
     Args:
-        version: Quant strategy version to create.
-        actor_id: Authenticated actor identifier.
-        idempotency_key: Idempotency key for the mutation.
-        service: Strategy service used to create the version.
+        version: QuantStrategyVersion: .
+        actor_id: str: .
+        idempotency_key: str: .
+        service: StrategyService: .
 
     Returns:
-        The created QuantStrategyVersion.
+        QuantStrategyVersion: .
     """
     return _call_service(
         lambda: service.create_quant_strategy(
@@ -583,13 +545,13 @@ def activate_quant_strategy(
     """Activate a calibrated quant strategy version.
 
     Args:
-        version_id: Quant strategy version to activate.
-        actor_id: Authenticated actor identifier.
-        idempotency_key: Idempotency key for the mutation.
-        service: Strategy service used to activate the version.
+        version_id: str: .
+        actor_id: str: .
+        idempotency_key: str: .
+        service: StrategyService: .
 
     Returns:
-        The activated QuantStrategyVersion.
+        QuantStrategyVersion: .
     """
     return _call_service(
         lambda: service.activate_quant_strategy(
@@ -608,11 +570,11 @@ def list_style_prompts(
     """List user style prompt versions.
 
     Args:
-        owner_id: Identifier of the owner whose style prompts should be listed.
-        service: Strategy service used to query style prompts.
+        owner_id: str: .
+        service: StrategyService: .
 
     Returns:
-        A list of UserStylePromptVersion objects.
+        list[UserStylePromptVersion]: .
     """
     return service.list_user_style_prompts(owner_id)
 
@@ -627,13 +589,13 @@ def create_style_prompt(
     """Create an append-only user style prompt version.
 
     Args:
-        version: User style prompt version to create.
-        actor_id: Authenticated actor identifier.
-        idempotency_key: Idempotency key for the mutation.
-        service: Strategy service used to create the version.
+        version: UserStylePromptVersion: .
+        actor_id: str: .
+        idempotency_key: str: .
+        service: StrategyService: .
 
     Returns:
-        The created UserStylePromptVersion.
+        UserStylePromptVersion: .
     """
     return _call_service(
         lambda: service.create_user_style_prompt(
@@ -654,13 +616,13 @@ def activate_style_prompt(
     """Activate a style prompt after protected-boundary validation.
 
     Args:
-        version_id: User style prompt version to activate.
-        actor_id: Authenticated actor identifier.
-        idempotency_key: Idempotency key for the mutation.
-        service: Strategy service used to activate the version.
+        version_id: str: .
+        actor_id: str: .
+        idempotency_key: str: .
+        service: StrategyService: .
 
     Returns:
-        The activated UserStylePromptVersion.
+        UserStylePromptVersion: .
     """
     return _call_service(
         lambda: service.activate_user_style_prompt(
@@ -679,11 +641,11 @@ def list_research_scopes(
     """List frozen research scope versions.
 
     Args:
-        owner_id: Identifier of the owner whose research scopes should be listed.
-        service: Strategy service used to query research scopes.
+        owner_id: str: .
+        service: StrategyService: .
 
     Returns:
-        A list of ResearchScopeVersion objects.
+        list[ResearchScopeVersion]: .
     """
     return service.list_research_scopes(owner_id)
 
@@ -698,13 +660,13 @@ def create_research_scope(
     """Create an append-only frozen research scope version.
 
     Args:
-        version: Research scope version to create.
-        actor_id: Authenticated actor identifier.
-        idempotency_key: Idempotency key for the mutation.
-        service: Strategy service used to create the version.
+        version: ResearchScopeVersion: .
+        actor_id: str: .
+        idempotency_key: str: .
+        service: StrategyService: .
 
     Returns:
-        The created ResearchScopeVersion.
+        ResearchScopeVersion: .
     """
     return _call_service(
         lambda: service.create_research_scope(
@@ -725,13 +687,13 @@ def activate_research_scope(
     """Activate a validated frozen research scope version.
 
     Args:
-        version_id: Research scope version to activate.
-        actor_id: Authenticated actor identifier.
-        idempotency_key: Idempotency key for the mutation.
-        service: Strategy service used to activate the version.
+        version_id: str: .
+        actor_id: str: .
+        idempotency_key: str: .
+        service: StrategyService: .
 
     Returns:
-        The activated ResearchScopeVersion.
+        ResearchScopeVersion: .
     """
     return _call_service(
         lambda: service.activate_research_scope(
@@ -743,7 +705,14 @@ def activate_research_scope(
 
 
 def _call_service(operation: Callable[[], T]) -> T:
-    """call service."""
+    """call service.
+
+    Args:
+        operation: Callable[[], T]: .
+
+    Returns:
+        T: .
+    """
     try:
         return operation()
     except KeyError as exc:

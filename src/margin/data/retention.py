@@ -20,7 +20,7 @@ from margin.sql.data_queries import (
 
 @dataclass(frozen=True)
 class RetentionCandidate:
-    """Storage object eligible for retention evaluation."""
+    """Storage object eligible for retention evaluation.."""
 
     object_type: str
     object_id: str
@@ -29,7 +29,7 @@ class RetentionCandidate:
 
 @dataclass(frozen=True)
 class RetentionDeletionResult:
-    """Outcome of a retention pass."""
+    """Outcome of a retention pass.."""
 
     deleted: tuple[str, ...]
     protected_count: int
@@ -37,13 +37,16 @@ class RetentionDeletionResult:
 
 
 class SQLAlchemyRetentionService:
-    """Delete only expired and unreferenced warehouse storage objects."""
+    """Delete only expired and unreferenced warehouse storage objects.."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
         """Initialize the service.
 
         Args:
-            session_factory: Callable returning a SQLAlchemy ``Session``.
+            session_factory: Callable[[], Session]: .
+
+        Returns:
+            None: .
         """
         self._session_factory = session_factory
 
@@ -56,12 +59,11 @@ class SQLAlchemyRetentionService:
         """Evaluate retention candidates and append audit rows for every decision.
 
         Args:
-            candidates: Storage objects to evaluate for deletion.
-            now: Optional override for the decision timestamp.
+            candidates: list[RetentionCandidate]: .
+            now: datetime | None: .
 
         Returns:
-            A ``RetentionDeletionResult`` with deleted, protected, and skipped
-            counts.
+            RetentionDeletionResult: .
         """
         decision_at = ensure_utc(now or utc_now())
         deleted: list[str] = []
@@ -104,9 +106,7 @@ class SQLAlchemyRetentionService:
                         created_at=decision_at,
                     )
                     continue
-                result = session.execute(
-                    delete_raw_snapshot(candidate.object_id)
-                )
+                result = session.execute(delete_raw_snapshot(candidate.object_id))
                 if result.rowcount:
                     deleted.append(candidate.object_id)
                     decision = "deleted"
@@ -131,11 +131,17 @@ class SQLAlchemyRetentionService:
 
 
 def _raw_snapshot_reference_count(session: Session, snapshot_id: str) -> int:
-    """Return the total reference count for a raw snapshot."""
+    """Return the total reference count for a raw snapshot.
+
+    Args:
+        session: Session: .
+        snapshot_id: str: .
+
+    Returns:
+        int: .
+    """
     fact_count = session.scalar(fact_reference_count(snapshot_id))
-    corporate_action_count = session.scalar(
-        corporate_action_reference_count(snapshot_id)
-    )
+    corporate_action_count = session.scalar(corporate_action_reference_count(snapshot_id))
     return int(fact_count or 0) + int(corporate_action_count or 0)
 
 
@@ -148,7 +154,19 @@ def _audit(
     reference_count: int,
     created_at: datetime,
 ) -> None:
-    """Append an immutable retention decision audit row."""
+    """Append an immutable retention decision audit row.
+
+    Args:
+        session: Session: .
+        candidate: RetentionCandidate: .
+        decision: str: .
+        reason: str: .
+        reference_count: int: .
+        created_at: datetime: .
+
+    Returns:
+        None: .
+    """
     session.add(
         RetentionDeletionAuditRow(
             audit_id=f"rda_{uuid.uuid4().hex[:12]}",

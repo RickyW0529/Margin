@@ -34,19 +34,29 @@ DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 
 
 class FakeWarehouse:
-    """Warehouse double exposing the production loader contract."""
+    """Warehouse double exposing the production loader contract.."""
 
     def __init__(self) -> None:
-        """Initialize deterministic current and historical facts."""
+        """Initialize deterministic current and historical facts.
+
+        Returns:
+            None: .
+        """
         self.history_query: IndicatorHistoryQuery | None = None
         self.history_queries: list[IndicatorHistoryQuery] = []
         self._dates = [
-            value.date()
-            for value in pd.bdate_range(end=DECISION_AT.date(), periods=260)
+            value.date() for value in pd.bdate_range(end=DECISION_AT.date(), periods=260)
         ]
 
     def canonical_values(self, _query):
-        """Return current financial and valuation indicators."""
+        """Return current financial and valuation indicators.
+
+        Args:
+            _query: Any: .
+
+        Returns:
+            Any: .
+        """
         values = [
             _canonical("000001.SZ", "roe_ttm", "0.15"),
             _canonical("000001.SZ", "n_income_attr_p", "100"),
@@ -65,7 +75,15 @@ class FakeWarehouse:
         return values
 
     def security_profiles(self, _security_ids, *, system_as_of):
-        """Return PIT security metadata."""
+        """Return PIT security metadata.
+
+        Args:
+            _security_ids: Any: .
+            system_as_of: Any: .
+
+        Returns:
+            Any: .
+        """
         assert system_as_of == DECISION_AT
         return [
             SecurityProfileValue(
@@ -89,14 +107,28 @@ class FakeWarehouse:
         ]
 
     def industry_memberships(self, _query):
-        """Return provider-industry membership."""
+        """Return provider-industry membership.
+
+        Args:
+            _query: Any: .
+
+        Returns:
+            Any: .
+        """
         return [
             _industry("000001.SZ", "银行"),
             _industry("000002.SZ", "软件服务"),
         ]
 
     def indicator_history(self, query):
-        """Return PIT-safe daily market facts or annual raw profit facts."""
+        """Return PIT-safe daily market facts or annual raw profit facts.
+
+        Args:
+            query: Any: .
+
+        Returns:
+            Any: .
+        """
         self.history_queries.append(query)
         if query.indicator_ids == ("n_income_attr_p",):
             return [
@@ -132,7 +164,7 @@ def test_loader_builds_pit_metadata_and_market_features() -> None:
     """Verify the loader derives real quant inputs and marks stale market histories.
 
     Returns:
-        None.
+        None: .
     """
     warehouse = FakeWarehouse()
     snapshot = QuantInputSnapshot(
@@ -179,7 +211,7 @@ def test_feature_mart_loader_reads_materialized_cross_section() -> None:
     """Verify third-layer ETL writes fourth-layer features consumed by quant.
 
     Returns:
-        None.
+        None: .
     """
     warehouse = FakeWarehouse()
     repository = MemoryAnalysisMartRepository()
@@ -222,9 +254,10 @@ def test_feature_mart_loader_reads_materialized_cross_section() -> None:
 
 def test_feature_mart_etl_pipeline_binds_snapshot_before_quant_read() -> None:
     """Verify managed ETL returns a quant input bound to the fourth-layer feature set.
+    Returns:.
 
     Returns:
-        None.
+        None: .
     """
     warehouse = FakeWarehouse()
     repository = MemoryAnalysisMartRepository()
@@ -245,9 +278,7 @@ def test_feature_mart_etl_pipeline_binds_snapshot_before_quant_read() -> None:
     )
 
     result = pipeline.materialize(snapshot)
-    loaded = build_feature_mart_cross_section_loader(repository)(
-        result.input_snapshot
-    )
+    loaded = build_feature_mart_cross_section_loader(repository)(result.input_snapshot)
 
     assert result.input_snapshot.feature_snapshot_id == (
         result.feature_snapshot.feature_snapshot_id
@@ -258,7 +289,11 @@ def test_feature_mart_etl_pipeline_binds_snapshot_before_quant_read() -> None:
 
 
 def test_loader_uses_explicit_suspension_status_without_feature_set_opt_in() -> None:
-    """Verify suspend_d-derived status is part of the hard-filter contract."""
+    """Verify suspend_d-derived status is part of the hard-filter contract.
+
+    Returns:
+        None: .
+    """
     warehouse = ExplicitSuspensionWarehouse()
     snapshot = QuantInputSnapshot(
         scope_version_id="scope-v1",
@@ -280,7 +315,11 @@ def test_loader_uses_explicit_suspension_status_without_feature_set_opt_in() -> 
 
 
 def test_loader_ignores_partial_latest_market_date_for_suspension_fallback() -> None:
-    """Verify one stray latest bar does not mark the whole market suspended."""
+    """Verify one stray latest bar does not mark the whole market suspended.
+
+    Returns:
+        None: .
+    """
     warehouse = PartialLatestMarketWarehouse()
     snapshot = QuantInputSnapshot(
         scope_version_id="scope-v1",
@@ -302,20 +341,38 @@ def test_loader_ignores_partial_latest_market_date_for_suspension_fallback() -> 
 
 
 class ExplicitSuspensionWarehouse(FakeWarehouse):
-    """Warehouse double that only returns suspension status when requested."""
+    """Warehouse double that only returns suspension status when requested.."""
 
     def __init__(self) -> None:
-        """Initialize current indicator tracking."""
+        """Initialize current indicator tracking.
+
+        Returns:
+            None: .
+        """
         super().__init__()
         self.current_indicator_ids: tuple[str, ...] = ()
 
     def canonical_values(self, query):
-        """Return explicit suspension facts only when loader asks for them."""
+        """Return explicit suspension facts only when loader asks for them.
+
+        Args:
+            query: Any: .
+
+        Returns:
+            Any: .
+        """
         self.current_indicator_ids = query.indicator_ids
         return list(super().canonical_values(query))
 
     def indicator_history(self, query):
-        """Return full market coverage so only explicit status can suspend."""
+        """Return full market coverage so only explicit status can suspend.
+
+        Args:
+            query: Any: .
+
+        Returns:
+            Any: .
+        """
         self.history_queries.append(query)
         if query.indicator_ids == ("n_income_attr_p",):
             return super().indicator_history(query)
@@ -335,10 +392,17 @@ class ExplicitSuspensionWarehouse(FakeWarehouse):
 
 
 class PartialLatestMarketWarehouse(FakeWarehouse):
-    """Warehouse double with one low-coverage latest market date."""
+    """Warehouse double with one low-coverage latest market date.."""
 
     def canonical_values(self, query):
-        """Return current indicators for three securities."""
+        """Return current indicators for three securities.
+
+        Args:
+            query: Any: .
+
+        Returns:
+            Any: .
+        """
         return [
             _canonical("000001.SZ", "roe_ttm", "0.15"),
             _canonical("000001.SZ", "n_income_attr_p", "100"),
@@ -352,7 +416,15 @@ class PartialLatestMarketWarehouse(FakeWarehouse):
         ]
 
     def security_profiles(self, _security_ids, *, system_as_of):
-        """Return three active non-ST profiles."""
+        """Return three active non-ST profiles.
+
+        Args:
+            _security_ids: Any: .
+            system_as_of: Any: .
+
+        Returns:
+            Any: .
+        """
         return [
             SecurityProfileValue(
                 security_id="000001.SZ",
@@ -384,7 +456,14 @@ class PartialLatestMarketWarehouse(FakeWarehouse):
         ]
 
     def industry_memberships(self, _query):
-        """Return provider-industry membership for three securities."""
+        """Return provider-industry membership for three securities.
+
+        Args:
+            _query: Any: .
+
+        Returns:
+            Any: .
+        """
         return [
             _industry("000001.SZ", "银行"),
             _industry("000002.SZ", "房地产"),
@@ -392,7 +471,14 @@ class PartialLatestMarketWarehouse(FakeWarehouse):
         ]
 
     def indicator_history(self, query):
-        """Return full prior coverage plus one partial latest date."""
+        """Return full prior coverage plus one partial latest date.
+
+        Args:
+            query: Any: .
+
+        Returns:
+            Any: .
+        """
         self.history_queries.append(query)
         if query.indicator_ids == ("n_income_attr_p",):
             return [
@@ -429,7 +515,16 @@ def _canonical(
     indicator_id: str,
     value: str,
 ) -> CanonicalValue:
-    """Build one current canonical value."""
+    """Build one current canonical value.
+
+    Args:
+        security_id: str: .
+        indicator_id: str: .
+        value: str: .
+
+    Returns:
+        CanonicalValue: .
+    """
     return CanonicalValue(
         canonical_id=f"cv-{security_id}-{indicator_id}",
         security_id=security_id,
@@ -452,7 +547,16 @@ def _canonical_text(
     indicator_id: str,
     value: str,
 ) -> CanonicalValue:
-    """Build one current canonical text value."""
+    """Build one current canonical text value.
+
+    Args:
+        security_id: str: .
+        indicator_id: str: .
+        value: str: .
+
+    Returns:
+        CanonicalValue: .
+    """
     canonical = _canonical(security_id, indicator_id, "0")
     return CanonicalValue(
         **{
@@ -467,7 +571,15 @@ def _industry(
     security_id: str,
     industry_name: str,
 ) -> IndustryMembershipValue:
-    """Build one active industry membership."""
+    """Build one active industry membership.
+
+    Args:
+        security_id: str: .
+        industry_name: str: .
+
+    Returns:
+        IndustryMembershipValue: .
+    """
     return IndustryMembershipValue(
         membership_id=f"membership-{security_id}",
         security_id=security_id,
@@ -490,7 +602,17 @@ def _market_facts(
     close: float,
     amount: float,
 ) -> list[IndicatorHistoryValue]:
-    """Build close and amount historical facts."""
+    """Build close and amount historical facts.
+
+    Args:
+        security_id: str: .
+        business_date: date: .
+        close: float: .
+        amount: float: .
+
+    Returns:
+        list[IndicatorHistoryValue]: .
+    """
     event_at = datetime.combine(
         business_date,
         datetime.min.time(),
@@ -527,7 +649,16 @@ def _income_fact(
     report_date: date,
     profit: float,
 ) -> IndicatorHistoryValue:
-    """Build one annual raw parent-company profit historical fact."""
+    """Build one annual raw parent-company profit historical fact.
+
+    Args:
+        security_id: str: .
+        report_date: date: .
+        profit: float: .
+
+    Returns:
+        IndicatorHistoryValue: .
+    """
     event_at = datetime.combine(
         report_date,
         datetime.min.time(),

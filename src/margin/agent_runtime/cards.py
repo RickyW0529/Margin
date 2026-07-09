@@ -12,29 +12,56 @@ from margin.agent_runtime.models import (
 
 
 class AgentCardRegistry:
-    """Registry of ExpertAgent cards visible to MainAgent."""
+    """Registry of ExpertAgent cards visible to MainAgent.."""
 
     def __init__(self, cards: Iterable[AgentCard]) -> None:
+        """Process __init__.
+
+        Args:
+            cards: Iterable[AgentCard]: .
+
+        Returns:
+            None: .
+        """
         card_tuple = tuple(cards)
         self._cards = {card.name: card for card in card_tuple}
         if len(self._cards) != len(card_tuple):
             raise ValueError("duplicate agent card")
 
     def get(self, name: str) -> AgentCard:
-        """Return a card by name."""
+        """Return a card by name.
+
+        Args:
+            name: str: .
+
+        Returns:
+            AgentCard: .
+        """
         return self._cards[name]
 
     def list_names(self) -> tuple[str, ...]:
-        """Return agent names in stable order."""
+        """Return agent names in stable order.
+
+        Returns:
+            tuple[str, ...]: .
+        """
         return tuple(sorted(self._cards))
 
     def list_cards(self) -> tuple[AgentCard, ...]:
-        """Return cards in stable order."""
+        """Return cards in stable order.
+
+        Returns:
+            tuple[AgentCard, ...]: .
+        """
         return tuple(self._cards[name] for name in self.list_names())
 
 
 def default_agent_card_registry() -> AgentCardRegistry:
-    """Return default v0.5 ExpertAgent cards."""
+    """Return default v0.5 ExpertAgent cards.
+
+    Returns:
+        AgentCardRegistry: .
+    """
     common = {
         "version": "v0.5.0",
         "capabilities": {
@@ -48,17 +75,14 @@ def default_agent_card_registry() -> AgentCardRegistry:
         [
             AgentCard(
                 name="DataInspectionAgent",
-                description=(
-                    "Checks data readiness and runs required deterministic sync."
-                ),
+                description=("Checks data readiness and runs required deterministic sync."),
                 url="margin://agents/data-inspection",
                 skills=(
                     AgentSkill(
                         skill_id="inspect_data_readiness",
                         name="Inspect Data Readiness",
                         description=(
-                            "Check freshness, completeness, PIT validity, and "
-                            "provider state."
+                            "Check freshness, completeness, PIT validity, and provider state."
                         ),
                         tags=("data", "freshness", "quality"),
                         produced_context_artifacts=(
@@ -75,8 +99,7 @@ def default_agent_card_registry() -> AgentCardRegistry:
             AgentCard(
                 name="QuantAgent",
                 description=(
-                    "Runs the fixed ML lifecycle quant strategy profile from "
-                    "structured PIT data."
+                    "Runs the fixed ML lifecycle quant strategy profile from structured PIT data."
                 ),
                 url="margin://agents/quant",
                 skills=(
@@ -104,8 +127,7 @@ def default_agent_card_registry() -> AgentCardRegistry:
             AgentCard(
                 name="PerformanceGrowthScoutAgent",
                 description=(
-                    "Screens structured financial data for strong performance "
-                    "growth targets."
+                    "Screens structured financial data for strong performance growth targets."
                 ),
                 url="margin://agents/performance-growth-scout",
                 skills=(
@@ -118,9 +140,7 @@ def default_agent_card_registry() -> AgentCardRegistry:
                         ),
                         tags=("fundamental", "financials", "growth"),
                         required_context_artifacts=("data_readiness",),
-                        produced_context_artifacts=(
-                            "fundamental_target_pool",
-                        ),
+                        produced_context_artifacts=("fundamental_target_pool",),
                         write_policy=AgentPermissionMode.WRITE_ALLOWED,
                         schedule_allowed=True,
                         qa_allowed=False,
@@ -160,9 +180,7 @@ def default_agent_card_registry() -> AgentCardRegistry:
             ),
             AgentCard(
                 name="FundamentalAnalystAgent",
-                description=(
-                    "Builds evidence-bound financial-report theses from scoped RAG."
-                ),
+                description=("Builds evidence-bound financial-report theses from scoped RAG."),
                 url="margin://agents/fundamental-analyst",
                 skills=(
                     AgentSkill(
@@ -252,8 +270,7 @@ def default_agent_card_registry() -> AgentCardRegistry:
             AgentCard(
                 name="StockAnalystAgent",
                 description=(
-                    "Runs evidence-bound stock analysis and publishes dashboard "
-                    "projections."
+                    "Runs evidence-bound stock analysis and publishes dashboard projections."
                 ),
                 url="margin://agents/stock-analyst",
                 skills=(

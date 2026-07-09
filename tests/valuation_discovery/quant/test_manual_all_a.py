@@ -22,7 +22,7 @@ def test_manual_all_a_scoring_does_not_filter_by_market_cap() -> None:
     """Verify manual All-A scoring keeps small companies when quality fields pass.
 
     Returns:
-        None.
+        None: .
     """
     frame = pd.DataFrame(
         [
@@ -49,7 +49,7 @@ def test_ai_quant_profile_exposes_key_fields_without_trade_instruction() -> None
     """Verify the AI profile contains explainable quant facts, not direct order advice.
 
     Returns:
-        None.
+        None: .
     """
     scored = score_manual_all_a(
         pd.DataFrame([_row("000001.SZ", market_cap=120_000_000_000.0)]),
@@ -68,9 +68,10 @@ def test_ai_quant_profile_exposes_key_fields_without_trade_instruction() -> None
 
 def test_theme_hotness_score_requires_confirmed_member_confidence() -> None:
     """Verify theme score is confidence-weighted and ignored until trend is confirmed.
+    Returns:.
 
     Returns:
-        None.
+        None: .
     """
     zero_base_weights = {key: 0.0 for key in DEFAULT_WEIGHTS}
     frame = pd.DataFrame(
@@ -111,16 +112,14 @@ def test_theme_hotness_score_requires_confirmed_member_confidence() -> None:
     assert by_id.loc["core", "manual_theme_hotness_score"] == 80.0
     assert by_id.loc["weak", "manual_theme_hotness_score"] == 20.0
     assert by_id.loc["unconfirmed", "manual_theme_hotness_score"] == 0.0
-    assert by_id.loc["core", "manual_all_a_score"] > by_id.loc[
-        "weak", "manual_all_a_score"
-    ]
+    assert by_id.loc["core", "manual_all_a_score"] > by_id.loc["weak", "manual_all_a_score"]
 
 
 def test_ai_quant_profile_exposes_theme_context_for_research() -> None:
     """Verify the AI profile receives theme context for explanation, not trade instruction.
 
     Returns:
-        None.
+        None: .
     """
     scored = score_manual_all_a(
         pd.DataFrame(
@@ -150,9 +149,10 @@ def test_ai_quant_profile_exposes_theme_context_for_research() -> None:
 
 def test_inactive_theme_weight_does_not_dilute_base_score() -> None:
     """Verify theme weight is neutral when no confirmed member receives a theme score.
+    Returns:.
 
     Returns:
-        None.
+        None: .
     """
     frame = pd.DataFrame(
         [
@@ -176,12 +176,8 @@ def test_inactive_theme_weight_does_not_dilute_base_score() -> None:
         ),
     ).set_index("security_id")
 
-    assert themed.loc["a", "manual_all_a_score"] == baseline.loc[
-        "a", "manual_all_a_score"
-    ]
-    assert themed.loc["b", "manual_all_a_score"] == baseline.loc[
-        "b", "manual_all_a_score"
-    ]
+    assert themed.loc["a", "manual_all_a_score"] == baseline.loc["a", "manual_all_a_score"]
+    assert themed.loc["b", "manual_all_a_score"] == baseline.loc["b", "manual_all_a_score"]
 
 
 def _row(
@@ -193,7 +189,19 @@ def _row(
     theme_member_confidence: float | None = None,
     theme_signal_confirmed: bool | None = None,
 ) -> dict[str, object]:
-    """Build one deterministic test cross-section row."""
+    """Build one deterministic test cross-section row.
+
+    Args:
+        security_id: str: .
+        market_cap: float: .
+        pe_ttm: float: .
+        theme_hot_score: float | None: .
+        theme_member_confidence: float | None: .
+        theme_signal_confirmed: bool | None: .
+
+    Returns:
+        dict[str, object]: .
+    """
     row: dict[str, object] = {
         "security_id": security_id,
         "name": security_id,

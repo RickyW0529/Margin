@@ -12,48 +12,51 @@ from margin.vector.providers.openai_embedding import OpenAIEmbeddingProvider
 
 
 class FakeResponse:
-    """Stub HTTP response for the embedding provider tests.
-
-    Attributes:
-        status_code: HTTP status code.
-        text: raw response body as a string.
-        _payload: dictionary returned by ``json()``.
-    """
+    """Stub HTTP response for the embedding provider tests.."""
 
     def __init__(self, status_code: int, payload: dict):
         """Initialize a fake response.
 
         Args:
-            status_code: simulated HTTP status code.
-            payload: JSON body returned by ``json()``.
+            status_code: int: .
+            payload: dict: .
+
+        Returns:
+            Any: .
         """
         self.status_code = status_code
         self._payload = payload
         self.text = str(payload)
 
     def json(self):
-        """Return the parsed JSON payload."""
+        """Return the parsed JSON payload.
+
+        Returns:
+            Any: .
+        """
         return self._payload
 
     def raise_for_status(self):
-        """Raise a runtime error when the status code indicates failure."""
+        """Raise a runtime error when the status code indicates failure.
+
+        Returns:
+            Any: .
+        """
         if self.status_code >= 400:
             raise RuntimeError(f"HTTP {self.status_code}")
 
 
 class FakeClient:
-    """Stub HTTP client that records all POST calls and returns a fixed response.
-
-    Attributes:
-        response: ``FakeResponse`` instance returned by every ``post`` call.
-        requests: list of kwargs passed to ``post``, including the captured URL.
-    """
+    """Stub HTTP client that records all POST calls and returns a fixed response.."""
 
     def __init__(self, response: FakeResponse):
         """Initialize the fake client.
 
         Args:
-            response: response to return on every POST request.
+            response: FakeResponse: .
+
+        Returns:
+            Any: .
         """
         self.response = response
         self.requests: list[dict] = []
@@ -62,11 +65,11 @@ class FakeClient:
         """Record the request and return the configured response.
 
         Args:
-            url: request URL.
-            **kwargs: additional arguments (headers, json payload, etc.).
+            url: str: .
+            **kwargs: Any: .
 
         Returns:
-            FakeResponse: the configured response object.
+            Any: .
         """
         self.requests.append({"url": url, **kwargs})
         return self.response
@@ -74,10 +77,10 @@ class FakeClient:
 
 def test_openai_embedding_provider_batches_and_validates_dimensions():
     """Provider must send batched inputs with auth headers and validate vector length.
+    Returns:.
 
-    Verifies that ``embed_batch`` posts to the embeddings endpoint, includes the
-    bearer token and model name, and converts integer embeddings to floats while
-    asserting the configured dimension.
+    Returns:
+        Any: .
     """
     client = FakeClient(
         FakeResponse(
@@ -102,7 +105,11 @@ def test_openai_embedding_provider_batches_and_validates_dimensions():
 
 
 def test_openai_embedding_provider_rejects_malformed_vectors():
-    """Provider must reject embeddings whose length does not match the dimension."""
+    """Provider must reject embeddings whose length does not match the dimension.
+
+    Returns:
+        Any: .
+    """
     provider = OpenAIEmbeddingProvider(
         api_key="secret",
         base_url="https://llm.example/v1",

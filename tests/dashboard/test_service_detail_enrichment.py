@@ -12,7 +12,11 @@ DECISION_AT = datetime(2026, 7, 2, 8, 5, tzinfo=UTC)
 
 
 def _repository() -> MemoryDashboardRepository:
-    """Build a repository with one quant-projected dashboard item."""
+    """Build a repository with one quant-projected dashboard item.
+
+    Returns:
+        MemoryDashboardRepository: .
+    """
     repo = MemoryDashboardRepository()
     run = ResearchRun(
         run_id="dr_detail",
@@ -43,7 +47,11 @@ def _repository() -> MemoryDashboardRepository:
 
 
 def test_candidate_list_uses_profile_display_name() -> None:
-    """Candidate rows should display the Chinese security name when available."""
+    """Candidate rows should display the Chinese security name when available.
+
+    Returns:
+        None: .
+    """
     service = DashboardQueryService(
         _repository(),
         quant_profile_loader=lambda _: {"display_name": "爱施德"},
@@ -62,14 +70,16 @@ def test_candidate_list_uses_profile_display_name() -> None:
 
 
 def test_item_detail_merges_context_review_news_valuation_and_trends() -> None:
-    """Detail DTO should expose AI status, news documents, valuation state, and trends."""
+    """Detail DTO should expose AI status, news documents, valuation state, and trends.
+
+    Returns:
+        None: .
+    """
     service = DashboardQueryService(
         _repository(),
         quant_profile_loader=lambda _: {
             "display_name": "爱施德",
-            "factor_scores": [
-                {"factor_key": "quality_score", "label": "质量", "score": 100.0}
-            ],
+            "factor_scores": [{"factor_key": "quality_score", "label": "质量", "score": 100.0}],
         },
         detail_context_loader=lambda *_: {
             "current_review": {

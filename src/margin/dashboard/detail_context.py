@@ -40,9 +40,26 @@ def make_dashboard_detail_context_loader(
     session_factory: SessionFactory,
     warehouse_repository: SQLAlchemyWarehouseRepository | None = None,
 ) -> Callable[[ResearchItem, ResearchRun], dict[str, Any] | None]:
-    """Return a loader that enriches one dashboard detail item."""
+    """Return a loader that enriches one dashboard detail item.
+
+    Args:
+        session_factory: SessionFactory: .
+        warehouse_repository: SQLAlchemyWarehouseRepository | None: .
+
+    Returns:
+        Callable[[ResearchItem, ResearchRun], dict[str, Any] | None]: .
+    """
 
     def loader(item: ResearchItem, run: ResearchRun) -> dict[str, Any] | None:
+        """Process loader.
+
+        Args:
+            item: ResearchItem: .
+            run: ResearchRun: .
+
+        Returns:
+            dict[str, Any] | None: .
+        """
         context = _load_latest_context(session_factory, item, run)
         if context is None:
             return None
@@ -81,18 +98,26 @@ def build_dashboard_detail_context(
     documents: Iterable[dict[str, Any]],
     trends: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Build the dashboard detail context dict consumed by ``DashboardQueryService``."""
+    """Build the dashboard detail context dict consumed by ``DashboardQueryService``.
+
+    Args:
+        security_id: str: .
+        context: dict[str, Any]: .
+        payload: dict[str, Any]: .
+        review: dict[str, Any] | None: .
+        assessment: dict[str, Any] | None: .
+        documents: Iterable[dict[str, Any]]: .
+        trends: list[dict[str, Any]]: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     summary = _dict_value(payload.get("analysis_summary"))
     factor_details = _dict_value(payload.get("quant_factor_details"))
-    display_name = _string_value(summary.get("name")) or _string_value(
-        factor_details.get("name")
-    )
+    display_name = _string_value(summary.get("name")) or _string_value(factor_details.get("name"))
     review_dict = _review_context(review, payload)
     assessment_dict = _assessment_context(assessment, payload)
-    document_items = tuple(
-        _document_context(document, security_id)
-        for document in documents
-    )
+    document_items = tuple(_document_context(document, security_id) for document in documents)
     valuation = _valuation_context(assessment)
     ai_outcome = _string_value(review_dict.get("outcome")) or ""
     deferred_reason = _string_value(review_dict.get("reason"))
@@ -138,7 +163,16 @@ def _load_latest_context(
     item: ResearchItem,
     run: ResearchRun,
 ) -> dict[str, Any] | None:
-    """Load the latest research context snapshot for the dashboard item."""
+    """Load the latest research context snapshot for the dashboard item.
+
+    Args:
+        session_factory: SessionFactory: .
+        item: ResearchItem: .
+        run: ResearchRun: .
+
+    Returns:
+        dict[str, Any] | None: .
+    """
     with session_factory() as session:
         row = session.scalar(
             latest_dashboard_research_context(
@@ -156,7 +190,15 @@ def _load_latest_review(
     session_factory: SessionFactory,
     context_snapshot_id: str,
 ) -> dict[str, Any] | None:
-    """Load the latest AI review for one context snapshot."""
+    """Load the latest AI review for one context snapshot.
+
+    Args:
+        session_factory: SessionFactory: .
+        context_snapshot_id: str: .
+
+    Returns:
+        dict[str, Any] | None: .
+    """
     with session_factory() as session:
         row = session.scalar(latest_dashboard_delta_review(context_snapshot_id))
     if row is None:
@@ -169,7 +211,16 @@ def _load_effective_assessment(
     security_id: str,
     scope_version_id: str,
 ) -> dict[str, Any] | None:
-    """Load the current effective assessment, if one exists."""
+    """Load the current effective assessment, if one exists.
+
+    Args:
+        session_factory: SessionFactory: .
+        security_id: str: .
+        scope_version_id: str: .
+
+    Returns:
+        dict[str, Any] | None: .
+    """
     with session_factory() as session:
         row = session.scalar(
             dashboard_effective_assessment(
@@ -186,7 +237,15 @@ def _load_news_documents(
     session_factory: SessionFactory,
     event_ids: tuple[str, ...],
 ) -> list[dict[str, Any]]:
-    """Load document events referenced by a research context."""
+    """Load document events referenced by a research context.
+
+    Args:
+        session_factory: SessionFactory: .
+        event_ids: tuple[str, ...]: .
+
+    Returns:
+        list[dict[str, Any]]: .
+    """
     if not event_ids:
         return []
     with session_factory() as session:
@@ -195,7 +254,14 @@ def _load_news_documents(
 
 
 def _research_context_row(row: ResearchContextSnapshotRow) -> dict[str, Any]:
-    """Convert a research-context ORM row into the detail context shape."""
+    """Convert a research-context ORM row into the detail context shape.
+
+    Args:
+        row: ResearchContextSnapshotRow: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     return {
         "context_snapshot_id": row.context_snapshot_id,
         "security_id": row.security_id,
@@ -207,7 +273,14 @@ def _research_context_row(row: ResearchContextSnapshotRow) -> dict[str, Any]:
 
 
 def _delta_review_row(row: ResearchDeltaReviewRow) -> dict[str, Any]:
-    """Convert a delta-review ORM row into the detail context shape."""
+    """Convert a delta-review ORM row into the detail context shape.
+
+    Args:
+        row: ResearchDeltaReviewRow: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     return {
         "review_id": row.review_id,
         "graph_run_id": row.graph_run_id,
@@ -224,7 +297,14 @@ def _delta_review_row(row: ResearchDeltaReviewRow) -> dict[str, Any]:
 
 
 def _assessment_row(row: ValuationAssessmentRow) -> dict[str, Any]:
-    """Convert an assessment ORM row into the detail context shape."""
+    """Convert an assessment ORM row into the detail context shape.
+
+    Args:
+        row: ValuationAssessmentRow: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     return {
         "assessment_id": row.assessment_id,
         "security_id": row.security_id,
@@ -238,7 +318,14 @@ def _assessment_row(row: ValuationAssessmentRow) -> dict[str, Any]:
 
 
 def _document_row(row: DocumentEventRow) -> dict[str, Any]:
-    """Convert a document event row into the detail context shape."""
+    """Convert a document event row into the detail context shape.
+
+    Args:
+        row: DocumentEventRow: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     return {
         "event_id": row.event_id,
         "title": row.title,
@@ -259,7 +346,16 @@ def _load_trends(
     security_id: str,
     decision_at: datetime,
 ) -> list[dict[str, Any]]:
-    """Load PIT-safe market and indicator trends."""
+    """Load PIT-safe market and indicator trends.
+
+    Args:
+        warehouse_repository: SQLAlchemyWarehouseRepository | None: .
+        security_id: str: .
+        decision_at: datetime: .
+
+    Returns:
+        list[dict[str, Any]]: .
+    """
     if warehouse_repository is None:
         return []
     decision = _ensure_utc(decision_at)
@@ -308,9 +404,7 @@ def _load_trends(
         "n_income_attr_p": ("归母净利", "CNY"),
     }
     for indicator_id in TREND_INDICATORS:
-        values = [
-            item for item in history if item.indicator_id == indicator_id
-        ]
+        values = [item for item in history if item.indicator_id == indicator_id]
         if not values:
             continue
         label, unit = labels[indicator_id]
@@ -335,15 +429,21 @@ def _review_context(
     review: dict[str, Any] | None,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    """Build current-review context with explicit empty-evidence state."""
+    """Build current-review context with explicit empty-evidence state.
+
+    Args:
+        review: dict[str, Any] | None: .
+        payload: dict[str, Any]: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     if review is None:
         evidence_ids = payload.get("evidence_ids") or ()
         return {
             "outcome": "pending" if evidence_ids else "evidence_unavailable",
             "reason": (
-                "AI 复核尚未完成。"
-                if evidence_ids
-                else "证据包为空，AI 复核不能形成可引用结论。"
+                "AI 复核尚未完成。" if evidence_ids else "证据包为空，AI 复核不能形成可引用结论。"
             ),
             "conclusion": "",
             "confidence": None,
@@ -367,7 +467,14 @@ def _review_context(
 
 
 def _review_reason(reason_code: str | None) -> str | None:
-    """Return a user-facing reason for deferred AI reviews."""
+    """Return a user-facing reason for deferred AI reviews.
+
+    Args:
+        reason_code: str | None: .
+
+    Returns:
+        str | None: .
+    """
     labels = {
         "empty_evidence_package": "证据包为空，AI 未形成可引用结论。",
         "news_target_incomplete": "News target 未完成，AI 复核延期。",
@@ -380,7 +487,15 @@ def _assessment_context(
     assessment: dict[str, Any] | None,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    """Build effective-assessment context."""
+    """Build effective-assessment context.
+
+    Args:
+        assessment: dict[str, Any] | None: .
+        payload: dict[str, Any]: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     if assessment is None:
         return {
             "assessment_id": None,
@@ -398,7 +513,14 @@ def _assessment_context(
 
 
 def _valuation_context(assessment: dict[str, Any] | None) -> dict[str, Any]:
-    """Build valuation card data without fabricating missing valuation."""
+    """Build valuation card data without fabricating missing valuation.
+
+    Args:
+        assessment: dict[str, Any] | None: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     if assessment is None:
         return {
             "discount_rate": None,
@@ -418,17 +540,20 @@ def _valuation_context(assessment: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def _document_context(document: dict[str, Any], security_id: str) -> dict[str, Any]:
-    """Map one document event into an evidence-like dashboard row."""
+    """Map one document event into an evidence-like dashboard row.
+
+    Args:
+        document: dict[str, Any]: .
+        security_id: str: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     snippet = _string_value(document.get("snippet")) or ""
     title = _string_value(document.get("title")) or document.get("event_id") or "新闻文档"
     symbols = tuple(document.get("symbols") or ())
     code = security_id.split(".")[0]
-    linked = (
-        security_id in symbols
-        or code in symbols
-        or code in snippet
-        or code in str(title)
-    )
+    linked = security_id in symbols or code in symbols or code in snippet or code in str(title)
     return {
         "evidence_id": document.get("event_id"),
         "title": title,
@@ -444,7 +569,14 @@ def _document_context(document: dict[str, Any], security_id: str) -> dict[str, A
 
 
 def _raw_metric_cards(factor_details: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return compact raw metrics for the detail page."""
+    """Return compact raw metrics for the detail page.
+
+    Args:
+        factor_details: dict[str, Any]: .
+
+    Returns:
+        list[dict[str, Any]]: .
+    """
     raw = _dict_value(_dict_value(factor_details.get("ai_quant_profile")).get("raw_factors"))
     labels = {
         "pe_ttm": ("PE TTM", "x"),
@@ -476,7 +608,15 @@ def _downsample_points(
     points: list[dict[str, Any]],
     max_points: int,
 ) -> list[dict[str, Any]]:
-    """Downsample points while keeping first and last observations."""
+    """Downsample points while keeping first and last observations.
+
+    Args:
+        points: list[dict[str, Any]]: .
+        max_points: int: .
+
+    Returns:
+        list[dict[str, Any]]: .
+    """
     if len(points) <= max_points:
         return points
     step = max(1, len(points) // max_points)
@@ -487,19 +627,40 @@ def _downsample_points(
 
 
 def _dict_value(value: Any) -> dict[str, Any]:
-    """Return a dict or empty dict."""
+    """Return a dict or empty dict.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        dict[str, Any]: .
+    """
     return dict(value) if isinstance(value, dict) else {}
 
 
 def _string_value(value: Any) -> str | None:
-    """Return stripped non-empty strings."""
+    """Return stripped non-empty strings.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        str | None: .
+    """
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
 
 
 def _optional_float(value: Any) -> float | None:
-    """Convert Decimal/numeric values to float."""
+    """Convert Decimal/numeric values to float.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        float | None: .
+    """
     if value is None:
         return None
     if isinstance(value, Decimal):
@@ -511,14 +672,28 @@ def _optional_float(value: Any) -> float | None:
 
 
 def _iso_or_none(value: Any) -> str | None:
-    """Return ISO datetime text when available."""
+    """Return ISO datetime text when available.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        str | None: .
+    """
     if hasattr(value, "isoformat"):
         return value.isoformat()
     return None
 
 
 def _ensure_utc(value: datetime) -> datetime:
-    """Normalize a datetime to UTC."""
+    """Normalize a datetime to UTC.
+
+    Args:
+        value: datetime: .
+
+    Returns:
+        datetime: .
+    """
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)

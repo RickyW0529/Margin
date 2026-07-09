@@ -13,7 +13,7 @@ from margin.news.models import ensure_utc, utc_now
 
 
 class RunStatus(StrEnum):
-    """Terminal state of a dashboard-level batch research run."""
+    """Terminal state of a dashboard-level batch research run.."""
 
     PUBLISHED = "published"
     ABSTAINED = "abstained"
@@ -22,7 +22,7 @@ class RunStatus(StrEnum):
 
 
 class ItemStatus(StrEnum):
-    """Dashboard status for a single research item."""
+    """Dashboard status for a single research item.."""
 
     PUBLISHED = "published"
     ABSTAINED = "abstained"
@@ -31,7 +31,7 @@ class ItemStatus(StrEnum):
 
 
 class FeedbackType(StrEnum):
-    """Allowed user feedback actions for a research item."""
+    """Allowed user feedback actions for a research item.."""
 
     ACCEPT = "accept"
     REJECT = "reject"
@@ -40,14 +40,14 @@ class FeedbackType(StrEnum):
 
 
 class JobStatus(StrEnum):
-    """Synchronous MVP job status for nightly dashboard runs."""
+    """Synchronous MVP job status for nightly dashboard runs.."""
 
     COMPLETED = "completed"
     FAILED = "failed"
 
 
 class ResearchRun(BaseModel):
-    """A run-level immutable aggregate for module 08 dashboard queries."""
+    """A run-level immutable aggregate for module 08 dashboard queries.."""
 
     run_id: str = Field(default_factory=lambda: f"dr_{uuid.uuid4().hex[:12]}")
     decision_at: datetime
@@ -70,16 +70,16 @@ class ResearchRun(BaseModel):
         """Normalize timestamp fields to UTC.
 
         Args:
-            value: The datetime value to normalize.
+            value: datetime: .
 
         Returns:
-            A timezone-aware UTC datetime.
+            datetime: .
         """
         return ensure_utc(value)
 
 
 class ResearchItem(BaseModel):
-    """A symbol-level item generated from a module 06 workflow result."""
+    """A symbol-level item generated from a module 06 workflow result.."""
 
     item_id: str = Field(default_factory=lambda: f"di_{uuid.uuid4().hex[:12]}")
     run_id: str
@@ -109,10 +109,10 @@ class ResearchItem(BaseModel):
         """Normalize the created_at timestamp to UTC.
 
         Args:
-            value: The datetime value to normalize.
+            value: datetime: .
 
         Returns:
-            A timezone-aware UTC datetime.
+            datetime: .
         """
         return ensure_utc(value)
 
@@ -122,13 +122,10 @@ class ResearchItem(BaseModel):
         """Validate that confidence is within the unit interval.
 
         Args:
-            value: Confidence score to validate.
+            value: float: .
 
         Returns:
-            The validated confidence score.
-
-        Raises:
-            ValueError: If confidence is not between 0.0 and 1.0.
+            float: .
         """
         if not 0.0 <= value <= 1.0:
             raise ValueError(f"confidence must be in [0, 1], got {value}")
@@ -136,7 +133,7 @@ class ResearchItem(BaseModel):
 
 
 class FeedbackRecord(BaseModel):
-    """Append-only user feedback for a research item."""
+    """Append-only user feedback for a research item.."""
 
     feedback_id: str = Field(default_factory=lambda: f"fb_{uuid.uuid4().hex[:12]}")
     item_id: str
@@ -152,16 +149,16 @@ class FeedbackRecord(BaseModel):
         """Normalize the created_at timestamp to UTC.
 
         Args:
-            value: The datetime value to normalize.
+            value: datetime: .
 
         Returns:
-            A timezone-aware UTC datetime.
+            datetime: .
         """
         return ensure_utc(value)
 
 
 class ProviderStatus(BaseModel):
-    """Health metadata for a dashboard-facing provider or subsystem."""
+    """Health metadata for a dashboard-facing provider or subsystem.."""
 
     provider: str
     status: str
@@ -171,7 +168,7 @@ class ProviderStatus(BaseModel):
 
 
 class DashboardPageInfo(BaseModel):
-    """Cursor page metadata for v0.2 dashboard BFF responses."""
+    """Cursor page metadata for v0.2 dashboard BFF responses.."""
 
     next_cursor: str | None = None
     previous_cursor: str | None = None
@@ -182,7 +179,7 @@ class DashboardPageInfo(BaseModel):
 
 
 class DashboardFilters(BaseModel):
-    """Server-side filters for v0.2 research candidate queries."""
+    """Server-side filters for v0.2 research candidate queries.."""
 
     screening_status: str | None = None
     data_status: str | None = None
@@ -194,7 +191,7 @@ class DashboardFilters(BaseModel):
 
 
 class DashboardSort(BaseModel):
-    """Safe sort descriptor for v0.2 research candidate queries."""
+    """Safe sort descriptor for v0.2 research candidate queries.."""
 
     field: str = "final_score"
     direction: str = "desc"
@@ -204,7 +201,14 @@ class DashboardSort(BaseModel):
     @field_validator("field")
     @classmethod
     def validate_field(cls, value: str) -> str:
-        """Validate sort field."""
+        """Validate sort field.
+
+        Args:
+            value: str: .
+
+        Returns:
+            str: .
+        """
         allowed = {"final_score", "confidence", "last_checked_at", "symbol"}
         if value not in allowed:
             raise ValueError(f"unsupported dashboard sort field: {value}")
@@ -213,7 +217,14 @@ class DashboardSort(BaseModel):
     @field_validator("direction")
     @classmethod
     def validate_direction(cls, value: str) -> str:
-        """Validate sort direction."""
+        """Validate sort direction.
+
+        Args:
+            value: str: .
+
+        Returns:
+            str: .
+        """
         normalized = value.lower()
         if normalized not in {"asc", "desc"}:
             raise ValueError(f"unsupported dashboard sort direction: {value}")
@@ -221,7 +232,7 @@ class DashboardSort(BaseModel):
 
 
 class ResearchCandidateListItemV2(BaseModel):
-    """One row in the v0.2 all-company research candidate list."""
+    """One row in the v0.2 all-company research candidate list.."""
 
     item_id: str
     security_id: str
@@ -250,12 +261,19 @@ class ResearchCandidateListItemV2(BaseModel):
     @field_validator("last_checked_at")
     @classmethod
     def normalize_last_checked_at(cls, value: datetime) -> datetime:
-        """Normalize last checked timestamp."""
+        """Normalize last checked timestamp.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)
 
 
 class ResearchCandidateListResponse(BaseModel):
-    """Paged v0.2 research candidate list response."""
+    """Paged v0.2 research candidate list response.."""
 
     items: tuple[ResearchCandidateListItemV2, ...] = Field(default_factory=tuple)
     page_info: DashboardPageInfo = Field(default_factory=DashboardPageInfo)
@@ -268,12 +286,19 @@ class ResearchCandidateListResponse(BaseModel):
     @field_validator("as_of")
     @classmethod
     def normalize_as_of(cls, value: datetime) -> datetime:
-        """Normalize as_of timestamp."""
+        """Normalize as_of timestamp.
+
+        Args:
+            value: datetime: .
+
+        Returns:
+            datetime: .
+        """
         return ensure_utc(value)
 
 
 class ResearchItemDetailV2(BaseModel):
-    """Company detail BFF DTO for the v0.2 dashboard."""
+    """Company detail BFF DTO for the v0.2 dashboard.."""
 
     item: ResearchCandidateListItemV2
     current_review: dict[str, Any] = Field(default_factory=dict)
@@ -287,7 +312,7 @@ class ResearchItemDetailV2(BaseModel):
 
 
 class ProviderSettingsView(BaseModel):
-    """Provider settings DTO shown by the dashboard."""
+    """Provider settings DTO shown by the dashboard.."""
 
     provider_id: str
     provider_name: str
@@ -301,7 +326,7 @@ class ProviderSettingsView(BaseModel):
 
 
 class ScopeSettingsView(BaseModel):
-    """Scope settings DTO shown by the dashboard."""
+    """Scope settings DTO shown by the dashboard.."""
 
     scope_version_id: str
     universe_code: str
@@ -312,7 +337,7 @@ class ScopeSettingsView(BaseModel):
 
 
 class JobRun(BaseModel):
-    """Synchronous MVP job record for nightly run endpoints."""
+    """Synchronous MVP job record for nightly run endpoints.."""
 
     job_run_id: str = Field(default_factory=lambda: f"job_{uuid.uuid4().hex[:12]}")
     run_id: str
@@ -328,9 +353,9 @@ class JobRun(BaseModel):
         """Normalize the created_at timestamp to UTC.
 
         Args:
-            value: The datetime value to normalize.
+            value: datetime: .
 
         Returns:
-            A timezone-aware UTC datetime.
+            datetime: .
         """
         return ensure_utc(value)

@@ -26,12 +26,7 @@ from pydantic import BaseModel, Field
 
 
 class Exchange(StrEnum):
-    """A-share stock exchanges.
-
-    Attributes:
-        SH: Shanghai Stock Exchange.
-        SZ: Shenzhen Stock Exchange.
-    """
+    """A-share stock exchanges.."""
 
     SH = "SH"
     SZ = "SZ"
@@ -40,24 +35,11 @@ class Exchange(StrEnum):
 def normalize_symbol(raw: str) -> str:
     """Normalize various symbol formats to ``<code>.<EXCHANGE>`` form.
 
-    Supported input formats:
-    - ``000001`` / ``600000`` (numeric only, exchange inferred by rules)
-    - ``000001.SZ`` / ``600000.SH`` (already standard)
-    - ``SZ000001`` / ``SH600000`` (exchange prefix)
-    - ``000001.sz`` / ``600000.sh`` (lowercase exchange)
-
     Args:
-        raw: The raw symbol string.
+        raw: str: .
 
     Returns:
-        A standardized symbol such as ``000001.SZ`` or ``600000.SH``.
-        If the input cannot be normalized, it is returned upper-cased.
-
-    Example:
-        >>> normalize_symbol("000001")
-        '000001.SZ'
-        >>> normalize_symbol("sh600000")
-        '600000.SH'
+        str: .
     """
     raw = str(raw).strip().upper()
 
@@ -80,13 +62,10 @@ def symbol_components(symbol: str) -> tuple[str, str]:
     """Split a standardized symbol into its code and exchange components.
 
     Args:
-        symbol: A standardized symbol, e.g. ``000001.SZ``.
+        symbol: str: .
 
     Returns:
-        A tuple of ``(code, exchange)`` where ``exchange`` is upper-cased.
-
-    Raises:
-        ValueError: If ``symbol`` does not contain a dot separator.
+        tuple[str, str]: .
     """
     if "." not in symbol:
         raise ValueError(f"Invalid symbol format: {symbol}")
@@ -100,16 +79,7 @@ def symbol_components(symbol: str) -> tuple[str, str]:
 
 
 class DataDomain(StrEnum):
-    """Data domains in the standardization layer (architecture §4.1).
-
-    Attributes:
-        MARKET_BAR: Market bar (OHLCV) data.
-        FINANCIAL: Financial report data.
-        SECURITY_META: Security metadata.
-        INDEX_MEMBER: Index constituent data.
-        ADJUSTMENT_FACTOR: Price adjustment factors.
-        CORPORATE_ACTION: Corporate action events.
-    """
+    """Data domains in the standardization layer (architecture §4.1).."""
 
     MARKET_BAR = "market_bar"
     FINANCIAL = "financial"
@@ -120,14 +90,7 @@ class DataDomain(StrEnum):
 
 
 class FieldMapping(BaseModel):
-    """Mapping rule for a single field from a source to the standard schema.
-
-    Attributes:
-        source_field: Name of the field in the external source.
-        target_field: Name of the field in the standard schema.
-        transform: Optional transform function name to apply, e.g. ``normalize_symbol``.
-        unit_factor: Multiplicative factor for unit conversion. Defaults to 1.0.
-    """
+    """Mapping rule for a single field from a source to the standard schema.."""
 
     source_field: str
     target_field: str
@@ -164,16 +127,7 @@ optional transform, and unit conversion factor.
 
 
 class UnitConverter:
-    """Unify units and currency for A-share data.
-
-    A-share data defaults to CNY. Monetary amounts are unified to yuan,
-    and trading volume is unified to shares. Some external sources return
-    amounts in ``wan_yuan`` (10k yuan) or volume in ``shou`` (lots of 100),
-    which are converted via explicit source units.
-
-    Attributes:
-        CURRENCY: Default currency code, ``CNY``.
-    """
+    """Unify units and currency for A-share data.."""
 
     CURRENCY = "CNY"
 
@@ -182,13 +136,11 @@ class UnitConverter:
         """Convert a monetary amount to yuan.
 
         Args:
-            value: The raw monetary amount.
-            source_unit: Source unit identifier. Supported values are ``yuan``,
-                ``qian_yuan`` (1,000 yuan), ``wan_yuan`` (10,000 yuan), and
-                ``yi_yuan`` (100,000,000 yuan). Defaults to ``yuan``.
+            value: float: .
+            source_unit: str: .
 
         Returns:
-            The amount expressed in yuan.
+            float: .
         """
         if source_unit == "qian_yuan":
             return value * 1000.0
@@ -203,13 +155,11 @@ class UnitConverter:
         """Convert trading volume to shares.
 
         Args:
-            value: The raw volume value.
-            source_unit: Source unit identifier. Supported values are ``gu``
-                (shares) and ``shou`` (lots, 1 lot = 100 shares).
-                Defaults to ``gu``.
+            value: float: .
+            source_unit: str: .
 
         Returns:
-            The volume expressed in shares.
+            float: .
         """
         if source_unit == "shou":
             return value * 100.0
@@ -222,23 +172,17 @@ class UnitConverter:
 
 
 class TimeStandardizer:
-    """Standardize timestamps, producing the five point-in-time fields.
-
-    The five point-in-time (PIT) fields are ``event_at``, ``published_at``,
-    ``available_at``, ``fetched_at``, and ``revised_at`` (architecture §4.4).
-    """
+    """Standardize timestamps, producing the five point-in-time fields.."""
 
     @staticmethod
     def parse_date(value: Any) -> datetime | None:
         """Parse a value in multiple date formats into a ``datetime``.
 
         Args:
-            value: A date-like value. Supported types are ``datetime``,
-                strings in formats such as ``%Y-%m-%d``, ``%Y%m%d``,
-                ``%Y/%m/%d``, and ``%Y-%m-%d %H:%M:%S``.
+            value: Any: .
 
         Returns:
-            A ``datetime`` if parsing succeeds, otherwise ``None``.
+            datetime | None: .
         """
         if value is None or value == "":
             return None
@@ -271,18 +215,15 @@ class TimeStandardizer:
     ) -> dict[str, datetime]:
         """Generate the full set of point-in-time fields.
 
-        Missing timestamps are back-filled from ``event_at`` / ``published_at``
-        or the current local time where appropriate.
-
         Args:
-            event_at: The moment the event actually occurred.
-            published_at: The moment the data was officially published.
-            available_at: The moment the data becomes usable for downstream logic.
-            fetched_at: The moment the data was fetched from the source.
-            revised_at: The moment of the latest revision, if any.
+            event_at: datetime | None: .
+            published_at: datetime | None: .
+            available_at: datetime | None: .
+            fetched_at: datetime | None: .
+            revised_at: datetime | None: .
 
         Returns:
-            A dictionary containing all five PIT fields.
+            dict[str, datetime]: .
         """
         now = datetime.now()
         return {
@@ -297,14 +238,11 @@ class TimeStandardizer:
 def market_bar_available_at(trade_date: datetime) -> datetime:
     """Return the earliest usable timestamp for a daily A-share bar.
 
-    Daily bars are considered available after the market close at 15:00
-    on their trade date.
-
     Args:
-        trade_date: The trade date of the market bar.
+        trade_date: datetime: .
 
     Returns:
-        A ``datetime`` combining the trade date with 15:00.
+        datetime: .
     """
     return datetime.combine(trade_date.date(), time(hour=15))
 
@@ -313,10 +251,10 @@ def next_market_open_after(value: datetime) -> datetime:
     """Return a conservative availability timestamp for an untimed announcement.
 
     Args:
-        value: The datetime from which to compute the next market open.
+        value: datetime: .
 
     Returns:
-        A ``datetime`` for the next trading day's market open at 09:30.
+        datetime: .
     """
     return datetime.combine((value + timedelta(days=1)).date(), time(hour=9, minute=30))
 
@@ -327,23 +265,7 @@ def next_market_open_after(value: datetime) -> datetime:
 
 
 class StandardDataEvent(BaseModel):
-    """Standard data event published after standardization (architecture §4.3).
-
-    All standardized data is emitted as an event for consumption by the
-    storage layer (ODS → DWD → PIT).
-
-    Attributes:
-        domain: The data domain this event belongs to.
-        symbol: Standardized symbol, if applicable.
-        data: The standardized payload as a dictionary.
-        event_at: The moment the event actually occurred.
-        published_at: The moment the data was officially published.
-        available_at: The moment the data becomes usable.
-        fetched_at: The moment the data was fetched from the source.
-        revised_at: The moment of the latest revision, if any.
-        source: Identifier of the external data source.
-        mapping_version: Version of the field mapping used.
-    """
+    """Standard data event published after standardization (architecture §4.3).."""
 
     domain: DataDomain
     symbol: str | None = None
@@ -360,22 +282,16 @@ class StandardDataEvent(BaseModel):
 
 
 class Standardizer:
-    """Convert raw data returned by an external provider into standard data events.
-
-    The standardization pipeline is:
-      Field mapping → Code mapping → Unit/currency unification
-      → Time standardization → Standard data event.
-
-    Attributes:
-        _mapping_version: The mapping version to attach to produced events.
-    """
+    """Convert raw data returned by an external provider into standard data events.."""
 
     def __init__(self, mapping_version: str = "v1") -> None:
         """Initialize a ``Standardizer``.
 
         Args:
-            mapping_version: Mapping version tag to use for emitted events.
-                Defaults to ``v1``.
+            mapping_version: str: .
+
+        Returns:
+            None: .
         """
         self._mapping_version = mapping_version
 
@@ -387,14 +303,11 @@ class Standardizer:
         """Standardize market bar (OHLCV) records.
 
         Args:
-            raw_records: List of raw market bar dictionaries. Expected keys
-                include ``symbol``, ``date``, ``open``, ``close``, ``high``,
-                ``low``, ``volume``, ``amount``, and optional unit fields
-                ``volume_unit`` / ``amount_unit``.
-            source: Identifier of the external data source.
+            raw_records: list[dict[str, Any]]: .
+            source: str: .
 
         Returns:
-            A list of ``StandardDataEvent`` objects in the ``MARKET_BAR`` domain.
+            list[StandardDataEvent]: .
         """
         events: list[StandardDataEvent] = []
         for record in raw_records:
@@ -445,13 +358,11 @@ class Standardizer:
         """Standardize security metadata records.
 
         Args:
-            raw_records: List of raw security metadata dictionaries. Expected
-                keys include ``symbol``, ``name``, ``industry``, ``market``,
-                ``list_date``, and optional timing fields.
-            source: Identifier of the external data source.
+            raw_records: list[dict[str, Any]]: .
+            source: str: .
 
         Returns:
-            A list of ``StandardDataEvent`` objects in the ``SECURITY_META`` domain.
+            list[StandardDataEvent]: .
         """
         events: list[StandardDataEvent] = []
         for record in raw_records:
@@ -489,15 +400,11 @@ class Standardizer:
         """Standardize financial report records.
 
         Args:
-            raw_records: List of raw financial report dictionaries. Expected keys
-                include ``symbol``, ``report_date``, ``ann_date``, and financial
-                metrics such as ``total_assets``, ``total_liabilities``,
-                ``total_equity``, ``roe``, ``eps``, ``gross_profit_margin``,
-                ``revenue``, and ``net_profit``.
-            source: Identifier of the external data source.
+            raw_records: list[dict[str, Any]]: .
+            source: str: .
 
         Returns:
-            A list of ``StandardDataEvent`` objects in the ``FINANCIAL`` domain.
+            list[StandardDataEvent]: .
         """
         events: list[StandardDataEvent] = []
         for record in raw_records:
@@ -551,13 +458,11 @@ class Standardizer:
         """Standardize index constituent records.
 
         Args:
-            raw_records: List of raw index member dictionaries. Expected keys
-                include ``symbol``, ``as_of``, ``index_code``, ``name``, and
-                ``weight``.
-            source: Identifier of the external data source.
+            raw_records: list[dict[str, Any]]: .
+            source: str: .
 
         Returns:
-            A list of ``StandardDataEvent`` objects in the ``INDEX_MEMBER`` domain.
+            list[StandardDataEvent]: .
         """
         events: list[StandardDataEvent] = []
         for record in raw_records:

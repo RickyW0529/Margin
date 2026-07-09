@@ -16,11 +16,8 @@ from margin.news.robots import RobotsChecker
 def test_robots_checker_enforces_disallow_and_caches_by_origin():
     """Allowed and disallowed paths are enforced and robots.txt is fetched once per origin.
 
-    Verifies that:
-    - a path not matching a ``Disallow`` rule is allowed;
-    - a path matching ``Disallow`` is rejected;
-    - a more specific ``Allow`` inside a disallowed prefix is allowed;
-    - the robots.txt fetcher is invoked exactly one time for the origin.
+    Returns:
+        Any: .
     """
     calls: list[str] = []
 
@@ -28,10 +25,10 @@ def test_robots_checker_enforces_disallow_and_caches_by_origin():
         """Fake robots.txt fetcher that records each requested URL.
 
         Args:
-            url: The robots.txt URL being fetched.
+            url: str: .
 
         Returns:
-            A tuple of HTTP status code and raw robots.txt body.
+            tuple[int, bytes]: .
         """
         calls.append(url)
         return (
@@ -50,8 +47,8 @@ def test_robots_checker_enforces_disallow_and_caches_by_origin():
 def test_robots_checker_rejects_invalid_schemes():
     """Non-HTTP/HTTPS schemes are rejected with a compliance error.
 
-    Verifies that ``assert_allowed`` raises ``ComplianceError`` when the URL
-    scheme is not supported for compliant web acquisition.
+    Returns:
+        Any: .
     """
     checker = RobotsChecker(fetcher=lambda url: (404, b""))
 

@@ -22,6 +22,11 @@ from margin.agents.security.policies import (
 
 
 def test_capability_token_can_only_be_narrowed() -> None:
+    """Test capability_token_can_only_be_narrowed.
+
+    Returns:
+        None: .
+    """
     parent = _token(
         data_access=(
             DataAccessPolicy.READ_CHAT_SUMMARY,
@@ -60,6 +65,11 @@ def test_capability_token_can_only_be_narrowed() -> None:
 
 
 def test_worker_success_result_requires_artifact_refs() -> None:
+    """Test worker_success_result_requires_artifact_refs.
+
+    Returns:
+        None: .
+    """
     with pytest.raises(ValidationError, match="output_artifact_refs"):
         WorkerTaskResult(
             run_id="ar_1",
@@ -74,6 +84,11 @@ def test_worker_success_result_requires_artifact_refs() -> None:
 
 
 def test_domain_result_requires_capsule_and_audit_refs() -> None:
+    """Test domain_result_requires_capsule_and_audit_refs.
+
+    Returns:
+        None: .
+    """
     result = DomainTaskResult(
         run_id="ar_1",
         domain_task_id="dt_quant",
@@ -91,6 +106,11 @@ def test_domain_result_requires_capsule_and_audit_refs() -> None:
 
 
 def test_context_pack_requires_token_budget() -> None:
+    """Test context_pack_requires_token_budget.
+
+    Returns:
+        None: .
+    """
     with pytest.raises(ValidationError, match="token_budget"):
         ContextPack(
             context_pack_id="ctxpack_1",
@@ -111,6 +131,18 @@ def _token(
     can_delegate: bool,
     delegation_depth_remaining: int,
 ) -> CapabilityToken:
+    """Helper token.
+
+    Args:
+        data_access: tuple[DataAccessPolicy, ...]: .
+        production_write: tuple[ProductionWritePolicy, ...]: .
+        tool_policy: tuple[ToolPolicy, ...]: .
+        can_delegate: bool: .
+        delegation_depth_remaining: int: .
+
+    Returns:
+        CapabilityToken: .
+    """
     return CapabilityToken(
         token_id="cap_parent",
         run_id="ar_1",

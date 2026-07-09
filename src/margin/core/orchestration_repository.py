@@ -25,21 +25,16 @@ from margin.sql.core_queries import (
 
 
 class OrchestrationRepository(Protocol):
-    """Persistence contract used by run creators and DB-backed workers.
-
-    Defines the atomic claim, append-only event, and run summary contract
-    for durable orchestration. Implementations must preserve immutable
-    step-event history and serialize concurrent step claims.
-    """
+    """Persistence contract used by run creators and DB-backed workers.."""
 
     def create_run(self, run: OrchestrationRun) -> None:
         """Persist a new orchestration run.
 
         Args:
-            run: The run to create.
+            run: OrchestrationRun: .
 
-        Raises:
-            ValueError: If the run already exists.
+        Returns:
+            None: .
         """
         ...
 
@@ -47,10 +42,10 @@ class OrchestrationRepository(Protocol):
         """Retrieve a run by its identifier.
 
         Args:
-            run_id: The run identifier.
+            run_id: str: .
 
         Returns:
-            The run if found, None otherwise.
+            OrchestrationRun | None: .
         """
         ...
 
@@ -65,13 +60,13 @@ class OrchestrationRepository(Protocol):
         """Return persisted runs, newest first, filtered by optional facets.
 
         Args:
-            run_type: Optional run-type filter (e.g. ``valuation_discovery``).
-            scope_version_id: Optional scope version filter.
-            state: Optional run-state filter.
-            limit: Maximum number of runs to return.
+            run_type: str | None: .
+            scope_version_id: str | None: .
+            state: str | RunState | None: .
+            limit: int: .
 
         Returns:
-            Ordered list of runs, newest ``created_at`` first.
+            list[OrchestrationRun]: .
         """
         ...
 
@@ -85,12 +80,12 @@ class OrchestrationRepository(Protocol):
         """Update the derived run summary while preserving step-event history.
 
         Args:
-            run_id: The run identifier.
-            state: New run state to set.
-            finished_at: Optional finished timestamp.
+            run_id: str: .
+            state: RunState: .
+            finished_at: datetime | None: .
 
         Returns:
-            The updated OrchestrationRun.
+            OrchestrationRun: .
         """
         ...
 
@@ -98,10 +93,10 @@ class OrchestrationRepository(Protocol):
         """Append an immutable step attempt event.
 
         Args:
-            event: The step event to append.
+            event: StepAttempt: .
 
-        Raises:
-            ValueError: If the event or its sequence already exists.
+        Returns:
+            None: .
         """
         ...
 
@@ -109,11 +104,11 @@ class OrchestrationRepository(Protocol):
         """Return all step events for a given run and step, ordered by sequence.
 
         Args:
-            run_id: The run identifier.
-            step_id: The step identifier.
+            run_id: str: .
+            step_id: str: .
 
         Returns:
-            Ordered list of step attempts.
+            list[StepAttempt]: .
         """
         ...
 
@@ -121,11 +116,11 @@ class OrchestrationRepository(Protocol):
         """Return the most recent step event for a given run and step.
 
         Args:
-            run_id: The run identifier.
-            step_id: The step identifier.
+            run_id: str: .
+            step_id: str: .
 
         Returns:
-            The latest step attempt, or None.
+            StepAttempt | None: .
         """
         ...
 
@@ -140,27 +135,26 @@ class OrchestrationRepository(Protocol):
         """Atomically claim one due step and return a lease-bearing event.
 
         Args:
-            worker_id: Identifier of the claiming worker.
-            now: Current UTC timestamp.
-            lease_expires_at: When the lease expires.
-            allowed_step_ids: Optional set of step ids to restrict claiming to.
+            worker_id: str: .
+            now: datetime: .
+            lease_expires_at: datetime: .
+            allowed_step_ids: frozenset[str] | None: .
 
         Returns:
-            A claimed step attempt, or None if nothing is due.
+            StepAttempt | None: .
         """
         ...
 
 
 class MemoryOrchestrationRepository:
-    """Deterministic process-local repository for domain tests.
-
-    Uses an ``RLock`` to serialize concurrent operations. Step events are
-    stored in a dictionary keyed by event id, with a separate set for
-    sequence uniqueness enforcement.
-    """
+    """Deterministic process-local repository for domain tests.."""
 
     def __init__(self) -> None:
-        """Initialize an empty in-memory repository."""
+        """Initialize an empty in-memory repository.
+
+        Returns:
+            None: .
+        """
         self._lock = RLock()
         self._runs: dict[str, OrchestrationRun] = {}
         self._events: dict[str, StepAttempt] = {}
@@ -170,10 +164,10 @@ class MemoryOrchestrationRepository:
         """Persist a new orchestration run in memory.
 
         Args:
-            run: The run to create.
+            run: OrchestrationRun: .
 
-        Raises:
-            ValueError: If the run already exists.
+        Returns:
+            None: .
         """
         with self._lock:
             if run.run_id in self._runs:
@@ -184,10 +178,10 @@ class MemoryOrchestrationRepository:
         """Retrieve a run by its identifier.
 
         Args:
-            run_id: The run identifier.
+            run_id: str: .
 
         Returns:
-            The run if found, None otherwise.
+            OrchestrationRun | None: .
         """
         return self._runs.get(run_id)
 
@@ -202,13 +196,13 @@ class MemoryOrchestrationRepository:
         """Return persisted runs, newest first, filtered by optional facets.
 
         Args:
-            run_type: Optional run-type filter.
-            scope_version_id: Optional scope version filter.
-            state: Optional run-state filter.
-            limit: Maximum number of runs to return.
+            run_type: str | None: .
+            scope_version_id: str | None: .
+            state: str | RunState | None: .
+            limit: int: .
 
         Returns:
-            Ordered list of runs, newest ``created_at`` first.
+            list[OrchestrationRun]: .
         """
         if limit <= 0:
             return []
@@ -232,15 +226,12 @@ class MemoryOrchestrationRepository:
         """Update the in-memory run summary.
 
         Args:
-            run_id: The run identifier.
-            state: New run state to set.
-            finished_at: Optional finished timestamp.
+            run_id: str: .
+            state: RunState: .
+            finished_at: datetime | None: .
 
         Returns:
-            The updated OrchestrationRun.
-
-        Raises:
-            KeyError: If the run does not exist.
+            OrchestrationRun: .
         """
         with self._lock:
             run = self._runs.get(run_id)
@@ -259,10 +250,10 @@ class MemoryOrchestrationRepository:
         """Append an immutable step attempt event.
 
         Args:
-            event: The step event to append.
+            event: StepAttempt: .
 
-        Raises:
-            ValueError: If the event or its sequence already exists.
+        Returns:
+            None: .
         """
         with self._lock:
             self._append_step_event_unlocked(event)
@@ -271,11 +262,11 @@ class MemoryOrchestrationRepository:
         """Return all step events for a given run and step, ordered by sequence.
 
         Args:
-            run_id: The run identifier.
-            step_id: The step identifier.
+            run_id: str: .
+            step_id: str: .
 
         Returns:
-            Ordered list of step attempts.
+            list[StepAttempt]: .
         """
         return sorted(
             (
@@ -290,11 +281,11 @@ class MemoryOrchestrationRepository:
         """Return the most recent step event for a given run and step.
 
         Args:
-            run_id: The run identifier.
-            step_id: The step identifier.
+            run_id: str: .
+            step_id: str: .
 
         Returns:
-            The latest step attempt, or None.
+            StepAttempt | None: .
         """
         events = self.list_step_events(run_id, step_id)
         return events[-1] if events else None
@@ -310,13 +301,13 @@ class MemoryOrchestrationRepository:
         """Atomically claim one due step in memory.
 
         Args:
-            worker_id: Identifier of the claiming worker.
-            now: Current UTC timestamp.
-            lease_expires_at: When the lease expires.
-            allowed_step_ids: Optional set of step ids to restrict claiming to.
+            worker_id: str: .
+            now: datetime: .
+            lease_expires_at: datetime: .
+            allowed_step_ids: frozenset[str] | None: .
 
         Returns:
-            A claimed step attempt, or None if nothing is due.
+            StepAttempt | None: .
         """
         with self._lock:
             latest_by_step: dict[tuple[str, str], StepAttempt] = {}
@@ -333,10 +324,7 @@ class MemoryOrchestrationRepository:
                     event
                     for event in latest_by_step.values()
                     if _is_claimable(event, now)
-                    and (
-                        allowed_step_ids is None
-                        or event.step_id in allowed_step_ids
-                    )
+                    and (allowed_step_ids is None or event.step_id in allowed_step_ids)
                 ),
                 key=lambda event: (event.created_at, event.run_id, event.step_id),
             )
@@ -355,11 +343,10 @@ class MemoryOrchestrationRepository:
         """Append a step event without acquiring the lock.
 
         Args:
-            event: The step event to append.
+            event: StepAttempt: .
 
-        Raises:
-            ValueError: If the run does not exist, the event id already exists,
-                or the sequence already exists.
+        Returns:
+            None: .
         """
         if event.run_id not in self._runs:
             raise ValueError(f"orchestration run '{event.run_id}' does not exist")
@@ -373,17 +360,16 @@ class MemoryOrchestrationRepository:
 
 
 class SQLAlchemyOrchestrationRepository:
-    """PostgreSQL repository preserving immutable step-event history.
-
-    Uses ``SELECT ... FOR UPDATE SKIP LOCKED`` for concurrent step claiming
-    and unique constraints to enforce append-only event sequences.
-    """
+    """PostgreSQL repository preserving immutable step-event history.."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
         """Initialize the repository.
 
         Args:
-            session_factory: Callable that returns a new SQLAlchemy session.
+            session_factory: Callable[[], Session]: .
+
+        Returns:
+            None: .
         """
         self._session_factory = session_factory
 
@@ -391,10 +377,10 @@ class SQLAlchemyOrchestrationRepository:
         """Persist a new orchestration run in PostgreSQL.
 
         Args:
-            run: The run to create.
+            run: OrchestrationRun: .
 
-        Raises:
-            ValueError: If the run already exists.
+        Returns:
+            None: .
         """
         try:
             with self._session_factory.begin() as session:
@@ -406,10 +392,10 @@ class SQLAlchemyOrchestrationRepository:
         """Retrieve a run by its identifier.
 
         Args:
-            run_id: The run identifier.
+            run_id: str: .
 
         Returns:
-            The run if found, None otherwise.
+            OrchestrationRun | None: .
         """
         with self._session_factory() as session:
             row = session.get(OrchestrationRunRow, run_id)
@@ -426,13 +412,13 @@ class SQLAlchemyOrchestrationRepository:
         """Return persisted runs, newest first, filtered by optional facets.
 
         Args:
-            run_type: Optional run-type filter.
-            scope_version_id: Optional scope version filter.
-            state: Optional run-state filter.
-            limit: Maximum number of runs to return.
+            run_type: str | None: .
+            scope_version_id: str | None: .
+            state: str | RunState | None: .
+            limit: int: .
 
         Returns:
-            Ordered list of runs, newest ``created_at`` first.
+            list[OrchestrationRun]: .
         """
         if limit <= 0:
             return []
@@ -456,15 +442,12 @@ class SQLAlchemyOrchestrationRepository:
         """Update the materialized run state derived from append-only steps.
 
         Args:
-            run_id: The run identifier.
-            state: New run state to set.
-            finished_at: Optional finished timestamp.
+            run_id: str: .
+            state: RunState: .
+            finished_at: datetime | None: .
 
         Returns:
-            The updated OrchestrationRun.
-
-        Raises:
-            KeyError: If the run does not exist.
+            OrchestrationRun: .
         """
         with self._session_factory.begin() as session:
             row = session.get(OrchestrationRunRow, run_id)
@@ -479,10 +462,10 @@ class SQLAlchemyOrchestrationRepository:
         """Append an immutable step attempt event.
 
         Args:
-            event: The step event to append.
+            event: StepAttempt: .
 
-        Raises:
-            ValueError: If the event or its sequence already exists.
+        Returns:
+            None: .
         """
         try:
             with self._session_factory.begin() as session:
@@ -507,11 +490,11 @@ class SQLAlchemyOrchestrationRepository:
         """Return all step events for a given run and step, ordered by sequence.
 
         Args:
-            run_id: The run identifier.
-            step_id: The step identifier.
+            run_id: str: .
+            step_id: str: .
 
         Returns:
-            Ordered list of step attempts.
+            list[StepAttempt]: .
         """
         statement = step_events_by_run_and_step(run_id, step_id)
         with self._session_factory() as session:
@@ -521,11 +504,11 @@ class SQLAlchemyOrchestrationRepository:
         """Return the most recent step event for a given run and step.
 
         Args:
-            run_id: The run identifier.
-            step_id: The step identifier.
+            run_id: str: .
+            step_id: str: .
 
         Returns:
-            The latest step attempt, or None.
+            StepAttempt | None: .
         """
         statement = latest_step_event(run_id, step_id)
         with self._session_factory() as session:
@@ -543,13 +526,13 @@ class SQLAlchemyOrchestrationRepository:
         """Atomically claim one due step using a PostgreSQL row lock.
 
         Args:
-            worker_id: Identifier of the claiming worker.
-            now: Current UTC timestamp.
-            lease_expires_at: When the lease expires.
-            allowed_step_ids: Optional set of step ids to restrict claiming to.
+            worker_id: str: .
+            now: datetime: .
+            lease_expires_at: datetime: .
+            allowed_step_ids: frozenset[str] | None: .
 
         Returns:
-            A claimed step attempt, or None if nothing is due.
+            StepAttempt | None: .
         """
         if allowed_step_ids is not None and not allowed_step_ids:
             return None
@@ -570,7 +553,14 @@ class SQLAlchemyOrchestrationRepository:
 
 
 def _event_sequence(event: StepAttempt) -> tuple[str, str, int, int]:
-    """Return the unique sequence key for a step attempt."""
+    """Return the unique sequence key for a step attempt.
+
+    Args:
+        event: StepAttempt: .
+
+    Returns:
+        tuple[str, str, int, int]: .
+    """
     return (event.run_id, event.step_id, event.attempt_no, event.state_seq)
 
 
@@ -578,10 +568,10 @@ def _run_to_row(run: OrchestrationRun) -> OrchestrationRunRow:
     """Map a domain OrchestrationRun to its SQLAlchemy row representation.
 
     Args:
-        run: The domain run model.
+        run: OrchestrationRun: .
 
     Returns:
-        The corresponding ORM row.
+        OrchestrationRunRow: .
     """
     return OrchestrationRunRow(
         run_id=run.run_id,
@@ -603,10 +593,10 @@ def _run_from_row(row: OrchestrationRunRow) -> OrchestrationRun:
     """Map a SQLAlchemy row back to a domain OrchestrationRun.
 
     Args:
-        row: The ORM row.
+        row: OrchestrationRunRow: .
 
     Returns:
-        The corresponding domain model.
+        OrchestrationRun: .
     """
     return OrchestrationRun(
         run_id=row.run_id,
@@ -628,10 +618,10 @@ def _event_to_row(event: StepAttempt) -> OrchestrationStepAttemptRow:
     """Map a domain StepAttempt to its SQLAlchemy row representation.
 
     Args:
-        event: The domain step attempt.
+        event: StepAttempt: .
 
     Returns:
-        The corresponding ORM row.
+        OrchestrationStepAttemptRow: .
     """
     return OrchestrationStepAttemptRow(
         event_id=event.event_id,
@@ -659,10 +649,10 @@ def _event_from_row(row: OrchestrationStepAttemptRow) -> StepAttempt:
     """Map a SQLAlchemy row back to a domain StepAttempt.
 
     Args:
-        row: The ORM row.
+        row: OrchestrationStepAttemptRow: .
 
     Returns:
-        The corresponding domain model.
+        StepAttempt: .
     """
     return StepAttempt(
         event_id=row.event_id,
@@ -690,11 +680,11 @@ def _is_claimable(event: StepAttempt, now: datetime) -> bool:
     """Determine whether a step attempt is eligible for claiming.
 
     Args:
-        event: The step attempt to check.
-        now: Current timestamp.
+        event: StepAttempt: .
+        now: datetime: .
 
     Returns:
-        True if the step is claimable.
+        bool: .
     """
     if event.state == StepState.PENDING:
         return True
@@ -721,13 +711,13 @@ def _claimed_event(
     """Create a claimed step attempt event from an eligible candidate.
 
     Args:
-        event: The eligible step attempt.
-        worker_id: Identifier of the claiming worker.
-        now: Current UTC timestamp.
-        lease_expires_at: When the lease expires.
+        event: StepAttempt: .
+        worker_id: str: .
+        now: datetime: .
+        lease_expires_at: datetime: .
 
     Returns:
-        A new StepAttempt in RUNNING state with lease fields populated.
+        StepAttempt: .
     """
     if event.state in {StepState.PENDING, StepState.WAITING_RATE_LIMIT, StepState.WAITING_BUDGET}:
         return event.append_state(

@@ -44,7 +44,7 @@ from margin.news.models import SourceLevel, ensure_utc, utc_now
 
 
 class ValidationStatus(StrEnum):
-    """Status of a single claim validation result."""
+    """Status of a single claim validation result.."""
 
     PASS = "pass"
     FAIL = "fail"
@@ -52,7 +52,7 @@ class ValidationStatus(StrEnum):
 
 
 class FailReason(StrEnum):
-    """Categorized reason why a claim validation failed or abstained."""
+    """Categorized reason why a claim validation failed or abstained.."""
 
     NO_EVIDENCE = "no_evidence"
     EVIDENCE_NOT_FOUND = "evidence_not_found"
@@ -72,21 +72,7 @@ class FailReason(StrEnum):
 
 
 class ValidationResult(BaseModel):
-    """Result of validating a single claim.
-
-    Attributes:
-        claim_id: Identifier of the validated claim.
-        status: Validation status (PASS, FAIL, or ABSTAINED).
-        reason: Human-readable explanation of the outcome.
-        fail_reason: Categorized failure reason, if applicable.
-        original_confidence: Confidence of the claim before any capping.
-        capped_confidence: Confidence after conflict capping.
-        conflicts_found: Number of conflicts detected for the claim.
-        evidences_checked: Number of evidence items examined.
-        evidences_passed: Number of evidence items that passed locator checks.
-        requires_counter_review: Whether a conflict warrants counter-review.
-        checked_at: Timestamp when validation occurred (UTC).
-    """
+    """Result of validating a single claim.."""
 
     claim_id: str
     status: ValidationStatus
@@ -108,10 +94,10 @@ class ValidationResult(BaseModel):
         """Normalize the checked-at timestamp to UTC.
 
         Args:
-            value: A datetime value to normalize.
+            value: datetime: .
 
         Returns:
-            The datetime normalized to UTC.
+            datetime: .
         """
         return ensure_utc(value)
 
@@ -119,11 +105,8 @@ class ValidationResult(BaseModel):
     def should_suppress(self) -> bool:
         """Return whether the claim should be suppressed from research signals.
 
-        FAIL and ABSTAINED results are not allowed to feed high-confidence research
-        conclusions.
-
         Returns:
-            True if the validation status is FAIL or ABSTAINED.
+            bool: .
         """
         return self.status in (ValidationStatus.FAIL, ValidationStatus.ABSTAINED)
 
@@ -134,24 +117,7 @@ class ValidationResult(BaseModel):
 
 
 class ValidationAuditRecord(BaseModel):
-    """Append-only audit record capturing the outcome of a claim validation.
-
-    Immutable after persistence.
-
-    Attributes:
-        audit_id: Unique identifier of the audit record.
-        claim_id: Identifier of the audited claim.
-        status: Validation status.
-        reason: Human-readable explanation of the outcome.
-        fail_reason: Categorized failure reason, if applicable.
-        original_confidence: Claim confidence before capping.
-        capped_confidence: Claim confidence after capping.
-        conflicts_found: Number of conflicts detected.
-        evidences_checked: Number of evidence items examined.
-        evidences_passed: Number of evidence items that passed.
-        requires_counter_review: Whether counter-review is required.
-        checked_at: Timestamp when validation occurred (UTC).
-    """
+    """Append-only audit record capturing the outcome of a claim validation.."""
 
     audit_id: str
     claim_id: str
@@ -174,29 +140,33 @@ class ValidationAuditRecord(BaseModel):
         """Normalize the checked-at timestamp to UTC.
 
         Args:
-            value: A datetime value to normalize.
+            value: datetime: .
 
         Returns:
-            The datetime normalized to UTC.
+            datetime: .
         """
         return ensure_utc(value)
 
 
 class ValidationAuditor:
-    """Records validation results for later audit and counter-review."""
+    """Records validation results for later audit and counter-review.."""
 
     def __init__(self) -> None:
-        """Initialize an empty auditor."""
+        """Initialize an empty auditor.
+
+        Returns:
+            None: .
+        """
         self._records: list[ValidationAuditRecord] = []
 
     def log(self, result: ValidationResult) -> ValidationAuditRecord:
         """Record a validation result as an append-only audit record.
 
         Args:
-            result: The validation result to record.
+            result: ValidationResult: .
 
         Returns:
-            The created audit record.
+            ValidationAuditRecord: .
         """
         record = ValidationAuditRecord(
             audit_id=f"aud_{uuid.uuid4().hex[:12]}",
@@ -219,7 +189,7 @@ class ValidationAuditor:
         """Return a copy of all recorded audit records.
 
         Returns:
-            List of recorded validation audit records.
+            list[ValidationAuditRecord]: .
         """
         return list(self._records)
 
@@ -228,7 +198,7 @@ class ValidationAuditor:
         """Return the number of PASS records.
 
         Returns:
-            Count of records with status PASS.
+            int: .
         """
         return sum(1 for r in self._records if r.status == ValidationStatus.PASS)
 
@@ -237,7 +207,7 @@ class ValidationAuditor:
         """Return the number of FAIL records.
 
         Returns:
-            Count of records with status FAIL.
+            int: .
         """
         return sum(1 for r in self._records if r.status == ValidationStatus.FAIL)
 
@@ -246,7 +216,7 @@ class ValidationAuditor:
         """Return the number of ABSTAINED records.
 
         Returns:
-            Count of records with status ABSTAINED.
+            int: .
         """
         return sum(1 for r in self._records if r.status == ValidationStatus.ABSTAINED)
 
@@ -257,16 +227,7 @@ class ValidationAuditor:
 
 
 class ValidationReport(BaseModel):
-    """Aggregated report for a batch of claim validations.
-
-    Attributes:
-        results: Individual validation results.
-        total: Total number of claims validated.
-        passed: Number of claims that passed.
-        failed: Number of claims that failed.
-        abstained: Number of claims that abstained.
-        checked_at: Timestamp when the report was generated (UTC).
-    """
+    """Aggregated report for a batch of claim validations.."""
 
     results: list[ValidationResult] = Field(default_factory=list)
     total: int = 0
@@ -283,10 +244,10 @@ class ValidationReport(BaseModel):
         """Normalize the report timestamp to UTC.
 
         Args:
-            value: A datetime value to normalize.
+            value: datetime: .
 
         Returns:
-            The datetime normalized to UTC.
+            datetime: .
         """
         return ensure_utc(value)
 
@@ -294,19 +255,11 @@ class ValidationReport(BaseModel):
     def should_suppress_research(self) -> bool:
         """Return whether high-confidence research signals should be suppressed.
 
-        Suppression occurs when any claim abstained, failed, or had a high-confidence
-        conflict downgrade (product §15 item 8).
-
         Returns:
-            True if high-confidence research output should be blocked.
+            bool: .
         """
-        has_abstained = any(
-            r.status == ValidationStatus.ABSTAINED for r in self.results
-        )
-        has_high_conf_fail = any(
-            r.status == ValidationStatus.FAIL
-            for r in self.results
-        )
+        has_abstained = any(r.status == ValidationStatus.ABSTAINED for r in self.results)
+        has_high_conf_fail = any(r.status == ValidationStatus.FAIL for r in self.results)
         has_high_conf_counter_review = any(
             r.requires_counter_review
             and r.original_confidence >= 0.7
@@ -320,7 +273,7 @@ class ValidationReport(BaseModel):
         """Return the results that passed validation.
 
         Returns:
-            List of PASS validation results.
+            list[ValidationResult]: .
         """
         return [r for r in self.results if r.status == ValidationStatus.PASS]
 
@@ -329,7 +282,7 @@ class ValidationReport(BaseModel):
         """Return the results that failed validation.
 
         Returns:
-            List of FAIL validation results.
+            list[ValidationResult]: .
         """
         return [r for r in self.results if r.status == ValidationStatus.FAIL]
 
@@ -338,7 +291,7 @@ class ValidationReport(BaseModel):
         """Return the results that abstained.
 
         Returns:
-            List of ABSTAINED validation results.
+            list[ValidationResult]: .
         """
         return [r for r in self.results if r.status == ValidationStatus.ABSTAINED]
 
@@ -349,24 +302,7 @@ class ValidationReport(BaseModel):
 
 
 class CitationValidator:
-    """Validates claim evidence references, source levels, and point-in-time.
-
-    Validation flow (architecture §10.2 RAG workflow):
-        1. Evidence reference existence (evidence_ids non-empty and resolvable).
-        2. Source-level rules (L5 cannot stand alone; L4 needs L1-L3 cross-validation).
-        3. Point-in-time check (available_at <= decision_at).
-        4. Locator check (each evidence can be traced back to the original source).
-        5. WebSearch original-source check (web_page sources must have a snapshot).
-        6. Conflict detection (opposite statement direction within the same claim_type
-           triggers confidence capping and counter-review).
-        7. Insufficient-evidence decision (no evidence passes -> ABSTAINED).
-
-    Degradation rules (architecture §25):
-        - Citation failure -> FAIL, do not feed research signals.
-        - Conflicts -> cap confidence and raise counter-review.
-        - Insufficient evidence -> ABSTAINED.
-        - Principle: prefer ABSTAINED over false high-confidence conclusions.
-    """
+    """Validates claim evidence references, source levels, and point-in-time.."""
 
     def __init__(
         self,
@@ -380,16 +316,15 @@ class CitationValidator:
         """Initialize the validator with configurable thresholds.
 
         Args:
-            min_evidence_count: Minimum number of evidence items that must pass
-                validation for a claim to PASS.
-            conflict_cap: Confidence cap applied when non-high conflicts exist.
-            high_conflict_cap: Confidence cap applied when a high-severity conflict
-                exists.
-            high_confidence_threshold: Confidence level considered high-confidence.
-            l4_only_status: Validation status for L4-only evidence. Defaults to FAIL
-                for backward compatibility; v0.2 workflows can set ABSTAINED.
-            snapshot_resolver: Optional callable that resolves snapshot IDs to
-                RawSnapshot instances.
+            min_evidence_count: int: .
+            conflict_cap: float: .
+            high_conflict_cap: float: .
+            high_confidence_threshold: float: .
+            l4_only_status: ValidationStatus: .
+            snapshot_resolver: SnapshotResolver | None: .
+
+        Returns:
+            None: .
         """
         self._min_evidence = min_evidence_count
         self._conflict_cap = conflict_cap
@@ -408,19 +343,18 @@ class CitationValidator:
         """Validate a single claim against its evidence.
 
         Args:
-            claim: The claim to validate.
-            evidences: Mapping from evidence_id to Evidence.
-            decision_at: Decision timestamp; evidence must be available at or before
-                this time.
-            precomputed_conflicts: Optional list of precomputed ConflictRecord items
-                for the claim. If omitted, conflicts are detected on the fly.
+            claim: Claim: .
+            evidences: dict[str, Evidence]: .
+            decision_at: datetime: .
+            precomputed_conflicts: list | None: .
 
         Returns:
-            A ValidationResult describing the outcome.
+            ValidationResult: .
         """
         if not claim.has_evidence:
             return self._fail(
-                claim, FailReason.NO_EVIDENCE,
+                claim,
+                FailReason.NO_EVIDENCE,
                 "Claim has no evidence references",
             )
 
@@ -428,21 +362,21 @@ class CitationValidator:
         for eid in claim.evidence_ids:
             if eid not in evidences:
                 return self._fail(
-                    claim, FailReason.EVIDENCE_NOT_FOUND,
+                    claim,
+                    FailReason.EVIDENCE_NOT_FOUND,
                     f"Evidence '{eid}' not found",
                 )
             found_evidences.append(evidences[eid])
 
         if not check_l5_restriction(claim, evidences):
             return self._fail(
-                claim, FailReason.L5_ONLY,
+                claim,
+                FailReason.L5_ONLY,
                 "Claim relies solely on L5 evidence — cannot change research state",
             )
 
         l4_evidences = [e for e in found_evidences if e.source_level == SourceLevel.L4]
-        l1_l3_evidences = [
-            e for e in found_evidences if e.source_level <= SourceLevel.L3
-        ]
+        l1_l3_evidences = [e for e in found_evidences if e.source_level <= SourceLevel.L3]
         if l4_evidences and not l1_l3_evidences:
             if self._l4_only_status == ValidationStatus.ABSTAINED:
                 return self._abstain_with_reason(
@@ -451,7 +385,8 @@ class CitationValidator:
                     "L4 evidence requires cross-validation with L1-L3",
                 )
             return self._fail(
-                claim, FailReason.L4_NO_CROSS_VALIDATION,
+                claim,
+                FailReason.L4_NO_CROSS_VALIDATION,
                 "L4 evidence requires cross-validation with L1-L3",
             )
 
@@ -525,12 +460,12 @@ class CitationValidator:
         """Validate a batch of claims and produce an aggregated report.
 
         Args:
-            claims: Claims to validate.
-            evidences: Mapping from evidence_id to Evidence.
-            decision_at: Decision timestamp.
+            claims: list[Claim]: .
+            evidences: dict[str, Evidence]: .
+            decision_at: datetime: .
 
         Returns:
-            A ValidationReport summarizing all results.
+            ValidationReport: .
         """
         results: list[ValidationResult] = []
         conflicts_map = detect_conflicts(claims, evidences)
@@ -556,7 +491,15 @@ class CitationValidator:
         )
 
     def _replay_locator(self, locator: CitationLocator, evidence: Evidence):
-        """Replay locator against snapshot content when available."""
+        """Replay locator against snapshot content when available.
+
+        Args:
+            locator: CitationLocator: .
+            evidence: Evidence: .
+
+        Returns:
+            Any: .
+        """
         if self._snapshot_resolver is None:
             return None
         if not evidence.snapshot_id or not evidence.snapshot_hash:
@@ -582,14 +525,14 @@ class CitationValidator:
         """Return a FAIL result for a claim.
 
         Args:
-            claim: The claim being validated.
-            reason: Categorized failure reason.
-            message: Human-readable failure message.
-            evidences_checked: Number of evidence items examined.
-            evidences_passed: Number of evidence items that passed.
+            claim: Claim: .
+            reason: FailReason: .
+            message: str: .
+            evidences_checked: int: .
+            evidences_passed: int: .
 
         Returns:
-            A ValidationResult with status FAIL.
+            ValidationResult: .
         """
         return ValidationResult(
             claim_id=claim.claim_id,
@@ -606,11 +549,11 @@ class CitationValidator:
         """Return an ABSTAINED result for a claim.
 
         Args:
-            claim: The claim being validated.
-            message: Human-readable explanation.
+            claim: Claim: .
+            message: str: .
 
         Returns:
-            A ValidationResult with status ABSTAINED.
+            ValidationResult: .
         """
         return ValidationResult(
             claim_id=claim.claim_id,
@@ -627,7 +570,16 @@ class CitationValidator:
         reason: FailReason,
         message: str,
     ) -> ValidationResult:
-        """Return an ABSTAINED result with an explicit categorized reason."""
+        """Return an ABSTAINED result with an explicit categorized reason.
+
+        Args:
+            claim: Claim: .
+            reason: FailReason: .
+            message: str: .
+
+        Returns:
+            ValidationResult: .
+        """
         return ValidationResult(
             claim_id=claim.claim_id,
             status=ValidationStatus.ABSTAINED,
@@ -642,10 +594,10 @@ def _fail_reason_from_locator(result: LocatorValidationResult) -> FailReason:
     """Map a locator validation failure to a stable failure reason.
 
     Args:
-        result: The locator validation result to map.
+        result: LocatorValidationResult: .
 
     Returns:
-        A FailReason matching the locator failure.
+        FailReason: .
     """
     reasons = " ".join(result.reasons).lower()
     if "lookahead" in reasons:
@@ -672,14 +624,14 @@ def validate_claims_with_audit(
     """Validate claims and append each result to an audit trail.
 
     Args:
-        claims: Claims to validate.
-        evidences: Mapping from evidence_id to Evidence.
-        decision_at: Decision timestamp.
-        validator: Optional custom CitationValidator.
-        auditor: Optional custom ValidationAuditor.
+        claims: list[Claim]: .
+        evidences: dict[str, Evidence]: .
+        decision_at: datetime: .
+        validator: CitationValidator | None: .
+        auditor: ValidationAuditor | None: .
 
     Returns:
-        A tuple of (validation report, auditor).
+        tuple[ValidationReport, ValidationAuditor]: .
     """
     val = validator or CitationValidator()
     aud = auditor or ValidationAuditor()

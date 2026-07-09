@@ -13,13 +13,16 @@ from margin.sql.research_queries import llm_call_by_billing_key
 
 
 class SQLAlchemyLLMCallAuditRepository:
-    """Persist hash-only LLM call audit records idempotently."""
+    """Persist hash-only LLM call audit records idempotently.."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
         """Initialize the repository.
 
         Args:
-            session_factory: Callable that returns a new SQLAlchemy ``Session``.
+            session_factory: Callable[[], Session]: .
+
+        Returns:
+            None: .
         """
         self._session_factory = session_factory
 
@@ -27,15 +30,13 @@ class SQLAlchemyLLMCallAuditRepository:
         """Persist one immutable LLM call audit record.
 
         Args:
-            record: Hash-only audit record to persist.
+            record: LLMCallAuditRecord: .
 
-        Raises:
-            ValueError: If a conflicting record with the same billing key exists.
+        Returns:
+            None: .
         """
         with self._session_factory.begin() as session:
-            existing = session.scalars(
-                llm_call_by_billing_key(record.billing_key)
-            ).first()
+            existing = session.scalars(llm_call_by_billing_key(record.billing_key)).first()
             if existing is not None:
                 if _llm_record_from_row(existing) != record:
                     raise ValueError("conflicting LLM call audit record")
@@ -44,13 +45,16 @@ class SQLAlchemyLLMCallAuditRepository:
 
 
 class SQLAlchemyToolCallAuditRepository:
-    """Persist scoped tool call audit records idempotently."""
+    """Persist scoped tool call audit records idempotently.."""
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
         """Initialize the repository.
 
         Args:
-            session_factory: Callable that returns a new SQLAlchemy ``Session``.
+            session_factory: Callable[[], Session]: .
+
+        Returns:
+            None: .
         """
         self._session_factory = session_factory
 
@@ -58,10 +62,10 @@ class SQLAlchemyToolCallAuditRepository:
         """Persist one immutable scoped-tool audit record.
 
         Args:
-            record: Secret-safe audit record to persist.
+            record: ToolCallAuditRecord: .
 
-        Raises:
-            ValueError: If a conflicting record with the same call ID exists.
+        Returns:
+            None: .
         """
         with self._session_factory.begin() as session:
             existing = session.get(ToolCallRecordRow, record.call_id)
@@ -73,7 +77,14 @@ class SQLAlchemyToolCallAuditRepository:
 
 
 def _llm_record_to_row(record: LLMCallAuditRecord) -> LLMCallRecordRow:
-    """Convert a hash-only LLM audit record to a DB row."""
+    """Convert a hash-only LLM audit record to a DB row.
+
+    Args:
+        record: LLMCallAuditRecord: .
+
+    Returns:
+        LLMCallRecordRow: .
+    """
     model_name = record.model_name or record.model or "unknown"
     provider_name = record.provider_name or "unknown"
     model_version = record.model_version or record.model or "unknown"
@@ -105,7 +116,14 @@ def _llm_record_to_row(record: LLMCallAuditRecord) -> LLMCallRecordRow:
 
 
 def _llm_record_from_row(row: LLMCallRecordRow) -> LLMCallAuditRecord:
-    """Convert a DB row to a hash-only LLM audit record."""
+    """Convert a DB row to a hash-only LLM audit record.
+
+    Args:
+        row: LLMCallRecordRow: .
+
+    Returns:
+        LLMCallAuditRecord: .
+    """
     return LLMCallAuditRecord(
         call_id=row.llm_call_id,
         billing_key=row.billing_key,
@@ -135,7 +153,14 @@ def _llm_record_from_row(row: LLMCallRecordRow) -> LLMCallAuditRecord:
 
 
 def _tool_record_to_row(record: ToolCallAuditRecord) -> ToolCallRecordRow:
-    """Convert a scoped-tool audit record to a DB row."""
+    """Convert a scoped-tool audit record to a DB row.
+
+    Args:
+        record: ToolCallAuditRecord: .
+
+    Returns:
+        ToolCallRecordRow: .
+    """
     return ToolCallRecordRow(
         tool_call_id=record.call_id,
         graph_run_id=record.graph_run_id,
@@ -158,7 +183,14 @@ def _tool_record_to_row(record: ToolCallAuditRecord) -> ToolCallRecordRow:
 
 
 def _tool_record_from_row(row: ToolCallRecordRow) -> ToolCallAuditRecord:
-    """Convert a scoped-tool audit row to its immutable model."""
+    """Convert a scoped-tool audit row to its immutable model.
+
+    Args:
+        row: ToolCallRecordRow: .
+
+    Returns:
+        ToolCallAuditRecord: .
+    """
     return ToolCallAuditRecord(
         call_id=row.tool_call_id,
         graph_run_id=row.graph_run_id,

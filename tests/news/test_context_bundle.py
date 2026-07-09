@@ -38,7 +38,14 @@ from margin.storage.database import (
 
 @pytest.fixture
 def news_repository(database_url: str) -> Iterator[NewsRepository]:
-    """Create a seeded repository for context bundle tests."""
+    """Create a seeded repository for context bundle tests.
+
+    Args:
+        database_url: str: .
+
+    Yields:
+        Any: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -63,7 +70,11 @@ def news_repository(database_url: str) -> Iterator[NewsRepository]:
 
 
 def _target() -> NewsTarget:
-    """Return a deterministic news target fixture for context bundle tests."""
+    """Return a deterministic news target fixture for context bundle tests.
+
+    Returns:
+        NewsTarget: .
+    """
     return NewsTarget(
         scope_version_id="scope-1",
         quant_run_id="quant-1",
@@ -85,9 +96,12 @@ def _seed_context_fixture(
     """Seed a refresh run, target, document event, and materiality score.
 
     Args:
-        repo: The news repository to seed.
-        run_id: The refresh run identifier to create.
-        complete: Whether to mark the target as completed or retried.
+        repo: NewsRepository: .
+        run_id: str: .
+        complete: bool: .
+
+    Returns:
+        None: .
     """
     repo.create_news_refresh_run(
         run_id=run_id,
@@ -141,7 +155,14 @@ def _seed_context_fixture(
 def test_bundle_includes_completed_documents_and_incomplete_target_summary(
     news_repository: NewsRepository,
 ) -> None:
-    """bundle includes completed documents and incomplete target summary."""
+    """bundle includes completed documents and incomplete target summary.
+
+    Args:
+        news_repository: NewsRepository: .
+
+    Returns:
+        None: .
+    """
     builder = NewsContextBundleBuilder(news_repository)
 
     bundle = builder.build_for_run(
@@ -160,7 +181,14 @@ def test_bundle_includes_completed_documents_and_incomplete_target_summary(
 def test_complete_bundle_can_support_verified_carry_forward(
     news_repository: NewsRepository,
 ) -> None:
-    """complete bundle can support verified carry forward."""
+    """complete bundle can support verified carry forward.
+
+    Args:
+        news_repository: NewsRepository: .
+
+    Returns:
+        None: .
+    """
     builder = NewsContextBundleBuilder(news_repository)
 
     bundle = builder.build_for_run(run_id="run-complete", security_id="000001.SZ")

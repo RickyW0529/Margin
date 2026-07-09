@@ -19,7 +19,7 @@ from margin.valuation_discovery.models import (
 
 
 class NewsTargetSelector:
-    """Select company targets that should receive news refresh after quant."""
+    """Select company targets that should receive news refresh after quant.."""
 
     def __init__(
         self,
@@ -36,8 +36,11 @@ class NewsTargetSelector:
         """Initialize the selector with eligibility and guardrail filters.
 
         Args:
-            include_near_threshold: Whether near-threshold results are eligible.
-            allowed_guardrails: Guardrails that permit news refresh.
+            include_near_threshold: bool: .
+            allowed_guardrails: tuple[ResearchGuardrail, ...]: .
+
+        Returns:
+            None: .
         """
         self._include_near_threshold = include_near_threshold
         self._allowed_guardrails = allowed_guardrails
@@ -53,14 +56,13 @@ class NewsTargetSelector:
         """Return every eligible news target sorted by priority descending.
 
         Args:
-            scope_version_id: The frozen scope version.
-            quant_run_id: The quant run that produced the results.
-            results: Iterable of ``QuantResult`` objects.
-            decision_at: Optional decision timestamp; defaults to result
-                creation time.
+            scope_version_id: str: .
+            quant_run_id: str: .
+            results: Iterable[QuantResult]: .
+            decision_at: datetime | None: .
 
         Returns:
-            Tuple of ``NewsTarget`` objects sorted by priority descending.
+            tuple[NewsTarget, ...]: .
         """
         targets = [
             self._target_for(
@@ -72,12 +74,17 @@ class NewsTargetSelector:
             for result in results
             if self._is_eligible(result)
         ]
-        return tuple(
-            sorted(targets, key=lambda item: (-item.priority, item.security_id))
-        )
+        return tuple(sorted(targets, key=lambda item: (-item.priority, item.security_id)))
 
     def _is_eligible(self, result: QuantResult) -> bool:
-        """Return whether a quant result is eligible for news refresh."""
+        """Return whether a quant result is eligible for news refresh.
+
+        Args:
+            result: QuantResult: .
+
+        Returns:
+            bool: .
+        """
         if result.research_guardrail not in self._allowed_guardrails:
             return False
         if result.screening_status == ScreeningStatus.PASS:
@@ -95,7 +102,17 @@ class NewsTargetSelector:
         result: QuantResult,
         decision_at: datetime,
     ) -> NewsTarget:
-        """Build a ``NewsTarget`` from one eligible quant result."""
+        """Build a ``NewsTarget`` from one eligible quant result.
+
+        Args:
+            scope_version_id: str: .
+            quant_run_id: str: .
+            result: QuantResult: .
+            decision_at: datetime: .
+
+        Returns:
+            NewsTarget: .
+        """
         priority, _, trigger_type = _priority_and_reasons(result)
         details = result.factor_details
         name = str(details.get("name") or result.security_id)
@@ -123,7 +140,14 @@ class NewsTargetSelector:
 def _priority_and_reasons(
     result: QuantResult,
 ) -> tuple[int, tuple[str, ...], TargetTriggerType]:
-    """Compute priority, reasons, and trigger type from a quant result."""
+    """Compute priority, reasons, and trigger type from a quant result.
+
+    Args:
+        result: QuantResult: .
+
+    Returns:
+        tuple[int, tuple[str, ...], TargetTriggerType]: .
+    """
     priority = 100 if result.screening_status == ScreeningStatus.PASS else 60
     reasons: list[str] = [f"quant_{result.screening_status.value}"]
     trigger_type = (
@@ -144,9 +168,8 @@ def _priority_and_reasons(
         priority += 30
         reasons.append("material_filing")
         trigger_type = TargetTriggerType.MATERIAL_FILING
-    if (
-        result.research_guardrail == ResearchGuardrail.THESIS_RECHECK_REQUIRED
-        or bool(details.get("thesis_invalidation_risk"))
+    if result.research_guardrail == ResearchGuardrail.THESIS_RECHECK_REQUIRED or bool(
+        details.get("thesis_invalidation_risk")
     ):
         priority += 40
         reasons.append("thesis_invalidation_risk")

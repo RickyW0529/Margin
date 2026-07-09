@@ -8,7 +8,11 @@ VERSION = "v0.4.0"
 
 
 def guardrail_prompt_templates() -> tuple[PromptTemplate, ...]:
-    """Return guardrail prompt templates."""
+    """Return guardrail prompt templates.
+
+    Returns:
+        tuple[PromptTemplate, ...]: .
+    """
     return (
         PromptTemplate(
             prompt_id="input_guardrail_policy_v0.4",

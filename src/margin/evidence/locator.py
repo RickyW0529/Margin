@@ -47,7 +47,7 @@ SnapshotResolver = Callable[[str], RawSnapshot | None]
 
 
 class SourceType(StrEnum):
-    """Source type enumeration (product §9.3 source_type field)."""
+    """Source type enumeration (product §9.3 source_type field).."""
 
     FILING_PDF = "filing_pdf"
     WEB_PAGE = "web_page"
@@ -62,30 +62,7 @@ class SourceType(StrEnum):
 
 
 class CitationLocator(BaseModel):
-    """Citation locator fields (architecture §10.3 locator + product §9.3).
-
-    Stores all information needed to trace a conclusion back to its original source.
-    Immutable after persistence.
-
-    Attributes:
-        evidence_id: Unique identifier of the related evidence record.
-        document_id: Identifier of the originating document.
-        source_type: Source type enumeration.
-        source_url: Optional URL of the original source.
-        source_level: Source level priority (L1-L5).
-        content_hash: Hash of the cited content.
-        published_at: Publication timestamp (UTC).
-        available_at: Availability timestamp (UTC).
-        retrieved_at: Retrieval timestamp (UTC).
-        page: Optional page number in the original document.
-        section: Optional section name in the original document.
-        paragraph_index: Optional paragraph index in the original document.
-        table_id: Optional table identifier.
-        row_id: Optional row identifier.
-        quote_span: Optional character span tuple (start, end).
-        snapshot_id: Optional snapshot identifier.
-        snapshot_hash: Optional snapshot content hash.
-    """
+    """Citation locator fields (architecture §10.3 locator + product §9.3).."""
 
     evidence_id: str
     document_id: str
@@ -116,10 +93,10 @@ class CitationLocator(BaseModel):
         """Normalize timestamp fields to UTC.
 
         Args:
-            value: A datetime value to normalize.
+            value: datetime: .
 
         Returns:
-            The datetime normalized to UTC.
+            datetime: .
         """
         return ensure_utc(value)
 
@@ -127,10 +104,8 @@ class CitationLocator(BaseModel):
     def is_locatable(self) -> bool:
         """Return whether the locator can trace back to the original source.
 
-        Requires at least a source_url plus one structural locator field.
-
         Returns:
-            True if both source_url and a structural locator are present.
+            bool: .
         """
         has_structural = (
             self.page is not None
@@ -150,7 +125,7 @@ class CitationLocator(BaseModel):
         """Return whether the locator references an original snapshot.
 
         Returns:
-            True if a snapshot_id is present.
+            bool: .
         """
         return self.snapshot_id is not None
 
@@ -159,10 +134,10 @@ class CitationLocator(BaseModel):
         """Build a CitationLocator from an Evidence instance.
 
         Args:
-            evidence: The evidence record to convert.
+            evidence: Evidence: .
 
         Returns:
-            A new CitationLocator instance.
+            CitationLocator: .
         """
         source_type = (
             SourceType(evidence.source_type)
@@ -197,10 +172,10 @@ class CitationLocator(BaseModel):
         """Build a CitationLocator from a Chunk (convenience method).
 
         Args:
-            chunk: A Chunk object containing locator fields.
+            chunk: Any: .
 
         Returns:
-            A new CitationLocator instance.
+            CitationLocator: .
         """
         ev = Evidence.from_chunk(chunk)
         return cls.from_evidence(ev)
@@ -220,13 +195,13 @@ def build_locator_from_pdf(
     """Build a locator for a PDF source: prefer page, section, and character span.
 
     Args:
-        chunk: A Chunk object.
-        page: Page number; uses parameter if provided, otherwise chunk.page.
-        section: Section name; uses parameter if provided, otherwise chunk.section.
-        quote_span: Character span; uses parameter if provided, otherwise chunk.quote_span.
+        chunk: Any: .
+        page: int | None: .
+        section: str | None: .
+        quote_span: tuple[int, int] | None: .
 
     Returns:
-        A CitationLocator configured for a PDF filing source.
+        CitationLocator: .
     """
     ev = Evidence.from_chunk(chunk, source_type=SourceType.FILING_PDF.value)
     locator = CitationLocator.from_evidence(ev)
@@ -247,12 +222,11 @@ def build_locator_from_html(
     """Build a locator for an HTML source: prefer URL, title, paragraph index, content hash.
 
     Args:
-        chunk: A Chunk object.
-        paragraph_index: Paragraph index; uses parameter if provided, otherwise
-            chunk.paragraph_index.
+        chunk: Any: .
+        paragraph_index: int | None: .
 
     Returns:
-        A CitationLocator configured for a web page source.
+        CitationLocator: .
     """
     ev = Evidence.from_chunk(chunk, source_type=SourceType.WEB_PAGE.value)
     locator = CitationLocator.from_evidence(ev)
@@ -260,9 +234,7 @@ def build_locator_from_html(
         update={
             "source_type": SourceType.WEB_PAGE,
             "paragraph_index": (
-                paragraph_index
-                if paragraph_index is not None
-                else chunk.paragraph_index
+                paragraph_index if paragraph_index is not None else chunk.paragraph_index
             ),
             "page": None,
             "table_id": None,
@@ -279,12 +251,12 @@ def build_locator_from_table(
     """Build a locator for a table source: prefer table ID, row locator, original file hash.
 
     Args:
-        chunk: A Chunk object.
-        table_id: Table identifier; uses parameter if provided, otherwise chunk.table_id.
-        row_id: Row identifier; uses parameter if provided, otherwise chunk.row_id.
+        chunk: Any: .
+        table_id: str | None: .
+        row_id: str | None: .
 
     Returns:
-        A CitationLocator configured for a table source.
+        CitationLocator: .
     """
     ev = Evidence.from_chunk(chunk, source_type=SourceType.TABLE.value)
     locator = CitationLocator.from_evidence(ev)
@@ -305,13 +277,7 @@ def build_locator_from_table(
 
 
 class WebSearchVerificationResult(BaseModel):
-    """Result of a WebSearch original-source verification check.
-
-    Attributes:
-        evidence_id: Identifier of the evidence being verified.
-        passed: Whether the verification passed.
-        reason: Human-readable explanation of the outcome.
-    """
+    """Result of a WebSearch original-source verification check.."""
 
     evidence_id: str
     passed: bool
@@ -321,7 +287,7 @@ class WebSearchVerificationResult(BaseModel):
 
 
 class LocatorReplayResult(BaseModel):
-    """Result of replaying a locator against stored snapshot content."""
+    """Result of replaying a locator against stored snapshot content.."""
 
     valid: bool
     reason_code: str
@@ -331,10 +297,17 @@ class LocatorReplayResult(BaseModel):
 
 
 class LocatorValidator:
-    """Replay locators against persisted snapshot content."""
+    """Replay locators against persisted snapshot content.."""
 
     def __init__(self, snapshot_resolver: SnapshotResolver | object) -> None:
-        """Initialize with a callable or object that can resolve snapshots."""
+        """Initialize with a callable or object that can resolve snapshots.
+
+        Args:
+            snapshot_resolver: SnapshotResolver | object: .
+
+        Returns:
+            None: .
+        """
         self._snapshot_resolver = snapshot_resolver
 
     def validate(
@@ -345,7 +318,17 @@ class LocatorValidator:
         locator: CitationLocator,
         expected_text: str,
     ) -> LocatorReplayResult:
-        """Validate snapshot hash, locator anchor, and located text."""
+        """Validate snapshot hash, locator anchor, and located text.
+
+        Args:
+            snapshot_id: str: .
+            snapshot_hash: str: .
+            locator: CitationLocator: .
+            expected_text: str: .
+
+        Returns:
+            LocatorReplayResult: .
+        """
         snapshot = self._resolve_snapshot(snapshot_id)
         if snapshot is None:
             return LocatorReplayResult(valid=False, reason_code="snapshot_not_found")
@@ -373,7 +356,14 @@ class LocatorValidator:
         )
 
     def _resolve_snapshot(self, snapshot_id: str) -> object | None:
-        """Resolve a snapshot ID via the configured resolver callable or object."""
+        """Resolve a snapshot ID via the configured resolver callable or object.
+
+        Args:
+            snapshot_id: str: .
+
+        Returns:
+            object | None: .
+        """
         resolver = self._snapshot_resolver
         if callable(resolver):
             return resolver(snapshot_id)
@@ -387,7 +377,14 @@ class LocatorValidator:
 
 
 def _snapshot_content(snapshot: object) -> str | bytes | None:
-    """Extract textual or binary content from a snapshot object."""
+    """Extract textual or binary content from a snapshot object.
+
+    Args:
+        snapshot: object: .
+
+    Returns:
+        str | bytes | None: .
+    """
     for attr in ("content", "text", "raw_content", "body"):
         value = getattr(snapshot, attr, None)
         if value is None and isinstance(snapshot, dict):
@@ -402,7 +399,16 @@ def _locate_text(
     content_type: str,
     locator: CitationLocator,
 ) -> str | LocatorReplayResult:
-    """Locate text within snapshot content using the locator's structural fields."""
+    """Locate text within snapshot content using the locator's structural fields.
+
+    Args:
+        content: str | bytes: .
+        content_type: str: .
+        locator: CitationLocator: .
+
+    Returns:
+        str | LocatorReplayResult: .
+    """
     normalized_content_type = content_type.lower()
     if locator.page is not None and (
         "pdf" in normalized_content_type
@@ -420,9 +426,7 @@ def _locate_text(
         return _apply_quote_span(located, locator)
 
     text_content = (
-        content.decode("utf-8", errors="replace")
-        if isinstance(content, bytes)
-        else content
+        content.decode("utf-8", errors="replace") if isinstance(content, bytes) else content
     )
     if locator.dom_path:
         if "html" not in normalized_content_type and "<" not in text_content:
@@ -442,7 +446,15 @@ def _locate_pdf_page(
     content: str | bytes,
     page_number: int,
 ) -> str | LocatorReplayResult:
-    """Extract text from a specific PDF page using PyMuPDF."""
+    """Extract text from a specific PDF page using PyMuPDF.
+
+    Args:
+        content: str | bytes: .
+        page_number: int: .
+
+    Returns:
+        str | LocatorReplayResult: .
+    """
     if not isinstance(content, bytes):
         return LocatorReplayResult(valid=False, reason_code="pdf_page_not_found")
     try:
@@ -470,7 +482,16 @@ def _locate_table_cell(
     content_type: str,
     locator: CitationLocator,
 ) -> str | None:
-    """Locate a table cell value from CSV content using table and row locators."""
+    """Locate a table cell value from CSV content using table and row locators.
+
+    Args:
+        content: str | bytes: .
+        content_type: str: .
+        locator: CitationLocator: .
+
+    Returns:
+        str | None: .
+    """
     if locator.table_id != "table-1":
         return None
     row_match = re.fullmatch(r"row-(\d+)", locator.row_id or "")
@@ -481,9 +502,7 @@ def _locate_table_cell(
         return None
 
     text_content = (
-        content.decode("utf-8-sig", errors="replace")
-        if isinstance(content, bytes)
-        else content
+        content.decode("utf-8-sig", errors="replace") if isinstance(content, bytes) else content
     )
     if "csv" not in content_type and "," not in text_content.partition("\n")[0]:
         return None
@@ -498,7 +517,15 @@ def _locate_table_cell(
 
 
 def _locate_dom_path(content: str, dom_path: str) -> str | None:
-    """Locate text within HTML content using a DOM path expression."""
+    """Locate text within HTML content using a DOM path expression.
+
+    Args:
+        content: str: .
+        dom_path: str: .
+
+    Returns:
+        str | None: .
+    """
     match = re.search(r"/([A-Za-z0-9]+)\[(\d+)\]$", dom_path)
     if match is None:
         return None
@@ -519,7 +546,15 @@ def _apply_quote_span(
     content: str,
     locator: CitationLocator,
 ) -> str | LocatorReplayResult:
-    """Extract a substring of content using the locator's quote span."""
+    """Extract a substring of content using the locator's quote span.
+
+    Args:
+        content: str: .
+        locator: CitationLocator: .
+
+    Returns:
+        str | LocatorReplayResult: .
+    """
     if locator.quote_span is None:
         return content
     start, end = locator.quote_span
@@ -538,16 +573,13 @@ def verify_websearch_original(
 ) -> WebSearchVerificationResult:
     """Verify a WebSearch result lands on an original source (architecture §6.2.1: 0502.3).
 
-    WebSearch results must point to an accessible original page or compliant snapshot,
-    not only a search snippet.
-
     Args:
-        locator: The citation locator to verify.
-        require_snapshot: Whether a snapshot reference is required.
-        snapshot_resolver: Optional lookup function for persisted raw snapshots.
+        locator: CitationLocator: .
+        require_snapshot: bool: .
+        snapshot_resolver: SnapshotResolver | None: .
 
     Returns:
-        A WebSearchVerificationResult describing the outcome.
+        WebSearchVerificationResult: .
     """
     if locator.source_type != SourceType.WEB_PAGE:
         return WebSearchVerificationResult(
@@ -617,15 +649,7 @@ def verify_websearch_original(
 
 
 class PointInTimeCheckResult(BaseModel):
-    """Result of a point-in-time check.
-
-    Attributes:
-        evidence_id: Identifier of the evidence being checked.
-        passed: Whether the check passed.
-        reason: Human-readable explanation of the outcome.
-        available_at: The availability timestamp used in the check.
-        decision_at: The decision timestamp used in the check.
-    """
+    """Result of a point-in-time check.."""
 
     evidence_id: str
     passed: bool
@@ -642,14 +666,12 @@ def check_point_in_time(
 ) -> PointInTimeCheckResult:
     """Point-in-time check (architecture §4.5: available_at <= decision_at).
 
-    Every citation must satisfy available_at <= decision_at to prevent future-data leakage.
-
     Args:
-        locator: The citation locator to check.
-        decision_at: The decision timestamp.
+        locator: CitationLocator: .
+        decision_at: datetime: .
 
     Returns:
-        A PointInTimeCheckResult describing the outcome.
+        PointInTimeCheckResult: .
     """
     available = ensure_utc(locator.available_at)
     decision = ensure_utc(decision_at)
@@ -679,11 +701,11 @@ def check_locators_point_in_time(
     """Run point-in-time checks for a batch of locators.
 
     Args:
-        locators: List of citation locators to check.
-        decision_at: The decision timestamp.
+        locators: list[CitationLocator]: .
+        decision_at: datetime: .
 
     Returns:
-        A tuple of (locators that passed, all check results).
+        tuple[list[CitationLocator], list[PointInTimeCheckResult]]: .
     """
     passed_locators: list[CitationLocator] = []
     results: list[PointInTimeCheckResult] = []
@@ -703,15 +725,7 @@ def check_locators_point_in_time(
 
 
 class LocatorValidationResult(BaseModel):
-    """Aggregated locator validation result.
-
-    Attributes:
-        evidence_id: Identifier of the evidence being validated.
-        is_locatable: Whether the locator can trace back to the original source.
-        pit_passed: Whether the point-in-time check passed.
-        websearch_passed: Optional result of WebSearch verification (None if not checked).
-        reasons: List of human-readable failure reasons.
-    """
+    """Aggregated locator validation result.."""
 
     evidence_id: str
     is_locatable: bool
@@ -726,8 +740,7 @@ class LocatorValidationResult(BaseModel):
         """Return whether every validation check passed.
 
         Returns:
-            True if locatable, point-in-time passed, and (when applicable) WebSearch
-            verification passed.
+            bool: .
         """
         if not self.is_locatable:
             return False
@@ -746,20 +759,14 @@ def validate_locator(
 ) -> LocatorValidationResult:
     """Validate a citation locator comprehensively.
 
-    Checks:
-        1. is_locatable — original source can be located.
-        2. point_in_time — available_at <= decision_at.
-        3. websearch_original — WebSearch results land on original source
-           (only for web_page type).
-
     Args:
-        locator: The citation locator to validate.
-        decision_at: The decision timestamp.
-        check_websearch: Whether to run WebSearch original-source verification.
-        snapshot_resolver: Optional lookup function for persisted raw snapshots.
+        locator: CitationLocator: .
+        decision_at: datetime: .
+        check_websearch: bool: .
+        snapshot_resolver: SnapshotResolver | None: .
 
     Returns:
-        A LocatorValidationResult with all check outcomes.
+        LocatorValidationResult: .
     """
     reasons: list[str] = []
 

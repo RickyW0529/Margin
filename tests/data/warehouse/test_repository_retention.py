@@ -34,7 +34,14 @@ DECISION = datetime(2026, 6, 22, tzinfo=UTC)
 
 @pytest.fixture
 def warehouse_stack(database_url: str):
-    """Provide a clean warehouse repository and session factory."""
+    """Provide a clean warehouse repository and session factory.
+
+    Args:
+        database_url: str: .
+
+    Yields:
+        Any: .
+    """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -43,9 +50,11 @@ def warehouse_stack(database_url: str):
         session.query(CanonicalIndicatorValueRow).delete()
         session.query(StandardizedIndicatorFactRow).delete()
         session.query(RawDataSnapshotRow).delete()
-    yield SQLAlchemyWarehouseRepository(session_factory), SQLAlchemyRetentionService(
-        session_factory
-    ), session_factory
+    yield (
+        SQLAlchemyWarehouseRepository(session_factory),
+        SQLAlchemyRetentionService(session_factory),
+        session_factory,
+    )
     with session_factory.begin() as session:
         session.query(RetentionDeletionAuditRow).delete()
         session.query(CanonicalIndicatorValueRow).delete()
@@ -55,7 +64,14 @@ def warehouse_stack(database_url: str):
 
 
 def test_historical_query_requires_decision_at(warehouse_stack) -> None:
-    """Test that a canonical query without a decision_at raises a PIT error."""
+    """Test that a canonical query without a decision_at raises a PIT error.
+
+    Args:
+        warehouse_stack: Any: .
+
+    Returns:
+        None: .
+    """
     repository, _, _ = warehouse_stack
 
     with pytest.raises(PITQueryError):
@@ -65,15 +81,18 @@ def test_historical_query_requires_decision_at(warehouse_stack) -> None:
 def test_freshness_filters_by_endpoint_domain_and_keeps_latest(
     warehouse_stack,
 ) -> None:
-    """Readiness sees the latest state for requested data domains only."""
+    """Readiness sees the latest state for requested data domains only.
+
+    Args:
+        warehouse_stack: Any: .
+
+    Returns:
+        None: .
+    """
     repository, _, session_factory = warehouse_stack
     with session_factory.begin() as session:
-        session.query(DataFreshnessStateRow).filter_by(
-            provider="freshness-test"
-        ).delete()
-        session.query(ProviderEndpointRow).filter_by(
-            provider="freshness-test"
-        ).delete()
+        session.query(DataFreshnessStateRow).filter_by(provider="freshness-test").delete()
+        session.query(ProviderEndpointRow).filter_by(provider="freshness-test").delete()
         session.add_all(
             [
                 ProviderEndpointRow(
@@ -140,16 +159,21 @@ def test_freshness_filters_by_endpoint_domain_and_keeps_latest(
 
     records = repository.freshness({DataDomain.MARKET})
 
-    selected = [
-        record for record in records if record.provider == "freshness-test"
-    ]
+    selected = [record for record in records if record.provider == "freshness-test"]
     assert len(selected) == 1
     assert selected[0].endpoint_code == "daily_bar"
     assert selected[0].as_of_date == date(2026, 6, 22)
 
 
 def test_canonical_query_does_not_return_future_decision(warehouse_stack) -> None:
-    """Test that canonical values available after the decision time are excluded."""
+    """Test that canonical values available after the decision time are excluded.
+
+    Args:
+        warehouse_stack: Any: .
+
+    Returns:
+        None: .
+    """
     repository, _, session_factory = warehouse_stack
     _insert_fact_and_canonical(session_factory, canonical_id="cv-old", value=Decimal("10.00"))
     _insert_fact_and_canonical(
@@ -175,7 +199,14 @@ def test_canonical_query_does_not_return_future_decision(warehouse_stack) -> Non
 
 
 def test_retention_never_deletes_referenced_raw_snapshot(warehouse_stack) -> None:
-    """Test that a raw snapshot referenced by a fact is protected from retention deletion."""
+    """Test that a raw snapshot referenced by a fact is protected from retention deletion.
+
+    Args:
+        warehouse_stack: Any: .
+
+    Returns:
+        None: .
+    """
     _, retention, session_factory = warehouse_stack
     _insert_fact_and_canonical(session_factory, canonical_id="cv-retained", value=Decimal("10.00"))
 
@@ -208,7 +239,19 @@ def _insert_fact_and_canonical(
     raw_snapshot_id: str = "raw-1",
     decision_at: datetime = DECISION,
 ) -> None:
-    """Insert a raw snapshot, fact, and canonical value row for testing."""
+    """Insert a raw snapshot, fact, and canonical value row for testing.
+
+    Args:
+        session_factory: Any: .
+        canonical_id: str: .
+        value: Decimal: .
+        fact_id: str: .
+        raw_snapshot_id: str: .
+        decision_at: datetime: .
+
+    Returns:
+        None: .
+    """
     with session_factory.begin() as session:
         session.add(
             RawDataSnapshotRow(

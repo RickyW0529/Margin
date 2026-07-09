@@ -11,7 +11,7 @@ from margin.strategy.provider_runtime import provider_capabilities_for_config
 
 @dataclass(frozen=True)
 class FeatureCapabilityStatus:
-    """One feature's local availability status."""
+    """One feature's local availability status.."""
 
     name: str
     enabled: bool
@@ -35,11 +35,16 @@ _FEATURE_REQUIREMENTS: dict[str, tuple[str, ...]] = {
 def build_feature_capabilities(
     provider_configs: tuple[ProviderConfigVersion, ...],
 ) -> dict[str, FeatureCapabilityStatus]:
-    """Build feature availability from active Provider config metadata."""
+    """Build feature availability from active Provider config metadata.
+
+    Args:
+        provider_configs: tuple[ProviderConfigVersion, ...]: .
+
+    Returns:
+        dict[str, FeatureCapabilityStatus]: .
+    """
     active_configs = tuple(
-        config
-        for config in provider_configs
-        if config.lifecycle is ConfigLifecycle.ACTIVE
+        config for config in provider_configs if config.lifecycle is ConfigLifecycle.ACTIVE
     )
     available = _available_requirements(active_configs)
     return {
@@ -59,7 +64,14 @@ def build_feature_capabilities(
 def _available_requirements(
     provider_configs: tuple[ProviderConfigVersion, ...],
 ) -> frozenset[str]:
-    """Return provider category and capability requirements that are satisfied."""
+    """Return provider category and capability requirements that are satisfied.
+
+    Args:
+        provider_configs: tuple[ProviderConfigVersion, ...]: .
+
+    Returns:
+        frozenset[str]: .
+    """
     available: set[str] = set()
     for config in provider_configs:
         category = provider_category_for_config(
@@ -67,9 +79,7 @@ def _available_requirements(
             config.provider_name,
             config.non_sensitive_config,
         )
-        secret_required = bool(
-            config.non_sensitive_config.get("secret_required", True)
-        )
+        secret_required = bool(config.non_sensitive_config.get("secret_required", True))
         if secret_required and config.secret_version_id is None:
             available.add(f"{category}.missing_secret")
             continue
@@ -80,7 +90,15 @@ def _available_requirements(
 
 
 def _missing_requirement(requirement: str, available: frozenset[str]) -> str:
-    """Return a user-actionable missing requirement label."""
+    """Return a user-actionable missing requirement label.
+
+    Args:
+        requirement: str: .
+        available: frozenset[str]: .
+
+    Returns:
+        str: .
+    """
     category = requirement.split(".", maxsplit=1)[0]
     if f"{category}.missing_secret" in available:
         return f"{category}.secret"

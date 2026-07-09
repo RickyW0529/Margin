@@ -10,7 +10,7 @@ from margin.research.prompts.factory import PromptKind
 
 
 class PromptTemplateRecord(BaseModel):
-    """Immutable metadata for a node prompt template."""
+    """Immutable metadata for a node prompt template.."""
 
     node_name: str
     kind: PromptKind
@@ -21,7 +21,7 @@ class PromptTemplateRecord(BaseModel):
 
 
 class PromptRepository(Protocol):
-    """Metadata-only persistence contract; full prompt text is excluded."""
+    """Metadata-only persistence contract; full prompt text is excluded.."""
 
     def get_template(
         self,
@@ -31,27 +31,34 @@ class PromptRepository(Protocol):
         """Return template metadata.
 
         Args:
-            node_name: Name of the graph node.
-            kind: Prompt stage (draft, reflection, or revision).
+            node_name: str: .
+            kind: PromptKind: .
 
         Returns:
-            The matching ``PromptTemplateRecord`` or ``None``.
+            PromptTemplateRecord | None: .
         """
 
     def record_rendered_prompt_hash(self, call_id: str, prompt_hash: str) -> None:
         """Associate an LLM call with a rendered prompt hash.
 
         Args:
-            call_id: LLM call identifier.
-            prompt_hash: Deterministic hash of the rendered prompt.
+            call_id: str: .
+            prompt_hash: str: .
+
+        Returns:
+            None: .
         """
 
 
 class MemoryPromptRepository:
-    """Append-only in-memory prompt metadata repository."""
+    """Append-only in-memory prompt metadata repository.."""
 
     def __init__(self) -> None:
-        """Initialize the instance."""
+        """Initialize the instance.
+
+        Returns:
+            None: .
+        """
         self._templates: dict[tuple[str, PromptKind], PromptTemplateRecord] = {}
         self._render_audits: dict[str, dict[str, str]] = {}
 
@@ -66,13 +73,13 @@ class MemoryPromptRepository:
         """Register immutable template metadata.
 
         Args:
-            node_name: Name of the graph node.
-            kind: Prompt stage (draft, reflection, or revision).
-            version: Template version string.
-            template_hash: Hash of the template content.
+            node_name: str: .
+            kind: PromptKind: .
+            version: str: .
+            template_hash: str: .
 
-        Raises:
-            ValueError: If a conflicting template already exists for the node/kind.
+        Returns:
+            None: .
         """
         key = (node_name, kind)
         record = PromptTemplateRecord(
@@ -94,11 +101,11 @@ class MemoryPromptRepository:
         """Return template metadata.
 
         Args:
-            node_name: Name of the graph node.
-            kind: Prompt stage (draft, reflection, or revision).
+            node_name: str: .
+            kind: PromptKind: .
 
         Returns:
-            The matching ``PromptTemplateRecord`` or ``None``.
+            PromptTemplateRecord | None: .
         """
         return self._templates.get((node_name, kind))
 
@@ -106,11 +113,11 @@ class MemoryPromptRepository:
         """Record only the prompt hash for an LLM call.
 
         Args:
-            call_id: LLM call identifier.
-            prompt_hash: Deterministic hash of the rendered prompt.
+            call_id: str: .
+            prompt_hash: str: .
 
-        Raises:
-            ValueError: If a conflicting hash already exists for the call ID.
+        Returns:
+            None: .
         """
         record = {"prompt_hash": prompt_hash}
         current = self._render_audits.get(call_id)
@@ -122,10 +129,10 @@ class MemoryPromptRepository:
         """Return a defensive copy of prompt render metadata.
 
         Args:
-            call_id: LLM call identifier.
+            call_id: str: .
 
         Returns:
-            A copy of the render audit dict, or ``None`` if not found.
+            dict[str, str] | None: .
         """
         record = self._render_audits.get(call_id)
         return dict(record) if record is not None else None

@@ -8,6 +8,8 @@ This module lets Agents combine quant output, evidence, risk review, and user qu
 - MainAgent plans, dispatches, and performs final review. Domain ExpertAgents decompose work inside one domain. WorkerAgents execute concrete capabilities and write artifacts.
 - CapabilityToken, DataAccessPolicy, and ToolPolicy control what Agents may read, write, and call.
 - ContextPack, DomainContextCapsule, and AuditReport make context transfer, compression, and final output traceable.
+- ToolGateway centralizes tool registration, authorization, idempotency, redaction, and audit. LangChain tools must go through the ToolGateway wrapper.
+- PromptBundle / PromptRegistry / PromptRenderer manage v1 system prompts, variable validation, and render hashes.
 - The old `src/margin/agent_runtime/` package remains the compatibility execution entry point for the API, worker, and Dashboard.
 
 ## How It Runs
@@ -32,15 +34,20 @@ Agents should not read raw/source tables directly or bypass Evidence and Analysi
 - `CodeSandboxAgent` is hidden from the planner by default and only becomes visible after an executable executor is registered.
 - Q&A execution status is tracked by `step_id`, so multiple steps from the same Agent do not overwrite each other.
 - Artifact detail API responses use a safe view by default and redact or truncate secrets, tokens, and long raw payload fields.
+- The API exposes safe run trace, context graph, and tool-call audit views with metadata, hashes, and redacted payloads only.
 - MainAgent final review checks artifact existence, payload hash, expected producer/type, evidence/source reference boundaries, and writes a `final_audit_report` artifact.
 
 ## Main Entry Points
 
 - `src/margin/agents/`
+- `src/margin/agents/tools/`
+- `src/margin/agents/prompts/`
+- `src/margin/agents/domains/`, `src/margin/agents/workers/`
 - `src/margin/agent_runtime/`
 - `src/margin/research/`
 - `src/margin/prompts/`
 - `src/margin/api/routes/agent_runtime.py`
+- `src/margin/api/routes/tool_audit.py`
 
 ## Who Uses It
 

@@ -69,12 +69,27 @@ if TYPE_CHECKING:
 
 
 def _domain(url: str) -> str:
-    """Return the normalized host for a URL."""
+    """Return the normalized host for a URL.
+
+    Args:
+        url: str: .
+
+    Returns:
+        str: .
+    """
     return urlparse(url).netloc.lower()
 
 
 def _matches_domain(domain: str, candidates: tuple[str, ...]) -> bool:
-    """Return whether domain equals or belongs to one of the candidates."""
+    """Return whether domain equals or belongs to one of the candidates.
+
+    Args:
+        domain: str: .
+        candidates: tuple[str, ...]: .
+
+    Returns:
+        bool: .
+    """
     return any(domain == candidate or domain.endswith(f".{candidate}") for candidate in candidates)
 
 
@@ -82,7 +97,15 @@ def _title_from_conversion(
     conversion: MarkdownConversionResult,
     fallback: str,
 ) -> str:
-    """Return a readable title from a Markdown conversion result."""
+    """Return a readable title from a Markdown conversion result.
+
+    Args:
+        conversion: MarkdownConversionResult: .
+        fallback: str: .
+
+    Returns:
+        str: .
+    """
     metadata = conversion.json_document or {}
     for key in ("title", "name"):
         title = _clean_title_candidate(metadata.get(key))
@@ -106,7 +129,15 @@ def _title_from_pipeline_result(
     result: DocumentPipelineResult,
     fallback: str,
 ) -> str:
-    """Return a readable title from final JSON, conversion metadata, or Markdown."""
+    """Return a readable title from final JSON, conversion metadata, or Markdown.
+
+    Args:
+        result: DocumentPipelineResult: .
+        fallback: str: .
+
+    Returns:
+        str: .
+    """
     title = _clean_title_candidate(result.final_json.get("title"))
     if title:
         return title
@@ -122,7 +153,14 @@ def _title_from_pipeline_result(
 
 
 def _clean_title_candidate(value: Any) -> str:
-    """Normalize and reject non-business titles such as temp filenames."""
+    """Normalize and reject non-business titles such as temp filenames.
+
+    Args:
+        value: Any: .
+
+    Returns:
+        str: .
+    """
     if not isinstance(value, str):
         return ""
     title = value.strip()
@@ -142,16 +180,7 @@ def _clean_title_candidate(value: Any) -> str:
 
 
 class SearchResult(BaseModel):
-    """A single web search result.
-
-    Attributes:
-        url: Result URL.
-        title: Result title.
-        snippet: Result snippet or abstract.
-        source_level: Source level assigned to the result (web search defaults to L4).
-        has_accessible_original: Whether accessible original content is available.
-        content_hash: Hash of the original content snapshot, if available.
-    """
+    """A single web search result.."""
 
     url: str
     title: str
@@ -165,19 +194,7 @@ class SearchResult(BaseModel):
 
 
 class SearchQueryRecord(BaseModel):
-    """Search query record (architecture §6.2.1: persist query/URL/title/snippet/
-    crawl time/original content snapshot hash).
-
-    Immutable after persistence; used for audit and compliance tracing.
-
-    Attributes:
-        query_id: Unique identifier for the query record.
-        query: Search query string.
-        results: List of search results.
-        searched_at: Timestamp when the search was performed.
-        api_provider: Name of the API provider that served the query.
-        result_count: Number of results returned.
-    """
+    """Search query record (architecture §6.2.1: persist query/URL/title/snippet/."""
 
     query_id: str
     query: str
@@ -190,7 +207,7 @@ class SearchQueryRecord(BaseModel):
 
 
 class SearchResultQualityPolicy:
-    """Filter and rank WebSearch results before original-content acquisition."""
+    """Filter and rank WebSearch results before original-content acquisition.."""
 
     OFFICIAL_DOMAINS = (
         "cninfo.com.cn",
@@ -319,7 +336,16 @@ class SearchResultQualityPolicy:
         query: str,
         max_results: int,
     ) -> tuple[SearchResult, ...]:
-        """Return acquisition-worthy results sorted by quality."""
+        """Return acquisition-worthy results sorted by quality.
+
+        Args:
+            results: tuple[SearchResult, ...]: .
+            query: str: .
+            max_results: int: .
+
+        Returns:
+            tuple[SearchResult, ...]: .
+        """
         target_terms = self._target_terms(query)
         scored: list[tuple[int, int, SearchResult]] = []
         for index, result in enumerate(results):
@@ -330,12 +356,18 @@ class SearchResultQualityPolicy:
 
         scored.sort(key=lambda item: (-item[0], item[1]))
         return tuple(
-            self._with_policy_source_level(result)
-            for _, _, result in scored[:max_results]
+            self._with_policy_source_level(result) for _, _, result in scored[:max_results]
         )
 
     def _with_policy_source_level(self, result: SearchResult) -> SearchResult:
-        """Return a result with source level derived from its domain."""
+        """Return a result with source level derived from its domain.
+
+        Args:
+            result: SearchResult: .
+
+        Returns:
+            SearchResult: .
+        """
         domain = _domain(result.url)
         source_level = result.source_level
         if _matches_domain(domain, self.OFFICIAL_DOMAINS):
@@ -348,6 +380,15 @@ class SearchResultQualityPolicy:
         *,
         target_terms: tuple[str, ...],
     ) -> int | None:
+        """Process _score.
+
+        Args:
+            result: SearchResult: .
+            target_terms: tuple[str, ...]: .
+
+        Returns:
+            int | None: .
+        """
         domain = _domain(result.url)
         text = f"{result.title} {result.snippet} {result.url}"
         lowered_text = text.lower()
@@ -363,9 +404,7 @@ class SearchResultQualityPolicy:
         target_matched = not target_terms or any(
             term and term.lower() in lowered_text for term in target_terms
         )
-        low_quality_text = any(
-            term.lower() in lowered_text for term in self.LOW_QUALITY_TEXT_TERMS
-        )
+        low_quality_text = any(term.lower() in lowered_text for term in self.LOW_QUALITY_TEXT_TERMS)
 
         if not target_matched:
             return None
@@ -394,6 +433,14 @@ class SearchResultQualityPolicy:
         return score
 
     def _target_terms(self, query: str) -> tuple[str, ...]:
+        """Process _target_terms.
+
+        Args:
+            query: str: .
+
+        Returns:
+            tuple[str, ...]: .
+        """
         ticker_match = self.TICKER_RE.search(query)
         terms: list[str] = []
         if ticker_match:
@@ -415,7 +462,14 @@ class SearchResultQualityPolicy:
 
 
 def _looks_garbled(text: str) -> bool:
-    """Return whether text looks like mojibake or private-use glyph garbage."""
+    """Return whether text looks like mojibake or private-use glyph garbage.
+
+    Args:
+        text: str: .
+
+    Returns:
+        bool: .
+    """
     if not text:
         return False
     meaningful = [char for char in text if not char.isspace()]
@@ -430,24 +484,13 @@ def _looks_garbled(text: str) -> bool:
         if category == "Co" or (category.startswith("C") and char not in "\t\n\r"):
             private_or_control += 1
             continue
-        if (
-            "\u4e00" <= char <= "\u9fff"
-            or char.isascii()
-            or category.startswith(("P", "S", "N"))
-        ):
+        if "\u4e00" <= char <= "\u9fff" or char.isascii() or category.startswith(("P", "S", "N")):
             readable += 1
     return private_or_control > 0 or readable / max(len(meaningful), 1) < 0.55
 
 
 class VerifiedContent(BaseModel):
-    """Accessible original content and its immutable snapshot metadata.
-
-    Attributes:
-        result: Verified search result with accessibility flags and snapshot references.
-        snapshot: Immutable raw snapshot of the downloaded original content.
-        title: Normalized title extracted from the original content.
-        content: Extracted body text from the original content.
-    """
+    """Accessible original content and its immutable snapshot metadata.."""
 
     result: SearchResult
     snapshot: RawSnapshot
@@ -463,20 +506,7 @@ class VerifiedContent(BaseModel):
 
 
 class WebSearchProvider(BaseProvider):
-    """WebSearch Provider — configurable web search provider.
-
-    The user supplies their own API key (referenced through SecretManager).
-    Supports multiple search APIs via injected ``search_func``.
-    The MVP does not bind a specific search service; plugability is achieved
-    through function injection.
-
-    Compliance constraints:
-    - Do not bypass robots.txt, login walls, paywalls, or anti-scraping
-      mechanisms.
-    - Do not submit copyright-restricted full text to open source sample data.
-    - A result enters the RAG evidence library only when it resolves to
-      accessible original content or a compliant snapshot.
-    """
+    """WebSearch Provider — configurable web search provider.."""
 
     def __init__(
         self,
@@ -487,10 +517,12 @@ class WebSearchProvider(BaseProvider):
         """Initialize the web search provider.
 
         Args:
-            name: Provider name used in descriptors and logging.
-            secret_ref: Secret manager reference for the API key.
-            search_func: Callable ``(query, max_results) -> list[dict]`` that
-                performs the actual search. Defaults to None.
+            name: str: .
+            secret_ref: str: .
+            search_func: Any: .
+
+        Returns:
+            None: .
         """
         self._secret_ref = secret_ref
         self._api_key: str | None = None
@@ -509,7 +541,7 @@ class WebSearchProvider(BaseProvider):
         """Return the provider descriptor.
 
         Returns:
-            ProviderDescriptor with metadata, capabilities, and secret refs.
+            ProviderDescriptor: .
         """
         return self._descriptor
 
@@ -517,7 +549,10 @@ class WebSearchProvider(BaseProvider):
         """Set the API key (injected by Registry after ``resolve_secrets``).
 
         Args:
-            api_key: Resolved API key string.
+            api_key: str: .
+
+        Returns:
+            None: .
         """
         self._api_key = api_key
 
@@ -525,7 +560,10 @@ class WebSearchProvider(BaseProvider):
         """Configure the API key through the standard ProviderRegistry hook.
 
         Args:
-            secrets: Mapping from secret reference to resolved secret value.
+            secrets: dict[str, str]: .
+
+        Returns:
+            None: .
         """
         api_key = secrets.get(self._secret_ref)
         if api_key:
@@ -533,14 +571,21 @@ class WebSearchProvider(BaseProvider):
 
     @property
     def api_key_configured(self) -> bool:
-        """Return whether the configured secret reference has been resolved."""
+        """Return whether the configured secret reference has been resolved.
+
+        Returns:
+            bool: .
+        """
         return bool(self._api_key)
 
     def set_search_func(self, search_func: Any) -> None:
         """Set the search function (enables swapping search APIs).
 
         Args:
-            search_func: Callable ``(query, max_results) -> list[dict]``.
+            search_func: Any: .
+
+        Returns:
+            None: .
         """
         self._search_func = search_func
 
@@ -548,8 +593,7 @@ class WebSearchProvider(BaseProvider):
         """Check whether the provider is ready to serve search requests.
 
         Returns:
-            HealthCheckResult: DEGRADED when no search function is configured,
-            HEALTHY otherwise.
+            HealthCheckResult: .
         """
         if self._search_func is None:
             return HealthCheckResult(
@@ -574,16 +618,12 @@ class WebSearchProvider(BaseProvider):
         """Execute a search and return the query record.
 
         Args:
-            query: Search query string.
-            max_results: Maximum number of results to return.
-            source_level: Default source level for returned results (web search
-                defaults to L4).
+            query: str: .
+            max_results: int: .
+            source_level: SourceLevel: .
 
         Returns:
-            SearchQueryRecord containing the result list and audit fields.
-
-        Raises:
-            RuntimeError: If no search function has been configured.
+            SearchQueryRecord: .
         """
         import uuid
 
@@ -620,20 +660,7 @@ class WebSearchProvider(BaseProvider):
 
 
 class ComplianceChecker:
-    """Compliance boundary checker (architecture §6.2.1).
-
-    Checks:
-    - Do not bypass robots.txt, paywalls, or anti-scraping (HTTP 401/403 ->
-      reject).
-    - Do not include copyright-restricted full text in open source sample data.
-    - WebSearch results must resolve to accessible original content or a
-      compliant snapshot.
-    - Search snippets alone cannot be cited as evidence.
-
-    Attributes:
-        BLOCKED_DOMAINS: Set of blocked domain strings.
-        PAYWALL_INDICATORS: Substrings that indicate paywalled content.
-    """
+    """Compliance boundary checker (architecture §6.2.1).."""
 
     BLOCKED_DOMAINS: set[str] = set()
 
@@ -650,30 +677,27 @@ class ComplianceChecker:
         """Check whether the URL belongs to a blocked domain.
 
         Args:
-            url: URL to validate.
+            url: str: .
 
-        Raises:
-            ComplianceError: If the URL matches a blocked domain.
+        Returns:
+            None: .
         """
         from urllib.parse import urlparse
 
         domain = urlparse(url).netloc.lower()
         for blocked in ComplianceChecker.BLOCKED_DOMAINS:
             if blocked in domain:
-                raise ComplianceError(
-                    f"URL '{url}' is in blocked domain list: {blocked}"
-                )
+                raise ComplianceError(f"URL '{url}' is in blocked domain list: {blocked}")
 
     @staticmethod
     def check_content_for_paywall(content: str) -> bool:
         """Check whether the content contains paywall indicators.
 
         Args:
-            content: Text content to inspect.
+            content: str: .
 
         Returns:
-            True if a paywall indicator is detected (content should not enter
-            the evidence library).
+            bool: .
         """
         lower = content.lower()
         return any(indicator in lower for indicator in ComplianceChecker.PAYWALL_INDICATORS)
@@ -683,10 +707,10 @@ class ComplianceChecker:
         """Check the HTTP status code; 401/403 trigger compliance rejection.
 
         Args:
-            status: HTTP response status code.
+            status: int: .
 
-        Raises:
-            ComplianceError: If ``status`` is 401 or 403.
+        Returns:
+            None: .
         """
         if status in (401, 403):
             raise ComplianceError(
@@ -695,11 +719,7 @@ class ComplianceChecker:
 
 
 class OriginalContentVerifier:
-    """Original content verifier (architecture §6.2.1: 0302.4).
-
-    WebSearch results must resolve to accessible original content or a compliant
-    snapshot; search snippets alone are insufficient.
-    """
+    """Original content verifier (architecture §6.2.1: 0302.4).."""
 
     def __init__(
         self,
@@ -708,15 +728,16 @@ class OriginalContentVerifier:
         markdown_converter: Any | None = None,
         normalization_pipeline: Any | None = None,
     ) -> None:
-        """Initialize the verifier with a downloader backed by the registry and
-        snapshot store.
+        """Initialize the verifier with a downloader backed by the registry and.
 
         Args:
-            registry: Source registry used by the downloader.
-            snapshot_store: Snapshot store used to read downloaded snapshots.
-            markdown_converter: Converter that normalizes all supported input formats
-                into Markdown before downstream LLM extraction.
-            normalization_pipeline: Optional full review/repair/verify/slim pipeline.
+            registry: SourceRegistry: .
+            snapshot_store: SnapshotStore: .
+            markdown_converter: Any | None: .
+            normalization_pipeline: Any | None: .
+
+        Returns:
+            None: .
         """
         self._downloader = Downloader(registry, snapshot_store)
         self._snapshot_store = snapshot_store
@@ -730,15 +751,13 @@ class OriginalContentVerifier:
         self,
         result: SearchResult,
     ) -> VerifiedContent | None:
-        """Verify that a search result resolves to accessible original content
-        and persist a snapshot.
+        """Verify that a search result resolves to accessible original content.
 
         Args:
-            result: Search result to verify.
+            result: SearchResult: .
 
         Returns:
-            Verified original content with snapshot metadata, or None when the
-            result is inaccessible, non-compliant, or cannot be parsed.
+            VerifiedContent | None: .
         """
         try:
             self._compliance.check_url(result.url)
@@ -797,10 +816,10 @@ class OriginalContentVerifier:
         """Verify a batch of search results.
 
         Args:
-            results: List of search results to verify.
+            results: list[SearchResult]: .
 
         Returns:
-            One verification result per input result; inaccessible items are None.
+            list[VerifiedContent | None]: .
         """
         verified: list[VerifiedContent | None] = []
         for result in results:
@@ -814,16 +833,7 @@ class OriginalContentVerifier:
 
 
 class WebSearchService:
-    """WebSearch service — integrates provider, compliance checks, and original
-    content verification.
-
-    Example:
-        provider = WebSearchProvider(search_func=my_search_api)
-        service = WebSearchService(provider, registry, snapshot_store)
-        record, events = service.search_and_acquire(
-            "平安银行 公告", max_results=5
-        )
-    """
+    """WebSearch service — integrates provider, compliance checks, and original."""
 
     def __init__(
         self,
@@ -838,13 +848,16 @@ class WebSearchService:
         """Initialize the service.
 
         Args:
-            provider: Configured web search provider.
-            registry: Source registry for content acquisition.
-            snapshot_store: Snapshot store for persisting downloaded content.
-            repository: Optional repository for persisting search records and audited results.
-            quality_policy: Optional policy for pre-download result filtering.
-            markdown_converter: Optional shared document-to-Markdown converter.
-            normalization_pipeline: Optional shared document normalization pipeline.
+            provider: WebSearchProvider: .
+            registry: SourceRegistry: .
+            snapshot_store: SnapshotStore: .
+            repository: NewsRepository | None: .
+            quality_policy: SearchResultQualityPolicy | None: .
+            markdown_converter: Any | None: .
+            normalization_pipeline: Any | None: .
+
+        Returns:
+            None: .
         """
         self._provider = provider
         self._verifier = OriginalContentVerifier(
@@ -864,11 +877,11 @@ class WebSearchService:
         """Execute a search and return the query record.
 
         Args:
-            query: Search query string.
-            max_results: Maximum number of results to return.
+            query: str: .
+            max_results: int: .
 
         Returns:
-            SearchQueryRecord containing the results and audit fields.
+            SearchQueryRecord: .
         """
         return self._provider.search(query, max_results=max_results)
 
@@ -879,24 +892,18 @@ class WebSearchService:
         source_level: SourceLevel = SourceLevel.L4,
         searched_at: datetime | None = None,
     ) -> tuple[SearchQueryRecord, list[DocumentEvent]]:
-        """Search and acquire original content, returning the query record and
-        document events for successfully acquired results.
-
-        Only results that resolve to accessible original content or a compliant
-        snapshot generate document events (architecture §6.2.1).
+        """Search and acquire original content, returning the query record and.
 
         Args:
-            query: Search query string.
-            max_results: Maximum number of results to return.
-            source_level: Source level assigned to returned results.
-            searched_at: Optional timestamp to record as the search time.
+            query: str: .
+            max_results: int: .
+            source_level: SourceLevel: .
+            searched_at: datetime | None: .
 
         Returns:
-            Tuple of (query record, list of document events).
+            tuple[SearchQueryRecord, list[DocumentEvent]]: .
         """
-        record = self._provider.search(
-            query, max_results=max_results, source_level=source_level
-        )
+        record = self._provider.search(query, max_results=max_results, source_level=source_level)
         filtered_results = self._quality_policy.filter_and_rank(
             record.results,
             query=query,

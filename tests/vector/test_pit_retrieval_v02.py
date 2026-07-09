@@ -33,10 +33,10 @@ def vector_repository(database_url: str) -> Iterator[VectorRepository]:
     """Yield a clean ``VectorRepository`` backed by a temporary PostgreSQL database.
 
     Args:
-        database_url: pytest fixture providing the connection URL for the test database.
+        database_url: str: .
 
     Yields:
-        VectorRepository: repository instance with dimension 2 and empty vector tables.
+        Any: .
     """
     engine = create_database_engine(DatabaseSettings(url=database_url))
     with engine.begin() as connection:
@@ -53,10 +53,17 @@ def vector_repository(database_url: str) -> Iterator[VectorRepository]:
 
 
 class FakeEmbeddingProvider:
-    """Stub embedding provider returning a fixed 2-D vector for any input."""
+    """Stub embedding provider returning a fixed 2-D vector for any input.."""
 
     def embed(self, text: str) -> list[float]:
-        """Return a constant ``[1.0, 0.0]`` vector, ignoring the input text."""
+        """Return a constant ``[1.0, 0.0]`` vector, ignoring the input text.
+
+        Args:
+            text: str: .
+
+        Returns:
+            list[float]: .
+        """
         return [1.0, 0.0]
 
 
@@ -71,11 +78,14 @@ def seed_chunk(
     """Insert a chunk with a security link and embedding into the repository.
 
     Args:
-        repo: target vector repository.
-        chunk_id: identifier assigned to the seeded chunk.
-        security_id: stock symbol linked to the chunk.
-        available_at: timestamp controlling PIT search availability.
-        content: text content stored in the chunk.
+        repo: VectorRepository: .
+        chunk_id: str: .
+        security_id: str: .
+        available_at: datetime: .
+        content: str: .
+
+    Returns:
+        None: .
     """
     chunk = make_chunk(
         document_id=f"doc-{chunk_id}",
@@ -114,11 +124,11 @@ def test_retrieval_filters_future_chunks_in_sql(
 ) -> None:
     """Retrieval must filter out chunks whose ``available_at`` is after the decision time.
 
-    Seeds one past and one future chunk, then verifies that only the past chunk
-    appears in search results when ``decision_at`` falls between them.
-
     Args:
-        vector_repository: pytest fixture providing a clean repository.
+        vector_repository: VectorRepository: .
+
+    Returns:
+        None: .
     """
     seed_chunk(
         vector_repository,
@@ -152,11 +162,11 @@ def test_retrieval_returns_locator_snapshot_and_quality(
 ) -> None:
     """Retrieval results must carry locator snapshots and positive source-quality scores.
 
-    Verifies that a retrieved chunk has a snapshot ID, a precise locator anchor,
-    and a source-quality score greater than zero for citation support.
-
     Args:
-        vector_repository: pytest fixture providing a clean repository.
+        vector_repository: VectorRepository: .
+
+    Returns:
+        None: .
     """
     seed_chunk(
         vector_repository,

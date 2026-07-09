@@ -9,15 +9,15 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class DuplicateEndpointError(ValueError):
-    """Raised when a provider/code endpoint is registered more than once."""
+    """Raised when a provider/code endpoint is registered more than once.."""
 
 
 class UnknownEndpointError(KeyError):
-    """Raised when a provider/code endpoint lookup misses."""
+    """Raised when a provider/code endpoint lookup misses.."""
 
 
 class BackfillPolicy(BaseModel):
-    """Backfill settings for an endpoint."""
+    """Backfill settings for an endpoint.."""
 
     mode: str = "incremental"
     default_lookback_days: int = Field(default=365, ge=0)
@@ -28,7 +28,7 @@ class BackfillPolicy(BaseModel):
 
 
 class RateLimitPolicy(BaseModel):
-    """Endpoint rate-limit settings used by sync workers."""
+    """Endpoint rate-limit settings used by sync workers.."""
 
     requests_per_minute: int = Field(default=60, ge=1)
     burst: int = Field(default=1, ge=1)
@@ -38,11 +38,7 @@ class RateLimitPolicy(BaseModel):
 
 
 class ProviderEndpoint(BaseModel):
-    """Versioned provider endpoint descriptor.
-
-    Endpoint definitions are global data-source contracts. They are not scoped to
-    user research scopes; downstream scope filtering happens after warehouse sync.
-    """
+    """Versioned provider endpoint descriptor.."""
 
     provider: str
     code: str
@@ -60,7 +56,14 @@ class ProviderEndpoint(BaseModel):
     @field_validator("provider", "code", "domain")
     @classmethod
     def normalize_identifier(cls, value: str) -> str:
-        """Normalize endpoint identity fields."""
+        """Normalize endpoint identity fields.
+
+        Args:
+            value: str: .
+
+        Returns:
+            str: .
+        """
         normalized = value.strip().lower()
         if not normalized:
             raise ValueError("endpoint identity fields must be non-empty")
@@ -68,18 +71,25 @@ class ProviderEndpoint(BaseModel):
 
     @property
     def endpoint_id(self) -> str:
-        """Return stable provider/code identity."""
+        """Return stable provider/code identity.
+
+        Returns:
+            str: .
+        """
         return f"{self.provider}:{self.code}"
 
 
 class ProviderEndpointRegistry:
-    """In-memory endpoint registry used by sync planning."""
+    """In-memory endpoint registry used by sync planning.."""
 
     def __init__(self, endpoints: Iterable[ProviderEndpoint] | None = None) -> None:
         """Initialize the registry.
 
         Args:
-            endpoints: Optional iterable of endpoints to register immediately.
+            endpoints: Iterable[ProviderEndpoint] | None: .
+
+        Returns:
+            None: .
         """
         self._endpoints: dict[tuple[str, str], ProviderEndpoint] = {}
         for endpoint in endpoints or ():
@@ -89,11 +99,10 @@ class ProviderEndpointRegistry:
         """Register an endpoint, rejecting duplicate provider/code pairs.
 
         Args:
-            endpoint: The endpoint descriptor to register.
+            endpoint: ProviderEndpoint: .
 
-        Raises:
-            DuplicateEndpointError: If the provider/code pair is already
-                registered.
+        Returns:
+            None: .
         """
         key = (endpoint.provider, endpoint.code)
         if key in self._endpoints:
@@ -106,14 +115,11 @@ class ProviderEndpointRegistry:
         """Return an endpoint descriptor by provider/code.
 
         Args:
-            provider: The provider name.
-            code: The endpoint code.
+            provider: str: .
+            code: str: .
 
         Returns:
-            The matching ``ProviderEndpoint``.
-
-        Raises:
-            UnknownEndpointError: If no endpoint matches the provider/code.
+            ProviderEndpoint: .
         """
         key = (provider.strip().lower(), code.strip().lower())
         try:
@@ -130,11 +136,11 @@ class ProviderEndpointRegistry:
         """List endpoint descriptors, optionally filtered by provider and domain.
 
         Args:
-            provider: Optional provider name filter.
-            domain: Optional domain filter.
+            provider: str | None: .
+            domain: str | None: .
 
         Returns:
-            A tuple of matching endpoints sorted by endpoint ID.
+            tuple[ProviderEndpoint, ...]: .
         """
         normalized_provider = provider.strip().lower() if provider else None
         normalized_domain = domain.strip().lower() if domain else None
@@ -150,8 +156,7 @@ class ProviderEndpointRegistry:
         """Build the default AKShare/Tushare endpoint registry.
 
         Returns:
-            A registry pre-populated with security, market, corporate-action,
-            financial, valuation, and universe endpoints for both providers.
+            ProviderEndpointRegistry: .
         """
         endpoints: list[ProviderEndpoint] = []
         for provider in ("akshare", "tushare"):

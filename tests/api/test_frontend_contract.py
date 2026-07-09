@@ -52,7 +52,11 @@ FRONTEND_API_PATHS = {
 
 
 def test_frontend_api_paths_exist_in_openapi() -> None:
-    """Verify frontend client paths are exposed by the backend app."""
+    """Verify frontend client paths are exposed by the backend app.
+
+    Returns:
+        None: .
+    """
     backend_paths = set(create_app().openapi()["paths"])
 
     assert FRONTEND_API_PATHS <= backend_paths

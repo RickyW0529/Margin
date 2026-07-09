@@ -11,16 +11,7 @@ from margin.news.models import ensure_utc
 
 
 class DiscoveredDocument(BaseModel):
-    """A document discovered before download and normalization.
-
-    Attributes:
-        external_id: Identifier assigned by the upstream source.
-        title: Document title.
-        source_url: URL where the document can be retrieved.
-        published_at: Official publication timestamp.
-        cursor: Optional opaque cursor used for incremental discovery.
-        metadata: Additional source-specific metadata.
-    """
+    """A document discovered before download and normalization.."""
 
     external_id: str
     title: str
@@ -37,16 +28,16 @@ class DiscoveredDocument(BaseModel):
         """Normalize exchange timestamps to UTC.
 
         Args:
-            value: Datetime value provided during model construction.
+            value: datetime: .
 
         Returns:
-            Timezone-aware UTC datetime.
+            datetime: .
         """
         return ensure_utc(value)
 
 
 class DiscoveryConnector(Protocol):
-    """Connector that discovers document URLs incrementally."""
+    """Connector that discovers document URLs incrementally.."""
 
     def discover(
         self,
@@ -56,9 +47,9 @@ class DiscoveryConnector(Protocol):
         """Discover a batch of documents from the source.
 
         Args:
-            cursor: Opaque cursor from a previous discovery pass, or None for the first pass.
-            limit: Maximum number of documents to return.
+            cursor: str | None: .
+            limit: int: .
 
         Returns:
-            List of discovered documents ordered from oldest to newest where possible.
+            list[DiscoveredDocument]: .
         """

@@ -23,10 +23,10 @@ def test_strategy_config_v02_tables_exist(database_url: str) -> None:
     """Verify all v0.2 strategy configuration tables exist after migration.
 
     Args:
-        database_url: PostgreSQL connection URL for the isolated test database.
+        database_url: str: .
 
     Returns:
-        None.
+        None: .
     """
     url = make_url(database_url)
     result = verify_clean_database(
@@ -53,7 +53,7 @@ def test_indicator_view_does_not_remove_required_quant_features() -> None:
     """Verify an indicator view excludes indicators without removing required features.
 
     Returns:
-        None.
+        None: .
     """
     view = IndicatorViewVersion(
         version_id="view-1",
@@ -80,7 +80,7 @@ def test_research_scope_hash_is_deterministic() -> None:
     """Verify the research scope hash is deterministic for identical scope content.
 
     Returns:
-        None.
+        None: .
     """
     scope = ResearchScopeVersion(
         version_id="scope-1",

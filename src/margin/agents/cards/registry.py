@@ -29,12 +29,16 @@ _DOMAIN_BY_AGENT = {
 
 
 def v0_agent_card_to_worker_card(card: AgentCard) -> WorkerAgentCard:
-    """Convert an existing v0 AgentCard into a v1 WorkerAgentCard."""
+    """Convert an existing v0 AgentCard into a v1 WorkerAgentCard.
+
+    Args:
+        card: AgentCard: .
+
+    Returns:
+        WorkerAgentCard: .
+    """
     domain = _DOMAIN_BY_AGENT.get(card.name, "general")
-    write_policies = tuple(
-        _write_policy(skill.write_policy)
-        for skill in card.skills
-    )
+    write_policies = tuple(_write_policy(skill.write_policy) for skill in card.skills)
     return WorkerAgentCard(
         name=card.name,
         version=card.version,
@@ -61,12 +65,23 @@ def v0_agent_card_to_worker_card(card: AgentCard) -> WorkerAgentCard:
 
 
 def v0_agent_cards_to_worker_cards(cards: Iterable[AgentCard]) -> tuple[WorkerAgentCard, ...]:
-    """Convert v0 AgentCards into v1 WorkerAgentCards."""
+    """Convert v0 AgentCards into v1 WorkerAgentCards.
+
+    Args:
+        cards: Iterable[AgentCard]: .
+
+    Returns:
+        tuple[WorkerAgentCard, ...]: .
+    """
     return tuple(v0_agent_card_to_worker_card(card) for card in cards)
 
 
 def default_domain_agent_cards() -> tuple[DomainAgentCard, ...]:
-    """Return the default Layer-2 Domain ExpertAgent cards."""
+    """Return the default Layer-2 Domain ExpertAgent cards.
+
+    Returns:
+        tuple[DomainAgentCard, ...]: .
+    """
     return (
         DomainAgentCard(
             name="DataExpertAgent",
@@ -152,12 +167,28 @@ def default_domain_agent_cards() -> tuple[DomainAgentCard, ...]:
 
 
 def _write_policy(mode: AgentPermissionMode) -> ProductionWritePolicy:
+    """Process _write_policy.
+
+    Args:
+        mode: AgentPermissionMode: .
+
+    Returns:
+        ProductionWritePolicy: .
+    """
     if mode is AgentPermissionMode.WRITE_ALLOWED:
         return ProductionWritePolicy.WRITE_CONTEXT_ONLY
     return ProductionWritePolicy.NONE
 
 
 def _data_access_policy(domain: str) -> tuple[DataAccessPolicy, ...]:
+    """Process _data_access_policy.
+
+    Args:
+        domain: str: .
+
+    Returns:
+        tuple[DataAccessPolicy, ...]: .
+    """
     if domain == "general":
         return (DataAccessPolicy.READ_CHAT_SUMMARY, DataAccessPolicy.READ_DASHBOARD)
     if domain == "quant":
@@ -170,6 +201,14 @@ def _data_access_policy(domain: str) -> tuple[DataAccessPolicy, ...]:
 
 
 def _tool_policy(domain: str) -> tuple[ToolPolicy, ...]:
+    """Process _tool_policy.
+
+    Args:
+        domain: str: .
+
+    Returns:
+        tuple[ToolPolicy, ...]: .
+    """
     if domain == "quant":
         return (ToolPolicy.QUANT_TOOLS,)
     if domain == "evidence":

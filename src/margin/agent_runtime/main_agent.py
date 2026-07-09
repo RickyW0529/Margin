@@ -43,15 +43,11 @@ from margin.research.llm import LLMProvider
 
 
 class MainAgentPlanningError(RuntimeError):
-    """Raised when MainAgent cannot produce a valid LLM-backed Q&A plan."""
+    """Raised when MainAgent cannot produce a valid LLM-backed Q&A plan.."""
 
 
 class MainAgentRuntime:
-    """MainAgent planner and reviewer.
-
-    This foundation class does not execute ExpertAgents. It creates plans from
-    flow definitions and reviews Context Store artifacts.
-    """
+    """MainAgent planner and reviewer.."""
 
     def __init__(
         self,
@@ -66,6 +62,22 @@ class MainAgentRuntime:
         prompt_renderer: PromptRenderer | None = None,
         executor_registry: ExecutorRegistry | None = None,
     ) -> None:
+        """Process __init__.
+
+        Args:
+            context_store: AgentContextStore: .
+            card_registry: AgentCardRegistry: .
+            scheduled_flow: AgentFlowDefinition: .
+            input_guardrail: InputGuardrail | None: .
+            plan_guardrail: PlanGuardrail | None: .
+            llm_provider_factory: Callable[[], LLMProvider] | None: .
+            prompt_registry: PromptRegistry | None: .
+            prompt_renderer: PromptRenderer | None: .
+            executor_registry: ExecutorRegistry | None: .
+
+        Returns:
+            None: .
+        """
         self._context_store = context_store
         self._cards = card_registry
         self._scheduled_flow = scheduled_flow
@@ -81,7 +93,11 @@ class MainAgentRuntime:
 
     @property
     def scheduled_flow(self) -> AgentFlowDefinition:
-        """Return the default scheduled flow configured for this runtime."""
+        """Return the default scheduled flow configured for this runtime.
+
+        Returns:
+            AgentFlowDefinition: .
+        """
         return self._scheduled_flow
 
     def create_scheduled_stock_analysis_plan(
@@ -91,7 +107,16 @@ class MainAgentRuntime:
         user_intent_summary: str,
         scheduled_flow: AgentFlowDefinition | None = None,
     ) -> MainAgentPlanResult:
-        """Create the fixed scheduled stock-analysis plan."""
+        """Create the fixed scheduled stock-analysis plan.
+
+        Args:
+            run_id: str: .
+            user_intent_summary: str: .
+            scheduled_flow: AgentFlowDefinition | None: .
+
+        Returns:
+            MainAgentPlanResult: .
+        """
         flow = scheduled_flow or self._scheduled_flow
         input_decision = self._input_guardrail.evaluate(
             user_intent_summary,
@@ -132,8 +157,7 @@ class MainAgentRuntime:
         )
         self._context_store.add_run(run)
         steps = tuple(
-            self._step_from_definition(definition, run_id=run_id)
-            for definition in flow.steps
+            self._step_from_definition(definition, run_id=run_id) for definition in flow.steps
         )
         plan_decision = self._plan_guardrail.validate_fixed_flow(
             run_type=run.run_type,
@@ -165,7 +189,17 @@ class MainAgentRuntime:
         conversation_context: list[dict[str, str]] | None = None,
         context_pack: ContextPack | None = None,
     ) -> MainAgentPlanResult:
-        """Create a dynamic read-only user-Q&A plan from exposed ExpertAgent cards."""
+        """Create a dynamic read-only user-Q&A plan from exposed ExpertAgent cards.
+
+        Args:
+            run_id: str: .
+            user_input: str: .
+            conversation_context: list[dict[str, str]] | None: .
+            context_pack: ContextPack | None: .
+
+        Returns:
+            MainAgentPlanResult: .
+        """
         input_decision = self._input_guardrail.evaluate(user_input, run_id=run_id)
         self._context_store.add_guardrail_decision(input_decision)
         if input_decision.decision != GuardrailDecisionType.ALLOW:
@@ -231,7 +265,15 @@ class MainAgentRuntime:
         run_id: str,
         scheduled_flow: AgentFlowDefinition | None = None,
     ) -> MainAgentReviewResult:
-        """Review required scheduled artifacts for a run."""
+        """Review required scheduled artifacts for a run.
+
+        Args:
+            run_id: str: .
+            scheduled_flow: AgentFlowDefinition | None: .
+
+        Returns:
+            MainAgentReviewResult: .
+        """
         flow = scheduled_flow or self._scheduled_flow
         artifacts = self._context_store.list_artifacts(run_id)
         artifact_types = {artifact.artifact_type for artifact in artifacts}
@@ -253,9 +295,7 @@ class MainAgentRuntime:
                 expected_producer=expected_producers.get(artifact.artifact_type),
                 expected_artifact_type=artifact.artifact_type,
             )
-            invalid.extend(
-                f"{artifact.artifact_id}:{problem}" for problem in check.problems
-            )
+            invalid.extend(f"{artifact.artifact_id}:{problem}" for problem in check.problems)
         audit_payload = {
             "required_artifacts": sorted(required),
             "missing_artifacts": list(missing),
@@ -269,10 +309,14 @@ class MainAgentRuntime:
             payload=audit_payload,
         )
         if missing or invalid:
-            expert, skill = self._retry_target_for_artifact(
-                missing[0],
-                scheduled_flow=flow,
-            ) if missing else (None, None)
+            expert, skill = (
+                self._retry_target_for_artifact(
+                    missing[0],
+                    scheduled_flow=flow,
+                )
+                if missing
+                else (None, None)
+            )
             return MainAgentReviewResult(
                 decision="blocked",
                 summary="Missing required scheduled stock-analysis artifacts.",
@@ -294,15 +338,36 @@ class MainAgentRuntime:
         )
 
     def add_context_artifact(self, artifact: ContextArtifact) -> None:
-        """Persist an expert-agent output artifact in the Shared Context Store."""
+        """Persist an expert-agent output artifact in the Shared Context Store.
+
+        Args:
+            artifact: ContextArtifact: .
+
+        Returns:
+            None: .
+        """
         self._context_store.add_artifact(artifact)
 
     def list_context_artifacts(self, run_id: str) -> list[ContextArtifact]:
-        """List Context Store artifacts for a run."""
+        """List Context Store artifacts for a run.
+
+        Args:
+            run_id: str: .
+
+        Returns:
+            list[ContextArtifact]: .
+        """
         return self._context_store.list_artifacts(run_id)
 
     def get_context_artifact(self, artifact_id: str) -> ContextArtifact | None:
-        """Return one Context Store artifact by ID."""
+        """Return one Context Store artifact by ID.
+
+        Args:
+            artifact_id: str: .
+
+        Returns:
+            ContextArtifact | None: .
+        """
         return self._context_store.get_artifact(artifact_id)
 
     def scheduled_flow_summary(
@@ -310,14 +375,20 @@ class MainAgentRuntime:
         *,
         scheduled_flow: AgentFlowDefinition | None = None,
     ) -> dict[str, Any]:
-        """Return a compact DAG summary for orchestration metadata and UI."""
+        """Return a compact DAG summary for orchestration metadata and UI.
+
+        Args:
+            scheduled_flow: AgentFlowDefinition | None: .
+
+        Returns:
+            dict[str, Any]: .
+        """
         flow = scheduled_flow or self._scheduled_flow
         return {
             "flow_id": flow.flow_id,
             "version": flow.version,
             "dependency_waves": [
-                [step.step_id for step in wave]
-                for wave in flow.dependency_waves()
+                [step.step_id for step in wave] for wave in flow.dependency_waves()
             ],
             "branches": {
                 "quant": ["quant_analysis"],
@@ -338,6 +409,15 @@ class MainAgentRuntime:
         *,
         run_id: str,
     ) -> AgentStep:
+        """Process _step_from_definition.
+
+        Args:
+            definition: AgentStepDefinition: .
+            run_id: str: .
+
+        Returns:
+            AgentStep: .
+        """
         return AgentStep(
             step_id=definition.step_id,
             run_id=run_id,
@@ -351,6 +431,14 @@ class MainAgentRuntime:
         self,
         scheduled_flow: AgentFlowDefinition,
     ) -> AgentStepDefinition:
+        """Process _final_review_step.
+
+        Args:
+            scheduled_flow: AgentFlowDefinition: .
+
+        Returns:
+            AgentStepDefinition: .
+        """
         for step in scheduled_flow.steps:
             if step.step_id == "main_agent_final_review":
                 return step
@@ -362,19 +450,37 @@ class MainAgentRuntime:
         *,
         scheduled_flow: AgentFlowDefinition,
     ) -> tuple[str | None, str | None]:
+        """Process _retry_target_for_artifact.
+
+        Args:
+            artifact_type: str: .
+            scheduled_flow: AgentFlowDefinition: .
+
+        Returns:
+            tuple[str | None, str | None]: .
+        """
         for step in scheduled_flow.steps:
             if artifact_type in step.produced_artifacts:
                 return step.expert_agent, step.skill_id
         return None, None
 
     def _qna_step(self, agent_name: str, *, run_id: str, index: int) -> AgentStep:
+        """Process _qna_step.
+
+        Args:
+            agent_name: str: .
+            run_id: str: .
+            index: int: .
+
+        Returns:
+            AgentStep: .
+        """
         card = self._cards.get(agent_name)
         skill = next(
             (
                 candidate
                 for candidate in card.skills
-                if candidate.qa_allowed
-                and candidate.write_policy == AgentPermissionMode.READ_ONLY
+                if candidate.qa_allowed and candidate.write_policy == AgentPermissionMode.READ_ONLY
             ),
             None,
         )
@@ -398,6 +504,17 @@ class MainAgentRuntime:
         conversation_context: list[dict[str, str]],
         context_pack: ContextPack | None,
     ) -> tuple[str, ...]:
+        """Process _select_user_qna_agents.
+
+        Args:
+            user_input: str: .
+            run_id: str: .
+            conversation_context: list[dict[str, str]]: .
+            context_pack: ContextPack | None: .
+
+        Returns:
+            tuple[str, ...]: .
+        """
         return self._select_user_qna_agents_with_llm(
             user_input=user_input,
             run_id=run_id,
@@ -413,6 +530,17 @@ class MainAgentRuntime:
         conversation_context: list[dict[str, str]],
         context_pack: ContextPack | None,
     ) -> tuple[str, ...]:
+        """Process _select_user_qna_agents_with_llm.
+
+        Args:
+            user_input: str: .
+            run_id: str: .
+            conversation_context: list[dict[str, str]]: .
+            context_pack: ContextPack | None: .
+
+        Returns:
+            tuple[str, ...]: .
+        """
         if self._llm_provider_factory is None:
             raise MainAgentPlanningError("LLM planner is not configured")
 
@@ -422,9 +550,7 @@ class MainAgentRuntime:
             variables={
                 "user_request": user_input,
                 "conversation_context": conversation_context,
-                "context_pack": (
-                    context_pack.model_dump(mode="json") if context_pack else {}
-                ),
+                "context_pack": (context_pack.model_dump(mode="json") if context_pack else {}),
                 "run_context": {
                     "run_id": run_id,
                     "run_type": AgentRunType.USER_QNA.value,
@@ -452,15 +578,21 @@ class MainAgentRuntime:
                 f"LLM planner failed: {type(exc).__name__}: {exc}"
             ) from exc
         if not result.success:
-            raise MainAgentPlanningError(
-                result.error or "LLM planner completion failed"
-            )
+            raise MainAgentPlanningError(result.error or "LLM planner completion failed")
         selected = self._agent_names_from_plan_output(result.output)
         if not selected:
             raise MainAgentPlanningError("LLM planner produced no valid Q&A expert")
         return selected
 
     def _agent_names_from_plan_output(self, output: dict[str, Any]) -> tuple[str, ...]:
+        """Process _agent_names_from_plan_output.
+
+        Args:
+            output: dict[str, Any]: .
+
+        Returns:
+            tuple[str, ...]: .
+        """
         raw_steps = output.get("steps")
         if not isinstance(raw_steps, list):
             return ()
@@ -480,6 +612,15 @@ class MainAgentRuntime:
         agent_name: str,
         skill_id: object,
     ) -> bool:
+        """Process _is_allowed_qna_agent.
+
+        Args:
+            agent_name: str: .
+            skill_id: object: .
+
+        Returns:
+            bool: .
+        """
         try:
             card = self._cards.get(agent_name)
         except KeyError:
@@ -487,19 +628,16 @@ class MainAgentRuntime:
         qa_skills = [
             skill
             for skill in card.skills
-            if skill.qa_allowed
-            and skill.write_policy == AgentPermissionMode.READ_ONLY
+            if skill.qa_allowed and skill.write_policy == AgentPermissionMode.READ_ONLY
         ]
         if not qa_skills:
             return False
         if skill_id in (None, ""):
             return any(
-                self._executor_registry.has(agent_name, skill.skill_id)
-                for skill in qa_skills
+                self._executor_registry.has(agent_name, skill.skill_id) for skill in qa_skills
             )
         return any(
-            skill.skill_id == skill_id
-            and self._executor_registry.has(agent_name, skill.skill_id)
+            skill.skill_id == skill_id and self._executor_registry.has(agent_name, skill.skill_id)
             for skill in qa_skills
         )
 
@@ -509,6 +647,15 @@ class MainAgentRuntime:
         run_id: str,
         payload: dict[str, object],
     ) -> str:
+        """Process _write_final_audit_artifact.
+
+        Args:
+            run_id: str: .
+            payload: dict[str, object]: .
+
+        Returns:
+            str: .
+        """
         payload_hash = stable_json_hash(payload).removeprefix("sha256:")[:16]
         artifact = make_context_artifact(
             artifact_id=f"ctx_{run_id}_final_audit_{payload_hash}",
@@ -524,6 +671,14 @@ class MainAgentRuntime:
 
 
 def _coerce_agent_name(step: dict[str, object]) -> str:
+    """Process _coerce_agent_name.
+
+    Args:
+        step: dict[str, object]: .
+
+    Returns:
+        str: .
+    """
     for key in ("expert_agent_name", "expert_agent", "agent_name", "name"):
         value = step.get(key)
         if isinstance(value, str) and value.strip():
@@ -532,6 +687,14 @@ def _coerce_agent_name(step: dict[str, object]) -> str:
 
 
 def _expected_producers(flow: AgentFlowDefinition) -> dict[str, str]:
+    """Process _expected_producers.
+
+    Args:
+        flow: AgentFlowDefinition: .
+
+    Returns:
+        dict[str, str]: .
+    """
     return {
         artifact_type: step.expert_agent
         for step in flow.steps
