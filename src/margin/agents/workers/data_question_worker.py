@@ -360,25 +360,40 @@ def _analysis_text_with_context(
     message: str,
     conversation_context: tuple[dict[str, str], ...],
 ) -> str:
-    """Return current request plus recent chat context for data-question recovery."""
-    if not conversation_context:
-        return message
-    recent = "\n".join(
-        f"{item.get('role', 'unknown')}: {item.get('content', '')}"
-        for item in conversation_context[-6:]
-    )
-    return f"{recent}\ncurrent_user: {message}"
+    """Return sanitized current request plus previous user-only context.
+
+    Assistant messages are intentionally excluded.  They frequently contain
+    generated no-data answers, chart labels, and trace text; passing them to
+    warehouse lookup makes the resolver search for a whole transcript.
+    """
+    current = _sanitize_worker_query_text(message, max_chars=300)
+    recent_user_turns = [
+        _sanitize_worker_query_text(item.get("content", ""), max_chars=160)
+        for item in conversation_context[-4:]
+        if item.get("role") == "user"
+    ]
+    recent_user_turns = [item for item in recent_user_turns if item]
+    if not recent_user_turns:
+        return current
+    return "\n".join((current, "recent_user_turns:", *recent_user_turns))
 
 
 def _normalize_worker_inputs(worker_inputs: dict[str, Any] | None) -> dict[str, str] | None:
-    """Validate ExpertAgent-filled worker placeholders."""
+    """Validate ExpertAgent-filled worker placeholders.
+
+    The LLM planner may provide ``worker_inputs``, but these values cross a
+    trust boundary.  They must never contain role-marked chat transcripts or
+    prior assistant output.  This function accepts only compact scalar fields.
+    """
     if not worker_inputs:
         return None
-    user_query = str(worker_inputs.get("user_query") or "").strip()
-    security_query = str(worker_inputs.get("security_query") or "").strip()
-    indicator_id = str(worker_inputs.get("indicator_id") or "").strip()
+    user_query = _sanitize_worker_query_text(worker_inputs.get("user_query"), max_chars=300)
+    security_query = _sanitize_worker_security_text(worker_inputs.get("security_query"))
+    indicator_id = _sanitize_indicator_id(worker_inputs.get("indicator_id"))
     chart_type = _normalize_chart_type(str(worker_inputs.get("chart_type") or "line"))
     if not user_query or not security_query:
+        return None
+    if indicator_id == "roe_ttm" and _WORKER_METRIC_TERM_RE.search(user_query) is None:
         return None
     return {
         "user_query": user_query,
@@ -386,6 +401,147 @@ def _normalize_worker_inputs(worker_inputs: dict[str, Any] | None) -> dict[str, 
         "indicator_id": indicator_id,
         "chart_type": chart_type,
     }
+
+
+_WORKER_CURRENT_USER_MARKER_RE = re.compile(r"(?i)\bcurrent_user\s*:\s*")
+_WORKER_ROLE_MARKER_RE = re.compile(r"(?im)^\s*(?:system|user|assistant|current_user)\s*:")
+_WORKER_INLINE_ROLE_MARKER_RE = re.compile(r"(?i)\b(?:system|user|assistant|current_user)\s*:")
+_WORKER_METRIC_TERM_RE = re.compile(
+    r"(?i)(?<![A-Za-z])roe(?:\s*ttm)?(?![A-Za-z])|return\s+on\s+equity|净资产收益率|净资产回报率|净资产回报"
+)
+_WORKER_SECURITY_TOKEN_RE = re.compile(
+    r"(?:\d{6}(?:\.(?:SH|SZ|BJ))?|[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z0-9·（）().-]{1,40})",
+    flags=re.IGNORECASE,
+)
+_WORKER_SECURITY_PREFIXES = (
+    "请帮我看一下",
+    "请帮我查一下",
+    "帮我看一下",
+    "帮我查一下",
+    "我想看一下",
+    "我想看看",
+    "我想查询",
+    "我想查",
+    "我想看",
+    "请问",
+    "麻烦",
+    "帮我",
+    "给我看一下",
+    "给我查一下",
+    "给我看看",
+    "给我",
+    "想看一下",
+    "想看看",
+    "想查询",
+    "想查",
+    "想看",
+    "查看一下",
+    "查一下",
+    "看一下",
+    "查询",
+    "查看",
+    "查查",
+    "看看",
+    "看",
+    "查",
+)
+_WORKER_SECURITY_STOPWORDS = {
+    "user",
+    "assistant",
+    "current_user",
+    "system",
+    "roe",
+    "ttm",
+    "return",
+    "equity",
+    "净资产收益率",
+    "净资产回报率",
+    "历史记录",
+    "趋势",
+    "指标",
+    "标的",
+    "股票",
+}
+
+
+def _sanitize_worker_query_text(value: object, *, max_chars: int) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    parts = _WORKER_CURRENT_USER_MARKER_RE.split(text)
+    if len(parts) > 1:
+        text = parts[-1]
+    lines: list[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if re.match(r"(?i)^(?:assistant|system)\s*:", line):
+            continue
+        line = re.sub(r"(?i)^(?:user|current_user)\s*:\s*", "", line).strip()
+        if line:
+            lines.append(line)
+    compact = re.sub(r"\s+", " ", " ".join(lines)).strip()
+    return compact[:max_chars].strip()
+
+
+def _sanitize_worker_security_text(value: object) -> str:
+    text = _sanitize_worker_query_text(value, max_chars=160)
+    if not text or _WORKER_ROLE_MARKER_RE.search(text):
+        return ""
+    if _WORKER_METRIC_TERM_RE.search(text):
+        text = _security_from_metric_question(text)
+    else:
+        text = _clean_worker_security_candidate(text)
+    tokens = [
+        token.strip(" 的关于一下这个这只该只股票标的公司")
+        for token in _WORKER_SECURITY_TOKEN_RE.findall(text)
+    ]
+    tokens = [
+        token
+        for token in tokens
+        if token and token.casefold() not in _WORKER_SECURITY_STOPWORDS
+    ]
+    if not tokens:
+        return ""
+    candidate = tokens[-1]
+    if _WORKER_INLINE_ROLE_MARKER_RE.search(candidate) or len(candidate) > 64:
+        return ""
+    return candidate
+
+
+def _security_from_metric_question(value: str) -> str:
+    match = _WORKER_METRIC_TERM_RE.search(value)
+    if match is None:
+        return ""
+    before_metric = _clean_worker_security_candidate(value[: match.start()])
+    if before_metric:
+        return before_metric
+    return _clean_worker_security_candidate(value[match.end() :])
+
+
+def _clean_worker_security_candidate(value: str) -> str:
+    text = _WORKER_INLINE_ROLE_MARKER_RE.sub(" ", str(value or ""))
+    text = re.sub(r"[：:，,。；;？?！!、/\\|]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = text.strip(" 的关于一下这个这只该只股票标的公司")
+    changed = True
+    while changed:
+        changed = False
+        for prefix in _WORKER_SECURITY_PREFIXES:
+            if text.startswith(prefix):
+                text = text[len(prefix) :].strip()
+                changed = True
+    text = text.strip(" 的关于一下这个这只该只股票标的公司")
+    text = _WORKER_METRIC_TERM_RE.sub(" ", text)
+    return re.sub(r"\s+", " ", text).strip()[:80]
+
+
+def _sanitize_indicator_id(value: object) -> str:
+    indicator_id = str(value or "").strip().casefold()
+    if indicator_id == "roe_ttm":
+        return "roe_ttm"
+    return ""
 
 
 def _normalize_chart_type(chart_type: str) -> str:
@@ -677,8 +833,13 @@ def _empty_financial_metric_analysis(
     workflow_tool_calls: tuple[str, ...] = (),
 ) -> FinancialMetricAnalysis:
     """Return a traceable empty analysis when the warehouse has no matching facts."""
+    display_message = (
+        _sanitize_worker_security_text(message)
+        or _sanitize_worker_query_text(message, max_chars=80)
+        or "该标的"
+    )
     answer = (
-        f"没有在当前 PIT 数据仓库中找到 {message or '该标的'} 的 {metric['label']} "
+        f"没有在当前 PIT 数据仓库中找到 {display_message} 的 {metric['label']} "
         "历史记录。这个回答只说明数据缺口，不构成投资建议。"
     )
     table_artifact = make_context_artifact(
@@ -737,7 +898,7 @@ def _empty_financial_metric_analysis(
     )
     worker_activity_artifact = _worker_activity_artifact(
         run_id=run_id,
-        analysis_text=message,
+        analysis_text=display_message,
         chart_type=chart_type,
         indicator_id=metric["indicator_id"],
         rows=[],

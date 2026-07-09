@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Protocol
@@ -437,20 +438,57 @@ def new_chat_message(
 def summarize_messages_for_prompt(messages: list[AgentChatMessage]) -> list[dict[str, str]]:
     """Return compact context rows safe for prompt rendering.
 
-    Args:
-        messages: list[AgentChatMessage]: .
-
-    Returns:
-        list[dict[str, str]]: .
+    Assistant messages are summarized instead of copied verbatim so generated
+    answers and trace text cannot be re-ingested as the next turn's user query.
     """
-    return [
-        {
-            "role": message.role,
-            "content": message.content[:2000],
-            "created_at": message.created_at.isoformat(),
-        }
-        for message in messages
-    ]
+    rows: list[dict[str, str]] = []
+    for message in messages:
+        content = _prompt_context_content(message)
+        if not content:
+            continue
+        rows.append(
+            {
+                "role": message.role,
+                "content": content,
+                "created_at": message.created_at.isoformat(),
+            }
+        )
+    return rows
+
+
+def _prompt_context_content(message: AgentChatMessage) -> str:
+    if message.role == "assistant":
+        return _summarize_assistant_message_for_prompt(message.content)
+    if message.role == "user":
+        return _compact_prompt_text(message.content, max_chars=500)
+    return _compact_prompt_text(message.content, max_chars=240)
+
+
+def _summarize_assistant_message_for_prompt(content: str) -> str:
+    compact = _compact_prompt_text(content, max_chars=600)
+    if not compact:
+        return ""
+    data_gap_markers = (
+        "没有在当前 PIT 数据仓库中找到",
+        "暂无可绘制数据",
+        "Dashboard 候选为空",
+        "当前会话没有可用的研究上下文",
+    )
+    if any(marker in compact for marker in data_gap_markers):
+        return "上一次助手回答主要说明：本地数据源或 Dashboard 上下文缺少匹配数据。"
+    return _compact_prompt_text(compact, max_chars=240)
+
+
+def _compact_prompt_text(content: str, *, max_chars: int) -> str:
+    text = str(content or "")
+    parts = re.split(r"(?i)\bcurrent_user\s*:\s*", text)
+    if len(parts) > 1:
+        text = parts[-1]
+    text = re.sub(r"(?i)\b(?:system|assistant|user|current_user)\s*:\s*", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + "..."
 
 
 def _session_to_row(session: AgentChatSession) -> AgentChatSessionRow:

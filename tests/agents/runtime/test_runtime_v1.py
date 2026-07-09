@@ -424,7 +424,9 @@ def test_expert_runtime_plans_workers_from_worker_cards() -> None:
     assert '"tool_allowlist"' in llm_provider.prompts[0]
     assert "warehouse.describe_schema" in llm_provider.prompts[0]
     assert "warehouse.discover_indicators" in llm_provider.prompts[0]
-    assert "For DataQuestionWorker.answer_financial_metric" not in llm_provider.prompts[0]
+    assert "For DataQuestionWorker.answer_financial_metric" in llm_provider.prompts[0]
+    assert "current user turn" in llm_provider.prompts[0]
+    assert "prior assistant answers" in llm_provider.prompts[0]
     assert "MainAgent" not in worker_plan.steps[0].worker_agent
 
 

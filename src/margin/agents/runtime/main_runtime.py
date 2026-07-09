@@ -460,6 +460,18 @@ def _build_planning_prompt(
         (
             MAIN_AGENT_SYSTEM_V1,
             planner_text,
+            (
+                "Current-turn authority rule: planning_context.user_goal is the "
+                "only current user request. conversation_context is background "
+                "only; never delegate a previous user request when user_goal lacks "
+                "the required target or metric."
+            ),
+            (
+                "For financial metric questions, delegate to DataAgent only when "
+                "the current user_goal itself contains both a target security and a "
+                "supported metric such as ROE. Otherwise ask clarification or answer "
+                "as general chat."
+            ),
             planning_context.model_dump_json(),
         )
     )

@@ -209,8 +209,61 @@ def test_v1_user_qna_service_answers_financial_metric_with_data_artifacts() -> N
     assert artifact_by_type["visualization_image"].payload_json["image_format"] == "svg"
 
 
-def test_v1_user_qna_service_plans_followup_chart_request_with_context() -> None:
-    """Follow-up chart requests should pass recent context to MainAgent and worker."""
+def test_v1_user_qna_service_uses_inline_current_user_for_metric_lookup() -> None:
+    """Single-line role-marked transcripts must not become warehouse queries."""
+    transcript = (
+        "user: 你好 assistant: 你好！ 我是 Margin 的本地投研助手。"
+        "current_user: 我想看一下中国平安银行的roe"
+    )
+    warehouse = _FinancialMetricWarehouse()
+    llm_provider = _SequencedLLMProvider(
+        main_plan=_main_plan("DataExpertAgent"),
+        expert_plan=_expert_plan(
+            "DataQuestionWorker",
+            "answer_financial_metric",
+            worker_inputs={
+                "user_query": transcript,
+                "security_query": transcript,
+                "indicator_id": "roe_ttm",
+                "chart_type": "line",
+            },
+        ),
+        answers=(),
+    )
+    service = AgentRuntimeService(
+        context_store=MemoryAgentContextStore(),
+        context_repository=MemoryContextRepository(),
+        dashboard_services=_dashboard_services(),
+        llm_provider_factory=lambda: llm_provider,
+        warehouse_repository=warehouse,
+    )
+
+    result = service.run_user_qna(
+        UserQnaCommand(
+            run_id="ar_qna_inline_transcript",
+            scope_version_id="scope-1",
+            message=transcript,
+            universe="ALL_A",
+            language="zh",
+            conversation_context=(
+                {"role": "user", "content": "你好"},
+                {
+                    "role": "assistant",
+                    "content": "没有在当前 PIT 数据仓库中找到 user: 你好 的 ROE TTM 历史记录。",
+                },
+            ),
+        )
+    )
+
+    assert warehouse.security_queries == ["中国平安银行"]
+    assert "中国平安" in result.answer
+    assert "assistant:" not in result.answer
+    assert "current_user:" not in result.answer
+    assert "user: 你好" not in result.answer
+
+
+def test_v1_user_qna_service_does_not_reuse_previous_metric_for_chart_only_followup() -> None:
+    """Chart-only follow-ups must not reuse previous ROE intent as executable input."""
     warehouse = _FinancialMetricWarehouse()
     llm_provider = _SequencedLLMProvider(
         main_plan=_main_plan("DataExpertAgent", task="Use data tools with recent chat context."),
@@ -251,9 +304,10 @@ def test_v1_user_qna_service_plans_followup_chart_request_with_context() -> None
     assert result.trace_steps[0].skill_id == "answer_financial_metric"
     assert llm_provider.calls == ["main_plan", "expert_plan"]
     artifact_by_type = {artifact.artifact_type: artifact for artifact in result.artifacts}
-    assert artifact_by_type["chart_spec"].payload_json["chart_type"] == "bar"
-    assert artifact_by_type["visualization_image"].payload_json["chart_type"] == "bar"
-    assert "rect" in artifact_by_type["visualization_image"].payload_json["svg"]
+    assert artifact_by_type["chart_spec"].payload_json["input_valid"] is False
+    assert artifact_by_type["visualization_image"].payload_json["input_valid"] is False
+    assert warehouse.indicator_queries == []
+    assert "请直接输入" in result.answer
 
 
 def test_v1_user_qna_service_executes_all_main_planned_domain_tasks() -> None:
@@ -532,8 +586,8 @@ def test_v1_user_qna_service_replans_when_worker_is_blocked() -> None:
     assert "当前环境没有开放该能力" in result.answer
 
 
-def test_v1_user_qna_service_replans_when_expert_omits_worker_inputs() -> None:
-    """DataQuestionWorker must not guess missing ExpertAgent placeholders."""
+def test_v1_user_qna_service_derives_metric_inputs_from_current_turn() -> None:
+    """DataQuestionWorker should derive lookup keys from current user text."""
     llm_provider = _SequencedLLMProvider(
         main_plan=_main_plan("DataExpertAgent"),
         expert_plan=_expert_plan("DataQuestionWorker", "answer_financial_metric"),
@@ -558,10 +612,10 @@ def test_v1_user_qna_service_replans_when_expert_omits_worker_inputs() -> None:
         )
     )
 
-    assert llm_provider.calls == ["main_plan", "expert_plan", "expert_plan"]
-    assert any("data_question_worker_no_answer" in prompt for prompt in llm_provider.prompts)
-    assert result.trace_steps[0].status is AgentExecutionStatus.BLOCKED
-    assert "DataQuestionWorker could not answer" in result.answer
+    assert llm_provider.calls == ["main_plan", "expert_plan"]
+    assert result.trace_steps[0].status is AgentExecutionStatus.SUCCEEDED
+    assert "中国平安" in result.answer
+    assert "ROE TTM" in result.answer
 
 
 def test_v1_user_qna_service_replans_when_worker_artifacts_fail_audit() -> None:
@@ -799,13 +853,14 @@ class _FinancialMetricWarehouse:
     def __init__(self) -> None:
         """Initialize the captured query list."""
         self.indicator_queries = []
+        self.security_queries = []
 
     def search_security_profiles(
         self,
         query: object,
     ) -> list[SecurityProfileValue]:
         """Resolve the Chinese company name to an active security profile."""
-        del query
+        self.security_queries.append(getattr(query, "query_text", ""))
         return [
             SecurityProfileValue(
                 security_id="601318.SH",

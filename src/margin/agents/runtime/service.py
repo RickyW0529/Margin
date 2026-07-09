@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
@@ -233,6 +233,10 @@ class AgentRuntimeService:
 
     def run_user_qna(self, command: UserQnaCommand) -> UserQnaRunResult:
         """Run one user Q&A request through v1 planning and final audit."""
+        raw_guardrail = _evaluate_user_input(command.message)
+        if not raw_guardrail.allowed:
+            raise AgentInputBlockedError(raw_guardrail)
+        command = _command_with_current_user_message(command)
         guardrail = _evaluate_user_input(command.message)
         if not guardrail.allowed:
             raise AgentInputBlockedError(guardrail)
@@ -995,6 +999,36 @@ def _blocked_worker_bundle(
     )
 
 
+def _command_with_current_user_message(command: UserQnaCommand) -> UserQnaCommand:
+    """Return a command whose message is only the current user turn."""
+    current_message = _current_user_message_text(command.message, max_chars=2000)
+    if not current_message or current_message == command.message:
+        return command
+    return replace(command, message=current_message)
+
+
+def _current_user_message_text(value: object, *, max_chars: int) -> str:
+    """Extract the active user turn from possible role-marked transcripts."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    parts = re.split(r"(?i)\bcurrent_user\s*:\s*", text)
+    if len(parts) > 1:
+        text = parts[-1]
+    lines: list[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if re.match(r"(?i)^(?:assistant|system)\s*:", line):
+            continue
+        line = re.sub(r"(?i)^(?:user|current_user)\s*:\s*", "", line).strip()
+        if line:
+            lines.append(line)
+    compact = re.sub(r"\s+", " ", " ".join(lines)).strip()
+    return compact[:max_chars].strip()
+
+
 def _worker_task_goal(
     *,
     user_message: str,
@@ -1003,23 +1037,42 @@ def _worker_task_goal(
     worker_task: str,
     worker_inputs: object | None = None,
 ) -> str:
-    """Build the WorkerAgent task prompt from A2A task context."""
-    recent = "\n".join(
-        f"{item.get('role', 'unknown')}: {item.get('content', '')}"
-        for item in conversation_context[-8:]
+    """Build the WorkerAgent task prompt without echoing assistant transcripts.
+
+    Data workers must receive the current user turn as the authoritative lookup
+    input.  Previous assistant answers often contain formatted no-data messages;
+    copying them into task_goal caused downstream tools to treat a whole chat
+    transcript as a security name.
+    """
+    recent_user_turns = "\n".join(
+        f"user: {_prompt_safe_text(item.get('content', ''), max_chars=180)}"
+        for item in conversation_context[-6:]
+        if item.get("role") == "user" and item.get("content")
     )
     return "\n".join(
         item
         for item in (
-            f"expert_task: {expert_task}",
-            f"worker_task: {worker_task}",
-            f"worker_inputs: {worker_inputs}" if worker_inputs is not None else "",
-            "recent_conversation:",
-            recent,
-            f"current_user: {user_message}",
+            f"expert_task: {_prompt_safe_text(expert_task, max_chars=360)}",
+            f"worker_task: {_prompt_safe_text(worker_task, max_chars=360)}",
+            f"worker_inputs: {_prompt_safe_text(repr(worker_inputs), max_chars=360)}"
+            if worker_inputs is not None
+            else "",
+            "recent_user_turns:" if recent_user_turns else "",
+            recent_user_turns,
+            f"current_user: {_prompt_safe_text(user_message, max_chars=300)}",
         )
         if item
     )
+
+
+def _prompt_safe_text(value: object, *, max_chars: int) -> str:
+    """Return compact single-line text for runtime prompts."""
+    text = str(value or "")
+    parts = re.split(r"(?i)\bcurrent_user\s*:\s*", text)
+    if len(parts) > 1:
+        text = parts[-1]
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:max_chars].strip()
 
 
 def _first_artifact_of_type(

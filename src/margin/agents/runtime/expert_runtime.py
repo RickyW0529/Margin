@@ -211,6 +211,19 @@ def _build_expert_planning_prompt(
                 "If no visible worker skill can satisfy the task contract, return a "
                 "blocked or clarification step instead of inventing a route."
             ),
+            (
+                "Input-safety rule: worker_inputs must be scalar fields from the "
+                "current user turn, never copied conversation_context, prior assistant "
+                "answers, ContextPack JSON, or DomainTask JSON."
+            ),
+            (
+                "For DataQuestionWorker.answer_financial_metric, user_query must be "
+                "the exact current user question; security_query must be only the "
+                "standalone security name or code such as 中国平安 or 601318.SH; "
+                "indicator_id must be a supported id such as roe_ttm. If the current "
+                "user turn does not contain both a financial metric and a target, "
+                "return ask_clarification instead of reusing earlier turns."
+            ),
             domain_task.model_dump_json(),
             context_pack.model_dump_json(),
             json.dumps(worker_catalog, ensure_ascii=False),
