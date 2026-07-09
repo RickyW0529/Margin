@@ -61,6 +61,8 @@ def derive_capability_token(
     allowed_tool_names: tuple[str, ...] | None = None,
     max_tool_calls: int | None = None,
     max_result_bytes: int | None = None,
+    can_delegate: bool = False,
+    delegation_depth_remaining: int | None = None,
 ) -> CapabilityToken:
     """Derive a child token by narrowing a parent token.
 
@@ -96,6 +98,15 @@ def derive_capability_token(
         raise ValueError("cannot expand max_tool_calls")
     if resolved_max_result_bytes > parent.max_result_bytes:
         raise ValueError("cannot expand max_result_bytes")
+    resolved_delegation_depth = (
+        parent.delegation_depth_remaining - 1
+        if delegation_depth_remaining is None
+        else delegation_depth_remaining
+    )
+    if resolved_delegation_depth > parent.delegation_depth_remaining - 1:
+        raise ValueError("cannot expand delegation_depth_remaining")
+    if can_delegate and resolved_delegation_depth <= 0:
+        raise ValueError("delegating child token requires remaining depth")
     return CapabilityToken(
         token_id=token_id,
         run_id=parent.run_id,
@@ -110,8 +121,8 @@ def derive_capability_token(
         expires_at=parent.expires_at,
         max_tool_calls=resolved_max_tool_calls,
         max_result_bytes=resolved_max_result_bytes,
-        can_delegate=False,
-        delegation_depth_remaining=parent.delegation_depth_remaining - 1,
+        can_delegate=can_delegate,
+        delegation_depth_remaining=resolved_delegation_depth,
     )
 
 

@@ -192,6 +192,44 @@ def test_runtime_resolves_data_source_by_capability(
     assert resolved.config.version_id == "provider-tushare-active"
 
 
+def test_runtime_resolves_detected_tushare_proxy_from_legacy_generic_name(
+    secret_store: SecretStore,
+) -> None:
+    """Legacy generic data-source configs should use detected Tushare capabilities."""
+    metadata = secret_store.create_or_replace(
+        WriteSecretCommand(
+            provider_name="provider-data-source-legacy",
+            secret_name="api_token",
+            secret_value="tushare-secret",
+            actor_id="local-admin",
+            idempotency_key=f"runtime-tushare-proxy-{uuid4().hex}",
+        )
+    )
+    repository = MemoryStrategyRepository()
+    repository.save_provider_config(
+        ProviderConfigVersion(
+            version_id="provider-data-source-legacy",
+            provider_name="data_source",
+            provider_type="market_data",
+            base_url="https://teajoin.com",
+            non_sensitive_config={
+                "provider_category": "data_source",
+                "detected_provider": "tushare",
+            },
+            secret_version_id=metadata.version_id,
+            lifecycle=ConfigLifecycle.ACTIVE,
+        )
+    )
+
+    resolved = ProviderRuntimeResolver(
+        repository,
+        secret_store,
+    ).resolve_capability("data_source", "quant_required_financials")
+
+    assert resolved.config.version_id == "provider-data-source-legacy"
+    assert resolved.config.provider_name == "data_source"
+
+
 def test_runtime_rejects_ambiguous_provider_capability(
     secret_store: SecretStore,
 ) -> None:

@@ -22,10 +22,12 @@ from margin.sql.data_queries import (
     adjusted_prices_by_decision,
     canonical_values_by_decision,
     freshness_records,
+    indicator_catalog_from_facts,
     indicator_history_pit,
     industry_memberships_bitemporal,
     quality_events_recent,
     security_profiles_active,
+    security_profiles_search,
 )
 
 
@@ -171,6 +173,15 @@ class SecurityProfileValue:
 
 
 @dataclass(frozen=True)
+class SecurityProfileSearchQuery:
+    """Search active security-master records by user-facing text."""
+
+    query_text: str
+    system_as_of: datetime | None = None
+    limit: int = 5
+
+
+@dataclass(frozen=True)
 class IndicatorHistoryQuery:
     """Query historical numeric indicator facts with PIT enforcement.."""
 
@@ -195,6 +206,19 @@ class IndicatorHistoryValue:
     fetched_at: datetime
     numeric_value: Decimal
     quality_score: Decimal
+
+
+@dataclass(frozen=True)
+class IndicatorCatalogItem:
+    """Discovered numeric indicator metadata from current warehouse facts."""
+
+    indicator_id: str
+    label: str
+    unit: str
+    value_scale: Decimal | None
+    aliases: tuple[str, ...]
+    coverage: dict
+    source_fields: tuple[str, ...]
 
 
 class SQLAlchemyWarehouseRepository:
@@ -385,6 +409,39 @@ class SQLAlchemyWarehouseRepository:
             )
         return list(latest.values())
 
+    def search_security_profiles(
+        self,
+        query: SecurityProfileSearchQuery,
+    ) -> list[SecurityProfileValue]:
+        """Search active security profiles by name, symbol, or security ID."""
+        system_as_of = _require_system_as_of(query.system_as_of)
+        query_text = query.query_text.strip()
+        if not query_text:
+            return []
+        with self._session_factory() as session:
+            rows = session.scalars(
+                security_profiles_search(
+                    query_text=query_text,
+                    system_as_of=system_as_of,
+                    limit=query.limit,
+                )
+            ).all()
+        latest: dict[str, SecurityProfileValue] = {}
+        for row in rows:
+            latest.setdefault(
+                row.security_id,
+                SecurityProfileValue(
+                    security_id=row.security_id,
+                    symbol=row.symbol,
+                    name=row.name,
+                    exchange=row.exchange,
+                    listed_at=row.listed_at,
+                    delisted_at=row.delisted_at,
+                    is_st="ST" in row.name.upper(),
+                ),
+            )
+        return list(latest.values())
+
     def indicator_history(
         self,
         query: IndicatorHistoryQuery,
@@ -424,6 +481,27 @@ class SQLAlchemyWarehouseRepository:
             )
             for row in rows
         ]
+
+    def discover_indicators(
+        self,
+        *,
+        security_ids: tuple[str, ...],
+        query_text: str,
+        decision_at: datetime,
+        limit: int = 200,
+    ) -> list[IndicatorCatalogItem]:
+        """Discover numeric indicator metadata available at ``decision_at``."""
+        del query_text
+        decision_time = _require_decision_at(decision_at)
+        with self._session_factory() as session:
+            rows = session.execute(
+                indicator_catalog_from_facts(
+                    security_ids=security_ids,
+                    decision_at=decision_time,
+                    limit=limit,
+                )
+            ).mappings().all()
+        return [_indicator_catalog_item_from_row(row) for row in rows]
 
 
 def _require_decision_at(value: datetime | None) -> datetime:
@@ -564,3 +642,34 @@ def _quality_event_from_row(row: DataQualityEventRow) -> QualityEvent:
         observed=row.observed,
         created_at=row.created_at,
     )
+
+
+def _indicator_catalog_item_from_row(row: object) -> IndicatorCatalogItem:
+    """Map grouped warehouse fact metadata into a discoverable indicator item."""
+    indicator_id = str(row.indicator_id)
+    unit = str(row.unit or "")
+    return IndicatorCatalogItem(
+        indicator_id=indicator_id,
+        label=indicator_id.replace("_", " "),
+        unit=unit,
+        value_scale=_default_value_scale(unit),
+        aliases=(indicator_id, indicator_id.replace("_", " ")),
+        coverage={
+            "point_count": int(row.point_count or 0),
+            "first_event_at": row.first_event_at.isoformat() if row.first_event_at else None,
+            "last_event_at": row.last_event_at.isoformat() if row.last_event_at else None,
+            "latest_available_at": (
+                row.latest_available_at.isoformat() if row.latest_available_at else None
+            ),
+        },
+        source_fields=(str(row.sample_endpoint_code or ""), indicator_id),
+    )
+
+
+def _default_value_scale(unit: str) -> Decimal | None:
+    """Return a generic display scale derived from warehouse unit metadata."""
+    if unit == "%":
+        return Decimal("100")
+    if unit in {"亿元", "100m_cny"}:
+        return Decimal("0.00000001")
+    return None

@@ -175,6 +175,7 @@ class WorkerTaskRequest(BaseModel):
     input_context_pack_ref: str
     input_artifact_refs: tuple[str, ...] = ()
     required_output_types: tuple[str, ...]
+    constraints: dict[str, Any] = Field(default_factory=dict)
     tool_policy_ref: str
     capability_token_ref: str
     token_budget: int = Field(ge=1)

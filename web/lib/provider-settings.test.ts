@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { chooseProviderForCategory, detectProviderLabel } from "./provider-settings";
+import {
+  chooseProviderForCategory,
+  detectProviderLabel,
+  providerNameForCategory,
+} from "./provider-settings";
 
 describe("provider settings detection", () => {
   it("detects ModelScope and local OpenAI-compatible LLM URLs", () => {
@@ -8,11 +12,40 @@ describe("provider settings detection", () => {
       detectProviderLabel("llm", "https://api-inference.modelscope.cn/v1/"),
     ).toMatchObject({ providerId: "modelscope", label: "ModelScope" });
     expect(
+      detectProviderLabel("llm", "https://platform.minimaxi.com"),
+    ).toMatchObject({ providerId: "minimax", label: "Minimax" });
+    expect(
+      detectProviderLabel("llm", "https://api.minimaxi.com/v1"),
+    ).toMatchObject({ providerId: "minimax", label: "Minimax" });
+    expect(
       detectProviderLabel("llm", "http://localhost:11434/v1"),
     ).toMatchObject({ providerId: "ollama", label: "Ollama" });
     expect(
       detectProviderLabel("llm", "http://127.0.0.1:8000/v1"),
     ).toMatchObject({ providerId: "vllm", label: "VLLM" });
+  });
+
+  it("detects the Teajoin Tushare proxy as a data source provider", () => {
+    const detection = detectProviderLabel("data_source", "https://teajoin.com");
+
+    expect(detection).toMatchObject({
+      providerId: "tushare",
+      label: "Tushare",
+      isCustom: false,
+    });
+    expect(
+      providerNameForCategory(
+        {
+          id: "data_source",
+          title: "数据源配置",
+          providerType: "market_data",
+          defaultProviderName: "data_source",
+          urlLabel: "数据源 URL",
+          tokenPlaceholder: "token",
+        },
+        detection,
+      ),
+    ).toBe("tushare");
   });
 
   it("prefers configured provider versions over empty active versions", () => {

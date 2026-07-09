@@ -27,8 +27,11 @@ services:
       MARGIN_LOG_FORMAT: ${MARGIN_LOG_FORMAT:-json}
       MARGIN_METRICS_ENABLED: ${MARGIN_METRICS_ENABLED:-true}
       MARGIN_ENVIRONMENT: ${MARGIN_ENVIRONMENT:-development}
+      MARGIN_WEB_ORIGIN: ${MARGIN_WEB_ORIGIN:-http://localhost:3000}
       MARGIN_ADMIN_API_TOKEN: ${MARGIN_ADMIN_API_TOKEN:-}
       MARGIN_CAPACITY_LIMIT_VERSION: ${MARGIN_CAPACITY_LIMIT_VERSION:-limits-v0.2.0}
+      MARGIN_SECRET_MASTER_KEY: ${MARGIN_SECRET_MASTER_KEY:-dev-only-change-me-32-byte-key!!}
+      MARGIN_SECRET_KEY_VERSION: ${MARGIN_SECRET_KEY_VERSION:-local-v1}
     depends_on:
       postgres:
         condition: service_healthy

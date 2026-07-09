@@ -68,10 +68,20 @@ describe("RecommendationChatPanel", () => {
       }),
     );
     expect(screen.getByText("今日推荐关注 000001、600000。")).toBeInTheDocument();
-    expect(screen.getByText("研究智能体 → 数据分析师")).toBeInTheDocument();
-    expect(screen.getAllByText("分析表").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "查看思考活动" }))
+      .toBeInTheDocument();
+    expect(screen.getByText("思考完成")).toBeInTheDocument();
+    expect(screen.queryByText("answer_research_question")).toBeNull();
+    expect(screen.queryByText("sha256:test")).toBeNull();
     expect(screen.getByText("推荐列表")).toBeInTheDocument();
     expect(screen.queryByText("GET /api/v1/research")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "查看思考活动" }));
+    expect(screen.getByRole("dialog", { name: "思考活动" })).toBeInTheDocument();
+    expect(screen.getByText("研究智能体")).toBeInTheDocument();
+    expect(screen.getByText("数据分析师")).toBeInTheDocument();
+    expect(screen.getByText("生成回答")).toBeInTheDocument();
+    expect(screen.queryByText("answer_research_question")).toBeNull();
+    expect(screen.getAllByText("状态：已完成").length).toBeGreaterThan(0);
 
     const href = navigationMocks.replace.mock.calls[0]?.[0] as string;
     const chatId = new URL(`http://localhost${href}`).searchParams.get("chat");
@@ -109,7 +119,9 @@ describe("RecommendationChatPanel", () => {
     );
     expect(screen.getByText("之前问过的问题")).toBeInTheDocument();
     expect(screen.getByText("这是之前保存的回答。")).toBeInTheDocument();
-    expect(screen.getByText("研究智能体 → 数据分析师")).toBeInTheDocument();
+    expect(screen.queryByTestId("qna-activity-line")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "查看思考活动" }));
+    expect(screen.getByText("数据分析师")).toBeInTheDocument();
   });
 
   it("sends follow-up questions with the active persisted session id", async () => {
@@ -166,7 +178,7 @@ describe("RecommendationChatPanel", () => {
     expect(screen.getByText("这是追问回答。")).toBeInTheDocument();
   });
 
-  it("expands analysis-table artifacts below assistant messages", async () => {
+  it("does not render raw artifacts below assistant messages", async () => {
     const ask = vi.fn().mockResolvedValue(
       makeQnaResponse({
         answer: "我整理了一张候选表。",
@@ -201,22 +213,160 @@ describe("RecommendationChatPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
 
     await screen.findByText("我整理了一张候选表。");
-    await waitFor(() => expect(fetchArtifact).toHaveBeenCalledWith("ctx_1"));
-    expect(screen.getByText("000001.SZ")).toBeInTheDocument();
-    expect(screen.getByText("平安银行")).toBeInTheDocument();
-    expect(screen.getByText("86")).toBeInTheDocument();
-    expect(screen.getByText("sha256:test")).toBeInTheDocument();
+    await waitFor(() => expect(ask).toHaveBeenCalled());
+    expect(fetchArtifact).not.toHaveBeenCalled();
+    expect(screen.queryByText("000001.SZ")).toBeNull();
+    expect(screen.queryByText("平安银行")).toBeNull();
+    expect(screen.queryByText("sha256:test")).toBeNull();
+  });
+
+  it("renders safe chart artifacts without exposing raw artifact JSON", async () => {
+    const ask = vi.fn().mockResolvedValue(
+      makeQnaResponse({
+        answer: "中国平安最近一期 ROE TTM 为 12.30%。",
+        artifacts: [
+          {
+            artifact_id: "ctx_table",
+            artifact_type: "analysis_table",
+            payload_hash: "sha256:table",
+            producer_agent: "DataQuestionWorker",
+          },
+          {
+            artifact_id: "ctx_metric",
+            artifact_type: "computed_metric",
+            payload_hash: "sha256:metric",
+            producer_agent: "DataQuestionWorker",
+          },
+          {
+            artifact_id: "ctx_chart",
+            artifact_type: "chart_spec",
+            payload_hash: "sha256:chart",
+            producer_agent: "DataQuestionWorker",
+          },
+          {
+            artifact_id: "ctx_image",
+            artifact_type: "visualization_image",
+            payload_hash: "sha256:image",
+            producer_agent: "DataQuestionWorker",
+          },
+        ],
+        sessionId: "acs_roe",
+      }),
+    );
+    const fetchArtifact = vi.fn(async (artifactId: string) => {
+      if (artifactId === "ctx_metric") {
+        return makeArtifactDetail({
+          artifactId,
+          artifactType: "computed_metric",
+          payload: {
+            label: "ROE TTM",
+            latest_value: 12.3,
+            unit: "%",
+          },
+        });
+      }
+      if (artifactId === "ctx_image") {
+        return makeArtifactDetail({
+          artifactId,
+          artifactType: "visualization_image",
+          payload: {
+            chart_type: "bar",
+            image_format: "svg",
+            title: "中国平安 ROE TTM 趋势",
+            svg: '<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="中国平安 ROE TTM 趋势"><rect x="0" y="0" width="10" height="10"/></svg>',
+          },
+        });
+      }
+      return makeArtifactDetail({
+        artifactId,
+        artifactType: "chart_spec",
+        payload: {
+          chart_type: "line",
+          title: "中国平安 ROE TTM 趋势",
+          unit: "%",
+          series: [
+            {
+              label: "ROE TTM",
+              metric: "roe_ttm",
+              points: [
+                { x: "2023-12-31", y: 10.1 },
+                { x: "2024-12-31", y: 12.3 },
+              ],
+            },
+          ],
+        },
+      });
+    });
+
+    render(
+      <LanguageProvider>
+        <RecommendationChatPanel ask={ask} fetchArtifact={fetchArtifact} />
+      </LanguageProvider>,
+    );
+
+    fireEvent.change(screen.getByLabelText("投资研究问题"), {
+      target: { value: "中国平安最近 ROE 怎么样？" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+
+    expect(
+      await screen.findByRole("img", { name: "中国平安 ROE TTM 趋势" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("12.30%").length).toBeGreaterThan(0);
+    expect(fetchArtifact).toHaveBeenCalledWith("ctx_metric");
+    expect(fetchArtifact).toHaveBeenCalledWith("ctx_chart");
+    expect(fetchArtifact).toHaveBeenCalledWith("ctx_image");
+    expect(fetchArtifact).not.toHaveBeenCalledWith("ctx_table");
+    expect(screen.queryByText("中国平安 ROE TTM 趋势")).toBeNull();
+    expect(screen.queryByText("sha256:chart")).toBeNull();
+    expect(screen.queryByText("sha256:image")).toBeNull();
+    expect(screen.queryByText("Chart spec")).toBeNull();
+  });
+
+  it("shows a clickable thinking activity entry while the request is running", async () => {
+    let resolveAnswer: (response: MainAgentQnaResponse) => void = () => undefined;
+    const ask = vi.fn(
+      () =>
+        new Promise<MainAgentQnaResponse>((resolve) => {
+          resolveAnswer = resolve;
+        }),
+    );
+
+    render(
+      <LanguageProvider>
+        <RecommendationChatPanel ask={ask} fetchArtifact={makeArtifactFetcher()} />
+      </LanguageProvider>,
+    );
+
+    fireEvent.change(screen.getByLabelText("投资研究问题"), {
+      target: { value: "帮我分析今天候选" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+
+    expect(await screen.findByText("正在思考")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "查看思考活动" }));
+    expect(screen.getByRole("dialog", { name: "思考活动" })).toBeInTheDocument();
+    expect(screen.getByText("正在读取上下文并规划回答")).toBeInTheDocument();
+
+    resolveAnswer(
+      makeQnaResponse({
+        answer: "完成。",
+        sessionId: "acs_running",
+      }),
+    );
   });
 });
 
 function makeQnaResponse({
   answer,
+  artifacts,
   assistantMessageId = "acm_assistant_1",
   runId = "ar_qna_1",
   sessionId,
   userMessageId = "acm_user_1",
 }: {
   answer: string;
+  artifacts?: MainAgentQnaResponse["artifacts"];
   assistantMessageId?: string;
   runId?: string;
   sessionId: string;
@@ -244,7 +394,7 @@ function makeQnaResponse({
         },
       ],
     },
-    artifacts: [
+    artifacts: artifacts ?? [
       {
         artifact_type: "analysis_table",
         artifact_id: "ctx_1",

@@ -25,6 +25,7 @@ _PROVIDER_NAME_CATEGORY: dict[str, ProviderCategory] = {
     "llm": "llm",
     "openai": "llm",
     "deepseek": "llm",
+    "minimax": "llm",
     "modelscope": "llm",
     "zhipu": "llm",
     "qwen": "llm",
@@ -80,6 +81,11 @@ _RULES: dict[ProviderCategory, tuple[_ProviderRule, ...]] = {
     "llm": (
         _ProviderRule("deepseek", "DeepSeek", re.compile(r"deepseek\.com", re.I)),
         _ProviderRule(
+            "minimax",
+            "Minimax",
+            re.compile(r"platform\.minimaxi\.com|minimaxi\.com", re.I),
+        ),
+        _ProviderRule(
             "modelscope",
             "ModelScope",
             re.compile(r"api-inference\.modelscope\.cn|modelscope\.cn", re.I),
@@ -117,7 +123,7 @@ _RULES: dict[ProviderCategory, tuple[_ProviderRule, ...]] = {
         ),
     ),
     "data_source": (
-        _ProviderRule("tushare", "Tushare", re.compile(r"tushare", re.I)),
+        _ProviderRule("tushare", "Tushare", re.compile(r"tushare|teajoin\.com", re.I)),
         _ProviderRule("akshare", "AKShare", re.compile(r"akshare", re.I)),
     ),
     "embedding": (

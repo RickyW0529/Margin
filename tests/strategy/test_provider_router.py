@@ -36,6 +36,33 @@ def test_llm_router_detects_modelscope_from_url() -> None:
     assert detected.label == "ModelScope"
 
 
+def test_llm_router_detects_minimax_from_platform_url() -> None:
+    """Minimax platform URLs should be reflected as the Minimax LLM label."""
+    detected = detect_provider_from_url("llm", "https://platform.minimaxi.com")
+
+    assert detected.provider_id == "minimax"
+    assert detected.label == "Minimax"
+    assert detected.is_custom is False
+
+
+def test_llm_router_detects_minimax_from_api_url() -> None:
+    """Minimax API URLs should be reflected as the Minimax LLM label."""
+    detected = detect_provider_from_url("llm", "https://api.minimaxi.com/v1")
+
+    assert detected.provider_id == "minimax"
+    assert detected.label == "Minimax"
+    assert detected.is_custom is False
+
+
+def test_data_source_router_detects_teajoin_tushare_proxy() -> None:
+    """Teajoin is the configured Tushare HTTP proxy and should not be Custom."""
+    detected = detect_provider_from_url("data_source", "https://teajoin.com")
+
+    assert detected.provider_id == "tushare"
+    assert detected.label == "Tushare"
+    assert detected.is_custom is False
+
+
 def test_llm_router_detects_local_ollama_and_vllm_ports() -> None:
     """Local OpenAI-compatible URLs should identify common local providers.
 

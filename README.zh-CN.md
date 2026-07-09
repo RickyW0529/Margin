@@ -56,14 +56,13 @@ xychart-beta
 
 ## 4. 我要怎么使用这个项目？
 
-启动本地应用：
+推荐使用 Docker 模式启动本地应用：
 
 ```bash
-cp .env.example .env
-python scripts/dev.py restart
+python scripts/docker_dev.py up
 ```
 
-打开：
+启动脚本会自动生成本机运行配置、选择空闲端口、执行迁移和配置引导，并在完成后打印实际的 Web/API/Grafana 地址。打开脚本输出的 Web 地址，例如：
 
 ```text
 http://localhost:3000
@@ -77,20 +76,7 @@ http://localhost:3000
 4. 在首页追问研究问题。
 5. 把系统输出当作研究清单，再结合自己的判断。
 
-开发助手会启动 Postgres，执行迁移和配置引导，然后启动 API、worker 和 web 进程。日志写在 `.margin/dev/logs/`。停止本地进程：
-
-```bash
-python scripts/dev.py stop
-```
-
-Docker 模式：
-
-```bash
-cp .env.example .env
-python scripts/docker_dev.py up
-```
-
-Docker 助手会以 `--build` 启动 Compose，自动避开已被占用的本机端口，在服务健康检查阶段显示启动进度，并打印实际的 Web/API/Grafana 地址。查看实时日志：
+查看实时日志：
 
 ```bash
 docker compose logs -f
@@ -100,6 +86,20 @@ docker compose logs -f
 
 ```bash
 python scripts/docker_dev.py down
+```
+
+`.env` 不是普通用户的必需步骤；Provider URL、模型名和 token 都在设置页配置并加密入库。只有需要自定义端口、日志级别或生产部署参数时，才参考 `.env.example` 创建 `.env`。
+
+开发者也可以使用本地进程模式：
+
+```bash
+python scripts/dev.py restart
+```
+
+本地进程模式日志写在 `.margin/dev/logs/`。停止本地进程：
+
+```bash
+python scripts/dev.py stop
 ```
 
 发布检查：

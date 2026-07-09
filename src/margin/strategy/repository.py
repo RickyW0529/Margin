@@ -1179,6 +1179,7 @@ class SQLAlchemyStrategyRepository:
             active_rows = session.scalars(
                 active_provider_configs_by_owner(row.owner_id, ConfigLifecycle.ACTIVE.value)
             ).all()
+            deprecated_existing = False
             for active in active_rows:
                 active_category = provider_category_for_config(
                     active.provider_type,
@@ -1187,6 +1188,9 @@ class SQLAlchemyStrategyRepository:
                 )
                 if active.version_id != version_id and active_category == category:
                     active.lifecycle = ConfigLifecycle.DEPRECATED.value
+                    deprecated_existing = True
+            if deprecated_existing:
+                session.flush()
             row.lifecycle = ConfigLifecycle.ACTIVE.value
             return _provider_config_from_row(row)
 

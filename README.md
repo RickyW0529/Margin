@@ -64,14 +64,15 @@ strategy-performance result is considered reproducible evidence.
 
 ## 4. How Do I Use It?
 
-Start the local app:
+Recommended Docker startup:
 
 ```bash
-cp .env.example .env
-python scripts/dev.py restart
+python scripts/docker_dev.py up
 ```
 
-Open:
+The helper creates local runtime config, picks free localhost ports, runs
+migrations and bootstrap, and prints the actual Web/API/Grafana URLs. Open the
+printed Web URL, for example:
 
 ```text
 http://localhost:3000
@@ -85,21 +86,31 @@ Local workflow:
 4. Ask follow-up research questions on the home page.
 5. Use the output as a research checklist and apply your own judgment.
 
-The dev helper starts Postgres, runs migrations and config bootstrap, then starts
-API, worker, and web processes. Logs are written under `.margin/dev/logs/`. Use
-`python scripts/dev.py stop` to stop the local processes.
-
-Docker mode:
+Follow logs:
 
 ```bash
-cp .env.example .env
-python scripts/docker_dev.py up
+docker compose logs -f
 ```
 
-The Docker helper starts Compose with `--build`, detects occupied localhost
-ports, shows startup progress while services become healthy, and prints the
-actual Web/API/Grafana URLs. Use `docker compose logs -f` to follow logs and
-`python scripts/docker_dev.py down` to stop the Docker stack.
+Stop the Docker stack:
+
+```bash
+python scripts/docker_dev.py down
+```
+
+`.env` is not required for normal local use. Provider URLs, model names, and
+tokens are configured in Settings and stored in the encrypted database-backed
+Secret Store. Create `.env` from `.env.example` only when you need advanced port,
+logging, or production deployment overrides.
+
+Developers can still use process-based local startup:
+
+```bash
+python scripts/dev.py restart
+```
+
+The process-based helper writes logs under `.margin/dev/logs/`. Stop it with
+`python scripts/dev.py stop`.
 
 Release checks:
 

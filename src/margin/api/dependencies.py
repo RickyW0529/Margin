@@ -469,11 +469,13 @@ def get_agent_runtime_service() -> AgentRuntimeService:
         AgentRuntimeService: .
     """
     runtime_factory = get_provider_runtime_factory()
+    container = get_app_container()
     return AgentRuntimeService(
         context_store=get_agent_context_store(),
         context_repository=get_context_repository(),
         dashboard_services=get_dashboard_services(),
         llm_provider_factory=lambda: runtime_factory.build_llm().adapter,
+        warehouse_repository=SQLAlchemyWarehouseRepository(container.session_factory),
     )
 
 
@@ -519,11 +521,21 @@ def get_provider_config_health_service(
         secret_store,
         health_adapters=_build_provider_health_adapters(),
         host_allowlists={
-            "tushare": {"api.tushare.pro"},
+            "tushare": {"api.tushare.pro", "teajoin.com"},
             "tavily": {"api.tavily.com"},
             "tavily_websearch": {"api.tavily.com"},
-            "llm": {"api.openai.com", "api.deepseek.com"},
-            "openai_llm": {"api.openai.com", "api.deepseek.com"},
+            "llm": {
+                "api.openai.com",
+                "api.deepseek.com",
+                "api.minimaxi.com",
+                "platform.minimaxi.com",
+            },
+            "openai_llm": {
+                "api.openai.com",
+                "api.deepseek.com",
+                "api.minimaxi.com",
+                "platform.minimaxi.com",
+            },
             "embedding": {"api.openai.com", "open.bigmodel.cn"},
             "openai_embedding": {"api.openai.com", "open.bigmodel.cn"},
             "rerank": {"api.cohere.com"},

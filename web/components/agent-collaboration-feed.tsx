@@ -1,12 +1,11 @@
 "use client";
 
 /**
- * @fileoverview Chat-style Agent collaboration progress for dashboard refreshes.
+ * @fileoverview Activity-line Agent collaboration progress for dashboard refreshes.
  */
 
 import { Check, Clock3, LoaderCircle, XCircle } from "lucide-react";
 
-import Lanyard from "@/components/lanyard";
 import type { ResearchRunDetailV2 } from "@/lib/api";
 import {
   buildRefreshRunNodes,
@@ -21,6 +20,7 @@ type AgentConversationItem = {
   label: string;
   message: string;
   owner: string;
+  breakpoint: string | null;
   progress: number;
   state: RefreshRunNodeState;
   status: string;
@@ -40,41 +40,53 @@ export function AgentCollaborationFeed({ run }: AgentCollaborationFeedProps) {
       className="max-h-[68vh] overflow-y-auto rounded-lg border border-border bg-muted/20 p-4"
       data-testid="agent-collaboration-feed"
     >
-      <div className="grid gap-4">
-        {items.map((item) => (
-          <AgentConversationBubble item={item} key={item.id} />
+      <div className="grid">
+        {items.map((item, index) => (
+          <AgentActivityRow
+            isLast={index === items.length - 1}
+            item={item}
+            key={item.id}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function AgentConversationBubble({ item }: { item: AgentConversationItem }) {
+function AgentActivityRow({
+  isLast,
+  item,
+}: {
+  isLast: boolean;
+  item: AgentConversationItem;
+}) {
   const tone = bubbleTone(item.state);
   return (
     <article
       className={cn(
-        "grid gap-3 rounded-lg border bg-card p-3 shadow-sm transition md:grid-cols-[112px_minmax(0,1fr)]",
-        tone.border,
+        "relative grid grid-cols-[2rem_minmax(0,1fr)] gap-3 pb-5 last:pb-0",
       )}
       data-agent-state={item.state}
-      data-testid={`agent-message-${item.id}`}
+      data-testid={`agent-activity-${item.id}`}
     >
-      <div className="grid justify-items-center">
-        <Lanyard
-          compact={item.state !== "active" && item.state !== "waiting"}
-          gravity={[0, -40, 0]}
-          label={shortAgentLabel(item.owner)}
-          name={agentDisplayName(item.owner)}
-          position={[0, 0, item.state === "active" ? 24 : 18]}
-          state={item.state}
-        />
+      <div className="relative flex justify-center">
+        {!isLast ? (
+          <span
+            aria-hidden="true"
+            className="absolute top-8 h-[calc(100%-0.25rem)] w-px bg-border"
+          />
+        ) : null}
+        <span
+          className={cn(
+            "relative z-10 grid size-8 place-items-center rounded-full shadow-sm",
+            tone.icon,
+          )}
+        >
+          <StateIcon state={item.state} />
+        </span>
       </div>
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={cn("grid size-7 place-items-center rounded-full", tone.icon)}>
-            <StateIcon state={item.state} />
-          </span>
+      <div className={cn("min-w-0 rounded-lg border bg-card p-3", tone.border)}>
+        <div className="flex flex-wrap items-start gap-2">
           <div className="min-w-0">
             <h3 className="truncate text-sm font-semibold text-foreground">
               {agentDisplayName(item.owner)}
@@ -88,9 +100,14 @@ function AgentConversationBubble({ item }: { item: AgentConversationItem }) {
         <div className="mt-3 rounded-lg bg-muted/70 px-3 py-2 text-sm leading-relaxed text-foreground">
           {item.message}
         </div>
+        {item.breakpoint ? (
+          <div className="mt-3 rounded-md border border-caution-soft bg-caution-soft px-3 py-2 text-xs font-medium text-caution">
+            断点：{item.breakpoint}
+          </div>
+        ) : null}
         <div className="mt-3">
           <div className="mb-1 flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
-            <span>{item.status}</span>
+            <span>状态：{item.status}</span>
             <span>{item.time ? formatDate(item.time) : "--"}</span>
           </div>
           <div
@@ -124,6 +141,7 @@ function buildConversationItems(run: ResearchRunDetailV2 | null): AgentConversat
           ? "MainAgent 已完成研究任务拆分，专家 Agent 正在按顺序协作。"
           : "MainAgent 正在读取任务范围并分配数据检查、量化、新闻和复核任务。",
       owner: "MainAgent",
+      breakpoint: null,
       progress: progressForState(mainState),
       state: mainState,
       status: mainState === "completed" ? "assigned" : "dispatching",
@@ -137,11 +155,12 @@ function nodeToConversationItem(node: RefreshRunNode): AgentConversationItem {
   return {
     id: node.id,
     label: node.label,
+    breakpoint: node.errorCode,
     message: messageForNode(node),
     owner: node.owner,
     progress: progressForState(node.state),
     state: node.state,
-    status: node.errorCode ?? node.status,
+    status: node.status,
     time: node.finishedAt ?? node.startedAt,
   };
 }
@@ -190,10 +209,14 @@ function messageForNode(node: RefreshRunNode): string {
     return `${agentDisplayName(node.owner)} 正在处理「${node.label}」。`;
   }
   if (node.state === "waiting") {
-    return `${agentDisplayName(node.owner)} 正在等待外部资源或预算恢复。`;
+    return node.errorCode
+      ? `${agentDisplayName(node.owner)} 在「${node.label}」等待重试，断点如下。`
+      : `${agentDisplayName(node.owner)} 正在等待外部资源或预算恢复。`;
   }
   if (node.state === "failed") {
-    return `${agentDisplayName(node.owner)} 在「${node.label}」中遇到阻断。`;
+    return node.errorCode
+      ? `${agentDisplayName(node.owner)} 在「${node.label}」中失败，断点如下。`
+      : `${agentDisplayName(node.owner)} 在「${node.label}」中遇到阻断。`;
   }
   return `${agentDisplayName(node.owner)} 等待接收「${node.label}」任务。`;
 }
@@ -229,18 +252,6 @@ function agentDisplayName(owner: string): string {
   return labels[owner] ?? owner;
 }
 
-function shortAgentLabel(owner: string): string {
-  const labels: Record<string, string> = {
-    Dashboard: "DB",
-    DataInspectionAgent: "DI",
-    MainAgent: "MA",
-    NewsAcquisitionAgent: "NA",
-    QuantAgent: "QA",
-    StockAnalystAgent: "SA",
-  };
-  return labels[owner] ?? owner.slice(0, 2).toUpperCase();
-}
-
 function StateIcon({ state }: { state: RefreshRunNodeState }) {
   if (state === "completed") {
     return <Check className="size-3.5" />;
@@ -249,7 +260,7 @@ function StateIcon({ state }: { state: RefreshRunNodeState }) {
     return <XCircle className="size-3.5" />;
   }
   if (state === "active" || state === "waiting") {
-    return <LoaderCircle className="size-3.5" />;
+    return <LoaderCircle className="size-3.5 animate-spin" />;
   }
   return <Clock3 className="size-3.5" />;
 }

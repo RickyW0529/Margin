@@ -11,12 +11,10 @@ from margin.agent_runtime.schedules import (
     StockAnalysisSchedule,
     compute_next_run_at,
 )
-from margin.agent_runtime.step_definitions import load_scheduled_stock_analysis_flow
 from margin.agents.runtime.scheduled import ScheduledAgentRuntimeRunner
 from margin.agents.workers.dashboard_publisher_worker import DashboardPublisherWorker
 from margin.config_runtime.bootstrap import SCHEDULED_QUANT_PROFILE_KEY
 from margin.config_runtime.models import (
-    AgentFlowConfigVersion,
     QuantAgentProfileConfigVersion,
 )
 from margin.config_runtime.repository import (
@@ -31,6 +29,7 @@ from margin.research.delta_repository import (
     ResearchDeltaReview,
 )
 from margin.research.graph.state import ReviewMode, ReviewOutcome
+from margin.research.llm import DeterministicLLMProvider
 from margin.valuation_discovery.adapters import ValuationPublisherAdapter
 from margin.valuation_discovery.assessments import EffectiveAssessmentService
 from margin.valuation_discovery.models import (
@@ -91,6 +90,7 @@ def test_scheduled_runner_triggers_v1_plan_and_refresh() -> None:
         context_store=context_store,
         valuation_service=valuation_service,
         scope_resolver=lambda scope: "scope-1" if scope == "scope-current" else scope,
+        llm_provider_factory=_scheduled_planner_factory,
     ).run_once(now=datetime(2026, 7, 7, 0, 31, tzinfo=UTC))
 
     assert processed == 1
@@ -108,19 +108,22 @@ def test_scheduled_runner_triggers_v1_plan_and_refresh() -> None:
     assert metadata["global_plan"]["domain_task_count"] >= 3
     assert metadata["quant_agent_strategy_profile"]["strategy_family"] == ("ml_lgbm_lifecycle")
     assert metadata["quant_strategy"]["strategy_family"] == "ml_lgbm_lifecycle"
-    assert metadata["agent_flow"]["dependency_waves"][:2] == [
-        ["data_inspection"],
-        ["quant_analysis", "performance_growth_scout"],
+    assert metadata["scheduled_task_intent"] == {
+        "planner": "MainAgent",
+        "intent_type": "scheduled_stock_analysis",
+        "universe": "ALL_A",
+        "scope_version_id": "scope-current",
+        "language": "zh",
+    }
+    assert metadata["main_agent_plan"]["planning_mode"] == "prompt_dynamic"
+    assert metadata["main_agent_plan"]["planning_prompt_ref"] == "main_agent_scheduled_planner_v1"
+    assert metadata["main_agent_plan"]["domain_agents"] == [
+        "DataExpertAgent",
+        "QuantExpertAgent",
+        "EvidenceRagExpertAgent",
+        "StockResearchExpertAgent",
     ]
-    assert metadata["agent_flow"]["branches"]["quant"] == ["quant_analysis"]
-    assert metadata["agent_flow"]["branches"]["fundamental"] == [
-        "performance_growth_scout",
-        "rag_coverage_gate",
-        "fundamental_analysis",
-        "sentiment_monitor",
-    ]
-    assert metadata["agent_flow"]["branches"]["fusion"] == ["fusion_research"]
-    assert metadata["agent_flow"]["quant_branch_uses_websearch"] is False
+    assert metadata["plan_validation"]["valid"] is True
     artifacts = context_store.list_artifacts("ar_sched_20260707_0830")
     assert [artifact.artifact_type for artifact in artifacts] == [
         "scheduled_global_plan",
@@ -137,8 +140,8 @@ def test_scheduled_runner_triggers_v1_plan_and_refresh() -> None:
     assert repository.saved.last_triggered_at == datetime(2026, 7, 7, 0, 31, tzinfo=UTC)
 
 
-def test_scheduled_runner_records_runtime_config_resolution_snapshot() -> None:
-    """Scheduled runs persist the resolved Agent flow and Quant profile versions.
+def test_scheduled_runner_records_quant_profile_config_resolution_snapshot() -> None:
+    """Scheduled runs persist resolved Quant profile versions, not fixed flows.
 
     Returns:
         None: .
@@ -146,15 +149,6 @@ def test_scheduled_runner_records_runtime_config_resolution_snapshot() -> None:
     decision_at = datetime(2026, 7, 7, 0, 31, tzinfo=UTC)
     config_repository = MemoryConfigRepository()
     config_admin = ConfigAdminService(config_repository)
-    db_flow = load_scheduled_stock_analysis_flow().model_copy(update={"version": "v0.db-config"})
-    config_admin.publish_agent_flow(
-        AgentFlowConfigVersion.from_flow(
-            version_id="agent-flow-test",
-            flow=db_flow,
-            valid_from=datetime(2026, 1, 1, tzinfo=UTC),
-            available_at=datetime(2026, 1, 1, tzinfo=UTC),
-        )
-    )
     config_admin.publish_quant_agent_profile(
         QuantAgentProfileConfigVersion.from_profile(
             version_id="quant-profile-test",
@@ -184,22 +178,17 @@ def test_scheduled_runner_records_runtime_config_resolution_snapshot() -> None:
         context_store=context_store,
         valuation_service=valuation_service,
         scope_resolver=lambda scope: scope,
+        llm_provider_factory=_scheduled_planner_factory,
         config_resolver=config_resolver,
     ).run_once(now=decision_at)
 
     metadata = valuation_service.calls[0][3]
-    assert metadata["agent_flow"]["version"] == "v0.db-config"
+    assert metadata["main_agent_plan"]["planning_prompt_ref"] == "main_agent_scheduled_planner_v1"
     snapshot_id = metadata["config_resolution_snapshot_id"]
     snapshot = config_repository.get_resolution_snapshot(snapshot_id)
 
-    assert [entry.domain for entry in snapshot.entries] == [
-        "agent_flow",
-        "quant_agent_profile",
-    ]
-    assert [entry.version_id for entry in snapshot.entries] == [
-        "agent-flow-test",
-        "quant-profile-test",
-    ]
+    assert [entry.domain for entry in snapshot.entries] == ["quant_agent_profile"]
+    assert [entry.version_id for entry in snapshot.entries] == ["quant-profile-test"]
 
 
 def test_scheduled_runner_can_drive_full_adjusted_dashboard_projection() -> None:
@@ -253,6 +242,7 @@ def test_scheduled_runner_can_drive_full_adjusted_dashboard_projection() -> None
         context_store=context_store,
         valuation_service=valuation_service,
         scope_resolver=lambda scope: "scope-1" if scope == "scope-current" else scope,
+        llm_provider_factory=_scheduled_planner_factory,
     ).run_once(now=decision_at)
     while valuation_service.create_step_worker(worker_id="schedule-full-flow-test").run_once(
         now=decision_at
@@ -679,6 +669,44 @@ class _ReviewSummary:
     """Minimal review summary consumed by the publisher.."""
 
     review_ids: tuple[str, ...]
+
+
+def _scheduled_planner_factory() -> DeterministicLLMProvider:
+    """Return the structured MainAgent plan used by scheduled tests."""
+    return DeterministicLLMProvider(
+        response={
+            "steps": [
+                {
+                    "step_id": "data",
+                    "agent": "DataExpertAgent",
+                    "task": "Check PIT data readiness for the scheduled research run.",
+                    "required_output_types": ["data_readiness"],
+                },
+                {
+                    "step_id": "quant",
+                    "agent": "QuantExpertAgent",
+                    "task": "Run the quant research line from PIT features.",
+                    "required_output_types": ["quant_result"],
+                    "depends_on": ["data"],
+                },
+                {
+                    "step_id": "evidence",
+                    "agent": "EvidenceRagExpertAgent",
+                    "task": "Prepare fundamental evidence coverage for candidates.",
+                    "required_output_types": ["evidence_package"],
+                    "depends_on": ["data"],
+                },
+                {
+                    "step_id": "stock",
+                    "agent": "StockResearchExpertAgent",
+                    "task": "Fuse quant, financial-report, sentiment, and risk context.",
+                    "required_output_types": ["stock_research_context_capsule"],
+                    "depends_on": ["quant", "evidence"],
+                },
+            ],
+            "final_answer_requirements": ["use_approved_capsules_only"],
+        }
+    )
 
 
 def _quant_result(

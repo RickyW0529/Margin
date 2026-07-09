@@ -4,11 +4,19 @@
  * @fileoverview User-facing recommendation Q&A panel.
  */
 
-import { ArrowUp, Plus } from "lucide-react";
+import {
+  ArrowUp,
+  Check,
+  CircleAlert,
+  Clock3,
+  LoaderCircle,
+  PanelRight,
+  Plus,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { AgentArtifactPanel } from "@/components/agent-artifact-panel";
 import { Textarea } from "@/components/ui/textarea";
 import { notifyAgentChatSessionsChanged } from "@/lib/agent-chat-history";
 import {
@@ -16,12 +24,14 @@ import {
   fetchAgentArtifact,
   fetchAgentChatSession,
   type AgentArtifactDetail,
+  type AgentArtifactSummary,
   type AgentChatMessage,
   type AgentChatSession,
   type AgentChatSessionDetail,
   type MainAgentQnaResponse,
 } from "@/lib/api";
 import { useLanguage, type UiLanguage } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 type RecommendationChatPanelProps = {
   ask?: (request: {
@@ -85,6 +95,8 @@ export function RecommendationChatPanel({
   );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [activityPanelOpen, setActivityPanelOpen] = useState(false);
+  const conversationStartedRef = useRef(false);
   const requestScopeVersionId = activeSession?.scope_version_id ?? scopeVersionId;
   const requestUniverse = activeSession?.universe ?? universe;
   const requestLanguage =
@@ -99,6 +111,12 @@ export function RecommendationChatPanel({
       busy ||
       submitError,
   );
+  const latestActivityResponse = latestAssistantResponse(chatMessages);
+  const activityState = busy
+    ? "thinking"
+    : latestActivityResponse
+      ? "completed"
+      : null;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -111,6 +129,10 @@ export function RecommendationChatPanel({
       setSubmitError(null);
       setLoadError(false);
       if (!initialChatSessionId) {
+        if (conversationStartedRef.current) {
+          setLoadingSession(false);
+          return;
+        }
         setActiveSession(null);
         setChatMessages([]);
         setLoadingSession(false);
@@ -166,6 +188,7 @@ export function RecommendationChatPanel({
     if (!trimmed) {
       return;
     }
+    conversationStartedRef.current = true;
     setPendingUserMessage(trimmed);
     setSubmitError(null);
     setMessage("");
@@ -262,11 +285,10 @@ export function RecommendationChatPanel({
 
             {chatMessages.map((chatMessage) => (
               <ChatMessageBubble
-                key={chatMessage.id}
                 fetchArtifact={fetchArtifact}
+                key={chatMessage.id}
                 language={language}
                 message={chatMessage}
-                t={t}
               />
             ))}
 
@@ -292,9 +314,25 @@ export function RecommendationChatPanel({
                 </p>
               </AssistantBlock>
             ) : null}
+
+            {activityState ? (
+              <ChatActivityDock
+                state={activityState}
+                onOpen={() => setActivityPanelOpen(true)}
+              />
+            ) : null}
           </div>
         </div>
       )}
+
+      {activityPanelOpen ? (
+        <ChatActivityDrawer
+          language={language}
+          response={latestActivityResponse}
+          state={activityState}
+          onClose={() => setActivityPanelOpen(false)}
+        />
+      ) : null}
 
       {hasConversation ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-background via-background to-transparent px-5 pb-5 pt-16 md:px-10">
@@ -326,12 +364,10 @@ function ChatMessageBubble({
   fetchArtifact,
   language,
   message,
-  t,
 }: {
   fetchArtifact: (artifactId: string) => Promise<AgentArtifactDetail>;
   language: UiLanguage;
   message: ChatDisplayMessage;
-  t: ReturnType<typeof useLanguage>["t"];
 }) {
   if (message.role === "user") {
     return <UserMessageBubble message={message.content} />;
@@ -343,24 +379,6 @@ function ChatMessageBubble({
       </p>
       {message.response ? (
         <div className="mt-6 grid gap-3 text-sm text-muted-foreground">
-          <details>
-            <summary className="cursor-pointer text-muted-foreground transition-colors hover:text-foreground">
-              {t("chatTrace")}
-            </summary>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">
-                {formatAgentTrace(message.response.agent_trace.steps, language)}
-              </span>
-              {message.response.artifacts.map((artifact) => (
-                <span
-                  key={artifact.artifact_id}
-                  className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground"
-                >
-                  {formatArtifactType(artifact.artifact_type, language)}
-                </span>
-              ))}
-            </div>
-          </details>
           {message.response.references.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {message.response.references.map((reference, index) => {
@@ -376,14 +394,429 @@ function ChatMessageBubble({
               })}
             </div>
           ) : null}
-          <AgentArtifactPanel
+          <SafeArtifactVisualization
             artifacts={message.response.artifacts}
             fetchArtifact={fetchArtifact}
-            language={language}
           />
         </div>
       ) : null}
     </AssistantBlock>
+  );
+}
+
+function SafeArtifactVisualization({
+  artifacts,
+  fetchArtifact,
+}: {
+  artifacts: AgentArtifactSummary[];
+  fetchArtifact: (artifactId: string) => Promise<AgentArtifactDetail>;
+}) {
+  const safeArtifacts = useMemo(
+    () =>
+      artifacts.filter((artifact) =>
+        ["chart_spec", "computed_metric", "visualization_image"].includes(
+          artifact.artifact_type,
+        ),
+      ),
+    [artifacts],
+  );
+  const safeArtifactIds = useMemo(
+    () => safeArtifacts.map((artifact) => artifact.artifact_id).join("|"),
+    [safeArtifacts],
+  );
+  const [details, setDetails] = useState<Record<string, AgentArtifactDetail>>({});
+
+  useEffect(() => {
+    if (safeArtifacts.length === 0) {
+      return () => undefined;
+    }
+    let cancelled = false;
+    for (const artifact of safeArtifacts) {
+      void fetchArtifact(artifact.artifact_id).then((detail) => {
+        if (cancelled) {
+          return;
+        }
+        setDetails((current) => ({
+          ...current,
+          [artifact.artifact_id]: detail,
+        }));
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchArtifact, safeArtifactIds, safeArtifacts]);
+
+  const chart = Object.values(details).find(
+    (detail) => detail.artifact_type === "chart_spec",
+  );
+  const image = Object.values(details).find(
+    (detail) => detail.artifact_type === "visualization_image",
+  );
+  const metric = Object.values(details).find(
+    (detail) => detail.artifact_type === "computed_metric",
+  );
+
+  if (!chart && !image && !metric) {
+    return null;
+  }
+
+  return (
+    <div className="mt-5 grid max-w-2xl gap-3">
+      {metric ? <MetricSummary detail={metric} /> : null}
+      {image ? <SvgImageArtifact detail={image} /> : chart ? (
+        <LineChartArtifact detail={chart} />
+      ) : null}
+    </div>
+  );
+}
+
+function SvgImageArtifact({ detail }: { detail: AgentArtifactDetail }) {
+  const payload = detail.payload_json;
+  const svg = typeof payload.svg === "string" ? sanitizeSvgImage(payload.svg) : "";
+  if (!svg) {
+    return null;
+  }
+  return (
+    <section
+      aria-label={
+        typeof payload.title === "string" ? payload.title : "数据可视化图"
+      }
+      className="overflow-hidden rounded-lg bg-muted/30 p-3"
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  );
+}
+
+function MetricSummary({ detail }: { detail: AgentArtifactDetail }) {
+  const payload = detail.payload_json;
+  const label = typeof payload.label === "string" ? payload.label : "Metric";
+  const value = typeof payload.latest_value === "number" ? payload.latest_value : null;
+  const unit = typeof payload.unit === "string" ? payload.unit : "";
+  if (value === null) {
+    return null;
+  }
+  return (
+    <div className="flex flex-wrap items-baseline gap-2 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-lg font-semibold text-foreground">
+        {formatChartNumber(value)}
+        {unit}
+      </span>
+    </div>
+  );
+}
+
+function LineChartArtifact({ detail }: { detail: AgentArtifactDetail }) {
+  const payload = detail.payload_json;
+  const title = typeof payload.title === "string" ? payload.title : "指标趋势";
+  const unit = typeof payload.unit === "string" ? payload.unit : "";
+  const points = extractChartPoints(payload);
+  if (points.length === 0) {
+    return null;
+  }
+  const latest = points[points.length - 1];
+  const coordinates = chartCoordinates(points);
+  const path = coordinates.map((point) => `${point.x},${point.y}`).join(" ");
+  return (
+    <section className="grid gap-3 rounded-lg bg-muted/30 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {points[0].x} - {latest.x}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-lg font-semibold text-foreground">
+            {formatChartNumber(latest.y)}
+            {unit}
+          </p>
+          <p className="text-xs text-muted-foreground">最新值</p>
+        </div>
+      </div>
+      <svg
+        aria-label={title}
+        className="h-28 w-full overflow-visible"
+        role="img"
+        viewBox="0 0 320 112"
+      >
+        <line className="stroke-border" x1="0" x2="320" y1="96" y2="96" />
+        <polyline
+          className="fill-none stroke-accent"
+          points={path}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="3"
+        />
+        {points.map((point, index) => {
+          const coordinate = coordinates[index];
+          return (
+            <circle
+              className="fill-card stroke-accent"
+              cx={coordinate.x}
+              cy={coordinate.y}
+              key={`${point.x}-${point.y}`}
+              r="3"
+              strokeWidth="2"
+            />
+          );
+        })}
+      </svg>
+    </section>
+  );
+}
+
+function ChatActivityDock({
+  onOpen,
+  state,
+}: {
+  onOpen: () => void;
+  state: "completed" | "thinking" | null;
+}) {
+  if (!state) {
+    return null;
+  }
+  const thinking = state === "thinking";
+  return (
+    <div className="max-w-[min(100%,56rem)]">
+      <button
+        aria-label="查看思考活动"
+        className="inline-flex items-center gap-2 py-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        type="button"
+        onClick={onOpen}
+      >
+        <span className="grid size-4 place-items-center">
+          {thinking ? (
+            <LoaderCircle className="size-4 animate-spin text-accent" />
+          ) : (
+            <PanelRight className="size-4" />
+          )}
+        </span>
+        <span className="font-medium">查看思考活动</span>
+        <span aria-hidden="true">·</span>
+        <span className={cn("text-xs", thinking ? "text-accent" : "text-muted-foreground")}>
+          {thinking ? "正在思考" : "思考完成"}
+        </span>
+      </button>
+    </div>
+  );
+}
+
+function ChatActivityDrawer({
+  language,
+  onClose,
+  response,
+  state,
+}: {
+  language: UiLanguage;
+  onClose: () => void;
+  response: MainAgentQnaResponse | null;
+  state: "completed" | "thinking" | null;
+}) {
+  return (
+    <aside
+      aria-label="思考活动"
+      className="fixed inset-y-0 right-0 z-50 grid w-[min(92vw,28rem)] grid-rows-[auto_minmax(0,1fr)] border-l border-border bg-card shadow-lg"
+      role="dialog"
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-accent">
+            Timeline
+          </p>
+          <h2 className="mt-1 text-sm font-semibold text-foreground">
+            思考活动
+          </h2>
+        </div>
+        <button
+          aria-label="关闭思考活动"
+          className="grid size-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          type="button"
+          onClick={onClose}
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+      <div className="min-h-0 overflow-y-auto p-4">
+        {state === "thinking" ? (
+          <ThinkingActivityLine language={language} />
+        ) : response ? (
+          <QnaActivityLine language={language} response={response} />
+        ) : (
+          <p className="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+            暂无可展示的思考活动。
+          </p>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function ThinkingActivityLine({ language }: { language: UiLanguage }) {
+  const rows = [
+    {
+      caption:
+        language === "zh"
+          ? "正在读取上下文并规划回答"
+          : "Reading context and planning the answer",
+      id: "thinking-main-agent",
+      label: formatAgentName("MainAgent", language),
+      skill: language === "zh" ? "上下文规划" : "context_planning",
+      status: "running",
+      state: "pending" as const,
+    },
+  ];
+  return (
+    <section
+      aria-label={language === "zh" ? "本次活动" : "Activity"}
+      className="rounded-lg border border-border bg-muted/20 p-3"
+      data-testid="qna-activity-line"
+    >
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-foreground">
+          {language === "zh" ? "本次活动" : "Activity"}
+        </p>
+        <span className="rounded-full bg-accent/10 px-2 py-1 text-[11px] text-accent">
+          正在思考
+        </span>
+      </div>
+      <div className="grid">
+        {rows.map((row, index) => (
+          <QnaActivityRow
+            isLast={index === rows.length - 1}
+            key={row.id}
+            language={language}
+            row={row}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function QnaActivityLine({
+  language,
+  response,
+}: {
+  language: UiLanguage;
+  response: MainAgentQnaResponse;
+}) {
+  const rows = [
+    {
+      caption:
+        language === "zh"
+          ? "读取上下文并规划本次回答"
+          : "Read context and planned this answer",
+      id: "main-agent-plan",
+      label: formatAgentName("MainAgent", language),
+      skill: language === "zh" ? "上下文规划" : "context_planning",
+      status: "planned",
+      state: "completed" as const,
+    },
+    ...response.agent_trace.steps.map((step) => ({
+      caption:
+        language === "zh"
+          ? "执行专家步骤并返回产物"
+          : "Executed expert step and returned artifacts",
+      id: step.step_id,
+      label: formatAgentName(step.expert_agent_name, language),
+      skill: step.skill_id,
+      status: step.status,
+      state: qnaStepState(step.status),
+    })),
+  ];
+
+  return (
+    <section
+      aria-label={language === "zh" ? "本次活动" : "Activity"}
+      className="rounded-lg border border-border bg-muted/20 p-3"
+      data-testid="qna-activity-line"
+    >
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-foreground">
+          {language === "zh" ? "本次活动" : "Activity"}
+        </p>
+        <span className="rounded-full bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+          {language === "zh" ? `共 ${rows.length} 步` : `${rows.length} steps`}
+        </span>
+      </div>
+      <div className="grid">
+        {rows.map((row, index) => (
+          <QnaActivityRow
+            isLast={index === rows.length - 1}
+            key={row.id}
+            language={language}
+            row={row}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function QnaActivityRow({
+  isLast,
+  language,
+  row,
+}: {
+  isLast: boolean;
+  language: UiLanguage;
+  row: {
+    caption: string;
+    id: string;
+    label: string;
+    skill: string;
+    state: "completed" | "failed" | "pending";
+    status: string;
+  };
+}) {
+  const tone = qnaActivityTone(row.state);
+  return (
+    <article className="grid grid-cols-[1.75rem_minmax(0,1fr)] gap-3 pb-4 last:pb-0">
+      <div className="relative flex justify-center">
+        {!isLast ? (
+          <span
+            aria-hidden="true"
+            className="absolute top-7 h-[calc(100%-0.25rem)] w-px bg-border"
+          />
+        ) : null}
+        <span
+          className={cn(
+            "relative z-10 grid size-7 place-items-center rounded-full",
+            tone.icon,
+          )}
+        >
+          <QnaActivityIcon state={row.state} />
+        </span>
+      </div>
+      <div className="min-w-0 rounded-md border border-border bg-card px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-medium text-foreground">{row.label}</h3>
+          <span className={cn("rounded-full px-2 py-0.5 text-[11px]", tone.badge)}>
+            {qnaActivityStatusText(row.state)}
+          </span>
+        </div>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          {row.caption}
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+          <span className="rounded border border-border bg-muted px-2 py-1">
+            {formatActivitySkill(row.skill, language)}
+          </span>
+          <span
+            className={cn(
+              "rounded border px-2 py-1",
+              row.state === "failed"
+                ? "border-negative/20 bg-negative-soft text-negative"
+                : "border-border bg-muted",
+            )}
+          >
+            {formatActivityStatusDetail(row.status, row.state, language)}
+          </span>
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -461,14 +894,16 @@ function AssistantBlock({ children }: { children: ReactNode }) {
   );
 }
 
-function formatAgentTrace(
-  steps: MainAgentQnaResponse["agent_trace"]["steps"],
-  language: UiLanguage,
-): string {
-  const agents = steps.map((step) =>
-    formatAgentName(step.expert_agent_name, language),
-  );
-  return [formatAgentName("MainAgent", language), ...agents].join(" → ");
+function latestAssistantResponse(
+  messages: ChatDisplayMessage[],
+): MainAgentQnaResponse | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const response = messages[index]?.response;
+    if (response) {
+      return response;
+    }
+  }
+  return null;
 }
 
 function formatAgentName(agentName: string, language: UiLanguage): string {
@@ -484,15 +919,153 @@ function formatAgentName(agentName: string, language: UiLanguage): string {
   return labels[agentName]?.[language] ?? agentName;
 }
 
-function formatArtifactType(artifactType: string, language: UiLanguage): string {
+function qnaStepState(status: string): "completed" | "failed" | "pending" {
+  if (["completed", "succeeded", "succeeded_with_degradation"].includes(status)) {
+    return "completed";
+  }
+  if (["cancelled", "failed", "failed_final", "upstream_failed"].includes(status)) {
+    return "failed";
+  }
+  return "pending";
+}
+
+function QnaActivityIcon({
+  state,
+}: {
+  state: "completed" | "failed" | "pending";
+}) {
+  if (state === "completed") {
+    return <Check className="size-3.5" />;
+  }
+  if (state === "failed") {
+    return <CircleAlert className="size-3.5" />;
+  }
+  return <Clock3 className="size-3.5" />;
+}
+
+function qnaActivityStatusText(
+  state: "completed" | "failed" | "pending",
+): string {
+  if (state === "completed") {
+    return "已完成";
+  }
+  if (state === "failed") {
+    return "失败";
+  }
+  return "处理中";
+}
+
+function formatActivitySkill(skill: string, language: UiLanguage): string {
   const labels: Record<string, Record<UiLanguage, string>> = {
-    analysis_table: { en: "Analysis table", zh: "分析表" },
-    chart_spec: { en: "Chart spec", zh: "图表说明" },
-    computed_metric: { en: "Computed metric", zh: "计算指标" },
-    explanation: { en: "Explanation", zh: "解释文本" },
-    generated_file_ref: { en: "Generated file", zh: "生成文件" },
+    answer_research_question: { en: "Generate answer", zh: "生成回答" },
+    context_planning: { en: "Context planning", zh: "上下文规划" },
+    data_question: { en: "Analyze data", zh: "分析数据" },
+    evidence_lookup: { en: "Check evidence", zh: "核验证据" },
+    news_review: { en: "Review news", zh: "舆情复核" },
+    quant_review: { en: "Review quant result", zh: "量化复核" },
   };
-  return labels[artifactType]?.[language] ?? artifactType;
+  return labels[skill]?.[language] ?? prettifyActivityIdentifier(skill);
+}
+
+function formatActivityStatusDetail(
+  status: string,
+  state: "completed" | "failed" | "pending",
+  language: UiLanguage,
+): string {
+  if (state === "failed") {
+    return language === "zh"
+      ? `失败断点：${prettifyActivityIdentifier(status)}`
+      : `Failed at: ${prettifyActivityIdentifier(status)}`;
+  }
+  if (status === "planned") {
+    return language === "zh" ? "状态：已规划" : "Status: planned";
+  }
+  if (status === "running") {
+    return language === "zh" ? "状态：进行中" : "Status: running";
+  }
+  if (status === "succeeded_with_degradation") {
+    return language === "zh"
+      ? "状态：已完成，有降级"
+      : "Status: completed with degradation";
+  }
+  if (state === "completed") {
+    return language === "zh" ? "状态：已完成" : "Status: completed";
+  }
+  return language === "zh" ? "状态：处理中" : "Status: running";
+}
+
+function prettifyActivityIdentifier(value: string): string {
+  return value.replace(/[_-]+/g, " ").trim();
+}
+
+type ChartPoint = {
+  x: string;
+  y: number;
+};
+
+function extractChartPoints(payload: Record<string, unknown>): ChartPoint[] {
+  const series = Array.isArray(payload.series) ? payload.series : [];
+  const firstSeries = series.find(isRecord);
+  const points = Array.isArray(firstSeries?.points) ? firstSeries.points : [];
+  return points
+    .filter(isRecord)
+    .map((point) => ({
+      x: typeof point.x === "string" ? point.x : String(point.x ?? ""),
+      y: typeof point.y === "number" ? point.y : Number(point.y),
+    }))
+    .filter((point) => point.x && Number.isFinite(point.y));
+}
+
+function chartCoordinates(points: ChartPoint[]): Array<{ x: number; y: number }> {
+  const values = points.map((point) => point.y);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const width = 300;
+  const left = 10;
+  const top = 12;
+  const height = 84;
+  return points.map((point, index) => ({
+    x: left + (points.length === 1 ? width / 2 : (index / (points.length - 1)) * width),
+    y: top + height - ((point.y - min) / range) * height,
+  }));
+}
+
+function formatChartNumber(value: number): string {
+  return value.toFixed(2);
+}
+
+function sanitizeSvgImage(svg: string): string {
+  if (!svg.trim().startsWith("<svg")) {
+    return "";
+  }
+  if (/<script[\s>]/i.test(svg) || /\son[a-z]+\s*=/i.test(svg)) {
+    return "";
+  }
+  return svg;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function qnaActivityTone(state: "completed" | "failed" | "pending") {
+  if (state === "completed") {
+    return {
+      badge: "bg-positive-soft text-positive",
+      icon: "bg-positive text-white",
+    };
+  }
+  if (state === "failed") {
+    return {
+      badge: "bg-negative-soft text-negative",
+      icon: "bg-negative text-white",
+    };
+  }
+  return {
+    badge: "bg-muted text-muted-foreground",
+    icon: "bg-muted-foreground text-white",
+  };
 }
 
 function mapPersistedChatMessage(message: AgentChatMessage): ChatDisplayMessage {

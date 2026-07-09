@@ -84,13 +84,13 @@ describe("DashboardRefreshControl", () => {
     expect(dialog).toHaveClass("fixed");
     expect(screen.getByText("run-1")).toBeInTheDocument();
     expect(screen.getByTestId("agent-collaboration-feed")).toBeInTheDocument();
-    expect(screen.getByTestId("agent-lanyard-MA")).toBeInTheDocument();
-    expect(screen.getByTestId("agent-lanyard-DI")).toBeInTheDocument();
-    expect(screen.getByTestId("agent-message-data_inspection")).toHaveAttribute(
+    expect(screen.getByTestId("agent-activity-main_agent_dispatch"))
+      .toBeInTheDocument();
+    expect(screen.getByTestId("agent-activity-data_inspection")).toHaveAttribute(
       "data-agent-state",
       "queued",
     );
-    expect(screen.getByTestId("agent-message-quant_analysis")).toHaveAttribute(
+    expect(screen.getByTestId("agent-activity-quant_analysis")).toHaveAttribute(
       "data-agent-state",
       "pending",
     );
@@ -142,6 +142,47 @@ describe("DashboardRefreshControl", () => {
     fireEvent.click(screen.getByRole("button", { name: "启动今日研究" }));
     expect(await screen.findByText("run-new")).toBeInTheDocument();
     expect(screen.queryByText("run-old")).not.toBeInTheDocument();
+  });
+
+  it("shows the exact blocked node and retryable failure reason", async () => {
+    renderControl(
+      <DashboardRefreshControl
+        fetchLatestRun={vi.fn().mockResolvedValue({
+          run_id: "run-blocked",
+          state: "failed_retryable",
+        })}
+        fetchRunDetail={vi.fn().mockResolvedValue({
+          ...baseRun,
+          completed_count: 2,
+          failed_count: 0,
+          pending_count: 10,
+          run_id: "run-blocked",
+          status: "failed_retryable",
+          steps: [
+            { status: "succeeded", step: "DATA_FRESHNESS_CHECK" },
+            { status: "succeeded", step: "DATA_SYNC" },
+            { status: "succeeded", step: "SCOPE_RESOLVE" },
+            { status: "succeeded", step: "QUANT_INPUT_BUILD" },
+            { status: "succeeded", step: "QUANT_RUN" },
+            {
+              error_code: "news_refresh_incomplete",
+              finished_at: "2026-07-01T04:12:00Z",
+              started_at: "2026-07-01T04:05:00Z",
+              status: "failed_retryable",
+              step: "NEWS_REFRESH",
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(await screen.findByText("run-blocked")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-activity-news_acquisition")).toHaveAttribute(
+      "data-agent-state",
+      "waiting",
+    );
+    expect(screen.getByText("断点：news_refresh_incomplete")).toBeInTheDocument();
+    expect(screen.getByText("状态：failed_retryable")).toBeInTheDocument();
   });
 
   it("allows users to collapse and reopen the latest run graph", async () => {

@@ -10,6 +10,7 @@ import margin.api.dependencies as dependencies
 from margin.api.dependencies import (
     build_data_warehouse_stack,
     build_provider_status_providers,
+    get_provider_config_health_service,
     get_provider_runtime_factory,
 )
 from margin.core.secret_store import (
@@ -154,6 +155,36 @@ def test_runtime_factory_dependency_uses_active_versioned_config(
 
     assert runtime.config_version_id == "provider-llm-dependency-v1"
     engine.dispose()
+
+
+def test_provider_health_dependency_allows_minimax_llm_host() -> None:
+    """Production LLM host allowlist should include Minimax API hosts."""
+    service = get_provider_config_health_service(
+        MemoryStrategyRepository(),
+        object(),  # type: ignore[arg-type]
+    )
+
+    service.validate_base_url(
+        "https://platform.minimaxi.com",
+        provider_name="llm",
+    )
+    service.validate_base_url(
+        "https://api.minimaxi.com/v1",
+        provider_name="llm",
+    )
+
+
+def test_provider_health_dependency_allows_teajoin_tushare_proxy_host() -> None:
+    """Production data-source allowlist should include the Tushare proxy host."""
+    service = get_provider_config_health_service(
+        MemoryStrategyRepository(),
+        object(),  # type: ignore[arg-type]
+    )
+
+    service.validate_base_url(
+        "https://teajoin.com",
+        provider_name="tushare",
+    )
 
 
 def test_get_agent_runtime_service_returns_cached_runtime() -> None:

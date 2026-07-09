@@ -12,22 +12,29 @@
 - ToolGateway 统一处理工具注册、权限、幂等、脱敏和审计；LangGraph tool/node 只能通过 ToolGateway wrapper 调用。
 - PromptBundle / PromptRegistry / PromptRenderer 管理 v1 系统提示词、变量校验和 render hash；PromptBundle、render history 和 LLM call audit 已有 `prompt.*` 表持久化边界。
 - Q&A API 已接入 `AgentRuntimeService`，由 v1 `GlobalPlan -> DomainContextCapsule -> FinalAudit -> FinalUserAnswerArtifact` 路径生成用户回答。
-- 定时股票研究已接入 `ScheduledAgentRuntimeRunner`，由 v1 scheduled global plan 触发 valuation refresh。
+- Q&A 执行链路已改为 `MainAgent prompt plan -> Domain ExpertAgent worker plan -> WorkerAgent execution`；MainAgent 和 ExpertAgent 只看 AgentCard/WorkerCard 做计划、派活和审核，不直接查库、画图或调用工具。
+- WorkerCard 的 skill `input_contract` 描述该 worker 需要哪些结构化输入；ExpertAgent 依据契约填充 `step.constraints.worker_inputs`，不在通用 prompt 里硬编码某个问题的字段。
+- Q&A runtime 会按 MainAgent 返回的 `GlobalPlan.domain_tasks` 顺序执行全部专家任务，而不是只执行第一个 task；最终回答引用所有已批准的 DomainContextCapsule。
+- `DataQuestionWorker` 内部使用固定 LangGraph 工具流完成数据问题：恢复上下文、检查指标 schema、解析证券、查询 PIT 指标、生成图表 artifact，并把工具步骤写入 `worker_activity`。
+- 定时股票研究已接入 `ScheduledAgentRuntimeRunner`，生产路径不再读取固定 flow；schedule 只提供目标和约束，由 MainAgent system prompt 生成动态 `GlobalPlan`，再经 `MainPlanValidator` 校验后触发 valuation refresh。
 - 旧 `src/margin/agent_runtime/` 只保留 chat/context/schedule 存储模型、历史 MainAgent 测试和旧 flow loader，不再作为 API 或 worker 编排入口。
 
 ## 它怎么跑
 
 ```text
 用户/定时任务触发
-  -> MainAgent 生成计划
-  -> 数据检查
-  -> 量化分支 + 财报/RAG 分支
-  -> 融合研究
-  -> 写入 Dashboard 投影
-  -> MainAgent 最终检查
+  -> MainAgent 读取 DomainAgentCard 并生成动态 GlobalPlan
+  -> 一个或多个 Domain ExpertAgent 根据 WorkerCard 生成 worker plan
+  -> WorkerAgent 在各自固定内部工具流中执行具体任务
+  -> 产出 ContextPack / DomainContextCapsule / Artifact / Audit
+  -> MainAgent 基于已批准 capsule 生成最终回答
 ```
 
-量化分支只读结构化 PIT 数据和 Mart，不做 WebSearch。财报/RAG 分支先检查资料覆盖，缺资料或过期才触发资料刷新；舆情线暂时使用 WebSearch 做增量验证。
+定时任务现在是 `ScheduledTaskIntent -> MainAgent prompt planning -> MainPlanValidator -> ExpertAgent tasks`。固定 flow JSON 只作为历史兼容和测试夹具，不再是生产定时任务的编排入口。
+
+MainAgent 不维护固定路由表。用户或定时任务可以提出任意自然语言目标，MainAgent 根据 DomainAgentCard 的 description、policy、required outputs 选择一个或多个专家，并把用户问题、输出要求和上下文约束写入每个专家任务。专家拿到任务后再根据 WorkerCard 和 skill `input_contract` 自行拆 worker step。
+
+量化线由 `QuantExpertAgent` 负责规划和复查；它下面当前的量化 Worker 可以执行固定的 PIT 特征、模型和 Analysis Mart 发布流程，但 `QuantExpertAgent` 本身不是固定流程。财报/RAG/舆情等工作也由 MainAgent 按目标动态选择对应专家，不再由定时任务代码写死分支。
 
 Agent 不应该直接读 raw/source 表，也不应该绕过 Evidence 和 Analysis Mart。
 
@@ -36,7 +43,7 @@ Agent 不应该直接读 raw/source 表，也不应该绕过 Evidence 和 Analys
 - 用户 Q&A endpoint 和 worker 定时任务不再直接依赖旧 MainAgent runtime 或旧 ExpertAgent 执行器。
 - Q&A service 只通过 v1 MainRuntime 生成 domain task，并把 context pack、domain capsule、domain audit、final audit、final answer 都写成 artifact。
 - Q&A service 同时把 ContextPack、DomainContextCapsule 和 lineage edge 写入结构化 ContextRepository。
-- scheduled runner 把固定 flow 映射为 v1 DomainTask，并写入 `scheduled_global_plan` 与 `valuation_refresh` artifact。
+- scheduled runner 把 schedule intent 交给 MainAgent 规划，写入 `scheduled_global_plan`、`main_agent_plan`、`plan_validation` 与 `valuation_refresh` artifact。
 - `CodeSandboxAgent` 默认不会暴露给 planner，只有注册可执行 executor 后才可见。
 - Q&A 执行状态按 `step_id` 记录，避免同一 Agent 多个步骤互相覆盖。
 - API 返回 artifact detail 时默认使用 safe view，对密钥、token、原始长文本等敏感字段做脱敏和裁剪。
@@ -56,7 +63,9 @@ Agent 不应该直接读 raw/source 表，也不应该绕过 Evidence 和 Analys
 - `src/margin/agents/prompts/repository.py`：PromptBundle、prompt render history、LLM call audit 的正式持久化边界。
 - `src/margin/agents/prompts/db_models.py`：`prompt.prompt_templates`、`prompt.prompt_bundles`、`prompt.prompt_render_history`、`prompt.llm_call_audits` ORM。
 - `src/margin/agents/runtime/service.py`：用户 Q&A v1 应用服务。
+- `src/margin/agents/runtime/expert_runtime.py`：Domain ExpertAgent 的 WorkerCard 驱动规划器。
 - `src/margin/agents/runtime/scheduled.py`：定时股票研究 v1 runner。
+- `src/margin/agents/workers/data_question_worker.py`：数据问答 worker，内部固定 LangGraph 工具流。
 - `src/margin/agents/workers/dashboard_publisher_worker.py`：发布 Agent 调整后的 Dashboard projection。
 - `src/margin/agents/domains/`、`src/margin/agents/workers/`：BackfillExpertAgent 与回填 worker skeleton。
 - `src/margin/agent_runtime/`：历史 chat/context/schedule 存储模型和旧 flow loader。

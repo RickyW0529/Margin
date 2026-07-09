@@ -303,6 +303,7 @@ def main() -> None:
                 get_agent_context_store,
                 get_agent_schedule_repository,
                 get_config_resolver,
+                get_provider_runtime_factory,
                 get_strategy_service,
                 get_valuation_discovery_service_for_api,
             )
@@ -331,6 +332,7 @@ def main() -> None:
                 context_store=get_agent_context_store(),
                 valuation_service=get_valuation_discovery_service_for_api(),
                 scope_resolver=resolve_scope,
+                llm_provider_factory=lambda: get_provider_runtime_factory().build_llm().adapter,
                 config_resolver=get_config_resolver(),
             ).run_once(now=datetime.now(UTC))
             logger.info(

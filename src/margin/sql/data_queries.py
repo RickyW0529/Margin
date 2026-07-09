@@ -209,6 +209,33 @@ def security_profiles_active(
     )
 
 
+def security_profiles_search(
+    query_text: str,
+    system_as_of: datetime,
+    limit: int = 5,
+) -> Select:
+    """Search active security-master records by name, symbol, or security ID."""
+    pattern = f"%{query_text}%"
+    return (
+        select(SecurityMasterRow)
+        .where(SecurityMasterRow.system_from <= system_as_of)
+        .where(
+            (SecurityMasterRow.system_to.is_(None)) | (SecurityMasterRow.system_to > system_as_of)
+        )
+        .where(
+            (SecurityMasterRow.name.ilike(pattern))
+            | (SecurityMasterRow.symbol.ilike(pattern))
+            | (SecurityMasterRow.security_id.ilike(pattern))
+        )
+        .order_by(
+            case((SecurityMasterRow.name == query_text, 0), else_=1),
+            SecurityMasterRow.security_id,
+            SecurityMasterRow.system_from.desc(),
+        )
+        .limit(limit)
+    )
+
+
 def indicator_history_pit(
     security_ids: tuple[str, ...],
     indicator_ids: tuple[str, ...],
@@ -322,6 +349,41 @@ def indicator_history_pit(
         unbounded.c.security_id,
         unbounded.c.indicator_id,
         unbounded.c.event_at,
+    )
+
+
+def indicator_catalog_from_facts(
+    *,
+    security_ids: tuple[str, ...],
+    decision_at: datetime,
+    limit: int = 200,
+) -> Select:
+    """Discover numeric indicators currently available from warehouse facts."""
+    stmt = (
+        select(
+            StandardizedIndicatorFactRow.indicator_id.label("indicator_id"),
+            func.coalesce(StandardizedIndicatorFactRow.unit, "").label("unit"),
+            func.count(StandardizedIndicatorFactRow.fact_id).label("point_count"),
+            func.min(StandardizedIndicatorFactRow.event_at).label("first_event_at"),
+            func.max(StandardizedIndicatorFactRow.event_at).label("last_event_at"),
+            func.min(StandardizedIndicatorFactRow.endpoint_code).label("sample_endpoint_code"),
+            func.max(StandardizedIndicatorFactRow.available_at).label("latest_available_at"),
+        )
+        .where(StandardizedIndicatorFactRow.available_at <= decision_at)
+        .where(StandardizedIndicatorFactRow.numeric_value.is_not(None))
+    )
+    if security_ids:
+        stmt = stmt.where(StandardizedIndicatorFactRow.security_id.in_(security_ids))
+    return (
+        stmt.group_by(
+            StandardizedIndicatorFactRow.indicator_id,
+            func.coalesce(StandardizedIndicatorFactRow.unit, ""),
+        )
+        .order_by(
+            func.count(StandardizedIndicatorFactRow.fact_id).desc(),
+            StandardizedIndicatorFactRow.indicator_id,
+        )
+        .limit(limit)
     )
 
 

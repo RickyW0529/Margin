@@ -3,14 +3,35 @@
 from __future__ import annotations
 
 import inspect
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
 
-from margin.agent_runtime.context_store import MemoryAgentContextStore
+import pytest
+
+from margin.agent_runtime.context_store import MemoryAgentContextStore, SQLAlchemyAgentContextStore
+from margin.agent_runtime.db_models import (
+    AgentRuntimeArtifactRow,
+    AgentRuntimeGuardrailDecisionRow,
+    AgentRuntimeRunRow,
+    AgentRuntimeStepRow,
+)
 from margin.agents.context.repository import MemoryContextRepository
+from margin.agents.runtime.service import (
+    AgentRuntimeService,
+    AgentRuntimeUnavailableError,
+    UserQnaCommand,
+)
 from margin.dashboard.models import ResearchItem, ResearchRun
 from margin.dashboard.repository import MemoryDashboardRepository
 from margin.dashboard.service import DashboardServiceBundle
+from margin.data.warehouse_repository import IndicatorHistoryValue, SecurityProfileValue
 from margin.research.llm import DeterministicLLMProvider, LLMResult
+from margin.storage.base import Base
+from margin.storage.database import (
+    DatabaseSettings,
+    create_database_engine,
+    create_session_factory,
+)
 
 DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 
@@ -22,7 +43,11 @@ def test_v1_user_qna_service_creates_plan_and_final_answer_artifact() -> None:
     context_store = MemoryAgentContextStore()
     context_repository = MemoryContextRepository()
     dashboard_services = _dashboard_services()
-    llm_provider = _AnswerOnlyLLMProvider("当前研究候选包含 000001.SZ。")
+    llm_provider = _SequencedLLMProvider(
+        main_plan=_main_plan("GeneralQnaExpertAgent"),
+        expert_plan=_expert_plan("GeneralQnaWorker", "answer_general_qna"),
+        answers=("当前研究候选包含 000001.SZ。",),
+    )
     service = AgentRuntimeService(
         context_store=context_store,
         context_repository=context_repository,
@@ -62,7 +87,294 @@ def test_v1_user_qna_service_creates_plan_and_final_answer_artifact() -> None:
     assert result.final_answer.artifact_id in artifact_ids
     assert context_store.get_artifact(result.final_answer.artifact_id) is not None
     assert any(artifact.artifact_type == "analysis_table" for artifact in result.artifacts)
-    assert llm_provider.calls == ["answer"]
+    assert llm_provider.calls == ["main_plan", "expert_plan", "answer"]
+
+
+def test_v1_user_qna_service_strips_model_thinking_blocks() -> None:
+    """User-visible Q&A answers must not expose model reasoning blocks."""
+    service = AgentRuntimeService(
+        context_store=MemoryAgentContextStore(),
+        context_repository=MemoryContextRepository(),
+        dashboard_services=_dashboard_services(),
+        llm_provider_factory=lambda: _SequencedLLMProvider(
+            main_plan=_main_plan("GeneralQnaExpertAgent"),
+            expert_plan=_expert_plan("GeneralQnaWorker", "answer_general_qna"),
+            answers=("<think>hidden reasoning</think>\n\n你好，我是 Margin。",),
+        ),
+    )
+
+    result = service.run_user_qna(
+        UserQnaCommand(
+            run_id="ar_qna_think",
+            scope_version_id="scope-1",
+            message="你好",
+            universe="ALL_A",
+            language="zh",
+            conversation_context=(),
+        )
+    )
+
+    assert result.answer == "你好，我是 Margin。"
+    assert "<think>" not in result.final_answer.answer_text
+
+
+def test_v1_user_qna_service_formats_long_final_answer_as_markdown() -> None:
+    """WritingAgent should format long user-facing answers as readable Markdown."""
+    service = AgentRuntimeService(
+        context_store=MemoryAgentContextStore(),
+        context_repository=MemoryContextRepository(),
+        dashboard_services=_dashboard_services(),
+        llm_provider_factory=lambda: _SequencedLLMProvider(
+            main_plan=_main_plan("GeneralQnaExpertAgent"),
+            expert_plan=_expert_plan("GeneralQnaWorker", "answer_general_qna"),
+            answers=(
+                "当前没有可用的研究候选。你可以先补充公司名称、财务指标或研究范围。"
+                "系统会基于已批准的数据和证据回答，不会直接给出交易指令。",
+            ),
+        ),
+    )
+
+    result = service.run_user_qna(
+        UserQnaCommand(
+            run_id="ar_qna_markdown_writer",
+            scope_version_id="scope-1",
+            message="你好，帮我看看当前能做什么",
+            universe="ALL_A",
+            language="zh",
+            conversation_context=(),
+        )
+    )
+
+    assert result.answer.startswith("### 回答")
+    assert "- 当前没有可用的研究候选。" in result.answer
+    assert "交易指令" in result.answer
+    artifact_by_type = {artifact.artifact_type: artifact for artifact in result.artifacts}
+    assert artifact_by_type["writing_revision"].producer_agent == "WritingAgent"
+    assert artifact_by_type["writing_revision"].payload_json["output_format"] == "markdown"
+
+
+def test_v1_user_qna_service_answers_financial_metric_with_data_artifacts() -> None:
+    """ROE questions should use DataExpert/DataQuestionWorker warehouse reads."""
+    warehouse = _FinancialMetricWarehouse()
+    llm_provider = _SequencedLLMProvider(
+        main_plan=_main_plan("DataExpertAgent"),
+        expert_plan=_expert_plan(
+            "DataQuestionWorker",
+            "answer_financial_metric",
+            worker_inputs=_roe_worker_inputs("中国平安最近 ROE 怎么样？"),
+        ),
+        answers=(),
+    )
+    service = AgentRuntimeService(
+        context_store=MemoryAgentContextStore(),
+        context_repository=MemoryContextRepository(),
+        dashboard_services=_dashboard_services(),
+        llm_provider_factory=lambda: llm_provider,
+        warehouse_repository=warehouse,
+    )
+
+    result = service.run_user_qna(
+        UserQnaCommand(
+            run_id="ar_qna_roe",
+            scope_version_id="scope-1",
+            message="中国平安最近 ROE 怎么样？",
+            universe="ALL_A",
+            language="zh",
+            conversation_context=(),
+        )
+    )
+
+    assert result.global_plan.domain_tasks[0].to_domain_agent == "DataExpertAgent"
+    assert result.trace_steps[0].expert_agent_name == "DataExpertAgent"
+    assert result.trace_steps[0].skill_id == "answer_financial_metric"
+    assert "中国平安" in result.answer
+    assert "ROE TTM" in result.answer
+    assert "12.30%" in result.answer
+    assert llm_provider.calls == ["main_plan", "expert_plan"]
+    assert warehouse.indicator_queries
+    assert warehouse.indicator_queries[0].indicator_ids == ("roe_ttm",)
+    artifact_by_type = {artifact.artifact_type: artifact for artifact in result.artifacts}
+    assert artifact_by_type["analysis_table"].payload_json["rows"][-1]["value"] == 12.3
+    assert artifact_by_type["chart_spec"].payload_json["series"][0]["metric"] == "roe_ttm"
+    assert artifact_by_type["computed_metric"].payload_json["latest_value"] == 12.3
+    assert artifact_by_type["visualization_image"].payload_json["image_format"] == "svg"
+
+
+def test_v1_user_qna_service_plans_followup_chart_request_with_context() -> None:
+    """Follow-up chart requests should pass recent context to MainAgent and worker."""
+    warehouse = _FinancialMetricWarehouse()
+    llm_provider = _SequencedLLMProvider(
+        main_plan=_main_plan("DataExpertAgent", task="Use data tools with recent chat context."),
+        expert_plan=_expert_plan(
+            "DataQuestionWorker",
+            "answer_financial_metric",
+            task="Use recent context and render the requested bar chart.",
+            worker_inputs=_roe_worker_inputs("画成柱状图", chart_type="bar"),
+        ),
+        answers=(),
+    )
+    service = AgentRuntimeService(
+        context_store=MemoryAgentContextStore(),
+        context_repository=MemoryContextRepository(),
+        dashboard_services=_dashboard_services(),
+        llm_provider_factory=lambda: llm_provider,
+        warehouse_repository=warehouse,
+    )
+
+    result = service.run_user_qna(
+        UserQnaCommand(
+            run_id="ar_qna_roe_bar",
+            scope_version_id="scope-1",
+            message="画成柱状图",
+            universe="ALL_A",
+            language="zh",
+            conversation_context=(
+                {"role": "user", "content": "中国平安最近 ROE 是多少？"},
+                {
+                    "role": "assistant",
+                    "content": "中国平安最近一期 ROE TTM 为 12.30%。",
+                },
+            ),
+        )
+    )
+
+    assert result.global_plan.domain_tasks[0].to_domain_agent == "DataExpertAgent"
+    assert result.trace_steps[0].skill_id == "answer_financial_metric"
+    assert llm_provider.calls == ["main_plan", "expert_plan"]
+    artifact_by_type = {artifact.artifact_type: artifact for artifact in result.artifacts}
+    assert artifact_by_type["chart_spec"].payload_json["chart_type"] == "bar"
+    assert artifact_by_type["visualization_image"].payload_json["chart_type"] == "bar"
+    assert "rect" in artifact_by_type["visualization_image"].payload_json["svg"]
+
+
+def test_v1_user_qna_service_executes_all_main_planned_domain_tasks() -> None:
+    """Runtime should execute every DomainTask selected by MainAgent."""
+    warehouse = _FinancialMetricWarehouse()
+    llm_provider = _SequencedLLMProvider(
+        main_plan={
+            "steps": [
+                {
+                    "step_id": "s_data",
+                    "agent": "DataExpertAgent",
+                    "task": "查询中国平安 ROE，并返回数据产物。",
+                    "required_output_types": [
+                        "qna_answer",
+                        "analysis_table",
+                        "computed_metric",
+                        "visualization_image",
+                    ],
+                },
+                {
+                    "step_id": "s_general",
+                    "agent": "GeneralQnaExpertAgent",
+                    "task": "结合已批准上下文整理用户可读总结。",
+                    "required_output_types": ["qna_answer", "analysis_table"],
+                    "depends_on": ["s_data"],
+                },
+            ],
+            "final_answer_requirements": ["use_approved_capsules_only"],
+        },
+        expert_plan=(
+            _expert_plan(
+                "DataQuestionWorker",
+                "answer_financial_metric",
+                required_output_types=(
+                    "qna_answer",
+                    "analysis_table",
+                    "computed_metric",
+                    "visualization_image",
+                ),
+                worker_inputs=_roe_worker_inputs("中国平安最近 ROE 怎么样？"),
+            ),
+            _expert_plan("GeneralQnaWorker", "answer_general_qna"),
+        ),
+        answers=("综合看，中国平安 ROE 数据已整理完成。",),
+    )
+    context_repository = MemoryContextRepository()
+    service = AgentRuntimeService(
+        context_store=MemoryAgentContextStore(),
+        context_repository=context_repository,
+        dashboard_services=_dashboard_services(),
+        llm_provider_factory=lambda: llm_provider,
+        warehouse_repository=warehouse,
+    )
+
+    result = service.run_user_qna(
+        UserQnaCommand(
+            run_id="ar_qna_multi_domain",
+            scope_version_id="scope-1",
+            message="中国平安最近 ROE 怎么样？再整理成用户能看的总结。",
+            universe="ALL_A",
+            language="zh",
+            conversation_context=(),
+        )
+    )
+
+    assert llm_provider.calls == ["main_plan", "expert_plan", "expert_plan", "answer"]
+    assert [step.expert_agent_name for step in result.trace_steps] == [
+        "DataExpertAgent",
+        "GeneralQnaExpertAgent",
+    ]
+    assert result.final_answer.used_domain_capsule_refs == (
+        "dcc_ar_qna_multi_domain_data",
+        "dcc_ar_qna_multi_domain_general",
+    )
+    assert context_repository.get_domain_capsule("dcc_ar_qna_multi_domain_data") is not None
+    assert context_repository.get_domain_capsule("dcc_ar_qna_multi_domain_general") is not None
+    assert result.answer == "综合看，中国平安 ROE 数据已整理完成。"
+
+
+def test_v1_user_qna_service_persists_run_before_postgres_artifacts(
+    database_url: str,
+) -> None:
+    """PostgreSQL artifact writes require the AgentRun parent row first."""
+    engine = create_database_engine(DatabaseSettings(url=database_url))
+    Base.metadata.create_all(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory.begin() as session:
+        for row in (
+            AgentRuntimeGuardrailDecisionRow,
+            AgentRuntimeArtifactRow,
+            AgentRuntimeStepRow,
+            AgentRuntimeRunRow,
+        ):
+            session.query(row).delete()
+    context_store = SQLAlchemyAgentContextStore(session_factory)
+    service = AgentRuntimeService(
+        context_store=context_store,
+        context_repository=MemoryContextRepository(),
+        dashboard_services=_dashboard_services(),
+        llm_provider_factory=lambda: _SequencedLLMProvider(
+            main_plan=_main_plan("GeneralQnaExpertAgent"),
+            expert_plan=_expert_plan("GeneralQnaWorker", "answer_general_qna"),
+            answers=("你好，我是 Margin。",),
+        ),
+    )
+
+    try:
+        result = service.run_user_qna(
+            UserQnaCommand(
+                run_id="ar_qna_pg",
+                scope_version_id="scope-1",
+                message="你好",
+                universe="ALL_A",
+                language="zh",
+                conversation_context=(),
+            )
+        )
+
+        assert context_store.get_run("ar_qna_pg") is not None
+        assert context_store.get_artifact(result.final_answer.artifact_id) is not None
+    finally:
+        with session_factory.begin() as session:
+            for row in (
+                AgentRuntimeGuardrailDecisionRow,
+                AgentRuntimeArtifactRow,
+                AgentRuntimeStepRow,
+                AgentRuntimeRunRow,
+            ):
+                session.query(row).delete()
+        engine.dispose()
 
 
 def test_api_route_no_longer_imports_legacy_main_agent_execution() -> None:
@@ -76,6 +388,117 @@ def test_api_route_no_longer_imports_legacy_main_agent_execution() -> None:
     assert "DataAnalystAgent" not in source
     assert "GeneralQnaAgent" not in source
     assert "_execute_user_qna_plan" not in source
+
+
+def test_v1_user_qna_service_does_not_directly_select_data_worker() -> None:
+    """Service must execute the worker selected by ExpertAgent planning."""
+    import margin.agents.runtime.service as service_module
+
+    source = inspect.getsource(service_module.AgentRuntimeService)
+
+    assert "_build_financial_metric_analysis" not in source
+    assert "question_mode" not in source
+    assert "financial_metric_analysis" not in source
+
+
+def test_v1_user_qna_service_replans_when_worker_is_blocked() -> None:
+    """Blocked worker output should trigger one ExpertAgent reflection replan."""
+    llm_provider = _SequencedLLMProvider(
+        main_plan=_main_plan("DataExpertAgent"),
+        expert_plan=_expert_plan(
+            "DataQuestionWorker",
+            "answer_financial_metric",
+            worker_inputs=_roe_worker_inputs("中国平安最近 ROE 怎么样？"),
+        ),
+        answers=(),
+    )
+    service = AgentRuntimeService(
+        context_store=MemoryAgentContextStore(),
+        context_repository=MemoryContextRepository(),
+        dashboard_services=_dashboard_services(),
+        llm_provider_factory=lambda: llm_provider,
+        warehouse_repository=None,
+    )
+
+    with pytest.raises(AgentRuntimeUnavailableError, match="Worker did not produce"):
+        service.run_user_qna(
+            UserQnaCommand(
+                run_id="ar_qna_blocked_worker",
+                scope_version_id="scope-1",
+                message="中国平安最近 ROE 怎么样？",
+                universe="ALL_A",
+                language="zh",
+                conversation_context=(),
+            )
+        )
+
+    assert llm_provider.calls == ["main_plan", "expert_plan", "expert_plan"]
+    assert any("reflection_feedback" in prompt for prompt in llm_provider.prompts)
+
+
+def test_v1_user_qna_service_replans_when_expert_omits_worker_inputs() -> None:
+    """DataQuestionWorker must not guess missing ExpertAgent placeholders."""
+    llm_provider = _SequencedLLMProvider(
+        main_plan=_main_plan("DataExpertAgent"),
+        expert_plan=_expert_plan("DataQuestionWorker", "answer_financial_metric"),
+        answers=(),
+    )
+    service = AgentRuntimeService(
+        context_store=MemoryAgentContextStore(),
+        context_repository=MemoryContextRepository(),
+        dashboard_services=_dashboard_services(),
+        llm_provider_factory=lambda: llm_provider,
+        warehouse_repository=_FinancialMetricWarehouse(),
+    )
+
+    with pytest.raises(AgentRuntimeUnavailableError, match="Worker did not produce"):
+        service.run_user_qna(
+            UserQnaCommand(
+                run_id="ar_qna_missing_worker_inputs",
+                scope_version_id="scope-1",
+                message="看一下中国平安的 ROE",
+                universe="ALL_A",
+                language="zh",
+                conversation_context=(),
+            )
+        )
+
+    assert llm_provider.calls == ["main_plan", "expert_plan", "expert_plan"]
+    assert any("data_question_worker_no_answer" in prompt for prompt in llm_provider.prompts)
+
+
+def test_v1_user_qna_service_replans_when_worker_artifacts_fail_audit() -> None:
+    """Missing required worker artifacts should be treated as bad output and replanned."""
+    llm_provider = _SequencedLLMProvider(
+        main_plan=_main_plan("GeneralQnaExpertAgent"),
+        expert_plan=_expert_plan(
+            "GeneralQnaWorker",
+            "answer_general_qna",
+            required_output_types=("qna_answer", "evidence_package"),
+        ),
+        answers=("只有普通回答，没有证据包。", "再次普通回答，仍没有证据包。"),
+    )
+    service = AgentRuntimeService(
+        context_store=MemoryAgentContextStore(),
+        context_repository=MemoryContextRepository(),
+        dashboard_services=_dashboard_services(),
+        llm_provider_factory=lambda: llm_provider,
+    )
+
+    with pytest.raises(AgentRuntimeUnavailableError, match="Worker did not produce"):
+        service.run_user_qna(
+            UserQnaCommand(
+                run_id="ar_qna_bad_artifacts",
+                scope_version_id="scope-1",
+                message="给我带证据包的回答",
+                universe="ALL_A",
+                language="zh",
+                conversation_context=(),
+            )
+        )
+
+    assert llm_provider.calls == ["main_plan", "expert_plan", "answer", "expert_plan", "answer"]
+    assert any("missing_required_artifacts" in prompt for prompt in llm_provider.prompts)
 
 
 def _dashboard_services() -> DashboardServiceBundle:
@@ -107,14 +530,76 @@ def _dashboard_services() -> DashboardServiceBundle:
     return DashboardServiceBundle.in_memory(dashboard_repository=repository)
 
 
-class _AnswerOnlyLLMProvider(DeterministicLLMProvider):
-    """Test LLM that records user-answer calls."""
+def _main_plan(agent_name: str, *, task: str = "Delegate to the selected ExpertAgent.") -> dict:
+    """Return one deterministic MainAgent plan."""
+    return {
+        "steps": [
+            {
+                "step_id": "s1",
+                "agent": agent_name,
+                "task": task,
+                "required_output_types": ["qna_answer", "analysis_table"],
+            }
+        ],
+        "final_answer_requirements": ["use_approved_capsules_only"],
+    }
 
-    def __init__(self, answer: str) -> None:
-        """Initialize the deterministic answer provider."""
+
+def _expert_plan(
+    worker_agent: str,
+    skill_id: str,
+    *,
+    task: str = "Execute the selected worker skill.",
+    required_output_types: tuple[str, ...] = ("qna_answer", "analysis_table"),
+    worker_inputs: dict[str, str] | None = None,
+) -> dict:
+    """Return one deterministic ExpertAgent worker plan."""
+    return {
+        "steps": [
+            {
+                "step_id": "w1",
+                "worker_agent": worker_agent,
+                "skill_id": skill_id,
+                "task": task,
+                "required_output_types": list(required_output_types),
+                "constraints": {"worker_inputs": worker_inputs} if worker_inputs else {},
+            }
+        ],
+        "audit_requirements": ["verify_artifacts_before_returning"],
+    }
+
+
+def _roe_worker_inputs(user_query: str, *, chart_type: str = "line") -> dict[str, str]:
+    """Return ExpertAgent-filled worker placeholders for a ROE task."""
+    return {
+        "user_query": user_query,
+        "security_query": "中国平安",
+        "indicator_id": "roe_ttm",
+        "chart_type": chart_type,
+    }
+
+
+class _SequencedLLMProvider(DeterministicLLMProvider):
+    """Test LLM that returns Main plan, Expert plan, then optional answers."""
+
+    def __init__(
+        self,
+        *,
+        main_plan: dict,
+        expert_plan: dict | tuple[dict, ...],
+        answers: tuple[str, ...],
+    ) -> None:
+        """Initialize the deterministic provider with ordered outputs."""
         super().__init__(response={})
-        self._answer = answer
+        self._main_plan = main_plan
+        self._expert_plans = (
+            list(expert_plan) if isinstance(expert_plan, tuple) else [expert_plan]
+        )
+        self._expert_plan_fallback = self._expert_plans[-1]
+        self._answers = list(answers)
         self.calls: list[str] = []
+        self.prompts: list[str] = []
+        self._structured_calls = 0
 
     def complete(
         self,
@@ -123,15 +608,120 @@ class _AnswerOnlyLLMProvider(DeterministicLLMProvider):
         response_schema: dict[str, object] | None = None,
         temperature: float = 0.0,
     ) -> LLMResult:
-        """Return a deterministic answer and reject planner-style calls."""
-        del prompt, temperature
+        """Return deterministic structured plans or user answers in order."""
+        del temperature
+        self.prompts.append(prompt)
         if response_schema is not None:
-            raise AssertionError("v1 user Q&A service must not use the v0 planner prompt")
+            self._structured_calls += 1
+            if self._structured_calls == 1:
+                self.calls.append("main_plan")
+                return LLMResult(
+                    output=self._main_plan,
+                    model="test",
+                    success=True,
+                    latency_ms=0.0,
+                    raw_response=str(self._main_plan),
+                )
+            self.calls.append("expert_plan")
+            expert_plan = (
+                self._expert_plans.pop(0)
+                if self._expert_plans
+                else self._expert_plan_fallback
+            )
+            return LLMResult(
+                output=expert_plan,
+                model="test",
+                success=True,
+                latency_ms=0.0,
+                raw_response="expert_plan",
+            )
+        if not self._answers:
+            raise AssertionError("unexpected free-form answer call")
         self.calls.append("answer")
+        answer = self._answers.pop(0)
         return LLMResult(
-            output={"content": self._answer},
+            output={"content": answer},
             model="test",
             success=True,
             latency_ms=0.0,
-            raw_response=self._answer,
+            raw_response=answer,
         )
+
+
+class _FinancialMetricWarehouse:
+    """Fake PIT warehouse for financial-metric Q&A tests."""
+
+    def __init__(self) -> None:
+        """Initialize the captured query list."""
+        self.indicator_queries = []
+
+    def search_security_profiles(
+        self,
+        query: object,
+    ) -> list[SecurityProfileValue]:
+        """Resolve the Chinese company name to an active security profile."""
+        del query
+        return [
+            SecurityProfileValue(
+                security_id="601318.SH",
+                symbol="601318",
+                name="中国平安",
+                exchange="SH",
+                listed_at=date(2007, 3, 1),
+                delisted_at=None,
+                is_st=False,
+            )
+        ]
+
+    def discover_indicators(
+        self,
+        *,
+        security_ids: tuple[str, ...],
+        query_text: str,
+        decision_at: datetime,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        """Return warehouse-discovered ROE metadata for service tests."""
+        del security_ids, query_text, decision_at, limit
+        return [
+            {
+                "indicator_id": "roe_ttm",
+                "label": "ROE TTM",
+                "unit": "%",
+                "value_scale": 100,
+                "aliases": ["roe", "ROE", "净资产收益率"],
+                "coverage": {"point_count": 2},
+                "source_fields": ["fina_indicator.roe"],
+            }
+        ]
+
+    def indicator_history(
+        self,
+        query: object,
+    ) -> list[IndicatorHistoryValue]:
+        """Return PIT-safe ROE history."""
+        self.indicator_queries.append(query)
+        return [
+            IndicatorHistoryValue(
+                fact_id="fact_roe_2023",
+                provider="tushare",
+                security_id="601318.SH",
+                indicator_id="roe_ttm",
+                event_at=datetime(2023, 12, 31, tzinfo=UTC),
+                available_at=datetime(2024, 3, 22, tzinfo=UTC),
+                fetched_at=datetime(2024, 3, 23, tzinfo=UTC),
+                numeric_value=Decimal("0.101"),
+                quality_score=Decimal("0.99"),
+            ),
+            IndicatorHistoryValue(
+                fact_id="fact_roe_2024",
+                provider="tushare",
+                security_id="601318.SH",
+                indicator_id="roe_ttm",
+                event_at=datetime(2024, 12, 31, tzinfo=UTC),
+                available_at=datetime(2025, 3, 22, tzinfo=UTC),
+                fetched_at=datetime(2025, 3, 23, tzinfo=UTC),
+                numeric_value=Decimal("0.123"),
+                quality_score=Decimal("0.99"),
+            ),
+        ]

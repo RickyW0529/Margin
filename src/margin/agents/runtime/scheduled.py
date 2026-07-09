@@ -3,19 +3,31 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from margin.agent_runtime.context_store import AgentContextStore, make_context_artifact
 from margin.agent_runtime.quant_agent import current_quant_agent_strategy_profile
 from margin.agent_runtime.schedules import AgentScheduleRepository, StockAnalysisSchedule
-from margin.agent_runtime.step_definitions import load_scheduled_stock_analysis_flow
-from margin.agents.runtime.adapters_v0 import map_v0_flow_to_domain_tasks
-from margin.agents.runtime.main_runtime import GlobalPlan
+from margin.agents.cards.registry import default_domain_agent_cards
+from margin.agents.protocol.models import ContextFact, ContextPack
+from margin.agents.runtime.main_runtime import (
+    GlobalPlan,
+    LLMMainAgentPlanner,
+    MainPlanValidator,
+    MainRuntime,
+)
+from margin.agents.security.capability import CapabilityToken
+from margin.agents.security.policies import (
+    DataAccessPolicy,
+    ProductionWritePolicy,
+    ToolPolicy,
+)
 from margin.config_runtime.bootstrap import SCHEDULED_QUANT_PROFILE_KEY
 from margin.config_runtime.models import ConfigReference
 from margin.config_runtime.repository import ConfigResolver
+from margin.research.llm import LLMProvider
 
 SCHEDULED_AGENT_RUNTIME_VERSION = "scheduled-agent-runtime-v1"
 
@@ -30,6 +42,7 @@ class ScheduledAgentRuntimeRunner:
         context_store: AgentContextStore,
         valuation_service: Any,
         scope_resolver: Callable[[str], str],
+        llm_provider_factory: Callable[[], LLMProvider],
         config_resolver: ConfigResolver | None = None,
     ) -> None:
         """Initialize the scheduled v1 Agent runtime runner."""
@@ -37,6 +50,7 @@ class ScheduledAgentRuntimeRunner:
         self._context_store = context_store
         self._valuation_service = valuation_service
         self._scope_resolver = scope_resolver
+        self._llm_provider_factory = llm_provider_factory
         self._config_resolver = config_resolver
 
     def run_once(self, *, now: datetime | None = None) -> int:
@@ -52,26 +66,31 @@ class ScheduledAgentRuntimeRunner:
         """Trigger one due schedule."""
         local_date = now.astimezone(ZoneInfo(schedule.timezone)).date().isoformat()
         run_id = f"ar_sched_{local_date.replace('-', '')}_{schedule.hour:02d}{schedule.minute:02d}"
-        scheduled_flow, flow_ref = self._resolve_agent_flow(now)
         context_pack_ref = f"ctxpack_{run_id}_scheduled"
-        capability_token_ref = f"cap_{run_id}_scheduled_root"
-        domain_tasks = map_v0_flow_to_domain_tasks(
-            scheduled_flow,
+        scheduled_task_intent = _scheduled_task_intent(schedule)
+        context_pack = _scheduled_context_pack(
             run_id=run_id,
             context_pack_ref=context_pack_ref,
-            capability_token_ref=capability_token_ref,
+            schedule=schedule,
+            scheduled_task_intent=scheduled_task_intent,
         )
-        global_plan = GlobalPlan(
+        domain_cards = default_domain_agent_cards()
+        global_plan = MainRuntime(
+            domain_cards=domain_cards,
+            planner=LLMMainAgentPlanner(llm_provider=self._llm_provider_factory()),
+        ).create_global_plan(
             run_id=run_id,
             run_type="scheduled_stock_analysis",
-            user_intent=(
-                f"daily stock analysis for {schedule.universe} at "
-                f"{schedule.hour:02d}:{schedule.minute:02d} {schedule.timezone}"
-            ),
-            domain_tasks=domain_tasks,
-            final_answer_requirements=("dashboard_projection_audited",),
+            user_goal=_scheduled_task_prompt(schedule),
+            context_pack=context_pack,
+            capability_token=_scheduled_root_capability_token(run_id),
         )
-        flow_summary = _scheduled_flow_summary(scheduled_flow)
+        plan_validation = MainPlanValidator(domain_cards).validate(global_plan)
+        if not plan_validation.valid:
+            raise RuntimeError(
+                "scheduled MainAgent plan validation failed: "
+                + ",".join(plan_validation.error_codes)
+            )
         plan_artifact = make_context_artifact(
             artifact_id=f"ctx_{run_id}_scheduled_global_plan",
             run_id=run_id,
@@ -80,19 +99,18 @@ class ScheduledAgentRuntimeRunner:
             payload_json={
                 "runtime_version": SCHEDULED_AGENT_RUNTIME_VERSION,
                 "global_plan": global_plan.model_dump(mode="json"),
-                "agent_flow": flow_summary,
+                "scheduled_task_intent": scheduled_task_intent,
+                "main_agent_plan": _global_plan_summary(global_plan),
+                "plan_validation": plan_validation.model_dump(mode="json"),
                 "context_pack_ref": context_pack_ref,
-                "capability_token_ref": capability_token_ref,
             },
-            source_refs=(scheduled_flow.flow_id,),
+            source_refs=(global_plan.planning_prompt_ref,),
         )
         self._context_store.add_artifact(plan_artifact)
 
         quant_profile, quant_profile_ref = self._resolve_quant_profile(now)
         quant_profile_metadata = quant_profile.to_metadata()
         config_references = []
-        if flow_ref is not None:
-            config_references.append(flow_ref)
         if quant_profile_ref is not None:
             config_references.append(quant_profile_ref)
         config_snapshot_id = None
@@ -118,7 +136,9 @@ class ScheduledAgentRuntimeRunner:
                     "created_by": global_plan.created_by,
                     "domain_task_count": len(global_plan.domain_tasks),
                 },
-                "agent_flow": flow_summary,
+                "scheduled_task_intent": scheduled_task_intent,
+                "main_agent_plan": _global_plan_summary(global_plan),
+                "plan_validation": plan_validation.model_dump(mode="json"),
                 "config_resolution_snapshot_id": config_snapshot_id,
                 "quant_agent_strategy_profile": quant_profile_metadata,
                 "quant_strategy": quant_profile.to_quant_strategy_metadata(),
@@ -137,6 +157,7 @@ class ScheduledAgentRuntimeRunner:
                     "agent_run_id": run_id,
                     "global_plan_ref": plan_artifact.artifact_id,
                     "config_resolution_snapshot_id": config_snapshot_id,
+                    "scheduled_task_intent": scheduled_task_intent,
                     "domain_tasks": [
                         {
                             "domain_task_id": task.domain_task_id,
@@ -181,38 +202,137 @@ class ScheduledAgentRuntimeRunner:
         except LookupError:
             return current_quant_agent_strategy_profile(), None
 
-    def _resolve_agent_flow(self, decision_at: datetime) -> tuple[Any, ConfigReference | None]:
-        """Resolve the scheduled Agent flow from DB with a local fallback."""
-        if self._config_resolver is None:
-            return load_scheduled_stock_analysis_flow(), None
-        try:
-            version = self._config_resolver.resolve_agent_flow(
-                flow_id="scheduled_stock_analysis",
-                decision_at=decision_at,
-            )
-            return version.to_flow(), ConfigReference.from_version("agent_flow", version)
-        except LookupError:
-            return load_scheduled_stock_analysis_flow(), None
 
-
-def _scheduled_flow_summary(scheduled_flow: Any) -> dict[str, Any]:
-    """Return a compact DAG summary for orchestration metadata and UI."""
+def _scheduled_task_intent(schedule: StockAnalysisSchedule) -> dict[str, str]:
+    """Return the durable scheduled intent metadata supplied to MainAgent."""
     return {
-        "flow_id": scheduled_flow.flow_id,
-        "version": scheduled_flow.version,
-        "runtime_owner": "agents.runtime.scheduled",
-        "dependency_waves": [
-            [step.step_id for step in wave] for wave in scheduled_flow.dependency_waves()
+        "planner": "MainAgent",
+        "intent_type": "scheduled_stock_analysis",
+        "universe": schedule.universe,
+        "scope_version_id": schedule.scope_version_id,
+        "language": "zh",
+    }
+
+
+def _scheduled_task_prompt(schedule: StockAnalysisSchedule) -> str:
+    """Return the natural-language scheduled goal given to MainAgent."""
+    return (
+        f"今天对 {schedule.universe} 做本地研究更新。先检查数据和 PIT 可用性；"
+        "然后让量化专家和财报增长专家并行研究。量化线只使用结构化 PIT 数据、"
+        "Quant Feature Mart 和 Analysis Mart，不使用 WebSearch。财报线关注业绩大增、"
+        "财报/招股说明书/调研中的产品供不应求、行业高景气度上行、市场超预期拓展、"
+        "新品上市持续超预期、产品价格中枢持续上涨、供给偏紧、需求旺盛；"
+        "已有财报结论时，舆情分析只验证近期信息是否继续支持原结论。"
+        "最后融合量化、财报、舆情和风险证据，发布 Dashboard 研究候选。"
+    )
+
+
+def _scheduled_context_pack(
+    *,
+    run_id: str,
+    context_pack_ref: str,
+    schedule: StockAnalysisSchedule,
+    scheduled_task_intent: dict[str, str],
+) -> ContextPack:
+    """Build the bounded ContextPack for scheduled MainAgent planning."""
+    return ContextPack(
+        context_pack_id=context_pack_ref,
+        run_id=run_id,
+        requester_agent="Scheduler",
+        target_agent="MainAgent",
+        purpose="scheduled_stock_analysis_planning",
+        token_budget=6000,
+        facts=(
+            ContextFact(
+                fact_id=f"fact_{run_id}_intent",
+                statement=_scheduled_task_prompt(schedule),
+                confidence=1.0,
+                fact_type="user_constraint",
+                source_refs=(f"schedule:{schedule.schedule_id}",),
+            ),
+            ContextFact(
+                fact_id=f"fact_{run_id}_scope",
+                statement=(
+                    f"Schedule scope={scheduled_task_intent['scope_version_id']}, "
+                    f"universe={scheduled_task_intent['universe']}."
+                ),
+                confidence=1.0,
+                fact_type="platform_status",
+                source_refs=(f"schedule:{schedule.schedule_id}",),
+            ),
+        ),
+        compression_policy_version="scheduled-main-planning-v1",
+    )
+
+
+def _scheduled_root_capability_token(run_id: str) -> CapabilityToken:
+    """Return the root token MainAgent can delegate to scheduled ExpertAgents."""
+    return CapabilityToken(
+        token_id=f"cap_{run_id}_scheduled_root",
+        run_id=run_id,
+        issued_by="system",
+        issued_to="MainAgent",
+        domain="global",
+        data_access=(
+            DataAccessPolicy.READ_CHAT_SUMMARY,
+            DataAccessPolicy.READ_DASHBOARD,
+            DataAccessPolicy.READ_ANALYSIS_MART,
+            DataAccessPolicy.READ_EVIDENCE,
+            DataAccessPolicy.READ_VECTOR_INDEX,
+            DataAccessPolicy.READ_PROVIDER_STATUS,
+        ),
+        production_write=(ProductionWritePolicy.WRITE_CONTEXT_ONLY,),
+        tool_policy=(
+            ToolPolicy.READ_ONLY_TOOLS,
+            ToolPolicy.RETRIEVAL_TOOLS,
+            ToolPolicy.QUANT_TOOLS,
+            ToolPolicy.DATA_SYNC_TOOLS,
+        ),
+        allowed_artifact_types=(
+            "data_context_capsule",
+            "data_readiness",
+            "quant_context_capsule",
+            "quant_result",
+            "evidence_context_capsule",
+            "evidence_package",
+            "stock_research_context_capsule",
+            "fundamental_thesis_snapshot",
+            "sentiment_delta_report",
+            "fusion_research_result",
+            "dashboard_projection_event",
+        ),
+        allowed_tool_names=(
+            "dashboard.read_candidates",
+            "analysis_mart.read_snapshot",
+            "quant.run_screen",
+            "evidence.read_package",
+            "provider.read_status",
+        ),
+        expires_at=datetime.now(UTC) + timedelta(hours=2),
+        max_tool_calls=16,
+        max_result_bytes=96_000,
+        can_delegate=True,
+        delegation_depth_remaining=2,
+    )
+
+
+def _global_plan_summary(global_plan: GlobalPlan) -> dict[str, Any]:
+    """Return a compact, user-safe summary of the dynamic MainAgent plan."""
+    return {
+        "planning_mode": global_plan.planning_mode,
+        "planning_prompt_ref": global_plan.planning_prompt_ref,
+        "planning_prompt_hash": global_plan.planning_prompt_hash,
+        "domain_agents": [task.to_domain_agent for task in global_plan.domain_tasks],
+        "domain_tasks": [
+            {
+                "domain_task_id": task.domain_task_id,
+                "to_domain_agent": task.to_domain_agent,
+                "domain": task.domain,
+                "required_output_types": list(task.required_output_types),
+                "constraints": task.constraints,
+            }
+            for task in global_plan.domain_tasks
         ],
-        "branches": {
-            "quant": ["quant_analysis"],
-            "fundamental": [
-                "performance_growth_scout",
-                "rag_coverage_gate",
-                "fundamental_analysis",
-                "sentiment_monitor",
-            ],
-            "fusion": ["fusion_research"],
-        },
-        "quant_branch_uses_websearch": False,
+        "dependency_edges": list(global_plan.domain_dependency_edges),
+        "final_answer_requirements": list(global_plan.final_answer_requirements),
     }

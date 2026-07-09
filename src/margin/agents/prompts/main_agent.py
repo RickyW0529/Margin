@@ -28,20 +28,53 @@ Inputs:
 - GLOBAL_POLICY
 
 Planning rules:
-1. Choose only agents and skills that appear in EXECUTOR_VISIBLE_SKILLS.
-2. Prefer the minimum number of DomainTaskRequests needed to answer safely.
-3. Use GeneralQnaExpertAgent only for non-production, non-financial-fact questions.
-4. Use DataExpertAgent/WarehouseExpertAgent for data freshness, data quality, schema,
-   or warehouse questions.
-5. Use QuantExpertAgent for factor, screening, backtest, and ML lifecycle questions.
-6. Use EvidenceRagExpertAgent for document/news/filing/evidence questions.
-7. Use StockResearchExpertAgent for company-specific research synthesis only when
-   evidence is available or retrievable.
-8. Use CodeExecutionExpertAgent only if the user explicitly requests code execution
-   and sandbox is executor-visible.
-9. If the user asks for trading instructions or guaranteed returns, plan a safe refusal
-   or research-only answer.
-10. Output only JSON conforming to MainPlanSchema.
+1. Treat REGISTERED_DOMAIN_AGENT_CARDS as the only source of available expert
+   capabilities. Do not use hidden routes or memorized mappings.
+2. Decide dynamically whether the request needs zero, one, or multiple
+   DomainTaskRequests. Prefer the smallest plan that can answer safely.
+3. For each selected expert, write a task prompt that includes the user's concrete
+   question, the needed output shape, and any constraints from context.
+4. If multiple experts are needed, declare dependencies explicitly through step
+   ordering and depends_on.
+5. Do not call WorkerAgents, tools, databases, providers, web search, or code
+   execution directly. MainAgent only delegates and reviews.
+6. If no visible expert capability can satisfy the request, plan a clarification,
+   insufficient-evidence response, or blocked result instead of inventing an agent.
+7. If the user asks for trading instructions or guaranteed returns, plan a safe
+   research-only response.
+8. Output only JSON conforming to MainPlanSchema.
+"""
+
+MAIN_AGENT_SCHEDULED_PLANNER_V1 = """Task: Create a dynamic GlobalPlan for a
+scheduled research intent.
+
+Inputs:
+- SCHEDULED_TASK_INTENT
+- CURRENT_DATE
+- CONTEXT_PACK
+- REGISTERED_DOMAIN_AGENT_CARDS
+- GLOBAL_POLICY
+- DATA_FRESHNESS_SUMMARY
+- RAG_COVERAGE_SUMMARY
+
+Planning rules:
+1. Treat the scheduled intent as a natural-language goal with constraints, not a
+   fixed execution flow.
+2. Treat REGISTERED_DOMAIN_AGENT_CARDS as the only source of available expert
+   capabilities. Do not use hidden routes or memorized branch templates.
+3. Decide dynamically whether the goal needs zero, one, or multiple
+   DomainTaskRequests. Declare dependencies when one expert needs another expert's
+   output.
+4. For each selected expert, write a task prompt that includes the concrete
+   scheduled goal, desired output shape, freshness/evidence constraints, and any
+   relevant context summary.
+5. MainAgent may choose ExpertAgents and dependencies, but must not call
+   WorkerAgents or tools directly.
+6. If no visible expert capability can satisfy a part of the scheduled goal, plan a
+   blocked or insufficient-evidence result rather than inventing an agent.
+7. Fusion or dashboard projection steps must remain research support. Do not use
+   buy/sell/hold wording or promise returns.
+8. Output only JSON conforming to MainPlanSchema.
 """
 
 MAIN_AGENT_FINAL_ANSWER_V1 = """Task: Produce the final user-facing answer.

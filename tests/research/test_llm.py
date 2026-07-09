@@ -113,6 +113,46 @@ def test_llm_provider_direct_default_model_is_deepseek_pro():
     assert provider.descriptor.version == "deepseek-v4-pro"
 
 
+def test_llm_provider_parses_json_after_minimax_thinking_block():
+    """Verify structured parsing tolerates MiniMax-M3 reasoning preambles.
+
+    Returns:
+        Any: .
+    """
+    client = _FakeClient(
+        _FakeResponse(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": '<think>reasoning</think>\n\n{"ok": true}',
+                        },
+                    }
+                ]
+            }
+        )
+    )
+    provider = LLMProvider(
+        api_key="test-key",
+        base_url="https://api.minimaxi.com/v1",
+        model="MiniMax-M3",
+        client=client,
+    )
+
+    result = provider.complete(
+        'Return JSON only: {"ok": true}',
+        response_schema={
+            "type": "object",
+            "properties": {"ok": {"type": "boolean"}},
+            "required": ["ok"],
+        },
+    )
+
+    assert result.success is True
+    assert result.output == {"ok": True}
+    assert client.calls[0]["args"][0] == "https://api.minimaxi.com/v1/chat/completions"
+
+
 def test_model_router_selects_cheap_model_for_extraction():
     """Verify the model router selects a task-specific model for extraction.
 

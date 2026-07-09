@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import secrets
 import socket
 import subprocess
 import sys
@@ -80,7 +81,21 @@ STARTUP_SERVICES: tuple[StartupService, ...] = (
 )
 
 STATE_FILE = Path(".margin/docker/ports.env")
+RUNTIME_FILE = Path(".margin/docker/runtime.env")
 DEFAULT_STARTUP_TIMEOUT_SECONDS = 300
+DEFAULT_LOCAL_SECRET_MASTER_KEY = "dev-only-change-me-32-byte-key!!"
+
+RUNTIME_ENV_DEFAULTS: Mapping[str, str] = {
+    "MARGIN_ADMIN_API_TOKEN": "",
+    "MARGIN_CAPACITY_LIMIT_VERSION": "limits-v0.2.0",
+    "MARGIN_ENVIRONMENT": "development",
+    "MARGIN_LOG_FORMAT": "json",
+    "MARGIN_LOG_LEVEL": "INFO",
+    "MARGIN_METRICS_ENABLED": "true",
+    "MARGIN_MONITORING_INTERVAL_SECONDS": "10",
+    "MARGIN_SECRET_KEY_VERSION": "local-v1",
+    "MARGIN_SECRET_MASTER_KEY": DEFAULT_LOCAL_SECRET_MASTER_KEY,
+}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -121,19 +136,31 @@ def main(argv: list[str] | None = None) -> int:
         if down_exit:
             return down_exit
 
+    dotenv_values = read_env_file(root / ".env")
+    runtime_values = ensure_runtime_env(
+        root=root,
+        dotenv_values=dotenv_values,
+    )
     ports = choose_ports(
         root=root,
-        dotenv_values=read_env_file(root / ".env"),
+        dotenv_values=dotenv_values,
         state_values=read_env_file(root / STATE_FILE),
         base_env=os.environ,
     )
     write_env_file(root / STATE_FILE, ports)
+    compose_env = build_compose_env(
+        base_env=os.environ,
+        runtime_values=runtime_values,
+        dotenv_values=dotenv_values,
+        ports=ports,
+    )
+    print(f"Runtime config: {RUNTIME_FILE}")
     print_port_summary(ports)
 
     print("Starting Docker services. First builds can take several minutes.")
     compose_exit = run_compose_up(
         root=root,
-        env={**os.environ, **ports},
+        env=compose_env,
         build=not args.no_build,
     )
     if compose_exit:
@@ -141,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
 
     return wait_for_startup(
         root=root,
-        env={**os.environ, **ports},
+        env=compose_env,
         ports=ports,
         timeout_seconds=args.startup_timeout,
     )
@@ -234,6 +261,93 @@ def choose_ports(
         reserved.add(port)
 
     return selected
+
+
+def ensure_runtime_env(
+    *,
+    root: Path,
+    dotenv_values: Mapping[str, str],
+    token_factory: Callable[[], str] | None = None,
+) -> dict[str, str]:
+    """Create or update the generated Docker runtime env file.
+
+    Args:
+        root: Repository root.
+        dotenv_values: Optional user-provided ``.env`` values used for migration.
+        token_factory: Callable that creates a stable local Grafana password.
+
+    Returns:
+        dict[str, str]: Runtime values to pass to Docker Compose.
+    """
+    token_factory = token_factory or (lambda: secrets.token_urlsafe(24))
+    runtime_file = root / RUNTIME_FILE
+    values = read_env_file(runtime_file)
+    defaults = runtime_env_defaults(
+        dotenv_values=dotenv_values,
+        token_factory=token_factory,
+    )
+
+    changed = False
+    for key, value in defaults.items():
+        if key not in values:
+            values[key] = value
+            changed = True
+
+    if changed or not runtime_file.exists():
+        write_env_file(runtime_file, values)
+    return values
+
+
+def runtime_env_defaults(
+    *,
+    dotenv_values: Mapping[str, str],
+    token_factory: Callable[[], str],
+) -> dict[str, str]:
+    """Build local Docker runtime defaults without copying provider credentials.
+
+    Args:
+        dotenv_values: Optional user-provided ``.env`` values used for migration.
+        token_factory: Callable that creates a stable local Grafana password.
+
+    Returns:
+        dict[str, str]: Non-provider runtime configuration defaults.
+    """
+    values = {
+        key: dotenv_values.get(key, default)
+        for key, default in RUNTIME_ENV_DEFAULTS.items()
+    }
+    values["GRAFANA_ADMIN_PASSWORD"] = (
+        dotenv_values.get("GRAFANA_ADMIN_PASSWORD") or token_factory()
+    )
+    return values
+
+
+def build_compose_env(
+    *,
+    base_env: Mapping[str, str],
+    runtime_values: Mapping[str, str],
+    dotenv_values: Mapping[str, str],
+    ports: Mapping[str, str],
+) -> dict[str, str]:
+    """Merge process, optional .env, generated runtime, and selected port values.
+
+    Args:
+        base_env: Current process environment.
+        runtime_values: Generated local Docker runtime defaults.
+        dotenv_values: Optional advanced user overrides from ``.env``.
+        ports: Selected concrete localhost ports.
+
+    Returns:
+        dict[str, str]: Environment passed to Docker Compose.
+    """
+    env = {
+        **runtime_values,
+        **dotenv_values,
+        **base_env,
+        **ports,
+    }
+    env.setdefault("MARGIN_WEB_ORIGIN", f"http://localhost:{ports['MARGIN_WEB_PORT']}")
+    return env
 
 
 def preferred_port(

@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from margin.core.secret_store import SecretMetadata, SecretRedactor, SecretStore
 from margin.news.models import utc_now
 from margin.strategy.models import ProviderConfigVersion
+from margin.strategy.provider_router import detect_provider_from_url, provider_category_for_config
 
 
 class ProviderSSRFError(ValueError):
@@ -89,11 +90,12 @@ class ProviderConfigHealthService:
         config = self._repository.get_provider_config(provider_config_version_id)
         if config is None:
             raise KeyError(f"provider config '{provider_config_version_id}' not found")
+        adapter_name = self._adapter_name_for_config(config)
 
         if config.base_url:
             self.validate_base_url(
                 config.base_url,
-                provider_name=config.provider_name,
+                provider_name=adapter_name,
                 allow_custom_base_url=bool(
                     config.non_sensitive_config.get(
                         "allow_custom_base_url",
@@ -129,7 +131,7 @@ class ProviderConfigHealthService:
             secret_metadata = self._secret_store.metadata(config.secret_version_id)
             secret_value = self._secret_store.resolve(secret_metadata.ref).get_secret_value()
         redactor = SecretRedactor(values=(secret_value,))
-        adapter = self._health_adapters.get(config.provider_name.lower())
+        adapter = self._health_adapters.get(adapter_name)
         if adapter is None:
             return self._result(
                 config,
@@ -138,7 +140,7 @@ class ProviderConfigHealthService:
                 status="failed",
                 error_code="health_adapter_missing",
                 redacted_error=(
-                    f"health adapter is not configured for provider {config.provider_name}"
+                    f"health adapter is not configured for provider {adapter_name}"
                 ),
                 secret_metadata=secret_metadata,
             )
@@ -163,6 +165,30 @@ class ProviderConfigHealthService:
             status="ok",
             secret_metadata=secret_metadata,
         )
+
+    def _adapter_name_for_config(self, config: ProviderConfigVersion) -> str:
+        """Return the concrete health adapter key for a provider config."""
+        provider_name = config.provider_name.strip().lower()
+        if provider_name in self._health_adapters:
+            return provider_name
+        detected_provider = str(
+            config.non_sensitive_config.get("detected_provider") or ""
+        ).strip().lower()
+        if detected_provider in self._health_adapters:
+            return detected_provider
+        category = provider_category_for_config(
+            config.provider_type,
+            config.provider_name,
+            config.non_sensitive_config,
+        )
+        detected = detect_provider_from_url(
+            category,
+            config.base_url,
+            fallback_provider_name=config.provider_name,
+        )
+        if detected.provider_id in self._health_adapters:
+            return detected.provider_id
+        return provider_name
 
     def validate_base_url(
         self,

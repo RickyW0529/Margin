@@ -32,6 +32,9 @@ class WorkerSkill(BaseModel):
     input_artifact_types: tuple[str, ...] = ()
     output_artifact_types: tuple[str, ...] = ()
     input_schema: dict[str, Any] = Field(default_factory=dict)
+    input_contract: dict[str, Any] = Field(default_factory=dict)
+    tool_allowlist: tuple[str, ...] = ()
+    tool_contracts: tuple[dict[str, Any], ...] = ()
     output_schema: dict[str, Any] = Field(default_factory=dict)
     retry_policy: RetryPolicy = Field(default_factory=RetryPolicy)
     deterministic: bool = False

@@ -86,7 +86,7 @@ class ProviderRuntimeResolver:
         matches = [
             config
             for config in self._repository.list_active_provider_configs(self._owner_id)
-            if config.provider_name.strip().lower() == normalized_name
+            if _runtime_provider_name_for_config(config) == normalized_name
         ]
         if not matches:
             raise LookupError(f"active provider config not found: {normalized_name}")
@@ -304,7 +304,7 @@ class ProviderRuntimeFactory:
             RuntimeBoundProvider: .
         """
         runtime = self._resolver.resolve_capability("data_source", capability)
-        provider_name = runtime.config.provider_name.strip().lower()
+        provider_name = _runtime_provider_name_for_config(runtime.config)
         if provider_name == "tushare":
             from margin.data.providers.tushare_provider import TushareProvider
 
@@ -369,8 +369,18 @@ def provider_capabilities_for_config(config: ProviderConfigVersion) -> frozenset
     configured = config.non_sensitive_config.get("capabilities")
     if configured:
         return frozenset(_normalize_capabilities(configured))
-    provider_name = config.provider_name.strip().lower()
+    provider_name = _runtime_provider_name_for_config(config)
     return _DEFAULT_PROVIDER_CAPABILITIES.get(provider_name, frozenset())
+
+
+def _runtime_provider_name_for_config(config: ProviderConfigVersion) -> str:
+    """Return the executable provider name after URL/category detection."""
+    detected_provider = str(
+        config.non_sensitive_config.get("detected_provider") or ""
+    ).strip().lower()
+    if detected_provider in _DEFAULT_PROVIDER_CAPABILITIES:
+        return detected_provider
+    return config.provider_name.strip().lower()
 
 
 def _normalize_capabilities(value: object) -> Iterable[str]:
@@ -408,7 +418,9 @@ def _secret_ref_matches_config(
         bool: .
     """
     normalized_secret_provider = secret_provider_name.strip().lower()
+    runtime_provider = _runtime_provider_name_for_config(config)
     return normalized_secret_provider in {
         config.provider_name.strip().lower(),
         config.version_id.strip().lower(),
+        runtime_provider,
     }

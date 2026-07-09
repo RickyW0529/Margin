@@ -5,6 +5,8 @@
  * All helpers use a configurable base URL and default to `http://localhost:8000`.
  */
 
+import { createClientId } from "@/lib/random-id";
+
 /** Cursor pagination metadata returned by v0.2 dashboard list endpoints. */
 export type DashboardPageInfo = {
   next_cursor: string | null;
@@ -389,10 +391,16 @@ export type ResearchFeedbackCreate = {
   comment?: string;
 };
 
-const API_BASE_URL =
-  process.env.MARGIN_API_BASE_URL ??
-  process.env.NEXT_PUBLIC_MARGIN_API_BASE_URL ??
-  "http://localhost:8000";
+function apiBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    return "";
+  }
+  return (
+    process.env.MARGIN_API_BASE_URL ??
+    process.env.NEXT_PUBLIC_MARGIN_API_BASE_URL ??
+    "http://localhost:8000"
+  );
+}
 
 /** Fetch init variant that expects a plain JSON header record. */
 type JsonRequestInit = Omit<RequestInit, "headers"> & {
@@ -420,7 +428,7 @@ async function request<T>(path: string, init: JsonRequestInit = {}): Promise<T> 
     : method === "GET"
       ? { next: { revalidate: 30 } }
       : { cache: "no-store" as const };
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(`${apiBaseUrl()}${path}`, {
     ...cacheOptions,
     ...init,
     headers: {
@@ -661,7 +669,7 @@ export function saveProviderSecret(
       cache: "no-store",
       headers: {
         "content-type": "application/json",
-        "Idempotency-Key": globalThis.crypto.randomUUID(),
+        "Idempotency-Key": createClientId("idem"),
       },
       body: JSON.stringify({
         secret_name: secretName,
@@ -681,7 +689,7 @@ export function testProviderConfig(
       method: "POST",
       cache: "no-store",
       headers: {
-        "Idempotency-Key": globalThis.crypto.randomUUID(),
+        "Idempotency-Key": createClientId("idem"),
       },
     },
   );
@@ -697,7 +705,7 @@ function authenticatedMutation<T>(
     cache: "no-store",
     headers: {
       ...(body === undefined ? {} : { "content-type": "application/json" }),
-      "Idempotency-Key": globalThis.crypto.randomUUID(),
+      "Idempotency-Key": createClientId("idem"),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
@@ -714,7 +722,7 @@ export function startValuationDiscoveryRefresh(
       cache: "no-store",
       headers: {
         "content-type": "application/json",
-        "Idempotency-Key": globalThis.crypto.randomUUID(),
+        "Idempotency-Key": createClientId("idem"),
       },
       body: JSON.stringify(refresh),
     },

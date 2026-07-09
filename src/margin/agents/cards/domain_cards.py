@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -24,6 +24,7 @@ class DomainAgentCard(BaseModel):
     domain: str
     description: str
     worker_agent_names: tuple[str, ...]
+    capability_manifest: tuple[dict[str, Any], ...] = ()
     required_output_types: tuple[str, ...] = ()
     data_access_policy: tuple[DataAccessPolicy, ...] = ()
     production_write_policy: tuple[ProductionWritePolicy, ...] = ()

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import {
   activateProviderConfig,
   createProviderConfig,
@@ -26,12 +27,16 @@ import {
   chooseProviderForCategory,
   defaultSecretName,
   detectProviderLabel,
-  displayDetection,
+  providerPresetForId,
+  providerPresetForProvider,
+  providerPresetOptions,
   providerNameForCategory,
   PROVIDER_CATEGORIES,
   type ProviderCategoryDefinition,
   type ProviderCategoryId,
+  type ProviderDetection,
 } from "@/lib/provider-settings";
+import { createClientId } from "@/lib/random-id";
 
 type ProviderSettingsPanelProps = {
   providers: ProviderConfigSummary[];
@@ -46,10 +51,13 @@ type ProviderSettingsPanelProps = {
 };
 
 type DraftState = {
+  providerId: string;
   url: string;
   model: string;
   secret: string;
 };
+
+const providerInputClassName = "min-w-0 overflow-hidden text-ellipsis";
 
 function healthTone(status: string): BadgeProps["tone"] {
   if (status === "ok" || status === "active") {
@@ -123,17 +131,19 @@ export function ProviderSettingsPanel({
     const draft = drafts[category.id];
     const urlChanged = draft.url.trim() !== (existing?.base_url ?? "");
     const modelChanged = draft.model.trim() !== (existing?.model_name ?? "");
+    const detection = detectionForDraft(category, draft);
+    const providerName = providerNameForCategory(category, detection);
+    const providerNameChanged = existing?.provider_name !== providerName;
     if (
       existing &&
       existing.lifecycle !== "active" &&
       !urlChanged &&
-      !modelChanged
+      !modelChanged &&
+      !providerNameChanged
     ) {
       return existing;
     }
 
-    const detection = detectProviderLabel(category.id, draft.url);
-    const providerName = providerNameForCategory(category, detection);
     const created = await createProvider({
       base_url: draft.url.trim() || null,
       enabled: true,
@@ -149,7 +159,7 @@ export function ProviderSettingsPanel({
       owner_id: "local-admin",
       provider_name: providerName,
       provider_type: category.providerType,
-      version_id: `provider-${category.id}-${globalThis.crypto.randomUUID()}`,
+      version_id: `provider-${category.id}-${createClientId("version")}`,
     });
     const summary = providerSummaryFromRecord(created, category, detection);
     setConfigs((current) => [
@@ -165,7 +175,7 @@ export function ProviderSettingsPanel({
 
   async function handleSave(category: ProviderCategoryDefinition) {
     const draft = drafts[category.id];
-    const detection = detectProviderLabel(category.id, draft.url);
+    const detection = detectionForDraft(category, draft);
     if (!draft.url.trim()) {
       setErrors((current) => ({
         ...current,
@@ -204,7 +214,7 @@ export function ProviderSettingsPanel({
     } catch {
       setErrors((current) => ({
         ...current,
-        [category.id]: "保存失败，请检查 URL 和后端日志。",
+        [category.id]: "保存失败，请检查供应商、URL 和后端日志。",
       }));
     } finally {
       setBusy((current) => ({ ...current, [category.id]: false }));
@@ -293,9 +303,9 @@ export function ProviderSettingsPanel({
   }
 
   return (
-    <Card aria-labelledby="provider-settings-title">
-      <CardHeader>
-        <div>
+    <Card aria-labelledby="provider-settings-title" className="min-w-0 overflow-hidden">
+      <CardHeader className="min-w-0">
+        <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-wider text-accent">
             密钥配置
           </p>
@@ -303,12 +313,12 @@ export function ProviderSettingsPanel({
             数据源与模型密钥
           </CardTitle>
         </div>
-        <span className="text-xs text-muted-foreground">
+        <span className="shrink-0 text-xs text-muted-foreground">
           {configs.length} 项配置
         </span>
       </CardHeader>
-      <CardContent className="grid gap-4">
-        <div className="grid gap-4 xl:grid-cols-2">
+      <CardContent className="grid min-w-0 gap-4">
+        <div className="grid min-w-0 gap-4 xl:grid-cols-2">
           {PROVIDER_CATEGORIES.map((category) => {
             const provider = chooseProviderFromSelection(
               configs,
@@ -316,11 +326,7 @@ export function ProviderSettingsPanel({
               selectedVersionIds[category.id],
             );
             const draft = drafts[category.id];
-            const detection = displayDetection(
-              category.id,
-              draft.url === (provider?.base_url ?? "") ? provider : null,
-              draft.url,
-            );
+            const detection = detectionForDraft(category, draft);
             return (
               <ProviderCategorySection
                 key={category.id}
@@ -353,7 +359,7 @@ export function ProviderSettingsPanel({
 
 type ProviderCategorySectionProps = {
   category: ProviderCategoryDefinition;
-  detection: { label: string; isCustom: boolean };
+  detection: ProviderDetection;
   draft: DraftState;
   error: string | null;
   health: ProviderHealthResult | null;
@@ -384,9 +390,29 @@ function ProviderCategorySection({
 }: ProviderCategorySectionProps) {
   const statusLabel =
     health?.status ?? (provider?.lifecycle === "active" ? "active" : "not tested");
+  const providerOptions = providerPresetOptions(category.id);
+  const selectedPreset = providerPresetForId(category.id, draft.providerId);
+  const isCustomProvider = selectedPreset?.isCustom ?? detection.isCustom;
+
+  function handleProviderChange(providerId: string) {
+    const preset = providerPresetForId(category.id, providerId);
+    if (!preset || preset.isCustom) {
+      onDraftChange({ providerId: "custom" });
+      return;
+    }
+    onDraftChange({
+      model:
+        category.modelLabel && draft.providerId !== providerId
+          ? (preset.model ?? draft.model)
+          : draft.model,
+      providerId: preset.providerId,
+      url: preset.baseUrl,
+    });
+  }
+
   return (
-    <section className="grid gap-4 rounded-md border border-border bg-card p-4">
-      <header className="flex items-start justify-between gap-3">
+    <section className="grid min-w-0 gap-4 overflow-hidden rounded-md border border-border bg-card p-4">
+      <header className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-semibold text-foreground">
             {category.title}
@@ -395,7 +421,7 @@ function ProviderCategorySection({
             {provider?.lifecycle ?? "未保存"} · {provider?.version_id ?? "new"}
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+        <div className="flex min-w-0 shrink-0 flex-wrap justify-end gap-2">
           <Badge tone={detection.isCustom ? "muted" : "positive"}>
             {detection.label}
           </Badge>
@@ -405,22 +431,40 @@ function ProviderCategorySection({
         </div>
       </header>
 
-      <div className="grid gap-3">
-        <div className="grid gap-1.5">
+      <div className="grid min-w-0 gap-3">
+        <div className="grid min-w-0 gap-1.5">
+          <Label>供应商</Label>
+          <Select
+            aria-label={`${category.title} provider`}
+            className={providerInputClassName}
+            disabled={isBusy}
+            value={draft.providerId}
+            onChange={(event) => handleProviderChange(event.target.value)}
+          >
+            {providerOptions.map((option) => (
+              <option key={option.providerId} value={option.providerId}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="grid min-w-0 gap-1.5">
           <Label>{category.urlLabel}</Label>
           <Input
             aria-label={`${category.title} URL`}
-            disabled={isBusy}
+            className={providerInputClassName}
+            disabled={isBusy || !isCustomProvider}
             placeholder="https://api.example.com/v1"
             value={draft.url}
             onChange={(event) => onDraftChange({ url: event.target.value })}
           />
         </div>
         {category.modelLabel ? (
-          <div className="grid gap-1.5">
+          <div className="grid min-w-0 gap-1.5">
             <Label>{category.modelLabel}</Label>
             <Input
               aria-label={`${category.title} model`}
+              className={providerInputClassName}
               disabled={isBusy}
               placeholder="model id"
               value={draft.model}
@@ -428,11 +472,12 @@ function ProviderCategorySection({
             />
           </div>
         ) : null}
-        <div className="grid gap-1.5">
+        <div className="grid min-w-0 gap-1.5">
           <Label>API Token</Label>
           <Input
             aria-label={`${provider?.provider_name ?? category.defaultProviderName} secret`}
             autoComplete="new-password"
+            className={providerInputClassName}
             disabled={isBusy}
             placeholder={category.tokenPlaceholder}
             type="password"
@@ -442,7 +487,7 @@ function ProviderCategorySection({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <Button size="sm" loading={isBusy} onClick={onSave} type="button">
           保存配置
         </Button>
@@ -464,23 +509,23 @@ function ProviderCategorySection({
         >
           激活
         </Button>
-        <span className="font-mono text-xs text-muted-foreground">
+        <span className="min-w-0 max-w-full truncate font-mono text-xs text-muted-foreground">
           {metadata?.configured ? `•••• ${metadata.last_four}` : "未配置"}
         </span>
       </div>
 
       {health ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="min-w-0 truncate text-xs text-muted-foreground">
           {health.status} · {health.latency_ms ?? "--"} ms
         </p>
       ) : null}
       {error ? (
-        <p className="text-xs text-negative" role="alert">
+        <p className="min-w-0 break-words text-xs text-negative" role="alert">
           {error}
         </p>
       ) : null}
       {success ? (
-        <p className="text-xs text-positive" role="status">
+        <p className="min-w-0 break-words text-xs text-positive" role="status">
           {success}
         </p>
       ) : null}
@@ -494,12 +539,20 @@ function buildInitialDrafts(
   return Object.fromEntries(
     PROVIDER_CATEGORIES.map((category) => {
       const provider = chooseProviderForCategory(providers, category.id);
+      const fallbackPreset = providerPresetOptions(category.id).find(
+        (preset) => !preset.isCustom,
+      );
+      const preset = provider
+        ? providerPresetForProvider(category.id, provider)
+        : fallbackPreset;
+      const usePresetUrl = preset && !preset.isCustom;
       return [
         category.id,
         {
-          model: provider?.model_name ?? "",
+          model: provider?.model_name ?? preset?.model ?? "",
+          providerId: preset?.providerId ?? "custom",
           secret: "",
-          url: provider?.base_url ?? "",
+          url: provider?.base_url ?? (usePresetUrl ? preset.baseUrl : ""),
         },
       ];
     }),
@@ -525,12 +578,12 @@ function chooseProviderFromSelection(
 function providerSummaryFromRecord(
   record: VersionedConfigRecord,
   category: ProviderCategoryDefinition,
-  detection: { providerId: string; label: string; isCustom: boolean },
+  detection: ProviderDetection,
 ): ProviderConfigSummary {
   const versionId =
     typeof record.version_id === "string"
       ? record.version_id
-      : `provider-${category.id}-${globalThis.crypto.randomUUID()}`;
+      : `provider-${category.id}-${createClientId("version")}`;
   const nonSensitiveConfig = record.non_sensitive_config as
     | Record<string, unknown>
     | undefined;
@@ -557,4 +610,23 @@ function providerSummaryFromRecord(
     secret_metadata: null,
     version_id: versionId,
   };
+}
+
+function detectionForDraft(
+  category: ProviderCategoryDefinition,
+  draft: DraftState,
+): ProviderDetection {
+  const preset = providerPresetForId(category.id, draft.providerId);
+  if (preset && !preset.isCustom) {
+    return {
+      providerId: preset.providerId,
+      label: preset.label,
+      isCustom: false,
+    };
+  }
+  const detected = detectProviderLabel(category.id, draft.url);
+  if (!detected.isCustom) {
+    return detected;
+  }
+  return { providerId: "custom", label: "Custom", isCustom: true };
 }

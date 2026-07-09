@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   activateDataPolicy,
+  createProviderConfig,
   createDataPolicy,
   createResearchItemFeedback,
   fetchProviderConfigs,
@@ -50,7 +51,7 @@ describe("api mutation helpers", () => {
     });
 
     expect(fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/v1/valuation-discovery/refreshes",
+      "/api/v1/valuation-discovery/refreshes",
       expect.objectContaining({
         method: "POST",
         cache: "no-store",
@@ -65,6 +66,61 @@ describe("api mutation helpers", () => {
     );
   });
 
+  it("uses same-origin API paths for browser provider mutations", async () => {
+    vi.stubGlobal("crypto", { randomUUID: () => "provider-create-idem" });
+
+    await createProviderConfig({
+      base_url: "https://api.minimaxi.com/v1",
+      provider_name: "llm",
+      provider_type: "llm",
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/provider-configs",
+      expect.objectContaining({
+        method: "POST",
+        cache: "no-store",
+        headers: expect.objectContaining({
+          "Idempotency-Key": "provider-create-idem",
+        }),
+      }),
+    );
+  });
+
+  it("ignores public API base URLs in browser builds", async () => {
+    process.env.NEXT_PUBLIC_MARGIN_API_BASE_URL = "http://127.0.0.1:8000";
+    vi.stubGlobal("crypto", { randomUUID: () => "provider-public-env-idem" });
+
+    await createProviderConfig({
+      base_url: "https://api.minimaxi.com/v1",
+      provider_name: "llm",
+      provider_type: "llm",
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/provider-configs",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "Idempotency-Key": "provider-public-env-idem",
+        }),
+      }),
+    );
+  });
+
+  it("falls back to a local idempotency key when randomUUID is unavailable", async () => {
+    vi.stubGlobal("crypto", {});
+
+    await createProviderConfig({
+      base_url: "https://api.minimaxi.com/v1",
+      provider_name: "llm",
+      provider_type: "llm",
+    });
+
+    const headers = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]
+      .headers as Record<string, string>;
+    expect(headers["Idempotency-Key"]).toMatch(/^idem-/);
+  });
+
   it("posts research item feedback", async () => {
     json.mockResolvedValueOnce({ feedback_id: "fb_1" });
     vi.stubGlobal("crypto", { randomUUID: () => "feedback-idem" });
@@ -75,7 +131,7 @@ describe("api mutation helpers", () => {
     });
 
     expect(fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/v1/research-items/item_1/feedback",
+      "/api/v1/research-items/item_1/feedback",
       expect.objectContaining({
         method: "POST",
         cache: "no-store",
@@ -108,7 +164,7 @@ describe("api mutation helpers", () => {
 
     expect(fetch).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8000/api/v1/data-policies",
+      "/api/v1/data-policies",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
@@ -118,7 +174,7 @@ describe("api mutation helpers", () => {
     );
     expect(fetch).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8000/api/v1/data-policies/data-policy-24/activate",
+      "/api/v1/data-policies/data-policy-24/activate",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
@@ -141,7 +197,7 @@ describe("api mutation helpers", () => {
     });
 
     expect(fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/v1/research?scope_version_id=scope-1&universe=HS300&limit=25&screening_status=pass&data_status=complete&review_required=true",
+      "/api/v1/research?scope_version_id=scope-1&universe=HS300&limit=25&screening_status=pass&data_status=complete&review_required=true",
       expect.objectContaining({
         next: { revalidate: 30 },
       }),
@@ -154,7 +210,7 @@ describe("api mutation helpers", () => {
     await fetchQuantStrategyDefaults();
 
     expect(fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/v1/quant-strategy-defaults",
+      "/api/v1/quant-strategy-defaults",
       expect.objectContaining({
         next: { revalidate: 30 },
       }),
@@ -169,7 +225,7 @@ describe("api mutation helpers", () => {
 
     expect(fetch).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8000/api/v1/provider-configs",
+      "/api/v1/provider-configs",
       expect.objectContaining({
         cache: "no-store",
       }),
@@ -177,7 +233,7 @@ describe("api mutation helpers", () => {
     expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]).not.toHaveProperty("next");
     expect(fetch).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8000/api/v1/provider-status",
+      "/api/v1/provider-status",
       expect.objectContaining({
         cache: "no-store",
       }),
@@ -215,7 +271,7 @@ describe("api mutation helpers", () => {
     const detail = await fetchResearchRunDetailV2("vdr-1");
 
     expect(fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/v1/valuation-discovery/runs/vdr-1",
+      "/api/v1/valuation-discovery/runs/vdr-1",
       expect.objectContaining({
         cache: "no-store",
       }),
@@ -250,7 +306,7 @@ describe("api mutation helpers", () => {
     });
 
     expect(fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/v1/valuation-discovery/runs?scope_version_id=scope-current&limit=1",
+      "/api/v1/valuation-discovery/runs?scope_version_id=scope-current&limit=1",
       expect.objectContaining({
         cache: "no-store",
       }),

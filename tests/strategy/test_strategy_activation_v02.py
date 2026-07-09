@@ -25,6 +25,7 @@ from margin.storage.database import (
     create_session_factory,
 )
 from margin.strategy.db_models import (
+    ProviderConfigVersionRow,
     ProviderSecretVersionRow,
     QuantFeatureSetVersionRow,
     QuantStrategyVersionRow,
@@ -423,6 +424,60 @@ def test_provider_activation_deprecates_prior_active_in_same_category() -> None:
         repository.get_provider_config("provider-tushare-active").lifecycle
         is ConfigLifecycle.DEPRECATED
     )
+
+
+def test_postgres_provider_activation_deprecates_old_provider_before_new_active(
+    database_url: str,
+) -> None:
+    """Verify provider activation respects active provider partial unique indexes.
+
+    Args:
+        database_url: str: .
+
+    Returns:
+        None: .
+    """
+    engine = create_database_engine(DatabaseSettings(url=database_url))
+    Base.metadata.create_all(engine)
+    session_factory = create_session_factory(engine)
+    with session_factory.begin() as session:
+        session.query(ProviderConfigVersionRow).delete()
+    repository = SQLAlchemyStrategyRepository(session_factory)
+    repository.save_provider_config(
+        ProviderConfigVersion(
+            version_id="provider-llm-old-active",
+            provider_name="llm",
+            provider_type="llm",
+            base_url="https://api.deepseek.com/",
+            model_name="deepseek-chat",
+            lifecycle=ConfigLifecycle.ACTIVE,
+        )
+    )
+    repository.save_provider_config(
+        ProviderConfigVersion(
+            version_id="provider-llm-new-review",
+            provider_name="llm",
+            provider_type="llm",
+            base_url="https://api.minimaxi.com/v1",
+            model_name="MiniMax-M3",
+            lifecycle=ConfigLifecycle.REVIEW,
+        )
+    )
+
+    activated = repository.activate_provider_config("provider-llm-new-review")
+
+    old_provider = repository.get_provider_config("provider-llm-old-active")
+    active_providers = repository.list_active_provider_configs("local-admin")
+    with session_factory.begin() as session:
+        session.query(ProviderConfigVersionRow).delete()
+    engine.dispose()
+
+    assert activated.lifecycle is ConfigLifecycle.ACTIVE
+    assert old_provider is not None
+    assert old_provider.lifecycle is ConfigLifecycle.DEPRECATED
+    assert [provider.version_id for provider in active_providers] == [
+        "provider-llm-new-review"
+    ]
 
 
 def test_cannot_activate_scope_with_deprecated_reference(

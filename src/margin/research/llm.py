@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -21,6 +22,8 @@ from margin.core.provider import (
 from margin.core.registry import ProviderNotFoundError, ProviderRegistry
 from margin.core.resilience import ProviderError
 from margin.news.models import utc_now
+
+_LEADING_THINK_BLOCK_RE = re.compile(r"^\s*<think>.*?</think>\s*", re.DOTALL | re.I)
 
 
 class TaskType(StrEnum):
@@ -61,6 +64,55 @@ def _compute_hash(data: Any) -> str:
         str: .
     """
     return hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def parse_structured_content(content: str) -> dict[str, Any]:
+    """Parse JSON content, tolerating model reasoning preambles.
+
+    Args:
+        content: str: Raw model response content.
+
+    Returns:
+        dict[str, Any]: Parsed JSON object.
+    """
+    stripped = strip_thinking_blocks(content)
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        parsed = json.JSONDecoder().raw_decode(_structured_json_candidate(stripped))[0]
+    if not isinstance(parsed, dict):
+        raise ValueError("structured LLM response must be a JSON object")
+    return parsed
+
+
+def _structured_json_candidate(content: str) -> str:
+    """Return the most likely JSON suffix from a model response.
+
+    Args:
+        content: str: Raw model response content.
+
+    Returns:
+        str: Candidate string starting with JSON object or array syntax.
+    """
+    content = strip_thinking_blocks(content)
+    object_index = content.find("{")
+    array_index = content.find("[")
+    indexes = [index for index in (object_index, array_index) if index >= 0]
+    if not indexes:
+        return content
+    return content[min(indexes) :]
+
+
+def strip_thinking_blocks(content: str) -> str:
+    """Remove leading model reasoning blocks from user-visible output.
+
+    Args:
+        content: str: Raw model response content.
+
+    Returns:
+        str: Content without a leading ``<think>...</think>`` block.
+    """
+    return _LEADING_THINK_BLOCK_RE.sub("", content).strip()
 
 
 class LLMProvider(BaseProvider):
@@ -171,7 +223,7 @@ class LLMProvider(BaseProvider):
             response.raise_for_status()
             data = response.json()
             content = data["choices"][0]["message"]["content"]
-            output = json.loads(content) if response_schema else {"content": content}
+            output = parse_structured_content(content) if response_schema else {"content": content}
             latency = (datetime.now().timestamp() - start) * 1000
             return LLMResult(
                 output=output,

@@ -5,6 +5,7 @@
 ## 它做什么
 
 - 提供 Docker / Compose / migration / bootstrap / smoke 脚本。
+- `scripts/docker_dev.py` 支持 zero-env 启动：自动生成 `.margin/docker/runtime.env`、选择空闲端口并显示启动进度。
 - 暴露健康检查、Prometheus 指标和结构化日志。
 - 保存审计记录、快照、任务状态和降级原因。
 - 在 Provider 不可用、配置缺失或任务失败时给出明确状态。
@@ -28,7 +29,7 @@
 ## 主要入口
 
 - `Dockerfile`、`web/Dockerfile`、`docker-compose.yml`。
-- `scripts/`：开发、迁移、回填、smoke。
+- `scripts/`：Docker 启动、本地开发、迁移、回填、smoke；普通 Docker 用户不需要手动创建 `.env`，`.env` 仅作为高级覆盖。
 - `src/margin/core/`：audit、metrics、degradation、run states。
 - `src/margin/platform_runtime/`：platform/ops 运行表 ORM 和 repository。
 - `src/margin/api/routes/health.py` 和 `/metrics`。

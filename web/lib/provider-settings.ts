@@ -23,6 +23,21 @@ export type ProviderDetection = {
   isCustom: boolean;
 };
 
+export type ProviderPreset = {
+  providerId: string;
+  label: string;
+  baseUrl: string;
+  model?: string;
+  isCustom?: boolean;
+};
+
+const CUSTOM_PROVIDER_PRESET: ProviderPreset = {
+  providerId: "custom",
+  label: "自定义",
+  baseUrl: "",
+  isCustom: true,
+};
+
 export const PROVIDER_CATEGORIES: ProviderCategoryDefinition[] = [
   {
     id: "llm",
@@ -69,6 +84,82 @@ export const PROVIDER_CATEGORIES: ProviderCategoryDefinition[] = [
   },
 ];
 
+export const PROVIDER_PRESETS: Record<ProviderCategoryId, ProviderPreset[]> = {
+  llm: [
+    {
+      providerId: "deepseek",
+      label: "DeepSeek",
+      baseUrl: "https://api.deepseek.com/v1",
+      model: "deepseek-chat",
+    },
+    {
+      providerId: "minimax",
+      label: "Minimax",
+      baseUrl: "https://api.minimaxi.com/v1",
+      model: "MiniMax-M3",
+    },
+    {
+      providerId: "openai",
+      label: "OpenAI",
+      baseUrl: "https://api.openai.com/v1",
+      model: "gpt-4o-mini",
+    },
+    {
+      providerId: "zhipu",
+      label: "Zhipu",
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+      model: "glm-4-flash",
+    },
+    {
+      providerId: "qwen",
+      label: "Qwen",
+      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      model: "qwen-plus",
+    },
+    CUSTOM_PROVIDER_PRESET,
+  ],
+  web_search: [
+    {
+      providerId: "tavily",
+      label: "Tavily",
+      baseUrl: "https://api.tavily.com/search",
+    },
+    CUSTOM_PROVIDER_PRESET,
+  ],
+  data_source: [
+    {
+      providerId: "tushare",
+      label: "Tushare",
+      baseUrl: "https://api.tushare.pro",
+    },
+    CUSTOM_PROVIDER_PRESET,
+  ],
+  embedding: [
+    {
+      providerId: "zhipu",
+      label: "Zhipu",
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+      model: "embedding-3",
+    },
+    {
+      providerId: "openai_compatible",
+      label: "OpenAI Compatible",
+      baseUrl: "https://api.openai.com/v1",
+      model: "text-embedding-3-small",
+    },
+    CUSTOM_PROVIDER_PRESET,
+  ],
+  rerank: [
+    {
+      providerId: "jina",
+      label: "Jina",
+      baseUrl: "https://api.jina.ai/v1/rerank",
+      model: "jina-reranker-v2-base-multilingual",
+    },
+    CUSTOM_PROVIDER_PRESET,
+  ],
+};
+
 type ProviderRule = {
   providerId: string;
   label: string;
@@ -78,6 +169,7 @@ type ProviderRule = {
 const RULES: Record<ProviderCategoryId, ProviderRule[]> = {
   llm: [
     { providerId: "deepseek", label: "DeepSeek", pattern: /deepseek\.com/i },
+    { providerId: "minimax", label: "Minimax", pattern: /platform\.minimaxi\.com|minimaxi\.com/i },
     { providerId: "modelscope", label: "ModelScope", pattern: /api-inference\.modelscope\.cn|modelscope\.cn/i },
     { providerId: "zhipu", label: "Zhipu", pattern: /open\.bigmodel\.cn|bigmodel\.cn/i },
     { providerId: "ollama", label: "Ollama", pattern: /(localhost|127\.0\.0\.1|\[::1\]):11434/i },
@@ -96,10 +188,11 @@ const RULES: Record<ProviderCategoryId, ProviderRule[]> = {
     { providerId: "bing", label: "Bing", pattern: /bing\.microsoft\.com|api\.bing\.microsoft/i },
   ],
   data_source: [
-    { providerId: "tushare", label: "Tushare", pattern: /tushare/i },
+    { providerId: "tushare", label: "Tushare", pattern: /tushare|teajoin\.com/i },
     { providerId: "akshare", label: "AKShare", pattern: /akshare/i },
   ],
   embedding: [
+    { providerId: "zhipu", label: "Zhipu", pattern: /open\.bigmodel\.cn|bigmodel\.cn/i },
     { providerId: "openai_compatible", label: "OpenAI Compatible", pattern: /openai\.com|\/embeddings?/i },
     { providerId: "dashscope", label: "DashScope", pattern: /dashscope|aliyuncs\.com/i },
     { providerId: "jina", label: "Jina", pattern: /jina\.ai/i },
@@ -125,6 +218,7 @@ const CATEGORY_ALIASES: Record<string, ProviderCategoryId> = {
 const PROVIDER_CATEGORY_BY_NAME: Record<string, ProviderCategoryId> = {
   llm: "llm",
   deepseek: "llm",
+  minimax: "llm",
   modelscope: "llm",
   zhipu: "llm",
   openai: "llm",
@@ -185,6 +279,46 @@ export function displayDetection(
     };
   }
   return detectProviderLabel(category, provider?.base_url ?? draftUrl);
+}
+
+export function providerPresetOptions(
+  category: ProviderCategoryId,
+): ProviderPreset[] {
+  return PROVIDER_PRESETS[category];
+}
+
+export function providerPresetForId(
+  category: ProviderCategoryId,
+  providerId: string,
+): ProviderPreset | null {
+  return (
+    PROVIDER_PRESETS[category].find(
+      (preset) => preset.providerId === providerId,
+    ) ?? null
+  );
+}
+
+export function providerPresetForProvider(
+  category: ProviderCategoryId,
+  provider: ProviderConfigSummary | null,
+): ProviderPreset {
+  if (provider?.detected_provider) {
+    const byDetectedProvider = providerPresetForId(
+      category,
+      provider.detected_provider,
+    );
+    if (byDetectedProvider) {
+      return byDetectedProvider;
+    }
+  }
+  const detection = detectProviderLabel(category, provider?.base_url);
+  if (!detection.isCustom) {
+    const byUrl = providerPresetForId(category, detection.providerId);
+    if (byUrl) {
+      return byUrl;
+    }
+  }
+  return CUSTOM_PROVIDER_PRESET;
 }
 
 export function chooseProviderForCategory(

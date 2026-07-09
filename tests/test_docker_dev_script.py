@@ -8,6 +8,147 @@ from typing import TextIO
 from scripts import docker_dev
 
 
+def test_ensure_runtime_env_creates_stable_local_defaults(tmp_path) -> None:
+    """Docker startup should not require users to copy .env.example first.
+
+    Args:
+        tmp_path: Path: .
+
+    Returns:
+        None: .
+    """
+    values = docker_dev.ensure_runtime_env(
+        root=tmp_path,
+        dotenv_values={},
+        token_factory=lambda: "generated-grafana-password",
+    )
+
+    runtime_file = tmp_path / ".margin/docker/runtime.env"
+    assert runtime_file.exists()
+    assert values["MARGIN_ENVIRONMENT"] == "development"
+    assert values["MARGIN_LOG_LEVEL"] == "INFO"
+    assert values["MARGIN_SECRET_MASTER_KEY"] == docker_dev.DEFAULT_LOCAL_SECRET_MASTER_KEY
+    assert values["GRAFANA_ADMIN_PASSWORD"] == "generated-grafana-password"
+    assert "MARGIN_TUSHARE_TOKEN" not in runtime_file.read_text(encoding="utf-8")
+
+
+def test_ensure_runtime_env_reuses_existing_values_and_backfills_missing(
+    tmp_path,
+) -> None:
+    """Local runtime secrets should stay stable across repeated Docker starts.
+
+    Args:
+        tmp_path: Path: .
+
+    Returns:
+        None: .
+    """
+    runtime_file = tmp_path / ".margin/docker/runtime.env"
+    runtime_file.parent.mkdir(parents=True)
+    runtime_file.write_text(
+        "GRAFANA_ADMIN_PASSWORD=existing-grafana\n"
+        "MARGIN_SECRET_MASTER_KEY=existing-master-key\n",
+        encoding="utf-8",
+    )
+
+    values = docker_dev.ensure_runtime_env(
+        root=tmp_path,
+        dotenv_values={},
+        token_factory=lambda: "new-password-that-should-not-be-used",
+    )
+
+    assert values["GRAFANA_ADMIN_PASSWORD"] == "existing-grafana"
+    assert values["MARGIN_SECRET_MASTER_KEY"] == "existing-master-key"
+    assert values["MARGIN_ENVIRONMENT"] == "development"
+    assert "new-password-that-should-not-be-used" not in runtime_file.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_ensure_runtime_env_does_not_copy_provider_secrets_from_dotenv(
+    tmp_path,
+) -> None:
+    """Provider credentials belong in the database-backed Secret Store.
+
+    Args:
+        tmp_path: Path: .
+
+    Returns:
+        None: .
+    """
+    values = docker_dev.ensure_runtime_env(
+        root=tmp_path,
+        dotenv_values={
+            "MARGIN_TUSHARE_TOKEN": "provider-token",
+            "MARGIN_LLM_API_KEY": "llm-token",
+            "MARGIN_SECRET_MASTER_KEY": "env-master-key",
+            "GRAFANA_ADMIN_PASSWORD": "env-grafana",
+        },
+        token_factory=lambda: "generated-grafana-password",
+    )
+
+    runtime_text = (tmp_path / ".margin/docker/runtime.env").read_text(
+        encoding="utf-8"
+    )
+    assert values["MARGIN_SECRET_MASTER_KEY"] == "env-master-key"
+    assert values["GRAFANA_ADMIN_PASSWORD"] == "env-grafana"
+    assert "provider-token" not in runtime_text
+    assert "llm-token" not in runtime_text
+    assert "MARGIN_TUSHARE_TOKEN" not in values
+    assert "MARGIN_LLM_API_KEY" not in values
+
+
+def test_build_compose_env_uses_runtime_env_and_derives_web_origin() -> None:
+    """Compose should receive generated runtime config plus selected ports.
+
+    Returns:
+        None: .
+    """
+    env = docker_dev.build_compose_env(
+        base_env={},
+        runtime_values={
+            "MARGIN_ENVIRONMENT": "development",
+            "MARGIN_LOG_LEVEL": "INFO",
+            "GRAFANA_ADMIN_PASSWORD": "local-grafana",
+        },
+        dotenv_values={"MARGIN_LOG_LEVEL": "DEBUG"},
+        ports={
+            "MARGIN_API_PORT": "8002",
+            "MARGIN_WEB_PORT": "3004",
+            "MARGIN_POSTGRES_PORT": "5434",
+            "MARGIN_PROMETHEUS_PORT": "9092",
+            "GRAFANA_PORT": "3006",
+        },
+    )
+
+    assert env["MARGIN_LOG_LEVEL"] == "DEBUG"
+    assert env["GRAFANA_ADMIN_PASSWORD"] == "local-grafana"
+    assert env["MARGIN_WEB_PORT"] == "3004"
+    assert env["MARGIN_WEB_ORIGIN"] == "http://localhost:3004"
+
+
+def test_build_compose_env_preserves_explicit_web_origin() -> None:
+    """Advanced users should still be able to override web origin through .env.
+
+    Returns:
+        None: .
+    """
+    env = docker_dev.build_compose_env(
+        base_env={},
+        runtime_values={"MARGIN_ENVIRONMENT": "development"},
+        dotenv_values={"MARGIN_WEB_ORIGIN": "http://127.0.0.1:3900"},
+        ports={
+            "MARGIN_API_PORT": "8002",
+            "MARGIN_WEB_PORT": "3004",
+            "MARGIN_POSTGRES_PORT": "5434",
+            "MARGIN_PROMETHEUS_PORT": "9092",
+            "GRAFANA_PORT": "3006",
+        },
+    )
+
+    assert env["MARGIN_WEB_ORIGIN"] == "http://127.0.0.1:3900"
+
+
 def test_choose_ports_skips_busy_defaults(monkeypatch) -> None:
     """Docker startup should pick free localhost ports when defaults are busy.
 

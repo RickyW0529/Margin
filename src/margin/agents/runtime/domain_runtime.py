@@ -29,6 +29,9 @@ class DomainRuntime:
         worker_agent_name: str,
         skill_id: str,
         required_output_types: tuple[str, ...],
+        task_goal: str | None = None,
+        constraints: dict[str, object] | None = None,
+        worker_task_id: str | None = None,
     ) -> tuple[WorkerTaskRequest, ...]:
         """Create worker tasks.
 
@@ -65,14 +68,17 @@ class DomainRuntime:
         worker_task = WorkerTaskRequest(
             run_id=domain_request.run_id,
             domain_task_id=domain_request.domain_task_id,
-            worker_task_id=f"wt_{domain_request.domain_task_id.removeprefix('dt_')}",
+            worker_task_id=(
+                worker_task_id or f"wt_{domain_request.domain_task_id.removeprefix('dt_')}"
+            ),
             parent_agent=self.expert_agent_name,
             worker_agent=worker_agent_name,
             skill_id=skill_id,
-            task_goal=domain_request.task_goal,
+            task_goal=task_goal or domain_request.task_goal,
             input_context_pack_ref=domain_request.input_context_pack_ref,
             input_artifact_refs=domain_request.input_artifact_refs,
             required_output_types=required_output_types,
+            constraints=constraints or {},
             tool_policy_ref=child_token.token_id,
             capability_token_ref=child_token.token_id,
             token_budget=domain_request.token_budget,

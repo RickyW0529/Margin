@@ -55,7 +55,7 @@ def test_user_qna_agent_run_returns_main_agent_trace() -> None:
         "qna_answer",
         "final_user_answer",
     }
-    assert llm_provider.calls == ["answer"]
+    assert llm_provider.calls == ["main_plan", "expert_plan", "answer"]
 
 
 def test_user_qna_greeting_runs_general_llm_agent() -> None:
@@ -85,7 +85,7 @@ def test_user_qna_greeting_runs_general_llm_agent() -> None:
         }
     ]
     assert any(artifact["artifact_type"] == "qna_answer" for artifact in body["artifacts"])
-    assert llm_provider.calls == ["answer"]
+    assert llm_provider.calls == ["main_plan", "expert_plan", "answer"]
 
 
 def test_user_qna_persists_chat_session_and_uses_context_for_followup() -> None:
@@ -410,7 +410,7 @@ def _idempotency_headers(key: str) -> dict[str, str]:
 
 
 class _AnswerLLMProvider(DeterministicLLMProvider):
-    """Test LLM that returns a free-form answer."""
+    """Test LLM that returns Main plan, Expert plan, and a free-form answer."""
 
     def __init__(self, answer: str) -> None:
         """Initialize with one deterministic answer."""
@@ -418,6 +418,7 @@ class _AnswerLLMProvider(DeterministicLLMProvider):
         self._answer = answer
         self.calls: list[str] = []
         self.prompts: list[str] = []
+        self._structured_calls = 0
 
     def complete(
         self,
@@ -439,7 +440,45 @@ class _AnswerLLMProvider(DeterministicLLMProvider):
         del temperature
         self.prompts.append(prompt)
         if response_schema is not None:
-            raise AssertionError("v1 API Q&A tests must not call the old planner")
+            self._structured_calls += 1
+            if self._structured_calls % 2 == 1:
+                self.calls.append("main_plan")
+                return LLMResult(
+                    output={
+                        "steps": [
+                            {
+                                "step_id": "general",
+                                "agent": "GeneralQnaExpertAgent",
+                                "task": "Delegate the user request to the general Q&A expert.",
+                                "required_output_types": ["analysis_table", "qna_answer"],
+                            }
+                        ],
+                        "final_answer_requirements": ["use_approved_capsules_only"],
+                    },
+                    model="test",
+                    success=True,
+                    latency_ms=0.0,
+                    raw_response="main_plan",
+                )
+            self.calls.append("expert_plan")
+            return LLMResult(
+                output={
+                    "steps": [
+                        {
+                            "step_id": "answer",
+                            "worker_agent": "GeneralQnaWorker",
+                            "skill_id": "answer_general_qna",
+                            "task": "Answer from approved context only.",
+                            "required_output_types": ["analysis_table", "qna_answer"],
+                        }
+                    ],
+                    "audit_requirements": ["verify_artifacts_before_returning"],
+                },
+                model="test",
+                success=True,
+                latency_ms=0.0,
+                raw_response="expert_plan",
+            )
         self.calls.append("answer")
         return LLMResult(
             output={"content": self._answer},

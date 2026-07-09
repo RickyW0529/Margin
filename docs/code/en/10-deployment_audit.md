@@ -5,6 +5,7 @@ This module makes the system runnable, inspectable, degradable, and auditable.
 ## What It Does
 
 - Provides Docker, Compose, migration, bootstrap, and smoke scripts.
+- `scripts/docker_dev.py` supports zero-env startup by generating `.margin/docker/runtime.env`, selecting free ports, and showing startup progress.
 - Exposes health checks, Prometheus metrics, and structured logs.
 - Stores audit records, snapshots, task state, and degradation reasons.
 - Reports explicit status when providers, config, or tasks fail.
@@ -28,7 +29,7 @@ It does not produce recommendations, but it makes failures diagnosable.
 ## Main Entry Points
 
 - `Dockerfile`, `web/Dockerfile`, `docker-compose.yml`
-- `scripts/`
+- `scripts/` for Docker startup, local development, migrations, backfills, and smoke checks. Normal Docker users do not need to create `.env`; `.env` is only an advanced override.
 - `src/margin/core/`
 - `src/margin/platform_runtime/`
 - `src/margin/api/routes/health.py`
