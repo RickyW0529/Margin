@@ -5,7 +5,17 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Date, DateTime, Index, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -47,7 +57,11 @@ class ContextFactRow(Base):
     )
 
     fact_id: Mapped[str] = mapped_column(Text, primary_key=True)
-    context_pack_id: Mapped[str] = mapped_column(Text, nullable=False)
+    context_pack_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("agent.context_packs.context_pack_id"),
+        nullable=False,
+    )
     fact_type: Mapped[str] = mapped_column(Text, nullable=False)
     subject_type: Mapped[str] = mapped_column(Text, nullable=False)
     subject_id: Mapped[str] = mapped_column(Text, nullable=False)
@@ -83,7 +97,11 @@ class ContextOmissionRow(Base):
     )
 
     omission_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    context_pack_id: Mapped[str] = mapped_column(Text, nullable=False)
+    context_pack_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("agent.context_packs.context_pack_id"),
+        nullable=False,
+    )
     omitted_ref: Mapped[str] = mapped_column(Text, nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)

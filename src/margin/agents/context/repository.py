@@ -188,6 +188,7 @@ class SQLAlchemyContextRepository:
                     created_at=now,
                 )
             )
+            session.flush()
             for fact in pack.facts:
                 session.add(_fact_row(pack.context_pack_id, fact, now))
             for omission in pack.omissions:

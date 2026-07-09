@@ -77,6 +77,12 @@ def test_sqlalchemy_context_repository_round_trips_pack_facts_and_omissions(
     assert repository.list_context_omissions("ctxpack_repo_1") == list(pack.omissions)
 
 
+def test_context_fact_and_omission_models_declare_pack_foreign_keys() -> None:
+    """ORM metadata must preserve flush ordering required by production DDL."""
+    assert ContextFactRow.__table__.c.context_pack_id.foreign_keys
+    assert ContextOmissionRow.__table__.c.context_pack_id.foreign_keys
+
+
 def test_sqlalchemy_context_repository_round_trips_domain_capsule_and_lineage(
     database_url: str,
 ) -> None:
