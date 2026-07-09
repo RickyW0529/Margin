@@ -57,30 +57,32 @@ const SETTINGS = [
 export default function SettingsPage() {
   const { t } = useLanguage();
   return (
-    <main className="mx-auto max-w-5xl space-y-6 px-6 py-8 md:px-10">
+    <main className="page-shell space-y-8">
       <header>
-        <p className="text-sm text-muted-foreground">{t("settingsEyebrow")}</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
+        <p className="text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+          {t("settingsEyebrow")}
+        </p>
+        <h1 className="text-display mt-2 text-3xl text-foreground">
           {t("settingsTitle")}
         </h1>
       </header>
-      <section className="grid gap-4 md:grid-cols-2">
+      <section className="grid gap-3 md:grid-cols-2">
         {SETTINGS.map((item) => {
           const Icon = item.icon;
           return (
             <Link
               key={item.href}
               href={item.href}
-              className="grid gap-4 rounded-lg border border-border bg-card p-5 no-underline transition-colors hover:bg-muted/50"
+              className="group grid gap-4 rounded-2xl border border-border/90 bg-card p-5 no-underline shadow-xs transition-all duration-150 hover:border-border hover:shadow-sm"
             >
-              <span className="grid size-10 place-items-center rounded-md bg-muted text-accent">
-                <Icon className="size-5" />
+              <span className="grid size-10 place-items-center rounded-xl bg-muted/70 text-accent transition-colors group-hover:bg-accent/10">
+                <Icon className="size-4" />
               </span>
-              <span className="grid gap-1">
-                <strong className="text-base text-foreground">
+              <span className="grid gap-1.5">
+                <strong className="text-[15px] font-semibold tracking-tight text-foreground">
                   {t(item.titleKey)}
                 </strong>
-                <span className="text-sm text-muted-foreground">
+                <span className="text-sm leading-relaxed text-muted-foreground">
                   {t(item.descriptionKey)}
                 </span>
               </span>

@@ -30,6 +30,7 @@ from margin.api.dependencies import (
     get_company_profile_service,
     get_context_repository,
     get_dashboard_services,
+    get_idempotency_store,
     get_llm_provider_factory,
     get_news_service,
     get_optional_secret_store,
@@ -147,6 +148,7 @@ def create_app(
     company_profile_service: CompanyProfileService | None = None,
     backfill_application_service: BackfillApplicationService | None = None,
     tool_audit_store: InMemoryToolAuditStore | SQLAlchemyToolAuditStore | None = None,
+    idempotency_store: object | None = None,
 ) -> FastAPI:
     """Create and configure the Margin API application.
 
@@ -166,6 +168,7 @@ def create_app(
         company_profile_service: CompanyProfileService | None: .
         backfill_application_service: BackfillApplicationService | None: .
         tool_audit_store: InMemoryToolAuditStore | SQLAlchemyToolAuditStore | None: .
+        idempotency_store: Optional idempotency store override for tests.
 
     Returns:
         FastAPI: .
@@ -254,6 +257,8 @@ def create_app(
         )
     if tool_audit_store is not None:
         application.dependency_overrides[get_tool_audit_store] = lambda: tool_audit_store
+    if idempotency_store is not None:
+        application.dependency_overrides[get_idempotency_store] = lambda: idempotency_store
 
     return application
 

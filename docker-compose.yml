@@ -103,6 +103,8 @@ services:
       dockerfile: Dockerfile
     environment:
       MARGIN_API_BASE_URL: http://api:8000
+      # Server-only; BFF injects Authorization on mutating /api/* proxy calls.
+      MARGIN_ADMIN_API_TOKEN: ${MARGIN_ADMIN_API_TOKEN:-}
     ports:
       - "127.0.0.1:${MARGIN_WEB_PORT:-3000}:3000"
     depends_on:

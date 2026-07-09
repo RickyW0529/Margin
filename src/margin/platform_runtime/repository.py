@@ -105,6 +105,55 @@ class DataFreshnessState(BaseModel):
     checked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class MemoryIdempotencyStore:
+    """Process-local idempotency store for tests and single-process personal mode."""
+
+    def __init__(self) -> None:
+        """Initialize an empty in-memory store."""
+        self._records: dict[str, IdempotencyKeyRecord] = {}
+
+    def record_idempotency_key(self, record: IdempotencyKeyRecord) -> None:
+        """Persist one idempotency record idempotently."""
+        current = self._records.get(record.idempotency_key)
+        if current is None:
+            self._records[record.idempotency_key] = record
+            return
+        if current != record:
+            raise ValueError(f"idempotency key '{record.idempotency_key}' is immutable")
+
+    def get_idempotency_key(self, idempotency_key: str) -> IdempotencyKeyRecord | None:
+        """Return one idempotency record by key."""
+        return self._records.get(idempotency_key)
+
+    def begin_idempotency_key(
+        self,
+        record: IdempotencyKeyRecord,
+    ) -> IdempotencyKeyRecord | None:
+        """Reserve an idempotency key before side effects run.
+
+        Returns the existing record when another request has already claimed
+        the key; otherwise stores ``record`` and returns ``None``.
+        """
+        current = self._records.get(record.idempotency_key)
+        if current is not None:
+            return current
+        self._records[record.idempotency_key] = record
+        return None
+
+    def complete_idempotency_key(self, record: IdempotencyKeyRecord) -> IdempotencyKeyRecord:
+        """Mark a reserved idempotency key completed."""
+        current = self._records.get(record.idempotency_key)
+        if current is None:
+            self._records[record.idempotency_key] = record
+            return record
+        if current.request_hash != record.request_hash or current.scope != record.scope:
+            raise ValueError(f"idempotency key '{record.idempotency_key}' is immutable")
+        if current.status == "completed":
+            return current
+        self._records[record.idempotency_key] = record
+        return record
+
+
 class SQLAlchemyPlatformRuntimeRepository:
     """SQLAlchemy-backed repository for platform and ops runtime records."""
 
@@ -127,6 +176,44 @@ class SQLAlchemyPlatformRuntimeRepository:
         with self._session_factory() as session:
             row = session.get(IdempotencyKeyRow, idempotency_key)
             return _idempotency_payload(row) if row is not None else None
+
+    def begin_idempotency_key(
+        self,
+        record: IdempotencyKeyRecord,
+    ) -> IdempotencyKeyRecord | None:
+        """Reserve an idempotency key before side effects run."""
+        from sqlalchemy.exc import IntegrityError
+
+        try:
+            with self._session_factory() as session, session.begin():
+                current = session.get(IdempotencyKeyRow, record.idempotency_key)
+                if current is not None:
+                    return _idempotency_payload(current)
+                session.add(_idempotency_row(record))
+                return None
+        except IntegrityError:
+            existing = self.get_idempotency_key(record.idempotency_key)
+            if existing is not None:
+                return existing
+            raise
+
+    def complete_idempotency_key(self, record: IdempotencyKeyRecord) -> IdempotencyKeyRecord:
+        """Mark a reserved idempotency key completed."""
+        with self._session_factory() as session, session.begin():
+            row = session.get(IdempotencyKeyRow, record.idempotency_key)
+            if row is None:
+                session.add(_idempotency_row(record))
+                return record
+            current = _idempotency_payload(row)
+            if current.request_hash != record.request_hash or current.scope != record.scope:
+                raise ValueError(f"idempotency key '{record.idempotency_key}' is immutable")
+            if current.status == "completed":
+                return current
+            row.response_hash = record.response_hash
+            row.response_ref = record.response_ref
+            row.status = record.status
+            row.expires_at = record.expires_at
+            return record
 
     def enqueue_outbox_event(self, event: OutboxEvent) -> None:
         """Append one platform outbox event."""

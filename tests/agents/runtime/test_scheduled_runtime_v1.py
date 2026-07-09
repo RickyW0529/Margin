@@ -44,28 +44,29 @@ def test_v1_scheduled_runner_starts_refresh_and_writes_v1_artifacts() -> None:
     assert idempotency_key == "stock_analysis_daily:2026-07-07"
     assert metadata["agent_runtime_version"] == "scheduled-agent-runtime-v1"
     assert metadata["global_plan"]["created_by"] == "MainAgent"
-    assert metadata["global_plan"]["domain_task_count"] == 0
+    assert metadata["global_plan"]["domain_task_count"] >= 1
     assert metadata["scheduled_task_intent"]["planner"] == "MainAgent"
     assert metadata["main_agent_plan"]["planning_mode"] == "prompt_dynamic"
     assert metadata["main_agent_plan"]["planning_prompt_ref"] == "main_agent_scheduled_planner_v1"
     assert metadata["plan_validation"]["valid"] is True
-    assert metadata["main_agent_plan"]["domain_agents"] == []
-    assert metadata["main_agent_plan"]["planner_messages"]
-    assert any(
-        message["domain"] == "quant"
-        for message in metadata["main_agent_plan"]["planner_messages"]
-    )
+    assert metadata["execution_boundary"] == "l3_worker_runtime"
 
     artifacts = context_store.list_artifacts("ar_sched_20260707_0830")
-    assert [artifact.artifact_type for artifact in artifacts] == [
+    types = [artifact.artifact_type for artifact in artifacts]
+    assert types == [
         "scheduled_global_plan",
+        "data_readiness",
         "valuation_refresh",
+        "l3_execution_report",
     ]
     assert artifacts[0].producer_agent == "MainAgent"
     assert artifacts[0].payload_json["scheduled_planner_mode"] == "dynamic_main_agent_planner"
-    assert artifacts[0].payload_json["execution_boundary"] == "valuation_refresh_service"
-    assert artifacts[1].producer_agent == "QuantExpertAgent"
-    assert artifacts[1].payload_json["valuation_refresh_run_id"] == "refresh-1"
+    assert artifacts[0].payload_json["execution_boundary"] == "l3_worker_runtime"
+    assert artifacts[1].producer_agent == "DataInspectionWorker"
+    assert artifacts[2].producer_agent == "QuantExpertAgent"
+    assert artifacts[2].payload_json["valuation_refresh_run_id"] == "refresh-1"
+    assert artifacts[2].payload_json["worker_layer"] == "L3"
+    assert artifacts[3].artifact_type == "l3_execution_report"
     assert repository.saved.last_triggered_at == datetime(2026, 7, 7, 0, 31, tzinfo=UTC)
 
 

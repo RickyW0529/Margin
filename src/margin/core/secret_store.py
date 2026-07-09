@@ -284,12 +284,18 @@ class SecretStore:
     def create_or_replace(self, command: WriteSecretCommand) -> SecretMetadata:
         """Encrypt and store a new active secret version.
 
+        Concurrent writers with the same idempotency key replay the first
+        stored version instead of creating duplicates (unique index on
+        provider_name/secret_name/idempotency_key).
+
         Args:
-            command: WriteSecretCommand: .
+            command: Write secret command.
 
         Returns:
-            SecretMetadata: .
+            SecretMetadata for the active (or replayed) version.
         """
+        from sqlalchemy.exc import IntegrityError
+
         provider_name = command.provider_name.strip().lower()
         secret_name = command.secret_name.strip().lower()
         prior = self._repository.find_by_idempotency(
@@ -328,12 +334,22 @@ class SecretStore:
             idempotency_key=command.idempotency_key,
             created_at=now,
         )
-        self._repository.create_active(
-            row,
-            provider_name=provider_name,
-            secret_name=secret_name,
-            deactivated_at=now,
-        )
+        try:
+            self._repository.create_active(
+                row,
+                provider_name=provider_name,
+                secret_name=secret_name,
+                deactivated_at=now,
+            )
+        except IntegrityError:
+            raced = self._repository.find_by_idempotency(
+                provider_name=provider_name,
+                secret_name=secret_name,
+                idempotency_key=command.idempotency_key,
+            )
+            if raced is not None:
+                return _metadata_from_row(raced)
+            raise
         return _metadata_from_row(row)
 
     def resolve(self, ref: SecretVersionRef) -> SecretValue:

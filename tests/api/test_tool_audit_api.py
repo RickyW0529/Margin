@@ -91,7 +91,7 @@ def _token() -> CapabilityToken:
         tool_policy=(ToolPolicy.READ_ONLY_TOOLS,),
         allowed_artifact_types=("tool_result",),
         allowed_tool_names=("context.echo",),
-        expires_at=datetime(2026, 7, 9, tzinfo=UTC),
+        expires_at=datetime(2099, 1, 1, tzinfo=UTC),
         max_tool_calls=4,
         max_result_bytes=512,
     )

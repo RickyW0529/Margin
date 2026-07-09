@@ -23,6 +23,7 @@ from margin.agent_runtime.models import (
     AgentRunType,
 )
 from margin.agents.cards.registry import default_domain_agent_cards, default_worker_agent_cards
+from margin.agents.context.persistence import ContextPersistence
 from margin.agents.context.readiness_builder import DataReadinessBuilder
 from margin.agents.context.repository import ContextRepository, MemoryContextRepository
 from margin.agents.context.router import ContextRouter
@@ -59,7 +60,7 @@ from margin.agents.security.policies import (
 )
 from margin.agents.tools.audit import InMemoryToolAuditStore
 from margin.agents.tools.catalog import default_tool_catalog
-from margin.agents.tools.gateway import ToolGateway
+from margin.agents.tools.gateway import ToolAuditStore, ToolGateway
 from margin.agents.workers.data_question_worker import DataQuestionWorker
 from margin.dashboard.service import DashboardServiceBundle
 from margin.research.llm import LLMProvider, strip_thinking_blocks
@@ -185,10 +186,15 @@ class AgentRuntimeService:
         warehouse_repository: Any | None = None,
         main_runtime: MainRuntime | None = None,
         audit_pipeline: AuditPipeline | None = None,
+        tool_audit_store: ToolAuditStore | None = None,
     ) -> None:
         """Initialize the application-facing v1 Agent runtime service."""
         self._context_store = context_store
         self._context_repository = context_repository or MemoryContextRepository()
+        self._context_persistence = ContextPersistence(
+            context_store=self._context_store,
+            context_repository=self._context_repository,
+        )
         self._dashboard_services = dashboard_services
         self._llm_provider_factory = llm_provider_factory
         self._warehouse_repository = warehouse_repository
@@ -197,13 +203,11 @@ class AgentRuntimeService:
             if warehouse_repository is not None
             else None
         )
-        planning_llm_provider = llm_provider_factory()
         domain_cards = default_domain_agent_cards()
         tool_catalog = default_tool_catalog(
             warehouse_repository=warehouse_repository,
             dashboard_services=dashboard_services,
         )
-        self._expert_planner = LLMExpertAgentPlanner(llm_provider=planning_llm_provider)
         self._worker_cards = default_worker_agent_cards()
         self._executor_registry = _default_worker_executor_registry(
             data_question_worker=data_question_worker,
@@ -219,8 +223,12 @@ class AgentRuntimeService:
         self._startup_contract_report = self._capability_registry.validate_startup_contracts()
         self._tool_gateway = ToolGateway(
             catalog=tool_catalog,
-            audit_store=InMemoryToolAuditStore(),
+            audit_store=tool_audit_store or InMemoryToolAuditStore(),
         )
+        # Resolve the planning LLM per construction so cache-clear rebuilds pick up
+        # rotated provider secrets; workers still use the factory for later calls.
+        planning_llm_provider = llm_provider_factory()
+        self._expert_planner = LLMExpertAgentPlanner(llm_provider=planning_llm_provider)
         self._main_runtime = main_runtime or MainRuntime(
             domain_cards=domain_cards,
             planner=LLMMainAgentPlanner(llm_provider=planning_llm_provider),
@@ -485,8 +493,12 @@ class AgentRuntimeService:
         )
 
     def get_context_artifact(self, artifact_id: str) -> ContextArtifact | None:
-        """Return a context artifact for scoped frontend expansion."""
-        return self._context_store.get_artifact(artifact_id)
+        """Return a context artifact for scoped frontend expansion.
+
+        Structured ContextPacks are owned by ContextRepository and reconstructed
+        on demand when the runtime artifact table has no row.
+        """
+        return self._context_persistence.get_runtime_artifact(artifact_id)
 
     def _blocked_run_result_from_planner_messages(
         self,
@@ -555,14 +567,13 @@ class AgentRuntimeService:
         command: UserQnaCommand,
         capability_token: CapabilityToken | None = None,
     ) -> ContextPack:
-        """Build and persist the L1 ContextPack artifact."""
+        """Build and persist the L1 ContextPack via the unified write path."""
         readiness_artifact = DataReadinessBuilder(
             dashboard_services=self._dashboard_services,
             warehouse_repository=self._warehouse_repository,
             capability_registry=self._capability_registry,
             capability_token=capability_token,
         ).build_for_user_qna(command)
-        self._context_store.add_artifact(readiness_artifact)
         context_pack = ContextRouter().build_context_pack(
             run_id=command.run_id,
             requester_agent="MainAgent",
@@ -572,31 +583,10 @@ class AgentRuntimeService:
             artifacts=(readiness_artifact,),
             included_chat_summary_ref=f"chat_summary:{_conversation_hash(command)}",
         )
-        self._context_store.add_artifact(
-            make_context_artifact(
-                artifact_id=context_pack.context_pack_id,
-                run_id=command.run_id,
-                artifact_type="context_pack",
-                producer_agent="MainAgent",
-                payload_json=context_pack.model_dump(mode="json"),
-                source_refs=(context_pack.included_chat_summary_ref or "chat_summary:none",),
-            )
+        return self._context_persistence.persist_context_pack(
+            context_pack,
+            readiness_artifact=readiness_artifact,
         )
-        self._context_repository.save_context_pack(context_pack)
-        self._context_repository.record_lineage_edge(
-            run_id=command.run_id,
-            from_ref=context_pack.context_pack_id,
-            to_ref=readiness_artifact.artifact_id,
-            edge_type="source_ref",
-        )
-        if context_pack.included_chat_summary_ref:
-            self._context_repository.record_lineage_edge(
-                run_id=command.run_id,
-                from_ref=context_pack.context_pack_id,
-                to_ref=context_pack.included_chat_summary_ref,
-                edge_type="source_ref",
-            )
-        return context_pack
 
     def _execute_domain_task(
         self,

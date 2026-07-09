@@ -30,7 +30,6 @@ def test_migration_sequence_from_clean_database(database_url: str) -> None:
     )
 
     assert result.current_head == result.expected_head
-    assert result.current_head == "20260709_0063_platform_ops"
     assert result.failed_revision is None
     assert {
         "raw_meta.raw_data_snapshots",

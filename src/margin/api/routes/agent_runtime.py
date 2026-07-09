@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from typing import Annotated
+import json
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, Any, Protocol
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -29,10 +30,13 @@ from margin.api.dependencies import (
     get_agent_chat_repository,
     get_agent_runtime_service,
     get_agent_schedule_repository,
+    get_idempotency_store,
     require_idempotency_key,
     require_local_admin,
 )
 from margin.api.serialization import safe_artifact_payload
+from margin.core.hashing import stable_json_hash
+from margin.platform_runtime.repository import IdempotencyKeyRecord
 
 router = APIRouter(prefix="/api/v1", tags=["agent-runtime"])
 
@@ -46,6 +50,30 @@ ChatRepo = Annotated[
     Depends(get_agent_chat_repository),
 ]
 IdempotencyKey = Annotated[str, Depends(require_idempotency_key)]
+_USER_QNA_SCOPE = "agent.user_qna"
+_USER_QNA_TTL = timedelta(hours=24)
+
+
+class _IdempotencyStore(Protocol):
+    """Minimal store interface used by user-qna replay."""
+
+    def get_idempotency_key(self, idempotency_key: str) -> IdempotencyKeyRecord | None:
+        """Return a prior record when present."""
+
+    def record_idempotency_key(self, record: IdempotencyKeyRecord) -> None:
+        """Persist a completed request/response pair."""
+
+    def begin_idempotency_key(
+        self,
+        record: IdempotencyKeyRecord,
+    ) -> IdempotencyKeyRecord | None:
+        """Reserve a key before side effects run."""
+
+    def complete_idempotency_key(self, record: IdempotencyKeyRecord) -> IdempotencyKeyRecord:
+        """Mark a reserved key completed."""
+
+
+IdempotencyStoreDep = Annotated[Any, Depends(get_idempotency_store)]
 
 
 class UserQnaRunRequest(BaseModel):
@@ -191,22 +219,49 @@ def run_user_qna_agent(
     request: UserQnaRunRequest,
     runtime: RuntimeDep,
     chat_repository: ChatRepo,
-    _idempotency_key: IdempotencyKey,
+    idempotency_key: IdempotencyKey,
+    idempotency_store: IdempotencyStoreDep,
 ) -> UserQnaRunResponse:
     """Run a read-only user Q&A request through the v1 Agent runtime service.
 
-    Args:
-        request: UserQnaRunRequest: .
-        runtime: RuntimeDep: .
-        chat_repository: ChatRepo: .
-        _idempotency_key: IdempotencyKey: .
-
-    Returns:
-        UserQnaRunResponse: .
+    Retries with the same Idempotency-Key and request body replay the stored
+    response without re-executing the LLM path or appending chat messages.
     """
+    request_hash = stable_json_hash(request.model_dump(mode="json"))
+    scoped_key = f"{_USER_QNA_SCOPE}:{idempotency_key}"
+    now = datetime.now(UTC)
+    pending = IdempotencyKeyRecord(
+        idempotency_key=scoped_key,
+        scope=_USER_QNA_SCOPE,
+        request_hash=request_hash,
+        response_hash=None,
+        response_ref=None,
+        status="pending",
+        created_at=now,
+        expires_at=now + _USER_QNA_TTL,
+    )
+    existing = idempotency_store.begin_idempotency_key(pending)
+    if existing is not None:
+        if existing.request_hash != request_hash:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "idempotency_key_conflict",
+                    "message": "Idempotency-Key was reused with a different request body",
+                },
+            )
+        if existing.status == "completed" and existing.response_ref:
+            return UserQnaRunResponse.model_validate_json(existing.response_ref)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "idempotency_key_in_progress",
+                "message": "Idempotency-Key is already processing this request",
+            },
+        )
+
     session_id = request.session_id or f"acs_{uuid4().hex}"
     session = chat_repository.get_session(session_id)
-    now = datetime.now(UTC)
     if session is None:
         if request.session_id is not None:
             raise HTTPException(
@@ -329,6 +384,38 @@ def run_user_qna_agent(
             payload=response.model_dump(mode="json"),
         )
     )
+    response_payload = response.model_dump_json()
+    record = IdempotencyKeyRecord(
+        idempotency_key=scoped_key,
+        scope=_USER_QNA_SCOPE,
+        request_hash=request_hash,
+        response_hash=stable_json_hash(json.loads(response_payload)),
+        response_ref=response_payload,
+        status="completed",
+        created_at=now,
+        expires_at=now + _USER_QNA_TTL,
+    )
+    try:
+        completed = idempotency_store.complete_idempotency_key(record)
+    except ValueError:
+        # Concurrent writer won; if the request matches, return the stored response.
+        raced = idempotency_store.get_idempotency_key(scoped_key)
+        if (
+            raced is not None
+            and raced.request_hash == request_hash
+            and raced.status == "completed"
+            and raced.response_ref
+        ):
+            return UserQnaRunResponse.model_validate_json(raced.response_ref)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "idempotency_key_conflict",
+                "message": "Idempotency-Key was reused with a different request body",
+            },
+        ) from None
+    if completed.status == "completed" and completed.response_ref != response_payload:
+        return UserQnaRunResponse.model_validate_json(completed.response_ref or response_payload)
     return response
 
 

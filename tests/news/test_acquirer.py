@@ -550,6 +550,56 @@ class TestDownloader:
         HTTPConnector().fetch("https://example.com", timeout=1)
         assert captured["timeout"] == 1
 
+    def test_http_connector_follows_safe_relative_redirect(self, monkeypatch):
+        """Relative redirects should be resolved before SSRF validation."""
+        calls: list[str] = []
+
+        class Response:
+            """Minimal fake HTTP response for redirect handling."""
+
+            def __init__(
+                self,
+                *,
+                url: str,
+                status_code: int,
+                headers: dict[str, str],
+                content: bytes,
+            ) -> None:
+                self.url = url
+                self.status_code = status_code
+                self.headers = headers
+                self.content = content
+
+        def fake_get(url, **_kwargs):
+            calls.append(url)
+            if len(calls) == 1:
+                return Response(
+                    url=url,
+                    status_code=302,
+                    headers={"Location": "/next", "Content-Type": "text/html"},
+                    content=b"",
+                )
+            return Response(
+                url=url,
+                status_code=200,
+                headers={"Content-Type": "text/plain"},
+                content=b"ok",
+            )
+
+        monkeypatch.setattr("requests.get", fake_get)
+
+        from margin.news.acquirer import HTTPConnector
+
+        content, content_type, status_code = HTTPConnector().fetch(
+            "https://example.com/start",
+            timeout=1,
+        )
+
+        assert calls == ["https://example.com/start", "https://example.com/next"]
+        assert content == b"ok"
+        assert content_type == "text/plain"
+        assert status_code == 200
+
 
 class TestDocumentParser:
     """Tests for HTML/text/JSON parsing.."""
@@ -792,3 +842,37 @@ class TestFilingAcquirer:
         assert event.snapshot_id is not None
         assert event.processing_status.value == "parse_failed"
         assert event.can_change_research_state is False
+
+
+def test_http_connector_blocks_loopback_ssrf(monkeypatch) -> None:
+    """HTTPConnector must reject private/loopback targets before fetching."""
+    from margin.news.acquirer import DownloadError, HTTPConnector
+
+    monkeypatch.setattr(
+        "margin.news.acquirer.get_settings",
+        lambda: type(
+            "S",
+            (),
+            {"allow_local_provider_urls": False, "resolve_provider_dns": True},
+        )(),
+    )
+    connector = HTTPConnector(allow_local=False, resolve_dns=True)
+    try:
+        connector.fetch("http://127.0.0.1/secret")
+    except DownloadError as exc:
+        message = str(exc).lower()
+        assert "forbidden" in message or "localhost" in message or "https" in message
+    else:  # pragma: no cover
+        raise AssertionError("loopback fetch should be blocked")
+
+
+def test_http_connector_blocks_metadata_ip(monkeypatch) -> None:
+    """Link-local / cloud metadata ranges must be rejected."""
+    from margin.news.acquirer import DownloadError, HTTPConnector
+
+    connector = HTTPConnector(allow_local=False, resolve_dns=False)
+    try:
+        connector.fetch("http://169.254.169.254/latest/meta-data/")
+    except DownloadError:
+        return
+    raise AssertionError("metadata IP fetch should be blocked")  # pragma: no cover

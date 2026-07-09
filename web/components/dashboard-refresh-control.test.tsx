@@ -139,6 +139,12 @@ describe("DashboardRefreshControl", () => {
     fireEvent.click(screen.getByRole("button", { name: "启动今日研究" }));
     expect(await screen.findByText("run-old")).toBeInTheDocument();
 
+    // Close the first run dialog so the start control is available again.
+    fireEvent.click(screen.getByRole("button", { name: "收起 Agent 进度" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Agent 协作进度" })).not
+        .toBeInTheDocument(),
+    );
     fireEvent.click(screen.getByRole("button", { name: "启动今日研究" }));
     expect(await screen.findByText("run-new")).toBeInTheDocument();
     expect(screen.queryByText("run-old")).not.toBeInTheDocument();
@@ -270,6 +276,7 @@ describe("DashboardRefreshControl", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Agent 协作进度",
     });
+    // Backdrop is the dialog surface itself; clicking it (not the panel) closes.
     fireEvent.click(dialog);
 
     await waitFor(() =>

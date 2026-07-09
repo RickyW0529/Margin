@@ -6,7 +6,8 @@ contract defined in specs 01 §3 and architecture §4.2.1, and covers the
 planned interfaces in plans 0102.2 / 0102.3 / 0102.4.
 
 Users must configure their own Tushare token, referenced via
-``tushare_token`` through SecretManager. Respect Tushare licensing and
+``tushare_token`` through the encrypted Secret Store (or legacy SecretManager
+fallback). Respect Tushare licensing and
 rate limits.
 """
 

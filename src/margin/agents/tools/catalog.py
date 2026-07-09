@@ -116,6 +116,9 @@ def default_tool_catalog(
             "warehouse.query_indicator_history": _warehouse_query_indicator_history_handler(
                 warehouse_tools
             ),
+            "warehouse.query_data_freshness": _warehouse_query_data_freshness_handler(
+                warehouse_tools
+            ),
         }
         for tool_name in handlers:
             catalog.register(_read_only_warehouse_tool_spec(tool_name), handlers[tool_name])
@@ -214,6 +217,21 @@ def _warehouse_query_indicator_history_handler(tools: WarehouseReadTools) -> Too
                 for value in result.output.get("history", ())
             ],
         }
+
+    return handler
+
+
+def _warehouse_query_data_freshness_handler(tools: WarehouseReadTools) -> ToolHandler:
+    def handler(request: ToolCallRequest) -> dict[str, Any]:
+        result = tools.query_data_freshness(
+            domains=_string_tuple(request.input_json.get("domains")),
+            dataset=(
+                str(request.input_json.get("dataset")).strip()
+                if request.input_json.get("dataset") is not None
+                else None
+            ),
+        )
+        return _json_safe(result.output)
 
     return handler
 

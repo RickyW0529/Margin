@@ -14,7 +14,9 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin
 
+from margin.core.ssrf import SSRFError, assert_public_http_url
 from margin.news.models import (
     DocumentEvent,
     DocumentStatus,
@@ -24,6 +26,7 @@ from margin.news.models import (
     make_document_event,
     utc_now,
 )
+from margin.settings import get_settings
 
 # ---------------------------------------------------------------------------
 # Exceptions
@@ -77,18 +80,25 @@ class BaseConnector(ABC):
 
 
 class HTTPConnector(BaseConnector):
-    """Generic HTTP connector.."""
+    """Generic HTTP connector with SSRF guards on every fetch."""
 
-    def __init__(self, name: str = "http") -> None:
+    def __init__(
+        self,
+        name: str = "http",
+        *,
+        allow_local: bool | None = None,
+        resolve_dns: bool | None = None,
+    ) -> None:
         """Initialize the HTTP connector.
 
         Args:
-            name: str: .
-
-        Returns:
-            None: .
+            name: Connector source name.
+            allow_local: Override for local/loopback allowance; defaults to settings.
+            resolve_dns: Override for DNS resolution; defaults to settings.
         """
         self._name = name
+        self._allow_local = allow_local
+        self._resolve_dns = resolve_dns
 
     @property
     def source_name(self) -> str:
@@ -103,24 +113,65 @@ class HTTPConnector(BaseConnector):
         """Fetch the URL using requests when available, falling back to urllib.
 
         Args:
-            url: str: .
-            **kwargs: Any: .
+            url: Absolute http(s) URL.
+            **kwargs: Forwarded to the underlying HTTP client.
 
         Returns:
-            tuple[bytes, str, int]: .
+            tuple[bytes, str, int]: Body, content-type, status code.
+
+        Raises:
+            DownloadError: When the URL fails SSRF checks or the request fails.
         """
         try:
-            import requests
-        except ImportError:
-            return self._fetch_urllib(url)
+            self._assert_safe_url(url)
+        except SSRFError as exc:
+            raise DownloadError(str(exc)) from exc
 
         request_kwargs = dict(kwargs)
         timeout = request_kwargs.pop("timeout", 30)
+        try:
+            import requests
+        except ImportError:
+            return self._fetch_urllib(url, timeout=timeout)
+
+        # Do not follow redirects blindly into private networks.
+        request_kwargs.setdefault("allow_redirects", False)
         resp = requests.get(url, timeout=timeout, **request_kwargs)
+        if 300 <= resp.status_code < 400:
+            location = resp.headers.get("Location")
+            if location:
+                redirect_url = urljoin(getattr(resp, "url", url) or url, location)
+                try:
+                    self._assert_safe_url(redirect_url)
+                except SSRFError as exc:
+                    raise DownloadError(str(exc)) from exc
+                resp = requests.get(
+                    redirect_url,
+                    timeout=timeout,
+                    allow_redirects=False,
+                    **{k: v for k, v in request_kwargs.items() if k != "allow_redirects"},
+                )
         content_type = resp.headers.get("Content-Type", "text/html")
         return resp.content, content_type, resp.status_code
 
-    def _fetch_urllib(self, url: str) -> tuple[bytes, str, int]:
+    def _assert_safe_url(self, url: str) -> None:
+        """Validate a fetch URL against the shared SSRF policy."""
+        settings = get_settings()
+        allow_local = (
+            self._allow_local
+            if self._allow_local is not None
+            else settings.allow_local_provider_urls
+        )
+        resolve_dns = (
+            self._resolve_dns if self._resolve_dns is not None else settings.resolve_provider_dns
+        )
+        assert_public_http_url(
+            url,
+            allow_local=allow_local,
+            resolve_dns=resolve_dns,
+        )
+
+    def _fetch_urllib(self, url: str, *, timeout: float | int = 30) -> tuple[bytes, str, int]:
         """Fetch the URL using urllib as a fallback.
 
         Args:
@@ -129,13 +180,50 @@ class HTTPConnector(BaseConnector):
         Returns:
             tuple[bytes, str, int]: .
         """
-        from urllib.request import Request, urlopen
+        from urllib.error import HTTPError
+        from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+        class _NoRedirect(HTTPRedirectHandler):
+            """Disable urllib's implicit redirect handling."""
+
+            def redirect_request(
+                self,
+                req: Any,
+                fp: Any,
+                code: int,
+                msg: str,
+                headers: Any,
+                newurl: str,
+            ) -> None:
+                """Return ``None`` so callers can validate redirect targets."""
+                return None
+
+        opener = build_opener(_NoRedirect)
         req = Request(url, headers={"User-Agent": "Margin/0.1"})
-        with urlopen(req, timeout=30) as resp:
-            content = resp.read()
-            content_type = resp.headers.get("Content-Type", "text/html")
-            return content, content_type, resp.status
+        try:
+            resp = opener.open(req, timeout=timeout)
+        except HTTPError as exc:
+            if 300 <= exc.code < 400:
+                location = exc.headers.get("Location")
+                if location:
+                    redirect_url = urljoin(getattr(exc, "url", url) or url, location)
+                    try:
+                        self._assert_safe_url(redirect_url)
+                    except SSRFError as ssrf_exc:
+                        raise DownloadError(str(ssrf_exc)) from ssrf_exc
+                    redirect_req = Request(redirect_url, headers={"User-Agent": "Margin/0.1"})
+                    with opener.open(redirect_req, timeout=timeout) as redirect_resp:
+                        return _read_urllib_response(redirect_resp)
+            raise
+        with resp:
+            return _read_urllib_response(resp)
+
+
+def _read_urllib_response(resp: Any) -> tuple[bytes, str, int]:
+    """Read a urllib response into the connector return tuple."""
+    content = resp.read()
+    content_type = resp.headers.get("Content-Type", "text/html")
+    return content, content_type, resp.status
 
 
 # ---------------------------------------------------------------------------

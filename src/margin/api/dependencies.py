@@ -60,6 +60,10 @@ from margin.news.repository import NewsRepository
 from margin.news.service import NewsService
 from margin.news.target_queue import NewsTargetQueue
 from margin.news.websearch import WebSearchProvider, WebSearchService
+from margin.platform_runtime.repository import (
+    MemoryIdempotencyStore,
+    SQLAlchemyPlatformRuntimeRepository,
+)
 from margin.research.delta_repository import SQLAlchemyResearchDeltaRepository
 from margin.research.execution.llm_service import LLMService
 from margin.research.graph_audit_repository import (
@@ -462,6 +466,16 @@ def get_context_repository() -> SQLAlchemyContextRepository:
 
 
 @lru_cache
+def get_idempotency_store() -> SQLAlchemyPlatformRuntimeRepository | MemoryIdempotencyStore:
+    """Return the platform idempotency store used by mutating agent routes.
+
+    Returns:
+        SQL-backed store in production processes; tests override via create_app.
+    """
+    return SQLAlchemyPlatformRuntimeRepository(get_app_container().session_factory)
+
+
+@lru_cache
 def get_agent_runtime_service() -> AgentRuntimeService:
     """Return the v1 application-facing Agent runtime service.
 
@@ -476,6 +490,7 @@ def get_agent_runtime_service() -> AgentRuntimeService:
         dashboard_services=get_dashboard_services(),
         llm_provider_factory=lambda: runtime_factory.build_llm().adapter,
         warehouse_repository=SQLAlchemyWarehouseRepository(container.session_factory),
+        tool_audit_store=get_tool_audit_store(),
     )
 
 
@@ -1326,3 +1341,7 @@ def clear_provider_runtime_caches() -> None:
     get_backfill_application_service.cache_clear()
     get_tool_audit_store.cache_clear()
     get_dashboard_services.cache_clear()
+    # Agent runtime freezes the planning LLM adapter at construction time.
+    get_agent_runtime_service.cache_clear()
+    get_agent_context_store.cache_clear()
+    get_context_repository.cache_clear()

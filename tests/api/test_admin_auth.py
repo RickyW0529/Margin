@@ -53,3 +53,14 @@ def test_local_admin_requires_bearer_token_in_production(monkeypatch) -> None:
         raise AssertionError("production auth without token should fail")
 
     assert require_local_admin("Bearer admin-secret") == "local-admin"
+
+
+def test_clear_provider_runtime_caches_includes_agent_runtime() -> None:
+    """Provider activation must invalidate the cached agent runtime service."""
+    import inspect
+
+    from margin.api.dependencies import clear_provider_runtime_caches
+
+    source = inspect.getsource(clear_provider_runtime_caches)
+    assert "get_agent_runtime_service.cache_clear()" in source
+    assert "get_tool_audit_store.cache_clear()" in source

@@ -12,11 +12,18 @@ import {
   LoaderCircle,
   PanelRight,
   Plus,
-  X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { notifyAgentChatSessionsChanged } from "@/lib/agent-chat-history";
 import {
@@ -247,10 +254,13 @@ export function RecommendationChatPanel({
       className="relative grid h-[calc(100vh-3.5rem)] grid-rows-[minmax(0,1fr)_auto]"
     >
       {!hasConversation ? (
-        <div className="grid min-h-0 place-items-center px-5 pb-10 pt-20 md:px-10">
-          <div className="mx-auto grid w-full max-w-5xl gap-8 text-center">
-            <div className="grid justify-items-center gap-3">
-              <h1 className="max-w-3xl text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-5xl">
+        <div className="grid min-h-0 place-items-center px-5 pb-12 pt-24 md:px-10">
+          <div className="mx-auto grid w-full max-w-3xl gap-10 text-center">
+            <div className="grid justify-items-center gap-4">
+              <p className="text-[11px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+                Margin Research
+              </p>
+              <h1 className="text-display max-w-2xl text-[2rem] leading-[1.15] text-foreground md:text-[2.75rem]">
                 {t("homeTitle")}
               </h1>
             </div>
@@ -265,8 +275,8 @@ export function RecommendationChatPanel({
           </div>
         </div>
       ) : (
-        <div className="min-h-0 overflow-y-auto px-5 pb-40 pt-20 md:px-10 md:pb-44 md:pt-24">
-          <div className="mx-auto grid min-h-full w-full max-w-6xl content-start gap-8">
+        <div className="min-h-0 overflow-y-auto px-5 pb-40 pt-16 md:px-10 md:pb-44 md:pt-20">
+          <div className="mx-auto grid min-h-full w-full max-w-3xl content-start gap-7">
             {loadingSession ? (
               <AssistantBlock>
                 <p className="text-base leading-8 text-foreground">
@@ -325,17 +335,35 @@ export function RecommendationChatPanel({
         </div>
       )}
 
-      {activityPanelOpen ? (
-        <ChatActivityDrawer
-          language={language}
-          response={latestActivityResponse}
-          state={activityState}
-          onClose={() => setActivityPanelOpen(false)}
-        />
-      ) : null}
+      <Sheet open={activityPanelOpen} onOpenChange={setActivityPanelOpen}>
+        <SheetContent side="right" className="max-w-md">
+          <SheetHeader>
+            <p className="text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+              Timeline
+            </p>
+            <SheetTitle>思考活动</SheetTitle>
+            <SheetDescription>
+              {activityState === "thinking"
+                ? "正在规划并读取上下文"
+                : "本轮回答的 Agent 协作轨迹"}
+            </SheetDescription>
+          </SheetHeader>
+          <SheetBody>
+            {activityState === "thinking" ? (
+              <ThinkingActivityLine language={language} />
+            ) : latestActivityResponse ? (
+              <QnaActivityLine language={language} response={latestActivityResponse} />
+            ) : (
+              <p className="rounded-2xl border border-border/80 bg-muted/30 p-4 text-sm text-muted-foreground">
+                暂无可展示的思考活动。
+              </p>
+            )}
+          </SheetBody>
+        </SheetContent>
+      </Sheet>
 
       {hasConversation ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-background via-background to-transparent px-5 pb-5 pt-16 md:px-10">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-background via-background/95 to-transparent px-5 pb-6 pt-20 md:px-10">
           <ChatComposer
             busy={busy}
             message={message}
@@ -353,7 +381,7 @@ export function RecommendationChatPanel({
 function UserMessageBubble({ message }: { message: string }) {
   return (
     <div className="flex justify-end">
-      <div className="max-w-[78%] rounded-[28px] bg-muted px-5 py-3 text-base leading-relaxed text-foreground shadow-sm md:max-w-[48rem]">
+      <div className="max-w-[82%] rounded-2xl rounded-br-md bg-foreground px-4 py-3 text-[15px] leading-relaxed text-background shadow-xs md:max-w-[36rem]">
         {message}
       </div>
     </div>
@@ -374,11 +402,11 @@ function ChatMessageBubble({
   }
   return (
     <AssistantBlock>
-      <p className="text-base leading-8 text-foreground md:text-lg md:leading-9">
+      <p className="text-[15px] leading-8 text-foreground md:text-base md:leading-8">
         {message.content}
       </p>
       {message.response ? (
-        <div className="mt-6 grid gap-3 text-sm text-muted-foreground">
+        <div className="mt-5 grid gap-3 text-sm text-muted-foreground">
           {message.response.references.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {message.response.references.map((reference, index) => {
@@ -386,7 +414,7 @@ function ChatMessageBubble({
                 return (
                   <span
                     key={`${label}-${index}`}
-                    className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground"
+                    className="rounded-full border border-border/80 bg-muted/60 px-2.5 py-1 text-[11px] font-medium tracking-tight text-muted-foreground"
                   >
                     {label}
                   </span>
@@ -603,56 +631,6 @@ function ChatActivityDock({
   );
 }
 
-function ChatActivityDrawer({
-  language,
-  onClose,
-  response,
-  state,
-}: {
-  language: UiLanguage;
-  onClose: () => void;
-  response: MainAgentQnaResponse | null;
-  state: "completed" | "thinking" | null;
-}) {
-  return (
-    <aside
-      aria-label="思考活动"
-      className="fixed inset-y-0 right-0 z-50 grid w-[min(92vw,28rem)] grid-rows-[auto_minmax(0,1fr)] border-l border-border bg-card shadow-lg"
-      role="dialog"
-    >
-      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-accent">
-            Timeline
-          </p>
-          <h2 className="mt-1 text-sm font-semibold text-foreground">
-            思考活动
-          </h2>
-        </div>
-        <button
-          aria-label="关闭思考活动"
-          className="grid size-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          type="button"
-          onClick={onClose}
-        >
-          <X className="size-4" />
-        </button>
-      </div>
-      <div className="min-h-0 overflow-y-auto p-4">
-        {state === "thinking" ? (
-          <ThinkingActivityLine language={language} />
-        ) : response ? (
-          <QnaActivityLine language={language} response={response} />
-        ) : (
-          <p className="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
-            暂无可展示的思考活动。
-          </p>
-        )}
-      </div>
-    </aside>
-  );
-}
-
 function ThinkingActivityLine({ language }: { language: UiLanguage }) {
   const rows = [
     {
@@ -837,24 +815,24 @@ function ChatComposer({
 }) {
   return (
     <form
-      className="pointer-events-auto mx-auto grid w-full max-w-5xl gap-3"
+      className="pointer-events-auto mx-auto grid w-full max-w-3xl gap-3"
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
       }}
     >
-      <div className="flex min-h-16 items-end gap-3 rounded-[32px] border border-border bg-card px-4 py-3 shadow-lg">
+      <div className="flex min-h-[3.75rem] items-end gap-2 rounded-2xl border border-border/90 bg-card px-3 py-2.5 shadow-md ring-1 ring-black/[0.02]">
         <button
           aria-label={t("chatAttach")}
-          className="mb-1 grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+          className="mb-0.5 grid size-9 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground disabled:opacity-40"
           disabled={busy}
           type="button"
         >
-          <Plus className="size-5" />
+          <Plus className="size-4" />
         </button>
         <Textarea
           aria-label={t("chatLabel")}
-          className="max-h-40 min-h-10 flex-1 resize-none border-0 bg-transparent px-0 py-2 text-base leading-6 text-foreground shadow-none outline-none placeholder:text-muted-foreground focus-visible:ring-0"
+          className="max-h-40 min-h-10 flex-1 resize-none border-0 bg-transparent px-0 py-2 text-[15px] leading-6 text-foreground shadow-none outline-none placeholder:text-muted-foreground/75 focus-visible:ring-0"
           disabled={busy}
           placeholder={placeholder}
           value={message}
@@ -868,18 +846,18 @@ function ChatComposer({
         />
         <button
           aria-label={t("chatSend")}
-          className="mb-0.5 grid size-10 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-transform hover:scale-105 disabled:scale-100 disabled:bg-muted disabled:text-muted-foreground"
+          className="mb-0.5 grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground shadow-xs transition-all duration-150 hover:bg-primary/90 active:scale-[0.98] disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none"
           disabled={busy || !message.trim()}
           type="submit"
         >
           {busy ? (
-            <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            <span className="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
           ) : (
-            <ArrowUp className="size-5" />
+            <ArrowUp className="size-4" />
           )}
         </button>
       </div>
-      <p className="text-center text-xs text-muted-foreground">
+      <p className="text-center text-[11px] leading-relaxed text-muted-foreground/80">
         {t("chatDisclaimer")}
       </p>
     </form>
@@ -888,7 +866,7 @@ function ChatComposer({
 
 function AssistantBlock({ children }: { children: ReactNode }) {
   return (
-    <div className="max-w-[min(100%,56rem)] text-left">
+    <div className="max-w-[min(100%,40rem)] text-left">
       {children}
     </div>
   );

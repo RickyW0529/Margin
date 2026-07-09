@@ -13,7 +13,8 @@ import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from margin.core.secret import SecretManager, SecretNotFoundError
+from margin.core.secret import SecretNotFoundError
+from margin.core.secret_resolution import resolve_named_secret
 from margin.data.ingestion import DataWarehouseIngestionStack
 from margin.data.providers.akshare_provider import AKShareProvider
 from margin.data.providers.tushare_provider import TushareProvider
@@ -147,9 +148,12 @@ def _build_provider(provider_name: str, tushare_token: str | None):
 
 
 def _resolve_tushare_token() -> str | None:
-    """Resolve the Tushare API token from the legacy smoke secret manager."""
+    """Resolve the Tushare API token via Secret Store first."""
     try:
-        token = SecretManager().resolve("tushare_token").strip()
+        token = resolve_named_secret(
+            "tushare_token",
+            provider_name="tushare",
+        ).strip()
     except SecretNotFoundError:
         return None
     return token or None

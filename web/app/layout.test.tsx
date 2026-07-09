@@ -9,6 +9,22 @@ import RootLayout from "./layout";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    refresh: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+}));
+
+vi.mock("next/font/google", () => ({
+  DM_Sans: () => ({ variable: "--font-dm-sans", className: "font-dm-sans" }),
+  JetBrains_Mono: () => ({
+    variable: "--font-jetbrains-mono",
+    className: "font-jetbrains-mono",
+  }),
 }));
 
 describe("RootLayout", () => {

@@ -10,6 +10,27 @@ function backendApiBaseUrl(): string {
   ).replace(/\/+$/, "");
 }
 
+/**
+ * Inject the server-side admin bearer token for mutating proxy requests.
+ *
+ * The browser never holds MARGIN_ADMIN_API_TOKEN; the Next.js BFF attaches it
+ * when the API runs with production auth. Development leaves the token empty
+ * so require_local_admin remains open for local-first use.
+ */
+function withAdminAuthorization(request: NextRequest, headers: Headers): void {
+  const method = request.method.toUpperCase();
+  headers.delete("authorization");
+  headers.delete("Authorization");
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
+    return;
+  }
+  const token = process.env.MARGIN_ADMIN_API_TOKEN?.trim();
+  if (!token) {
+    return;
+  }
+  headers.set("Authorization", `Bearer ${token}`);
+}
+
 async function proxyRequest(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> },
@@ -19,6 +40,7 @@ async function proxyRequest(
   targetUrl.search = request.nextUrl.search;
   const requestHeaders = new Headers(request.headers);
   requestHeaders.delete("host");
+  withAdminAuthorization(request, requestHeaders);
 
   const response = await fetch(targetUrl, {
     body: ["GET", "HEAD"].includes(request.method) ? undefined : await request.arrayBuffer(),

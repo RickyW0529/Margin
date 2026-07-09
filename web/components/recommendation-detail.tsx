@@ -10,6 +10,7 @@ import { FactorScoreBar } from "@/components/factor-score-bar";
 import { MetricTrendChart } from "@/components/metric-trend-chart";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Stat } from "@/components/ui/stat";
 import type {
   MetricTrend,
   RawMetricCard,
@@ -37,19 +38,41 @@ export function RecommendationDetail({ detail }: RecommendationDetailProps) {
   );
 
   return (
-    <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
-      <header className="flex min-w-0 flex-wrap items-end justify-between gap-3">
+    <section className="page-shell grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
+      <header className="flex min-w-0 flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-sm text-muted-foreground">{t("detailRecommendation")}</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
+          <p className="text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+            {t("detailRecommendation")}
+          </p>
+          <h1 className="text-display mt-2 text-3xl text-foreground">
             {item.name}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">{item.security_id}</p>
+          <p className="mt-1 text-sm tabular text-muted-foreground">{item.security_id}</p>
         </div>
         <Badge tone={statusTone(item.screening_status)}>
           {statusLabel(item.screening_status, language)}
         </Badge>
       </header>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Stat
+          label={t("detailConfidence")}
+          value={formatPercentOne(
+            reviewConfidence(detail.current_review, item.confidence),
+          )}
+          progress={Math.round(
+            (reviewConfidence(detail.current_review, item.confidence) ?? 0) * 100,
+          )}
+        />
+        <Stat
+          label={t("dashboardQuantScore")}
+          value={formatScore(item.final_score)}
+        />
+        <Stat
+          label={t("dashboardDiscount")}
+          value={formatPercentOne(item.discount_rate)}
+        />
+      </div>
 
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
@@ -63,16 +86,13 @@ export function RecommendationDetail({ detail }: RecommendationDetailProps) {
                   </span>
                 ) : null}
               </div>
-              <span className="text-xs text-muted-foreground">
-                {t("detailConfidence")} {formatPercentOne(reviewConfidence(detail.current_review, item.confidence))}
-              </span>
             </CardHeader>
             <CardContent className="grid gap-3">
               <p className="text-sm leading-relaxed text-foreground">
                 {safeText(detail.thesis.statement) ?? t("detailNoConclusion")}
               </p>
               {reviewReason ? (
-                <div className="rounded-md border border-caution-soft bg-caution-soft px-3 py-2 text-sm text-caution">
+                <div className="rounded-xl border border-caution/15 bg-caution-soft px-3 py-2 text-sm text-caution">
                   {reviewReason}
                 </div>
               ) : null}

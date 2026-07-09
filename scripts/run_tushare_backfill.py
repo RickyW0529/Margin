@@ -9,7 +9,8 @@ import os
 import sys
 from datetime import UTC, datetime
 
-from margin.core.secret import SecretManager, SecretNotFoundError
+from margin.core.secret import SecretNotFoundError
+from margin.core.secret_resolution import resolve_named_secret
 from margin.data.company_pool import SQLAlchemyCompanyPoolRepository
 from margin.data.ingestion import DataWarehouseIngestionStack
 from margin.data.policy import DataAcquisitionPolicyVersion
@@ -109,12 +110,12 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _resolve_tushare_token() -> str | None:
-    """Resolve the Tushare token for this manual backfill script."""
-    env_token = os.environ.get("MARGIN_TUSHARE_TOKEN", "").strip()
-    if env_token:
-        return env_token
+    """Resolve the Tushare token via Secret Store first, then legacy fallbacks."""
     try:
-        token = SecretManager().resolve("tushare_token").strip()
+        token = resolve_named_secret(
+            "tushare_token",
+            provider_name="tushare",
+        ).strip()
     except SecretNotFoundError:
         return None
     return token or None

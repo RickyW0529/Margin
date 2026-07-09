@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from margin.api.dependencies import get_strategy_service
 from margin.api.main import create_app
+from margin.platform_runtime.repository import MemoryIdempotencyStore
 from margin.storage.base import Base
 from margin.storage.database import (
     DatabaseSettings,
@@ -35,9 +36,11 @@ def test_strategy_api_persists_across_default_service_instances(database_url, mo
         session.query(StrategyProfileRow).delete()
 
     try:
-        first_client = TestClient(create_app())
+        first_client = TestClient(
+            create_app(idempotency_store=MemoryIdempotencyStore())
+        )
         response = first_client.post(
-            "/strategies",
+            "/api/v1/strategies",
             headers={"Idempotency-Key": "strategy-postgres-create"},
             json={"owner_id": "user_1", "template": "value_quality"},
         )
@@ -45,8 +48,10 @@ def test_strategy_api_persists_across_default_service_instances(database_url, mo
         strategy_id = response.json()["strategy_id"]
 
         get_strategy_service.cache_clear()
-        second_client = TestClient(create_app())
-        listed = second_client.get("/strategies", params={"owner_id": "user_1"})
+        second_client = TestClient(
+            create_app(idempotency_store=MemoryIdempotencyStore())
+        )
+        listed = second_client.get("/api/v1/strategies", params={"owner_id": "user_1"})
 
         assert listed.status_code == 200
         assert [item["strategy_id"] for item in listed.json()] == [strategy_id]

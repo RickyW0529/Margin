@@ -49,7 +49,7 @@ def _token(
         tool_policy=tool_policy,
         allowed_artifact_types=("tool_result",),
         allowed_tool_names=allowed_tool_names,
-        expires_at=datetime(2026, 7, 9, tzinfo=UTC),
+        expires_at=datetime(2099, 1, 1, tzinfo=UTC),
         max_tool_calls=4,
         max_result_bytes=512,
     )
@@ -119,6 +119,35 @@ def _request(
         idempotency_key=idempotency_key,
         deadline_ms=1000,
     )
+
+
+def test_tool_gateway_blocks_expired_capability() -> None:
+    """Expired capability tokens must not execute tools."""
+    catalog = ToolCatalog()
+    catalog.register(_spec(), lambda request: {"message": request.input_json["message"]})
+    gateway = ToolGateway(catalog=catalog, audit_store=InMemoryToolAuditStore())
+    token = _token()
+    expired = token.model_copy(update={"expires_at": datetime(2000, 1, 1, tzinfo=UTC)})
+
+    result = gateway.call(_request(token=expired))
+
+    assert result.status is ToolCallStatus.BLOCKED
+    assert result.error_code == "capability_expired"
+
+
+def test_tool_gateway_blocks_max_tool_calls() -> None:
+    """Per-token max_tool_calls is enforced across successive calls."""
+    catalog = ToolCatalog()
+    catalog.register(_spec(), lambda request: {"message": request.input_json["message"]})
+    gateway = ToolGateway(catalog=catalog, audit_store=InMemoryToolAuditStore())
+    token = _token().model_copy(update={"max_tool_calls": 1})
+
+    first = gateway.call(_request(idempotency_key="call-1", token=token))
+    second = gateway.call(_request(idempotency_key="call-2", token=token))
+
+    assert first.status is ToolCallStatus.SUCCEEDED
+    assert second.status is ToolCallStatus.BLOCKED
+    assert second.error_code == "max_tool_calls_exceeded"
 
 
 def test_tool_gateway_blocks_unregistered_tool() -> None:

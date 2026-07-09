@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import ipaddress
-import socket
 import time
 from collections.abc import Callable, Mapping
 from datetime import datetime
@@ -13,13 +11,14 @@ from urllib.parse import urlparse
 from pydantic import BaseModel
 
 from margin.core.secret_store import SecretMetadata, SecretRedactor, SecretStore
+from margin.core.ssrf import SSRFError, assert_public_http_url
 from margin.news.models import utc_now
 from margin.strategy.models import ProviderConfigVersion
 from margin.strategy.provider_router import detect_provider_from_url, provider_category_for_config
 
 
-class ProviderSSRFError(ValueError):
-    """Raised when a provider base URL violates SSRF guardrails.."""
+class ProviderSSRFError(SSRFError):
+    """Raised when a provider base URL violates SSRF guardrails."""
 
 
 class ProviderHealth(BaseModel):
@@ -200,67 +199,31 @@ class ProviderConfigHealthService:
         """Validate a provider URL against SSRF guardrails.
 
         Args:
-            base_url: str: .
-            provider_name: str | None: .
-            allow_custom_base_url: bool: .
+            base_url: Provider base URL.
+            provider_name: Optional adapter name for host allowlists.
+            allow_custom_base_url: When True, skip host allowlist enforcement.
 
         Returns:
-            None: .
+            None
         """
+        try:
+            assert_public_http_url(
+                base_url,
+                allow_local=self._allow_local_development,
+                resolve_dns=self._resolve_dns,
+            )
+        except SSRFError as exc:
+            message = str(exc).replace("url ", "provider base_url ", 1)
+            raise ProviderSSRFError(message) from exc
+
         parsed = urlparse(base_url)
-        if parsed.scheme not in {"http", "https"}:
-            raise ProviderSSRFError("provider base_url must be http or https")
-        if parsed.scheme == "http" and not self._allow_local_development:
-            raise ProviderSSRFError("provider base_url must use https")
-        if not parsed.hostname:
-            raise ProviderSSRFError("provider base_url must include a hostname")
-
-        host = parsed.hostname.strip("[]").lower()
-        if host == "localhost":
-            if self._allow_local_development:
-                return
-            raise ProviderSSRFError("provider base_url cannot target localhost")
-
-        addresses = self._parse_or_resolve_host(host)
-        for address in addresses:
-            if _is_forbidden_ip(address):
-                if self._allow_local_development and address.is_loopback:
-                    continue
-                raise ProviderSSRFError(f"provider base_url targets forbidden network: {address}")
-
+        host = (parsed.hostname or "").strip("[]").lower()
         if provider_name is not None:
             allowed_hosts = self._host_allowlists.get(provider_name.lower())
             if allowed_hosts and host not in allowed_hosts and not allow_custom_base_url:
                 raise ProviderSSRFError(
                     f"provider base_url host is outside the {provider_name} allowlist"
                 )
-
-    def _parse_or_resolve_host(
-        self,
-        host: str,
-    ) -> tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...]:
-        """parse or resolve host.
-
-        Args:
-            host: str: .
-
-        Returns:
-            tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...]: .
-        """
-        try:
-            return (ipaddress.ip_address(host),)
-        except ValueError:
-            if not self._resolve_dns:
-                return ()
-
-        resolved: set[ipaddress.IPv4Address | ipaddress.IPv6Address] = set()
-        try:
-            infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
-        except socket.gaierror as exc:
-            raise ProviderSSRFError(f"provider base_url host cannot resolve: {host}") from exc
-        for info in infos:
-            resolved.add(ipaddress.ip_address(info[4][0]))
-        return tuple(sorted(resolved, key=str))
 
     def _result(
         self,
@@ -273,20 +236,7 @@ class ProviderConfigHealthService:
         redacted_error: str | None = None,
         secret_metadata: SecretMetadata | None = None,
     ) -> ProviderHealth:
-        """result.
-
-        Args:
-            config: ProviderConfigVersion: .
-            checked_at: datetime: .
-            started: float: .
-            status: Literal['ok', 'failed', 'not_configured']: .
-            error_code: str | None: .
-            redacted_error: str | None: .
-            secret_metadata: SecretMetadata | None: .
-
-        Returns:
-            ProviderHealth: .
-        """
+        """Build a health result with measured latency."""
         latency_ms = int((time.perf_counter() - started) * 1000)
         return ProviderHealth(
             provider_name=config.provider_name,
@@ -298,24 +248,3 @@ class ProviderConfigHealthService:
             redacted_error=redacted_error,
             secret_metadata=secret_metadata,
         )
-
-
-def _is_forbidden_ip(
-    address: ipaddress.IPv4Address | ipaddress.IPv6Address,
-) -> bool:
-    """is forbidden ip.
-
-    Args:
-        address: ipaddress.IPv4Address | ipaddress.IPv6Address: .
-
-    Returns:
-        bool: .
-    """
-    return (
-        address.is_loopback
-        or address.is_link_local
-        or address.is_private
-        or address.is_multicast
-        or address.is_reserved
-        or address.is_unspecified
-    )

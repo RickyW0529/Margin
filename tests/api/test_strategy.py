@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from margin.api.main import create_app
+from margin.platform_runtime.repository import MemoryIdempotencyStore
 from margin.strategy.service import StrategyService
 
 
@@ -14,7 +15,10 @@ def _client() -> TestClient:
     Returns:
         TestClient: .
     """
-    app = create_app(strategy_service=StrategyService())
+    app = create_app(
+        strategy_service=StrategyService(),
+        idempotency_store=MemoryIdempotencyStore(),
+    )
     return TestClient(app)
 
 
@@ -38,7 +42,7 @@ def test_create_strategy_endpoint():
     """
     client = _client()
     response = client.post(
-        "/strategies",
+        "/api/v1/strategies",
         headers=_idempotency_headers("strategy-create"),
         json={"owner_id": "user_1", "template": "value_quality"},
     )
@@ -55,9 +59,25 @@ def test_list_templates_endpoint():
         Any: .
     """
     client = _client()
-    response = client.get("/strategies/templates")
+    response = client.get("/api/v1/strategies/templates")
     assert response.status_code == 200
     assert len(response.json()) == 6
+
+
+def test_create_strategy_replays_idempotency_key():
+    """Identical create requests must not mint a second strategy profile."""
+    client = _client()
+    headers = _idempotency_headers("strategy-create-once")
+    body = {"owner_id": "user_1", "template": "value_quality", "name": "once"}
+
+    first = client.post("/api/v1/strategies", headers=headers, json=body)
+    second = client.post("/api/v1/strategies", headers=headers, json=body)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["strategy_id"] == second.json()["strategy_id"]
+    listed = client.get("/api/v1/strategies", params={"owner_id": "user_1"})
+    assert len(listed.json()) == 1
 
 
 def test_strategy_mutations_require_idempotency_key():
@@ -69,7 +89,7 @@ def test_strategy_mutations_require_idempotency_key():
     client = _client()
 
     response = client.post(
-        "/strategies",
+        "/api/v1/strategies",
         json={"owner_id": "user_1", "template": "value_quality"},
     )
 
@@ -85,12 +105,12 @@ def test_get_strategy_endpoint():
     """
     client = _client()
     create_resp = client.post(
-        "/strategies",
+        "/api/v1/strategies",
         headers=_idempotency_headers("strategy-get-create"),
         json={"owner_id": "user_1", "template": "value_quality"},
     )
     strategy_id = create_resp.json()["strategy_id"]
-    response = client.get(f"/strategies/{strategy_id}")
+    response = client.get(f"/api/v1/strategies/{strategy_id}")
     assert response.status_code == 200
     assert response.json()["strategy_id"] == strategy_id
 
@@ -103,13 +123,13 @@ def test_update_strategy_endpoint():
     """
     client = _client()
     create_resp = client.post(
-        "/strategies",
+        "/api/v1/strategies",
         headers=_idempotency_headers("strategy-update-create"),
         json={"owner_id": "user_1", "template": "value_quality"},
     )
     strategy_id = create_resp.json()["strategy_id"]
     response = client.put(
-        f"/strategies/{strategy_id}",
+        f"/api/v1/strategies/{strategy_id}",
         headers=_idempotency_headers("strategy-update"),
         json={"config_delta": {"universe": ["000002.SZ"]}},
     )
@@ -125,26 +145,26 @@ def test_activate_version_endpoint():
     """
     client = _client()
     create_resp = client.post(
-        "/strategies",
+        "/api/v1/strategies",
         headers=_idempotency_headers("strategy-activate-create"),
         json={"owner_id": "user_1", "template": "value_quality"},
     )
     strategy_id = create_resp.json()["strategy_id"]
     version_id = create_resp.json()["versions"][0]["version_id"]
     client.post(
-        f"/strategies/{strategy_id}/versions/{version_id}/validate",
+        f"/api/v1/strategies/{strategy_id}/versions/{version_id}/validate",
         headers=_idempotency_headers("strategy-validate"),
     )
     client.post(
-        f"/strategies/{strategy_id}/versions/{version_id}/backtest",
+        f"/api/v1/strategies/{strategy_id}/versions/{version_id}/backtest",
         headers=_idempotency_headers("strategy-backtest"),
     )
     client.post(
-        f"/strategies/{strategy_id}/versions/{version_id}/paper-trade",
+        f"/api/v1/strategies/{strategy_id}/versions/{version_id}/paper-trade",
         headers=_idempotency_headers("strategy-paper"),
     )
     response = client.post(
-        f"/strategies/{strategy_id}/versions/{version_id}/activate",
+        f"/api/v1/strategies/{strategy_id}/versions/{version_id}/activate",
         headers=_idempotency_headers("strategy-activate"),
     )
     assert response.status_code == 200
@@ -159,12 +179,12 @@ def test_get_prompt_endpoint():
     """
     client = _client()
     create_resp = client.post(
-        "/strategies",
+        "/api/v1/strategies",
         headers=_idempotency_headers("strategy-prompt-create"),
         json={"owner_id": "user_1", "template": "value_quality"},
     )
     strategy_id = create_resp.json()["strategy_id"]
     version_id = create_resp.json()["versions"][0]["version_id"]
-    response = client.get(f"/strategies/{strategy_id}/versions/{version_id}/prompt")
+    response = client.get(f"/api/v1/strategies/{strategy_id}/versions/{version_id}/prompt")
     assert response.status_code == 200
     assert "prompt" in response.json()

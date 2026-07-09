@@ -58,6 +58,7 @@ class WarehouseReadTools:
                     "warehouse.resolve_security",
                     "warehouse.discover_indicators",
                     "warehouse.query_indicator_history",
+                    "warehouse.query_data_freshness",
                 ],
             },
         )
@@ -147,17 +148,70 @@ class WarehouseReadTools:
             output={"history": history},
         )
 
+    def query_data_freshness(
+        self,
+        *,
+        domains: tuple[str, ...] = (),
+        dataset: str | None = None,
+    ) -> WarehouseToolResult:
+        """Return persisted warehouse freshness records for requested domains."""
+        domain_set = set(domains) if domains else None
+        if hasattr(self._repository, "freshness"):
+            records = self._repository.freshness(domain_set)
+        else:
+            records = []
+        rows = [_freshness_row(record) for record in records]
+        if dataset:
+            dataset_key = dataset.strip().lower()
+            rows = [
+                row
+                for row in rows
+                if dataset_key in str(row.get("endpoint_code", "")).lower()
+                or dataset_key in str(row.get("provider", "")).lower()
+            ]
+        statuses = {str(row.get("status") or "unknown") for row in rows}
+        if not rows:
+            aggregate = "unknown"
+        elif statuses == {"fresh"}:
+            aggregate = "fresh"
+        elif "failed" in statuses:
+            aggregate = "failed"
+        elif "stale" in statuses or "never_synced" in statuses:
+            aggregate = "stale"
+        elif "syncing" in statuses:
+            aggregate = "syncing"
+        else:
+            aggregate = "mixed"
+        return WarehouseToolResult(
+            tool_name="warehouse.query_data_freshness",
+            output={
+                "dataset": dataset or "all",
+                "status": aggregate,
+                "domains": list(domains),
+                "records": rows,
+                "record_count": len(rows),
+            },
+        )
+
 
 def query_data_freshness(request: ToolCallRequest) -> dict:
-    """Query data freshness.
-
-    Args:
-        request: ToolCallRequest: .
-
-    Returns:
-        dict: .
-    """
+    """Module-level stub kept for import compatibility; prefer WarehouseReadTools."""
     return {"dataset": request.input_json.get("dataset", "unknown"), "status": "unknown"}
+
+
+def _freshness_row(record: Any) -> dict[str, Any]:
+    """Normalize one warehouse freshness record into tool JSON."""
+    status = getattr(record, "status", None)
+    status_value = getattr(status, "value", status)
+    return {
+        "provider": getattr(record, "provider", ""),
+        "endpoint_code": getattr(record, "endpoint_code", ""),
+        "as_of_date": getattr(record, "as_of_date", None),
+        "expected_at": getattr(record, "expected_at", None),
+        "observed_at": getattr(record, "observed_at", None),
+        "status": status_value,
+        "lag_seconds": getattr(record, "lag_seconds", None),
+    }
 
 
 def _indicator_catalog_item(item: Any) -> dict[str, Any]:

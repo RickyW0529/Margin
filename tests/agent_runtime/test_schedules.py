@@ -105,7 +105,8 @@ def test_scheduled_runner_triggers_v1_plan_and_refresh() -> None:
     assert metadata["schedule_id"] == "stock_analysis_daily"
     assert metadata["universe"] == "ALL_A"
     assert metadata["global_plan"]["created_by"] == "MainAgent"
-    assert metadata["global_plan"]["domain_task_count"] == 0
+    assert metadata["global_plan"]["domain_task_count"] >= 1
+    assert metadata["execution_boundary"] == "l3_worker_runtime"
     assert metadata["quant_agent_strategy_profile"]["strategy_family"] == ("ml_lgbm_lifecycle")
     assert metadata["quant_strategy"]["strategy_family"] == "ml_lgbm_lifecycle"
     assert metadata["scheduled_task_intent"] == {
@@ -117,24 +118,21 @@ def test_scheduled_runner_triggers_v1_plan_and_refresh() -> None:
     }
     assert metadata["main_agent_plan"]["planning_mode"] == "prompt_dynamic"
     assert metadata["main_agent_plan"]["planning_prompt_ref"] == "main_agent_scheduled_planner_v1"
-    assert metadata["main_agent_plan"]["domain_agents"] == []
-    assert metadata["main_agent_plan"]["planner_messages"]
-    assert any(
-        message["domain"] == "quant"
-        for message in metadata["main_agent_plan"]["planner_messages"]
-    )
     assert metadata["plan_validation"]["valid"] is True
     artifacts = context_store.list_artifacts("ar_sched_20260707_0830")
     assert [artifact.artifact_type for artifact in artifacts] == [
         "scheduled_global_plan",
+        "data_readiness",
         "valuation_refresh",
+        "l3_execution_report",
     ]
     assert artifacts[0].producer_agent == "MainAgent"
-    assert artifacts[1].producer_agent == "QuantExpertAgent"
-    assert artifacts[1].payload_json["valuation_refresh_run_id"] == "refresh-1"
-    assert artifacts[1].payload_json["dashboard_projection"] == "expected_after_refresh"
+    assert artifacts[2].producer_agent == "QuantExpertAgent"
+    assert artifacts[2].payload_json["valuation_refresh_run_id"] == "refresh-1"
+    assert artifacts[2].payload_json["dashboard_projection"] == "expected_after_refresh"
+    assert artifacts[2].payload_json["worker_layer"] == "L3"
     assert (
-        artifacts[1].payload_json["quant_agent_strategy_profile"]["profile_id"]
+        artifacts[2].payload_json["quant_agent_strategy_profile"]["profile_id"]
         == "liquid-large-mid-lgbm-recent-trend80-ddstop-v1"
     )
     assert repository.saved.last_triggered_at == datetime(2026, 7, 7, 0, 31, tzinfo=UTC)

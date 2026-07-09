@@ -853,7 +853,7 @@ export function fetchValuationDiscoveryRuns(
   );
 }
 
-/** Built-in strategy template metadata returned by GET /strategies/templates. */
+/** Built-in strategy template metadata returned by GET /api/v1/strategies/templates. */
 export type StrategyTemplate = {
   template_id: string;
   name: string;
@@ -893,32 +893,32 @@ export type UpdateStrategyRequest = {
   description?: string;
 };
 
-/** Merged prompt response returned by GET /strategies/{id}/versions/{v}/prompt. */
+/** Merged prompt response returned by GET /api/v1/strategies/{id}/versions/{v}/prompt. */
 export type StrategyPromptResponse = {
   prompt: string;
 };
 
 /** Lists available built-in strategy templates. */
 export function fetchStrategyTemplates(): Promise<StrategyTemplate[]> {
-  return request<StrategyTemplate[]>(`/strategies/templates`);
+  return request<StrategyTemplate[]>(`/api/v1/strategies/templates`);
 }
 
 /** Lists strategy profiles owned by the given owner. */
 export function fetchStrategies(ownerId: string): Promise<StrategyProfile[]> {
   const query = new URLSearchParams({ owner_id: ownerId });
-  return request<StrategyProfile[]>(`/strategies?${query.toString()}`);
+  return request<StrategyProfile[]>(`/api/v1/strategies?${query.toString()}`);
 }
 
 /** Returns a single strategy profile by id. */
 export function fetchStrategyDetail(strategyId: string): Promise<StrategyProfile> {
-  return request<StrategyProfile>(`/strategies/${strategyId}`);
+  return request<StrategyProfile>(`/api/v1/strategies/${strategyId}`);
 }
 
 /** Creates a strategy from a built-in template. */
 export function createStrategy(
   body: CreateStrategyRequest,
 ): Promise<StrategyProfile> {
-  return authenticatedMutation<StrategyProfile>("/strategies", "POST", body);
+  return authenticatedMutation<StrategyProfile>("/api/v1/strategies", "POST", body);
 }
 
 /** Creates a strategy from a fully custom configuration. */
@@ -926,7 +926,7 @@ export function createCustomStrategy(
   body: CreateCustomStrategyRequest,
 ): Promise<StrategyProfile> {
   return authenticatedMutation<StrategyProfile>(
-    "/strategies/custom",
+    "/api/v1/strategies/custom",
     "POST",
     body,
   );
@@ -938,7 +938,7 @@ export function updateStrategy(
   body: UpdateStrategyRequest,
 ): Promise<StrategyProfile> {
   return authenticatedMutation<StrategyProfile>(
-    `/strategies/${strategyId}`,
+    `/api/v1/strategies/${strategyId}`,
     "PUT",
     body,
   );
@@ -950,7 +950,7 @@ export function validateStrategyVersion(
   versionId: string,
 ): Promise<StrategyProfile> {
   return authenticatedMutation<StrategyProfile>(
-    `/strategies/${strategyId}/versions/${versionId}/validate`,
+    `/api/v1/strategies/${strategyId}/versions/${versionId}/validate`,
     "POST",
     {},
   );
@@ -962,7 +962,7 @@ export function backtestStrategyVersion(
   versionId: string,
 ): Promise<StrategyProfile> {
   return authenticatedMutation<StrategyProfile>(
-    `/strategies/${strategyId}/versions/${versionId}/backtest`,
+    `/api/v1/strategies/${strategyId}/versions/${versionId}/backtest`,
     "POST",
     {},
   );
@@ -974,7 +974,7 @@ export function paperTradeStrategyVersion(
   versionId: string,
 ): Promise<StrategyProfile> {
   return authenticatedMutation<StrategyProfile>(
-    `/strategies/${strategyId}/versions/${versionId}/paper-trade`,
+    `/api/v1/strategies/${strategyId}/versions/${versionId}/paper-trade`,
     "POST",
     {},
   );
@@ -986,7 +986,7 @@ export function activateStrategyVersion(
   versionId: string,
 ): Promise<StrategyProfile> {
   return authenticatedMutation<StrategyProfile>(
-    `/strategies/${strategyId}/versions/${versionId}/activate`,
+    `/api/v1/strategies/${strategyId}/versions/${versionId}/activate`,
     "POST",
     {},
   );
@@ -995,7 +995,7 @@ export function activateStrategyVersion(
 /** Archives the active version of a strategy. */
 export function archiveStrategy(strategyId: string): Promise<StrategyProfile> {
   return authenticatedMutation<StrategyProfile>(
-    `/strategies/${strategyId}/archive`,
+    `/api/v1/strategies/${strategyId}/archive`,
     "POST",
     {},
   );
@@ -1011,7 +1011,7 @@ export function fetchStrategyPrompt(
   appendQuery(query, "task", task);
   const qs = query.toString();
   return request<StrategyPromptResponse>(
-    `/strategies/${strategyId}/versions/${versionId}/prompt${qs ? `?${qs}` : ""}`,
+    `/api/v1/strategies/${strategyId}/versions/${versionId}/prompt${qs ? `?${qs}` : ""}`,
   );
 }
 

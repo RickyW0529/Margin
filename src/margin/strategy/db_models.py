@@ -69,6 +69,13 @@ class ProviderSecretVersionRow(Base):
             unique=True,
             postgresql_where=text("status = 'active'"),
         ),
+        Index(
+            "uq_provider_secret_idempotency",
+            "provider_name",
+            "secret_name",
+            "idempotency_key",
+            unique=True,
+        ),
     )
 
     secret_version_id: Mapped[str] = mapped_column(String(64), primary_key=True)

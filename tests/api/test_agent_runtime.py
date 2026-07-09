@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
@@ -17,9 +17,11 @@ from margin.agent_runtime.context_store import (
 from margin.agent_runtime.schedules import MemoryAgentScheduleRepository
 from margin.agents.runtime.service import AgentRuntimeService
 from margin.api.main import create_app
+from margin.core.hashing import stable_json_hash
 from margin.dashboard.models import ResearchItem, ResearchRun
 from margin.dashboard.repository import MemoryDashboardRepository
 from margin.dashboard.service import DashboardServiceBundle
+from margin.platform_runtime.repository import IdempotencyKeyRecord, MemoryIdempotencyStore
 from margin.research.llm import DeterministicLLMProvider, LLMResult
 
 DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
@@ -146,13 +148,15 @@ def test_user_qna_persists_chat_session_and_uses_context_for_followup() -> None:
 
 
 def test_user_qna_persists_context_pack_artifact() -> None:
-    """Test that L1 planning receives a persisted ContextPack instead of raw context.
+    """Test that L1 planning persists a structured ContextPack (not dual-written)."""
+    from margin.agents.context.repository import MemoryContextRepository
 
-    Returns:
-        None: .
-    """
     context_store = MemoryAgentContextStore()
-    client = _client_with_agent_runtime(context_store=context_store)
+    context_repository = MemoryContextRepository()
+    client = _client_with_agent_runtime(
+        context_store=context_store,
+        context_repository=context_repository,
+    )
 
     response = client.post(
         "/api/v1/agent-runs/user-qna",
@@ -162,11 +166,20 @@ def test_user_qna_persists_context_pack_artifact() -> None:
 
     assert response.status_code == 200
     run_id = response.json()["run_id"]
-    artifact = context_store.get_artifact(f"ctxpack_{run_id}_mainagent")
-    assert artifact is not None
-    assert artifact.artifact_type == "context_pack"
-    assert artifact.producer_agent == "MainAgent"
-    assert artifact.payload_json["token_budget"] == 4000
+    pack_id = f"ctxpack_{run_id}_mainagent"
+    # Source of truth is ContextRepository — no dual-write into runtime artifacts.
+    assert context_store.get_artifact(pack_id) is None
+    pack = context_repository.get_context_pack(pack_id)
+    assert pack is not None
+    assert pack.token_budget == 4000
+    assert pack.target_agent == "MainAgent"
+    # API expansion reconstructs the pack as an artifact view (payload is redacted).
+    detail = client.get(f"/api/v1/agent-artifacts/{pack_id}")
+    assert detail.status_code == 200
+    body = detail.json()
+    assert body["artifact_type"] == "context_pack"
+    assert body["artifact_id"] == pack_id
+    assert body["producer_agent"] == "MainAgent"
 
 
 def test_user_qna_rejects_unknown_chat_session() -> None:
@@ -333,17 +346,12 @@ def _client_with_agent_runtime(
     llm_provider: DeterministicLLMProvider | None = None,
     chat_repository: AgentChatRepository | None = None,
     context_store: MemoryAgentContextStore | None = None,
+    context_repository: object | None = None,
+    idempotency_store: MemoryIdempotencyStore | None = None,
 ) -> TestClient:
-    """Build a test client with in-memory agent runtime dependencies.
+    """Build a test client with in-memory agent runtime dependencies."""
+    from margin.agents.context.repository import MemoryContextRepository
 
-    Args:
-        llm_provider: DeterministicLLMProvider | None: .
-        chat_repository: AgentChatRepository | None: .
-        context_store: MemoryAgentContextStore | None: .
-
-    Returns:
-        TestClient: .
-    """
     dashboard_repository = MemoryDashboardRepository()
     bundle = DashboardServiceBundle.in_memory(
         dashboard_repository=dashboard_repository,
@@ -372,27 +380,29 @@ def _client_with_agent_runtime(
     dashboard_repository.add_run(run)
     dashboard_repository.add_items([item])
     context_store = context_store or MemoryAgentContextStore()
+    context_repository = context_repository or MemoryContextRepository()
+    idempotency_store = idempotency_store or MemoryIdempotencyStore()
     fallback_llm_provider = llm_provider or _AnswerLLMProvider("LLM 默认测试回答：000001.SZ。")
 
     def llm_provider_factory() -> DeterministicLLMProvider:
-        """Process llm_provider_factory.
-
-        Returns:
-            DeterministicLLMProvider: .
-        """
+        """Return the deterministic test LLM provider."""
         return fallback_llm_provider
 
     return TestClient(
         create_app(
             dashboard_services=bundle,
             agent_runtime_service=AgentRuntimeService(
-                context_store=context_store or MemoryAgentContextStore(),
+                context_store=context_store,
+                context_repository=context_repository,
                 dashboard_services=bundle,
                 llm_provider_factory=llm_provider_factory,
             ),
+            agent_context_store=context_store,
+            agent_context_repository=context_repository,
             agent_schedule_repository=MemoryAgentScheduleRepository(),
             agent_chat_repository=chat_repository or MemoryAgentChatRepository(),
             llm_provider_factory=llm_provider_factory,
+            idempotency_store=idempotency_store,
         )
     )
 
@@ -487,3 +497,88 @@ class _AnswerLLMProvider(DeterministicLLMProvider):
             latency_ms=0.0,
             raw_response=self._answer,
         )
+
+
+def test_user_qna_replays_same_idempotency_key_without_second_llm_call() -> None:
+    """Identical Idempotency-Key + body must replay without re-running the LLM."""
+    llm_provider = _AnswerLLMProvider("LLM 幂等回答：000001.SZ。")
+    client = _client_with_agent_runtime(llm_provider=llm_provider)
+    headers = _idempotency_headers("qna-idempotent-once")
+    body = {
+        "scope_version_id": "scope-1",
+        "message": "今日推荐？",
+        "session_id": None,
+        "universe": "ALL_A",
+        "language": "zh",
+    }
+
+    first = client.post("/api/v1/agent-runs/user-qna", headers=headers, json=body)
+    second = client.post("/api/v1/agent-runs/user-qna", headers=headers, json=body)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["run_id"] == second.json()["run_id"]
+    assert first.json()["answer"] == second.json()["answer"]
+    # One planning path only; replay must not call the LLM again.
+    assert llm_provider.calls == ["main_plan", "expert_plan", "answer"]
+
+
+def test_user_qna_pending_idempotency_key_does_not_execute_runtime() -> None:
+    """In-flight duplicate requests must not append chat or run the LLM path."""
+    body = {
+        "scope_version_id": "scope-1",
+        "message": "今日推荐？",
+        "session_id": None,
+        "universe": "ALL_A",
+        "language": "zh",
+    }
+    store = MemoryIdempotencyStore()
+    now = datetime(2026, 7, 9, tzinfo=UTC)
+    store.begin_idempotency_key(
+        IdempotencyKeyRecord(
+            idempotency_key="agent.user_qna:qna-pending",
+            scope="agent.user_qna",
+            request_hash=stable_json_hash(body),
+            response_hash=None,
+            response_ref=None,
+            status="pending",
+            created_at=now,
+            expires_at=now + timedelta(hours=24),
+        )
+    )
+    llm_provider = _AnswerLLMProvider("should not run")
+    client = _client_with_agent_runtime(
+        llm_provider=llm_provider,
+        idempotency_store=store,
+    )
+
+    response = client.post(
+        "/api/v1/agent-runs/user-qna",
+        headers=_idempotency_headers("qna-pending"),
+        json=body,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "idempotency_key_in_progress"
+    assert llm_provider.calls == []
+
+
+def test_user_qna_idempotency_key_conflict_on_different_body() -> None:
+    """Reusing Idempotency-Key with a different body returns 409."""
+    client = _client_with_agent_runtime()
+    headers = _idempotency_headers("qna-idempotent-conflict")
+
+    first = client.post(
+        "/api/v1/agent-runs/user-qna",
+        headers=headers,
+        json={"scope_version_id": "scope-1", "message": "第一问"},
+    )
+    second = client.post(
+        "/api/v1/agent-runs/user-qna",
+        headers=headers,
+        json={"scope_version_id": "scope-1", "message": "第二问"},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert second.json()["detail"]["code"] == "idempotency_key_conflict"
