@@ -9,8 +9,9 @@ from margin.agent_runtime.context_store import MemoryAgentContextStore, make_con
 from margin.agent_runtime.guardrails import GuardrailDecisionType
 from margin.agent_runtime.main_agent import MainAgentPlanningError, MainAgentRuntime
 from margin.agent_runtime.step_definitions import load_scheduled_stock_analysis_flow
+from margin.agents.protocol.models import ContextFact, ContextPack
 from margin.agents.runtime.executor_registry import default_qna_executor_registry
-from margin.research.llm import DeterministicLLMProvider
+from margin.research.llm import DeterministicLLMProvider, LLMResult
 
 
 def _runtime() -> MainAgentRuntime:
@@ -24,6 +25,28 @@ def _runtime() -> MainAgentRuntime:
         card_registry=default_agent_card_registry(),
         scheduled_flow=load_scheduled_stock_analysis_flow(),
     )
+
+
+class _RecordingLLMProvider(DeterministicLLMProvider):
+    """Deterministic provider that records prompts."""
+
+    def __init__(self, *, response: dict) -> None:
+        super().__init__(response=response)
+        self.prompts: list[str] = []
+
+    def complete(
+        self,
+        prompt: str,
+        *,
+        response_schema: dict[str, object] | None = None,
+        temperature: float = 0.0,
+    ) -> LLMResult:
+        self.prompts.append(prompt)
+        return super().complete(
+            prompt,
+            response_schema=response_schema,
+            temperature=temperature,
+        )
 
 
 def test_create_scheduled_plan_uses_fixed_json_steps() -> None:
@@ -296,6 +319,58 @@ def test_create_user_qna_plan_can_use_sandbox_after_executor_registration() -> N
         "DataAnalystAgent",
         "CodeSandboxAgent",
     ]
+    assert result.plan.steps[1].skill_id == "run_sandboxed_analysis_code"
+
+
+def test_legacy_qna_planner_receives_context_artifact_summaries() -> None:
+    """Legacy v0 Q&A planner should not receive empty artifact_summaries."""
+    provider = _RecordingLLMProvider(
+        response={
+            "plan_id": "plan_ar_qna_context",
+            "fixed_flow": False,
+            "steps": [
+                {
+                    "expert_agent_name": "GeneralQnaAgent",
+                    "skill_id": "answer_general_qna",
+                }
+            ],
+        }
+    )
+    runtime = MainAgentRuntime(
+        context_store=MemoryAgentContextStore(),
+        card_registry=default_agent_card_registry(),
+        scheduled_flow=load_scheduled_stock_analysis_flow(),
+        llm_provider_factory=lambda: provider,
+    )
+
+    runtime.create_user_qna_plan(
+        run_id="ar_qna_context",
+        user_input="现在能做什么？",
+        context_pack=ContextPack(
+            context_pack_id="ctxpack_ar_qna_context",
+            run_id="ar_qna_context",
+            requester_agent="MainAgent",
+            target_agent="MainAgent",
+            purpose="user_qna",
+            token_budget=4000,
+            included_artifact_refs=("ctx_ar_qna_context_data_readiness",),
+            facts=(
+                ContextFact(
+                    fact_id="fact_dashboard_status",
+                    statement="dashboard_candidates readiness status is empty.",
+                    confidence=1.0,
+                    fact_type="data_status",
+                    subject_type="dataset",
+                    subject_id="dashboard_candidates",
+                    artifact_refs=("ctx_ar_qna_context_data_readiness",),
+                ),
+            ),
+            compression_policy_version="test",
+        ),
+    )
+
+    assert "ctx_ar_qna_context_data_readiness" in provider.prompts[0]
+    assert "dashboard_candidates" in provider.prompts[0]
 
 
 def test_create_user_qna_plan_fails_when_llm_planner_unavailable() -> None:

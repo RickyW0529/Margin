@@ -11,11 +11,10 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, ConfigDict, Field
 
 from margin.agent_runtime.context_store import ContextArtifact, make_context_artifact
-from margin.agents.tools.warehouse_tools import WarehouseReadTools
-from margin.data.warehouse_repository import (
-    IndicatorHistoryValue,
-    SecurityProfileValue,
-)
+from margin.agents.security.capability import CapabilityToken
+from margin.agents.tools.specs import ToolCallRequest, ToolCallStatus
+from margin.agents.tools.warehouse_tools import WarehouseReadTools, WarehouseToolResult
+from margin.core.hashing import stable_json_hash
 
 
 @dataclass(frozen=True)
@@ -73,6 +72,11 @@ class DataQuestionWorker:
         chart_type: str = "line",
         conversation_context: tuple[dict[str, str], ...] = (),
         decision_at: datetime | None = None,
+        tool_gateway: Any | None = None,
+        capability_token: CapabilityToken | None = None,
+        context_pack_id: str | None = None,
+        worker_task_id: str | None = None,
+        idempotency_key: str | None = None,
     ) -> FinancialMetricAnalysis | None:
         """Answer a supported financial metric question from PIT warehouse facts."""
         normalized_inputs = _normalize_worker_inputs(worker_inputs)
@@ -87,6 +91,11 @@ class DataQuestionWorker:
             conversation_context=conversation_context,
             chart_type=normalized_inputs["chart_type"] or _normalize_chart_type(chart_type),
             decision_at=decision_time,
+            tool_gateway=tool_gateway,
+            capability_token=capability_token,
+            context_pack_id=context_pack_id,
+            worker_task_id=worker_task_id,
+            idempotency_key=idempotency_key,
         )
         metric = state.metric
         if metric is None:
@@ -118,10 +127,26 @@ def _run_financial_metric_workflow(
     conversation_context: tuple[dict[str, str], ...],
     chart_type: str,
     decision_at: datetime,
+    tool_gateway: Any | None = None,
+    capability_token: CapabilityToken | None = None,
+    context_pack_id: str | None = None,
+    worker_task_id: str | None = None,
+    idempotency_key: str | None = None,
 ) -> FinancialMetricWorkflowState:
     """Run the fixed internal LangGraph workflow for financial metrics."""
     graph = StateGraph(FinancialMetricWorkflowState)
-    tools = WarehouseReadTools(repository)
+    tools = (
+        _GatewayWarehouseReadTools(
+            gateway=tool_gateway,
+            capability_token=capability_token,
+            run_id=run_id,
+            worker_task_id=worker_task_id or f"wt_{run_id}_data_question",
+            context_pack_id=context_pack_id,
+            idempotency_key=idempotency_key or run_id,
+        )
+        if tool_gateway is not None and capability_token is not None
+        else WarehouseReadTools(repository)
+    )
 
     def recover_context(state: FinancialMetricWorkflowState) -> dict[str, Any]:
         user_query_text = worker_inputs["user_query"]
@@ -147,12 +172,13 @@ def _run_financial_metric_workflow(
             decision_at=state.decision_at,
         )
         return {
-            "profiles": security_result.output.get("raw_profiles", []),
+            "profiles": security_result.output.get("raw_profiles")
+            or security_result.output.get("profiles", []),
             "tool_calls": (*state.tool_calls, security_result.tool_name),
         }
 
     def discover_indicators(state: FinancialMetricWorkflowState) -> dict[str, Any]:
-        security_ids = tuple(profile.security_id for profile in state.profiles[:3])
+        security_ids = tuple(_profile_security_id(profile) for profile in state.profiles[:3])
         catalog_result = tools.discover_indicators(
             security_ids=security_ids,
             query_text=state.user_query_text,
@@ -180,10 +206,12 @@ def _run_financial_metric_workflow(
 
     def query_indicator_history(state: FinancialMetricWorkflowState) -> dict[str, Any]:
         if state.metric is None or not state.profiles:
-            history: list[IndicatorHistoryValue] = []
+            history: list[Any] = []
         else:
             history_result = tools.query_indicator_history(
-                security_ids=tuple(profile.security_id for profile in state.profiles[:3]),
+                security_ids=tuple(
+                    _profile_security_id(profile) for profile in state.profiles[:3]
+                ),
                 indicator_ids=(state.metric["indicator_id"],),
                 decision_at=state.decision_at,
             )
@@ -224,6 +252,108 @@ def _run_financial_metric_workflow(
     if isinstance(output, FinancialMetricWorkflowState):
         return output
     return FinancialMetricWorkflowState.model_validate(output)
+
+
+class _GatewayWarehouseReadTools:
+    """Warehouse tool facade that delegates every call through ToolGateway."""
+
+    def __init__(
+        self,
+        *,
+        gateway: Any,
+        capability_token: CapabilityToken,
+        run_id: str,
+        worker_task_id: str,
+        context_pack_id: str | None,
+        idempotency_key: str,
+    ) -> None:
+        self._gateway = gateway
+        self._capability_token = capability_token
+        self._run_id = run_id
+        self._worker_task_id = worker_task_id
+        self._context_pack_id = context_pack_id
+        self._idempotency_key = idempotency_key
+
+    def describe_schema(self) -> WarehouseToolResult:
+        return self._call("warehouse.describe_schema", {})
+
+    def resolve_security(
+        self,
+        *,
+        query_text: str,
+        decision_at: datetime,
+        limit: int = 5,
+    ) -> WarehouseToolResult:
+        return self._call(
+            "warehouse.resolve_security",
+            {
+                "query_text": query_text,
+                "decision_at": decision_at.isoformat(),
+                "limit": limit,
+            },
+        )
+
+    def discover_indicators(
+        self,
+        *,
+        security_ids: tuple[str, ...],
+        query_text: str,
+        decision_at: datetime,
+        limit: int = 200,
+    ) -> WarehouseToolResult:
+        return self._call(
+            "warehouse.discover_indicators",
+            {
+                "security_ids": list(security_ids),
+                "query_text": query_text,
+                "decision_at": decision_at.isoformat(),
+                "limit": limit,
+            },
+        )
+
+    def query_indicator_history(
+        self,
+        *,
+        security_ids: tuple[str, ...],
+        indicator_ids: tuple[str, ...],
+        decision_at: datetime,
+        years: int = 4,
+        max_points_per_indicator: int = 12,
+    ) -> WarehouseToolResult:
+        return self._call(
+            "warehouse.query_indicator_history",
+            {
+                "security_ids": list(security_ids),
+                "indicator_ids": list(indicator_ids),
+                "decision_at": decision_at.isoformat(),
+                "years": years,
+                "max_points_per_indicator": max_points_per_indicator,
+            },
+        )
+
+    def _call(self, tool_name: str, input_json: dict[str, Any]) -> WarehouseToolResult:
+        payload_hash = stable_json_hash(input_json).replace(":", "_")
+        tool_call_id = (
+            f"tc_{self._worker_task_id}_{tool_name.replace('.', '_')}_{payload_hash}"
+        )
+        result = self._gateway.call(
+            ToolCallRequest(
+                tool_call_id=tool_call_id,
+                run_id=self._run_id,
+                task_id=self._worker_task_id,
+                caller_agent=DataQuestionWorker.name,
+                tool_name=tool_name,
+                tool_version="v1",
+                input_json=input_json,
+                capability_token=self._capability_token,
+                context_pack_id=self._context_pack_id,
+                idempotency_key=f"{self._idempotency_key}:{tool_name}:{payload_hash}",
+                deadline_ms=30_000,
+            )
+        )
+        if result.status is not ToolCallStatus.SUCCEEDED or result.output_json is None:
+            raise RuntimeError(result.error_code or f"{tool_name} failed")
+        return WarehouseToolResult(tool_name=tool_name, output=result.output_json)
 
 
 def _analysis_text_with_context(
@@ -337,6 +467,43 @@ def _normalize_indicator_catalog_item(item: Any) -> dict[str, Any]:
     }
 
 
+def _profile_security_id(profile: Any) -> str:
+    if isinstance(profile, dict):
+        return str(profile.get("security_id") or "")
+    return str(getattr(profile, "security_id", "") or "")
+
+
+def _profile_name(profile: Any) -> str:
+    if isinstance(profile, dict):
+        return str(profile.get("name") or profile.get("security_id") or "")
+    return str(getattr(profile, "name", "") or getattr(profile, "security_id", "") or "")
+
+
+def _history_security_id(value: Any) -> str:
+    if isinstance(value, dict):
+        return str(value.get("security_id") or "")
+    return str(getattr(value, "security_id", "") or "")
+
+
+def _history_provider(value: Any) -> str:
+    if isinstance(value, dict):
+        return str(value.get("provider") or "")
+    return str(getattr(value, "provider", "") or "")
+
+
+def _history_numeric_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return value.get("numeric_value")
+    return getattr(value, "numeric_value", None)
+
+
+def _history_datetime(value: Any, field_name: str) -> datetime:
+    raw = value.get(field_name) if isinstance(value, dict) else getattr(value, field_name)
+    if isinstance(raw, datetime):
+        return raw if raw.tzinfo is not None else raw.replace(tzinfo=UTC)
+    return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+
+
 def _extract_security_codes(message: str) -> list[str]:
     """Extract A-share style security IDs from user text."""
     codes: list[str] = []
@@ -359,33 +526,35 @@ def _financial_metric_analysis_from_history(
     *,
     run_id: str,
     metric: dict[str, str],
-    profiles: list[SecurityProfileValue],
-    history: list[IndicatorHistoryValue],
+    profiles: list[Any],
+    history: list[Any],
     chart_type: str,
     workflow_tool_calls: tuple[str, ...],
 ) -> FinancialMetricAnalysis:
     """Build table/chart/metric artifacts and a user-facing answer from history."""
-    profile_by_security_id = {profile.security_id: profile for profile in profiles}
+    profile_by_security_id = {_profile_security_id(profile): profile for profile in profiles}
     rows = [
         {
-            "date": value.event_at.date().isoformat(),
-            "security_id": value.security_id,
-            "name": profile_by_security_id.get(value.security_id).name
-            if profile_by_security_id.get(value.security_id)
-            else value.security_id,
+            "date": _history_datetime(value, "event_at").date().isoformat(),
+            "security_id": _history_security_id(value),
+            "name": _profile_name(profile_by_security_id.get(_history_security_id(value)))
+            or _history_security_id(value),
             "metric": metric["label"],
-            "value": _metric_display_value(metric, value.numeric_value),
+            "value": _metric_display_value(metric, _history_numeric_value(value)),
             "unit": metric["unit"],
-            "available_at": value.available_at.isoformat(),
-            "source": value.provider,
+            "available_at": _history_datetime(value, "available_at").isoformat(),
+            "source": _history_provider(value),
         }
-        for value in sorted(history, key=lambda item: (item.security_id, item.event_at))
+        for value in sorted(
+            history,
+            key=lambda item: (_history_security_id(item), _history_datetime(item, "event_at")),
+        )
     ]
     if not rows:
         return _empty_financial_metric_analysis(
             run_id=run_id,
             metric=metric,
-            message=profiles[0].name if profiles else "",
+            message=_profile_name(profiles[0]) if profiles else "",
             chart_type=chart_type,
         )
     latest = rows[-1]
@@ -485,7 +654,7 @@ def _financial_metric_analysis_from_history(
         chart_type=chart_type,
         indicator_id=metric["indicator_id"],
         rows=rows,
-        security_ids=tuple(profile.security_id for profile in profiles[:3]),
+        security_ids=tuple(_profile_security_id(profile) for profile in profiles[:3]),
         tool_calls=workflow_tool_calls,
     )
     return FinancialMetricAnalysis(

@@ -5,8 +5,7 @@ from __future__ import annotations
 import inspect
 from datetime import UTC, date, datetime
 from decimal import Decimal
-
-import pytest
+from types import SimpleNamespace
 
 from margin.agent_runtime.context_store import MemoryAgentContextStore, SQLAlchemyAgentContextStore
 from margin.agent_runtime.db_models import (
@@ -16,9 +15,9 @@ from margin.agent_runtime.db_models import (
     AgentRuntimeStepRow,
 )
 from margin.agents.context.repository import MemoryContextRepository
+from margin.agents.protocol.models import AgentExecutionStatus
 from margin.agents.runtime.service import (
     AgentRuntimeService,
-    AgentRuntimeUnavailableError,
     UserQnaCommand,
 )
 from margin.dashboard.models import ResearchItem, ResearchRun
@@ -74,6 +73,8 @@ def test_v1_user_qna_service_creates_plan_and_final_answer_artifact() -> None:
     assert all(step.expert_agent_name.endswith("ExpertAgent") for step in result.trace_steps)
     assert result.final_answer.answer_text == "当前研究候选包含 000001.SZ。"
     assert result.final_answer.final_audit_report_ref == "fa_ar_qna_v1"
+    tool_records = service._tool_gateway._audit_store.records.values()  # noqa: SLF001
+    assert [record.tool_name for record in tool_records] == ["dashboard.read_candidates"]
     assert context_repository.get_context_pack("ctxpack_ar_qna_v1_mainagent") is not None
     assert context_repository.get_domain_capsule("dcc_ar_qna_v1_general") is not None
     assert {
@@ -190,6 +191,14 @@ def test_v1_user_qna_service_answers_financial_metric_with_data_artifacts() -> N
     assert "中国平安" in result.answer
     assert "ROE TTM" in result.answer
     assert "12.30%" in result.answer
+    assert service._startup_contract_report.valid is True  # noqa: SLF001
+    tool_records = service._tool_gateway._audit_store.records.values()  # noqa: SLF001
+    assert [record.tool_name for record in tool_records] == [
+        "warehouse.describe_schema",
+        "warehouse.resolve_security",
+        "warehouse.discover_indicators",
+        "warehouse.query_indicator_history",
+    ]
     assert llm_provider.calls == ["main_plan", "expert_plan"]
     assert warehouse.indicator_queries
     assert warehouse.indicator_queries[0].indicator_ids == ("roe_ttm",)
@@ -321,7 +330,11 @@ def test_v1_user_qna_service_executes_all_main_planned_domain_tasks() -> None:
     )
     assert context_repository.get_domain_capsule("dcc_ar_qna_multi_domain_data") is not None
     assert context_repository.get_domain_capsule("dcc_ar_qna_multi_domain_general") is not None
-    assert result.answer == "综合看，中国平安 ROE 数据已整理完成。"
+    assert "### 综合回答" in result.answer
+    assert "#### DataExpertAgent" in result.answer
+    assert "#### GeneralQnaExpertAgent" in result.answer
+    assert "ROE TTM" in result.answer
+    assert "综合看，中国平安 ROE 数据已整理完成。" in result.answer
 
 
 def test_v1_user_qna_service_persists_run_before_postgres_artifacts(
@@ -401,8 +414,52 @@ def test_v1_user_qna_service_does_not_directly_select_data_worker() -> None:
     assert "financial_metric_analysis" not in source
 
 
-def test_v1_user_qna_service_replans_when_worker_is_blocked() -> None:
-    """Blocked worker output should trigger one ExpertAgent reflection replan."""
+def test_agent_runtime_service_has_no_worker_name_if_else_dispatch() -> None:
+    """Worker execution must go through WorkerRuntime instead of service branches."""
+    import margin.agents.runtime.service as service_module
+
+    source = inspect.getsource(service_module.AgentRuntimeService._execute_worker_task)
+
+    assert 'worker_task.worker_agent == "DataQuestionWorker"' not in source
+    assert 'worker_task.worker_agent == "GeneralQnaWorker"' not in source
+    assert "_worker_runtime.execute" in source
+
+
+def test_main_planner_only_sees_executable_domains() -> None:
+    """Main planner domain catalog should be filtered by CapabilityRegistry."""
+    llm_provider = _SequencedLLMProvider(
+        main_plan=_main_plan("GeneralQnaExpertAgent"),
+        expert_plan=_expert_plan("GeneralQnaWorker", "answer_general_qna"),
+        answers=("你好，我是 Margin。",),
+    )
+    service = AgentRuntimeService(
+        context_store=MemoryAgentContextStore(),
+        context_repository=MemoryContextRepository(),
+        dashboard_services=_dashboard_services(),
+        llm_provider_factory=lambda: llm_provider,
+        warehouse_repository=None,
+    )
+
+    service.run_user_qna(
+        UserQnaCommand(
+            run_id="ar_qna_visible_domains",
+            scope_version_id="scope-1",
+            message="你好",
+            universe="ALL_A",
+            language="zh",
+            conversation_context=(),
+        )
+    )
+
+    main_prompt = llm_provider.prompts[0]
+
+    assert '"domain_agent_names":["GeneralQnaExpertAgent"]' in main_prompt
+    assert '"context_status"' in main_prompt
+    assert '"capability_snapshot"' in main_prompt
+
+
+def test_expert_planner_only_sees_executable_worker_skills() -> None:
+    """Main planner should not create domain tasks for hidden worker skills."""
     llm_provider = _SequencedLLMProvider(
         main_plan=_main_plan("DataExpertAgent"),
         expert_plan=_expert_plan(
@@ -420,20 +477,59 @@ def test_v1_user_qna_service_replans_when_worker_is_blocked() -> None:
         warehouse_repository=None,
     )
 
-    with pytest.raises(AgentRuntimeUnavailableError, match="Worker did not produce"):
-        service.run_user_qna(
-            UserQnaCommand(
-                run_id="ar_qna_blocked_worker",
-                scope_version_id="scope-1",
-                message="中国平安最近 ROE 怎么样？",
-                universe="ALL_A",
-                language="zh",
-                conversation_context=(),
-            )
+    result = service.run_user_qna(
+        UserQnaCommand(
+            run_id="ar_qna_hidden_data_worker",
+            scope_version_id="scope-1",
+            message="中国平安最近 ROE 怎么样？",
+            universe="ALL_A",
+            language="zh",
+            conversation_context=(),
         )
+    )
 
-    assert llm_provider.calls == ["main_plan", "expert_plan", "expert_plan"]
-    assert any("reflection_feedback" in prompt for prompt in llm_provider.prompts)
+    assert llm_provider.calls == ["main_plan"]
+    assert result.global_plan.domain_tasks == ()
+    assert result.trace_steps == ()
+    assert result.global_plan.planner_messages[0]["kind"] == "blocked"
+    assert "当前环境没有开放该能力" in result.answer
+
+
+def test_v1_user_qna_service_replans_when_worker_is_blocked() -> None:
+    """Hidden domain output should be blocked before ExpertAgent execution."""
+    llm_provider = _SequencedLLMProvider(
+        main_plan=_main_plan("DataExpertAgent"),
+        expert_plan=_expert_plan(
+            "DataQuestionWorker",
+            "answer_financial_metric",
+            worker_inputs=_roe_worker_inputs("中国平安最近 ROE 怎么样？"),
+        ),
+        answers=(),
+    )
+    service = AgentRuntimeService(
+        context_store=MemoryAgentContextStore(),
+        context_repository=MemoryContextRepository(),
+        dashboard_services=_dashboard_services(),
+        llm_provider_factory=lambda: llm_provider,
+        warehouse_repository=None,
+    )
+
+    result = service.run_user_qna(
+        UserQnaCommand(
+            run_id="ar_qna_blocked_worker",
+            scope_version_id="scope-1",
+            message="中国平安最近 ROE 怎么样？",
+            universe="ALL_A",
+            language="zh",
+            conversation_context=(),
+        )
+    )
+
+    assert llm_provider.calls == ["main_plan"]
+    assert result.global_plan.domain_tasks == ()
+    assert result.trace_steps == ()
+    assert result.final_answer.limitations == ("requested_capability_not_executable",)
+    assert "当前环境没有开放该能力" in result.answer
 
 
 def test_v1_user_qna_service_replans_when_expert_omits_worker_inputs() -> None:
@@ -451,20 +547,21 @@ def test_v1_user_qna_service_replans_when_expert_omits_worker_inputs() -> None:
         warehouse_repository=_FinancialMetricWarehouse(),
     )
 
-    with pytest.raises(AgentRuntimeUnavailableError, match="Worker did not produce"):
-        service.run_user_qna(
-            UserQnaCommand(
-                run_id="ar_qna_missing_worker_inputs",
-                scope_version_id="scope-1",
-                message="看一下中国平安的 ROE",
-                universe="ALL_A",
-                language="zh",
-                conversation_context=(),
-            )
+    result = service.run_user_qna(
+        UserQnaCommand(
+            run_id="ar_qna_missing_worker_inputs",
+            scope_version_id="scope-1",
+            message="看一下中国平安的 ROE",
+            universe="ALL_A",
+            language="zh",
+            conversation_context=(),
         )
+    )
 
     assert llm_provider.calls == ["main_plan", "expert_plan", "expert_plan"]
     assert any("data_question_worker_no_answer" in prompt for prompt in llm_provider.prompts)
+    assert result.trace_steps[0].status is AgentExecutionStatus.BLOCKED
+    assert "DataQuestionWorker could not answer" in result.answer
 
 
 def test_v1_user_qna_service_replans_when_worker_artifacts_fail_audit() -> None:
@@ -485,20 +582,56 @@ def test_v1_user_qna_service_replans_when_worker_artifacts_fail_audit() -> None:
         llm_provider_factory=lambda: llm_provider,
     )
 
-    with pytest.raises(AgentRuntimeUnavailableError, match="Worker did not produce"):
-        service.run_user_qna(
-            UserQnaCommand(
-                run_id="ar_qna_bad_artifacts",
-                scope_version_id="scope-1",
-                message="给我带证据包的回答",
-                universe="ALL_A",
-                language="zh",
-                conversation_context=(),
-            )
+    result = service.run_user_qna(
+        UserQnaCommand(
+            run_id="ar_qna_bad_artifacts",
+            scope_version_id="scope-1",
+            message="给我带证据包的回答",
+            universe="ALL_A",
+            language="zh",
+            conversation_context=(),
         )
+    )
 
     assert llm_provider.calls == ["main_plan", "expert_plan", "answer", "expert_plan", "answer"]
     assert any("missing_required_artifacts" in prompt for prompt in llm_provider.prompts)
+    assert result.trace_steps[0].status is AgentExecutionStatus.BLOCKED
+    assert "missing required artifacts" in result.answer
+
+
+def test_dashboard_query_error_surfaces_safe_error_code() -> None:
+    """Dashboard errors should be visible as status, not collapsed to empty rows."""
+    llm_provider = _SequencedLLMProvider(
+        main_plan=_main_plan("GeneralQnaExpertAgent"),
+        expert_plan=_expert_plan("GeneralQnaWorker", "answer_general_qna"),
+        answers=("Dashboard 候选源暂时不可用。",),
+    )
+    service = AgentRuntimeService(
+        context_store=MemoryAgentContextStore(),
+        context_repository=MemoryContextRepository(),
+        dashboard_services=_exploding_dashboard_services(),
+        llm_provider_factory=lambda: llm_provider,
+    )
+
+    result = service.run_user_qna(
+        UserQnaCommand(
+            run_id="ar_qna_dashboard_error",
+            scope_version_id="scope-1",
+            message="今日研究候选有哪些？",
+            universe="ALL_A",
+            language="zh",
+            conversation_context=(),
+        )
+    )
+
+    table = next(
+        artifact for artifact in result.artifacts if artifact.artifact_type == "analysis_table"
+    )
+
+    assert table.payload_json["status"] == "error"
+    assert table.payload_json["error_code"] == "RuntimeError"
+    assert "dashboard_candidates" in llm_provider.prompts[-1]
+    assert "RuntimeError" in llm_provider.prompts[-1]
 
 
 def _dashboard_services() -> DashboardServiceBundle:
@@ -528,6 +661,18 @@ def _dashboard_services() -> DashboardServiceBundle:
     repository.add_run(run)
     repository.add_items([item])
     return DashboardServiceBundle.in_memory(dashboard_repository=repository)
+
+
+def _exploding_dashboard_services() -> object:
+    return SimpleNamespace(
+        query=_ExplodingDashboardQuery(),
+        providers=SimpleNamespace(list_status=lambda: []),
+    )
+
+
+class _ExplodingDashboardQuery:
+    def list_research_candidates_v2(self, **_kwargs: object) -> object:
+        raise RuntimeError("dashboard down")
 
 
 def _main_plan(agent_name: str, *, task: str = "Delegate to the selected ExpertAgent.") -> dict:

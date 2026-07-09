@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from margin.agent_runtime.models import AgentCard
 from margin.agents.cards.worker_cards import WorkerAgentCard
@@ -18,6 +18,20 @@ class ExecutorKey:
     skill_id: str
 
 
+@dataclass(frozen=True)
+class ExecutorSpec:
+    """Executable WorkerAgent skill metadata."""
+
+    agent_name: str
+    skill_id: str
+    executor: object
+    runtime: Literal["deterministic", "langgraph", "python"] = "python"
+    required_tools: tuple[str, ...] = ()
+    output_artifact_types: tuple[str, ...] = ()
+    domain: str | None = None
+    enabled: bool = True
+
+
 class ExecutorRegistry:
     """Registry mapping WorkerAgent skills to executable implementations.."""
 
@@ -27,7 +41,7 @@ class ExecutorRegistry:
         Returns:
             None: .
         """
-        self._executors: dict[ExecutorKey, object] = {}
+        self._specs: dict[ExecutorKey, ExecutorSpec] = {}
 
     def register(self, *, agent_name: str, skill_id: str, executor: object) -> None:
         """Register one executable agent skill.
@@ -40,7 +54,13 @@ class ExecutorRegistry:
         Returns:
             None: .
         """
-        self._executors[ExecutorKey(agent_name, skill_id)] = executor
+        self.register_spec(
+            ExecutorSpec(agent_name=agent_name, skill_id=skill_id, executor=executor)
+        )
+
+    def register_spec(self, spec: ExecutorSpec) -> None:
+        """Register one executable agent skill with runtime metadata."""
+        self._specs[ExecutorKey(spec.agent_name, spec.skill_id)] = spec
 
     def has(self, agent_name: str, skill_id: str) -> bool:
         """Return whether an executor exists.
@@ -52,7 +72,8 @@ class ExecutorRegistry:
         Returns:
             bool: .
         """
-        return ExecutorKey(agent_name, skill_id) in self._executors
+        spec = self._specs.get(ExecutorKey(agent_name, skill_id))
+        return spec is not None and spec.enabled
 
     def get(self, agent_name: str, skill_id: str) -> object:
         """Return an executor or raise a clear error.
@@ -66,9 +87,35 @@ class ExecutorRegistry:
         """
         key = ExecutorKey(agent_name, skill_id)
         try:
-            return self._executors[key]
+            spec = self._specs[key]
         except KeyError as exc:
             raise KeyError(f"missing executor for {agent_name}.{skill_id}") from exc
+        if not spec.enabled:
+            raise KeyError(f"disabled executor for {agent_name}.{skill_id}")
+        return spec.executor
+
+    def get_spec(self, agent_name: str, skill_id: str) -> ExecutorSpec | None:
+        """Return executor metadata if registered."""
+        spec = self._specs.get(ExecutorKey(agent_name, skill_id))
+        if spec is None or not spec.enabled:
+            return None
+        return spec
+
+    def list_specs(self, *, domain: str | None = None) -> tuple[ExecutorSpec, ...]:
+        """Return registered executor metadata."""
+        specs = tuple(spec for spec in self._specs.values() if spec.enabled)
+        if domain is None:
+            return specs
+        return tuple(spec for spec in specs if spec.domain == domain)
+
+    def explain_missing(self, card: WorkerAgentCard, skill: object) -> str:
+        """Return a stable missing-executor explanation for one worker skill."""
+        skill_id = getattr(skill, "skill_id", "")
+        key = ExecutorKey(card.name, skill_id)
+        spec = self._specs.get(key)
+        if spec is not None and not spec.enabled:
+            return f"executor disabled for {card.name}.{skill_id}"
+        return f"missing executor for {card.name}.{skill_id}"
 
     def planner_visible_worker_cards(
         self,

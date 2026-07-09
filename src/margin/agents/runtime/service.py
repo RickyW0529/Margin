@@ -23,6 +23,7 @@ from margin.agent_runtime.models import (
     AgentRunType,
 )
 from margin.agents.cards.registry import default_domain_agent_cards, default_worker_agent_cards
+from margin.agents.context.readiness_builder import DataReadinessBuilder
 from margin.agents.context.repository import ContextRepository, MemoryContextRepository
 from margin.agents.context.router import ContextRouter
 from margin.agents.protocol.models import (
@@ -34,18 +35,32 @@ from margin.agents.protocol.models import (
     WorkerTaskRequest,
     WorkerTaskResult,
 )
+from margin.agents.protocol.planning import PlanActionKind
 from margin.agents.runtime.audit_pipeline import AuditPipeline
+from margin.agents.runtime.capability_registry import CapabilityRegistry
 from margin.agents.runtime.domain_runtime import DomainRuntime
+from margin.agents.runtime.execution_context import (
+    WorkerExecutionBundle,
+    WorkerExecutionContext,
+)
+from margin.agents.runtime.executor_registry import ExecutorRegistry, ExecutorSpec
 from margin.agents.runtime.expert_runtime import LLMExpertAgentPlanner, WorkerPlanStepDraft
 from margin.agents.runtime.main_runtime import GlobalPlan, LLMMainAgentPlanner, MainRuntime
+from margin.agents.runtime.worker_executors import (
+    DataQuestionWorkerExecutor,
+    GeneralQnaWorkerExecutor,
+)
+from margin.agents.runtime.worker_runtime import WorkerRuntime
 from margin.agents.security.capability import CapabilityToken
 from margin.agents.security.policies import (
     DataAccessPolicy,
     ProductionWritePolicy,
     ToolPolicy,
 )
+from margin.agents.tools.audit import InMemoryToolAuditStore
+from margin.agents.tools.catalog import default_tool_catalog
+from margin.agents.tools.gateway import ToolGateway
 from margin.agents.workers.data_question_worker import DataQuestionWorker
-from margin.dashboard.models import DashboardFilters, DashboardSort
 from margin.dashboard.service import DashboardServiceBundle
 from margin.research.llm import LLMProvider, strip_thinking_blocks
 
@@ -71,6 +86,21 @@ _DEFAULT_ALLOWED_ARTIFACT_TYPES = (
     "writing_revision",
     "worker_activity",
 )
+_DATA_QUESTION_TOOL_ALLOWLIST = (
+    "warehouse.describe_schema",
+    "warehouse.resolve_security",
+    "warehouse.discover_indicators",
+    "warehouse.query_indicator_history",
+)
+_DATA_QUESTION_OUTPUT_TYPES = (
+    "analysis_table",
+    "chart_spec",
+    "computed_metric",
+    "qna_answer",
+    "visualization_image",
+    "worker_activity",
+)
+_GENERAL_QNA_OUTPUT_TYPES = ("analysis_table", "qna_answer")
 
 
 @dataclass(frozen=True)
@@ -106,6 +136,17 @@ class AgentTraceStep:
 
 
 @dataclass(frozen=True)
+class DomainAnswerFragment:
+    """One domain's user-safe answer fragment."""
+
+    domain_agent: str
+    domain: str
+    answer: str
+    capsule_ref: str
+    status: AgentExecutionStatus = AgentExecutionStatus.SUCCEEDED
+
+
+@dataclass(frozen=True)
 class UserQnaRunResult:
     """Result returned by the v1 runtime to the API boundary."""
 
@@ -116,16 +157,6 @@ class UserQnaRunResult:
     artifacts: tuple[ContextArtifact, ...]
     references: tuple[dict[str, str], ...]
     final_answer: FinalUserAnswerArtifact
-
-
-@dataclass(frozen=True)
-class WorkerExecutionBundle:
-    """Executed WorkerAgent result plus frontend-safe artifacts."""
-
-    result: WorkerTaskResult
-    artifacts: tuple[ContextArtifact, ...]
-    answer: str | None
-    table_rows: list[dict[str, Any]]
 
 
 class AgentInputBlockedError(RuntimeError):
@@ -161,19 +192,43 @@ class AgentRuntimeService:
         self._dashboard_services = dashboard_services
         self._llm_provider_factory = llm_provider_factory
         self._warehouse_repository = warehouse_repository
-        self._data_question_worker = (
+        data_question_worker = (
             DataQuestionWorker(warehouse_repository)
             if warehouse_repository is not None
             else None
         )
         planning_llm_provider = llm_provider_factory()
         domain_cards = default_domain_agent_cards()
-        self._main_runtime = main_runtime or MainRuntime(
-            domain_cards=domain_cards,
-            planner=LLMMainAgentPlanner(llm_provider=planning_llm_provider),
+        tool_catalog = default_tool_catalog(
+            warehouse_repository=warehouse_repository,
+            dashboard_services=dashboard_services,
         )
         self._expert_planner = LLMExpertAgentPlanner(llm_provider=planning_llm_provider)
         self._worker_cards = default_worker_agent_cards()
+        self._executor_registry = _default_worker_executor_registry(
+            data_question_worker=data_question_worker,
+            dashboard_services=dashboard_services,
+            llm_provider_factory=llm_provider_factory,
+        )
+        self._capability_registry = CapabilityRegistry(
+            domain_cards=domain_cards,
+            worker_cards=self._worker_cards,
+            executor_registry=self._executor_registry,
+            tool_catalog=tool_catalog,
+        )
+        self._startup_contract_report = self._capability_registry.validate_startup_contracts()
+        self._tool_gateway = ToolGateway(
+            catalog=tool_catalog,
+            audit_store=InMemoryToolAuditStore(),
+        )
+        self._main_runtime = main_runtime or MainRuntime(
+            domain_cards=domain_cards,
+            planner=LLMMainAgentPlanner(llm_provider=planning_llm_provider),
+            capability_registry=self._capability_registry,
+        )
+        self._worker_runtime = WorkerRuntime(
+            executor_registry=self._executor_registry
+        )
         self._audit_pipeline = audit_pipeline or AuditPipeline()
 
     def run_user_qna(self, command: UserQnaCommand) -> UserQnaRunResult:
@@ -193,8 +248,8 @@ class AgentRuntimeService:
                 started_at=datetime.now(UTC),
             )
         )
-        context_pack = self._build_and_store_context_pack(command)
         root_token = _root_capability_token(command.run_id)
+        context_pack = self._build_and_store_context_pack(command, root_token)
         global_plan = self._main_runtime.create_global_plan(
             run_id=command.run_id,
             run_type="user_qna",
@@ -204,7 +259,11 @@ class AgentRuntimeService:
             conversation_context=tuple(command.conversation_context),
         )
         if not global_plan.domain_tasks:
-            raise AgentRuntimeUnavailableError("MainAgent produced no domain tasks")
+            return self._blocked_run_result_from_planner_messages(
+                command=command,
+                guardrail=guardrail,
+                global_plan=global_plan,
+            )
 
         artifacts: list[ContextArtifact] = []
         available_artifacts: dict[str, ContextArtifact] = {}
@@ -212,7 +271,7 @@ class AgentRuntimeService:
         used_artifact_refs: list[str] = []
         trace_steps: list[AgentTraceStep] = []
         table_rows: list[dict[str, Any]] = []
-        answer = ""
+        domain_answer_fragments: list[DomainAnswerFragment] = []
 
         for domain_task in global_plan.domain_tasks:
             execution = self._execute_domain_task(
@@ -220,7 +279,11 @@ class AgentRuntimeService:
                 context_pack=context_pack,
                 domain_task=domain_task,
             )
-            if execution.result.status is not AgentExecutionStatus.SUCCEEDED:
+            if execution.result.status not in {
+                AgentExecutionStatus.SUCCEEDED,
+                AgentExecutionStatus.PARTIAL,
+                AgentExecutionStatus.BLOCKED,
+            }:
                 raise AgentRuntimeUnavailableError("Worker did not produce a user-safe answer")
             table_artifact = _first_artifact_of_type(execution.artifacts, "analysis_table")
             if table_artifact is None:
@@ -232,9 +295,10 @@ class AgentRuntimeService:
             domain_answer = execution.answer or (
                 answer_artifact.payload_json.get("answer", "") if answer_artifact else ""
             )
+            if execution.result.status is not AgentExecutionStatus.SUCCEEDED:
+                domain_answer = execution.result.safe_summary
             if not domain_answer:
                 raise AgentRuntimeUnavailableError("Worker did not produce a user-safe answer")
-            answer = domain_answer
             if answer_artifact is None:
                 answer_artifact = _qna_answer_artifact(
                     run_id=command.run_id,
@@ -259,7 +323,7 @@ class AgentRuntimeService:
                 run_id=command.run_id,
                 domain=domain_task.domain,
                 purpose="user_qna",
-                status=AgentExecutionStatus.SUCCEEDED,
+                status=execution.result.status,
                 summary=domain_answer,
                 artifact_refs=domain_artifact_refs,
                 source_refs=("agent:v1:user_qna",),
@@ -271,13 +335,17 @@ class AgentRuntimeService:
                 run_id=command.run_id,
                 domain_task_id=domain_task.domain_task_id,
                 domain=domain_task.domain,
-                status=AgentExecutionStatus.SUCCEEDED,
+                status=execution.result.status,
                 checked_artifact_refs=domain_artifact_refs,
-                schema_valid=True,
-                evidence_valid=True,
+                schema_valid=execution.result.status is AgentExecutionStatus.SUCCEEDED,
+                evidence_valid=execution.result.status is AgentExecutionStatus.SUCCEEDED,
                 source_refs_valid=True,
                 context_budget_ok=True,
-                safe_summary="domain audit passed",
+                safe_summary=(
+                    "domain audit passed"
+                    if execution.result.status is AgentExecutionStatus.SUCCEEDED
+                    else execution.result.safe_summary
+                ),
             )
             capsule_artifact = make_context_artifact(
                 artifact_id=domain_capsule.capsule_id,
@@ -335,16 +403,26 @@ class AgentRuntimeService:
                 {artifact.artifact_id: artifact for artifact in domain_artifacts}
             )
             approved_capsule_refs.append(domain_capsule.capsule_id)
+            domain_answer_fragments.append(
+                DomainAnswerFragment(
+                    domain_agent=domain_task.to_domain_agent,
+                    domain=domain_task.domain,
+                    answer=domain_answer,
+                    capsule_ref=domain_capsule.capsule_id,
+                    status=execution.result.status,
+                )
+            )
             used_artifact_refs.extend(domain_artifact_refs)
             trace_steps.append(
                 AgentTraceStep(
                     step_id=domain_task.domain_task_id,
                     expert_agent_name=domain_task.to_domain_agent,
                     skill_id=execution.result.skill_id,
-                    status=AgentExecutionStatus.SUCCEEDED,
+                    status=execution.result.status,
                 )
             )
 
+        answer = _synthesize_domain_answer_fragments(domain_answer_fragments)
         answer, writing_artifact = _writing_revision_artifact(
             run_id=command.run_id,
             answer=answer,
@@ -406,14 +484,88 @@ class AgentRuntimeService:
         """Return a context artifact for scoped frontend expansion."""
         return self._context_store.get_artifact(artifact_id)
 
-    def _build_and_store_context_pack(self, command: UserQnaCommand) -> ContextPack:
+    def _blocked_run_result_from_planner_messages(
+        self,
+        *,
+        command: UserQnaCommand,
+        guardrail: GuardrailSummary,
+        global_plan: GlobalPlan,
+    ) -> UserQnaRunResult:
+        """Return a structured blocked answer when planning produces no executable tasks."""
+        answer = _planner_messages_answer(global_plan.planner_messages)
+        answer, writing_artifact = _writing_revision_artifact(
+            run_id=command.run_id,
+            answer=answer,
+            language=command.language,
+            used_domain_capsule_refs=(),
+        )
+        final_audit = self._audit_pipeline.audit_final_answer(
+            run_id=command.run_id,
+            required_artifact_refs=(),
+            available_artifacts={writing_artifact.artifact_id: writing_artifact},
+            approved_capsule_refs=(),
+        )
+        final_answer = FinalUserAnswerArtifact(
+            artifact_id=f"fua_{command.run_id}",
+            run_id=command.run_id,
+            answer_text=answer,
+            language=command.language,
+            used_domain_capsule_refs=(),
+            used_artifact_refs=(writing_artifact.artifact_id,),
+            source_refs=("agent:v1:user_qna",),
+            disclaimers=("research_support_not_financial_advice",),
+            limitations=("requested_capability_not_executable",),
+            final_audit_report_ref=final_audit.audit_report_id,
+        )
+        final_audit_artifact = make_context_artifact(
+            artifact_id=final_audit.audit_report_id,
+            run_id=command.run_id,
+            artifact_type="final_audit_report",
+            producer_agent="MainAgent",
+            payload_json=final_audit.model_dump(mode="json"),
+            source_refs=("agent:v1:user_qna",),
+        )
+        final_answer_artifact = make_context_artifact(
+            artifact_id=final_answer.artifact_id,
+            run_id=command.run_id,
+            artifact_type="final_user_answer",
+            producer_agent="MainAgent",
+            payload_json=final_answer.model_dump(mode="json"),
+            source_refs=final_answer.source_refs,
+        )
+        artifacts = (writing_artifact, final_audit_artifact, final_answer_artifact)
+        for artifact in artifacts:
+            self._context_store.add_artifact(artifact)
+        return UserQnaRunResult(
+            answer=answer,
+            guardrail=guardrail,
+            global_plan=global_plan,
+            trace_steps=(),
+            artifacts=artifacts,
+            references=(),
+            final_answer=final_answer,
+        )
+
+    def _build_and_store_context_pack(
+        self,
+        command: UserQnaCommand,
+        capability_token: CapabilityToken | None = None,
+    ) -> ContextPack:
         """Build and persist the L1 ContextPack artifact."""
+        readiness_artifact = DataReadinessBuilder(
+            dashboard_services=self._dashboard_services,
+            warehouse_repository=self._warehouse_repository,
+            capability_registry=self._capability_registry,
+            capability_token=capability_token,
+        ).build_for_user_qna(command)
+        self._context_store.add_artifact(readiness_artifact)
         context_pack = ContextRouter().build_context_pack(
             run_id=command.run_id,
             requester_agent="MainAgent",
             target_agent="MainAgent",
             purpose="user_qna_planning",
             token_budget=4000,
+            artifacts=(readiness_artifact,),
             included_chat_summary_ref=f"chat_summary:{_conversation_hash(command)}",
         )
         self._context_store.add_artifact(
@@ -427,6 +579,12 @@ class AgentRuntimeService:
             )
         )
         self._context_repository.save_context_pack(context_pack)
+        self._context_repository.record_lineage_edge(
+            run_id=command.run_id,
+            from_ref=context_pack.context_pack_id,
+            to_ref=readiness_artifact.artifact_id,
+            edge_type="source_ref",
+        )
         if context_pack.included_chat_summary_ref:
             self._context_repository.record_lineage_edge(
                 run_id=command.run_id,
@@ -435,33 +593,6 @@ class AgentRuntimeService:
                 edge_type="source_ref",
             )
         return context_pack
-
-    def _build_candidate_table_artifact(
-        self,
-        command: UserQnaCommand,
-    ) -> tuple[ContextArtifact, list[dict[str, Any]]]:
-        """Read dashboard candidates through the app service and store a table artifact."""
-        rows = self._load_candidate_rows(command)
-        artifact = make_context_artifact(
-            artifact_id=f"ctx_{command.run_id}_dashboard_candidates",
-            run_id=command.run_id,
-            artifact_type="analysis_table",
-            producer_agent="DataQuestionWorker",
-            payload_json={
-                "scope_version_id": command.scope_version_id,
-                "universe": command.universe,
-                "columns": [
-                    "security_id",
-                    "symbol",
-                    "final_score",
-                    "confidence",
-                    "screening_status",
-                ],
-                "rows": rows,
-            },
-            source_refs=("dashboard:research_candidates",),
-        )
-        return artifact, rows
 
     def _execute_domain_task(
         self,
@@ -476,20 +607,43 @@ class AgentRuntimeService:
             raise AgentRuntimeUnavailableError(
                 f"missing capability token for {domain_task.domain_task_id}"
             )
-        worker_cards = tuple(
-            card for card in self._worker_cards if card.domain == domain_task.domain
+        worker_cards = self._capability_registry.visible_worker_cards(
+            domain=domain_task.domain,
+            capability_token=parent_token,
+            required_output_types=domain_task.required_output_types,
         )
         current_domain_task = domain_task
         latest_bundle: WorkerExecutionBundle | None = None
         for attempt_index in range(2):
-            worker_plan = self._expert_planner.plan(
-                domain_task=current_domain_task,
-                worker_cards=worker_cards,
-                context_pack=context_pack,
-            )
+            try:
+                worker_plan = self._expert_planner.plan(
+                    domain_task=current_domain_task,
+                    worker_cards=worker_cards,
+                    context_pack=context_pack,
+                )
+            except RuntimeError as exc:
+                latest_bundle = _blocked_domain_planning_bundle(
+                    domain_task=current_domain_task,
+                    error_code="expert_plan_invalid",
+                    summary=str(exc),
+                )
+                current_domain_task = _domain_task_with_reflection_feedback(
+                    current_domain_task,
+                    attempt_index=attempt_index + 1,
+                    bundle=latest_bundle,
+                )
+                continue
             domain_runtime = DomainRuntime(expert_agent_name=domain_task.to_domain_agent)
             bundles: list[WorkerExecutionBundle] = []
             for step in worker_plan.steps:
+                if step.kind is not PlanActionKind.EXECUTE:
+                    bundles.append(
+                        _non_execute_worker_plan_bundle(
+                            domain_task=current_domain_task,
+                            step=step,
+                        )
+                    )
+                    continue
                 worker_task = self._worker_task_from_step(
                     domain_runtime=domain_runtime,
                     domain_task=current_domain_task,
@@ -497,7 +651,17 @@ class AgentRuntimeService:
                     step=step,
                     command=command,
                 )
-                bundles.append(self._execute_worker_task(worker_task, command, context_pack))
+                worker_token = domain_runtime.issued_tokens.get(
+                    worker_task.capability_token_ref
+                )
+                bundles.append(
+                    self._execute_worker_task(
+                        worker_task,
+                        command,
+                        context_pack,
+                        worker_token,
+                    )
+                )
             latest_bundle = _merge_worker_bundles(bundles)
             latest_bundle = _audit_worker_bundle(
                 latest_bundle,
@@ -527,6 +691,8 @@ class AgentRuntimeService:
         command: UserQnaCommand,
     ) -> WorkerTaskRequest:
         """Create the L2-to-L3 request selected by ExpertAgent planning."""
+        if step.worker_agent is None or step.skill_id is None:
+            raise AgentRuntimeUnavailableError("execute worker step is missing worker identity")
         required_output_types = step.required_output_types or domain_task.required_output_types
         task_goal = _worker_task_goal(
             user_message=command.message,
@@ -551,174 +717,125 @@ class AgentRuntimeService:
         worker_task: WorkerTaskRequest,
         command: UserQnaCommand,
         context_pack: ContextPack,
+        capability_token: CapabilityToken | None,
     ) -> WorkerExecutionBundle:
         """Execute a WorkerAgent selected by the ExpertAgent worker plan."""
-        if (
-            worker_task.worker_agent == "DataQuestionWorker"
-            and worker_task.skill_id == "answer_financial_metric"
-        ):
-            return self._execute_data_question_worker(worker_task, command)
-        if (
-            worker_task.worker_agent == "GeneralQnaWorker"
-            and worker_task.skill_id == "answer_general_qna"
-        ):
-            return self._execute_general_qna_worker(worker_task, command, context_pack)
-        return WorkerExecutionBundle(
-            result=WorkerTaskResult(
-                run_id=worker_task.run_id,
-                domain_task_id=worker_task.domain_task_id,
-                worker_task_id=worker_task.worker_task_id,
-                worker_agent=worker_task.worker_agent,
-                skill_id=worker_task.skill_id,
-                status=AgentExecutionStatus.BLOCKED,
-                error_code="worker_executor_not_registered",
-                retryable=False,
-                safe_summary="Worker executor is not registered.",
+        bundle = self._worker_runtime.execute(
+            worker_task,
+            WorkerExecutionContext(
+                command=command,
+                context_pack=context_pack,
+                context_store=self._context_store,
+                context_repository=self._context_repository,
+                tool_gateway=self._tool_gateway,
+                capability_token=capability_token,
+                llm_provider_factory=self._llm_provider_factory,
             ),
-            artifacts=(),
-            answer=None,
-            table_rows=[],
         )
+        if not isinstance(bundle, WorkerExecutionBundle):
+            return WorkerExecutionBundle(
+                result=bundle,
+                artifacts=(),
+                answer=None,
+                table_rows=[],
+            )
+        return bundle
 
-    def _execute_data_question_worker(
-        self,
-        worker_task: WorkerTaskRequest,
-        command: UserQnaCommand,
-    ) -> WorkerExecutionBundle:
-        """Execute the DataQuestionWorker selected by the ExpertAgent."""
-        if self._data_question_worker is None:
-            return _blocked_worker_bundle(
-                worker_task,
-                error_code="warehouse_repository_unavailable",
-                summary="DataQuestionWorker requires a warehouse repository.",
-            )
-        analysis = self._data_question_worker.answer_financial_metric(
-            run_id=command.run_id,
-            message=worker_task.task_goal,
-            conversation_context=tuple(command.conversation_context),
-            worker_inputs=worker_task.constraints.get("worker_inputs")
-            if isinstance(worker_task.constraints.get("worker_inputs"), dict)
-            else None,
-            chart_type="line",
+
+def _default_worker_executor_registry(
+    *,
+    data_question_worker: DataQuestionWorker | None,
+    dashboard_services: DashboardServiceBundle,
+    llm_provider_factory: Callable[[], LLMProvider],
+) -> ExecutorRegistry:
+    """Return default WorkerAgent executors for the v1 user-Q&A service."""
+    registry = ExecutorRegistry()
+    registry.register_spec(
+        ExecutorSpec(
+            agent_name="DataQuestionWorker",
+            skill_id="answer_financial_metric",
+            executor=DataQuestionWorkerExecutor(data_question_worker),
+            runtime="langgraph",
+            required_tools=_DATA_QUESTION_TOOL_ALLOWLIST,
+            output_artifact_types=_DATA_QUESTION_OUTPUT_TYPES,
+            domain="data",
         )
-        if analysis is None:
-            return _blocked_worker_bundle(
-                worker_task,
-                error_code="data_question_worker_no_answer",
-                summary="DataQuestionWorker could not answer the task.",
-            )
-        answer_artifact = _qna_answer_artifact(
-            run_id=command.run_id,
-            answer=analysis.answer,
-            language=command.language,
-            producer_agent=worker_task.worker_agent,
-        )
-        artifacts = (
-            analysis.table_artifact,
-            analysis.metric_artifact,
-            analysis.chart_artifact,
-            analysis.image_artifact,
-            analysis.worker_activity_artifact,
-            answer_artifact,
-        )
-        return WorkerExecutionBundle(
-            result=WorkerTaskResult(
-                run_id=worker_task.run_id,
-                domain_task_id=worker_task.domain_task_id,
-                worker_task_id=worker_task.worker_task_id,
-                worker_agent=worker_task.worker_agent,
-                skill_id=worker_task.skill_id,
-                status=AgentExecutionStatus.SUCCEEDED,
-                output_artifact_refs=tuple(artifact.artifact_id for artifact in artifacts),
-                safe_summary="DataQuestionWorker produced analysis artifacts.",
+    )
+    registry.register_spec(
+        ExecutorSpec(
+            agent_name="GeneralQnaWorker",
+            skill_id="answer_general_qna",
+            executor=GeneralQnaWorkerExecutor(
+                dashboard_services=dashboard_services,
+                llm_provider_factory=llm_provider_factory,
             ),
-            artifacts=artifacts,
-            answer=analysis.answer,
-            table_rows=analysis.table_rows,
+            runtime="deterministic",
+            required_tools=("dashboard.read_candidates",),
+            output_artifact_types=_GENERAL_QNA_OUTPUT_TYPES,
+            domain="general",
         )
+    )
+    return registry
 
-    def _execute_general_qna_worker(
-        self,
-        worker_task: WorkerTaskRequest,
-        command: UserQnaCommand,
-        context_pack: ContextPack,
-    ) -> WorkerExecutionBundle:
-        """Execute the GeneralQnaWorker selected by the ExpertAgent."""
-        table_artifact, table_rows = self._build_candidate_table_artifact(command)
-        answer = self._answer_with_llm(
-            command=command,
-            context_pack=context_pack,
-            table_rows=table_rows,
-        )
-        answer_artifact = _qna_answer_artifact(
-            run_id=command.run_id,
-            answer=answer,
-            language=command.language,
-            producer_agent=worker_task.worker_agent,
-        )
-        artifacts = (table_artifact, answer_artifact)
-        return WorkerExecutionBundle(
-            result=WorkerTaskResult(
-                run_id=worker_task.run_id,
-                domain_task_id=worker_task.domain_task_id,
-                worker_task_id=worker_task.worker_task_id,
-                worker_agent=worker_task.worker_agent,
-                skill_id=worker_task.skill_id,
-                status=AgentExecutionStatus.SUCCEEDED,
-                output_artifact_refs=tuple(artifact.artifact_id for artifact in artifacts),
-                safe_summary="GeneralQnaWorker produced a context-bound answer.",
-            ),
-            artifacts=artifacts,
-            answer=answer,
-            table_rows=table_rows,
-        )
 
-    def _load_candidate_rows(self, command: UserQnaCommand) -> list[dict[str, Any]]:
-        """Load a compact dashboard candidate table without exposing raw internals."""
-        try:
-            page = self._dashboard_services.query.list_research_candidates_v2(
-                scope_version_id=command.scope_version_id,
-                universe_code=command.universe,
-                filters=DashboardFilters(),
-                sort=DashboardSort(field="final_score", direction="desc"),
-                cursor=None,
-                limit=10,
+def _synthesize_domain_answer_fragments(
+    fragments: list[DomainAnswerFragment],
+) -> str:
+    """Synthesize final answer text from approved domain fragments."""
+    if not fragments:
+        raise AgentRuntimeUnavailableError("No domain answer fragments available")
+    if len(fragments) == 1:
+        fragment = fragments[0]
+        if fragment.status is AgentExecutionStatus.SUCCEEDED:
+            return fragment.answer
+        return "\n\n".join(
+            (
+                "### 暂时无法完成",
+                f"- {fragment.answer}",
+                "### 下一步",
+                "- 补充缺失输入、启用对应能力，或稍后重试不可用的数据源。",
             )
-        except Exception:
-            return []
-        return [
-            {
-                "security_id": item.security_id,
-                "symbol": item.symbol,
-                "final_score": item.final_score,
-                "confidence": item.confidence,
-                "screening_status": item.screening_status,
-            }
-            for item in page.items
+        )
+    if all(fragment.status is not AgentExecutionStatus.SUCCEEDED for fragment in fragments):
+        sections = ["### 暂时无法完成"]
+        for fragment in fragments:
+            sections.append(f"#### {fragment.domain_agent}\n{fragment.answer}")
+        sections.append("### 下一步\n- 补充缺失输入、启用对应能力，或稍后重试不可用的数据源。")
+        return "\n\n".join(sections)
+    sections = ["### 综合回答"]
+    for fragment in fragments:
+        sections.append(
+            "\n".join(
+                (
+                    f"#### {fragment.domain_agent} ({fragment.status})",
+                    fragment.answer,
+                )
+            )
+        )
+    return "\n\n".join(sections)
+
+
+def _planner_messages_answer(messages: tuple[dict[str, Any], ...]) -> str:
+    """Return a concise blocked answer from non-executable MainAgent plan messages."""
+    details = []
+    for message in messages:
+        text = str(
+            message.get("user_safe_message")
+            or message.get("reason")
+            or "当前能力不可执行。"
+        ).strip()
+        if text:
+            details.append(text)
+    if not details:
+        details.append("MainAgent 没有找到当前环境中可执行的专家能力。")
+    lines = ["### 暂时无法完成", *[f"- {detail}" for detail in dict.fromkeys(details)]]
+    lines.extend(
+        [
+            "### 下一步",
+            "- 启用对应 worker/tool/repository 后重试，或改问当前已开放的数据/普通问答能力。",
         ]
-
-    def _answer_with_llm(
-        self,
-        *,
-        command: UserQnaCommand,
-        context_pack: ContextPack,
-        table_rows: list[dict[str, Any]],
-    ) -> str:
-        """Generate a user answer from approved context only."""
-        prompt = _build_user_answer_prompt(
-            command=command,
-            context_pack=context_pack,
-            table_rows=table_rows,
-        )
-        result = self._llm_provider_factory().complete(prompt, temperature=0.0)
-        if not result.success:
-            raise AgentRuntimeUnavailableError(result.error or "LLM completion failed")
-        answer = strip_thinking_blocks(
-            result.raw_response or str(result.output.get("content", ""))
-        )
-        if not answer:
-            raise AgentRuntimeUnavailableError("LLM returned an empty answer")
-        return answer
+    )
+    return "\n\n".join(lines)
 
 
 def _merge_worker_bundles(bundles: list[WorkerExecutionBundle]) -> WorkerExecutionBundle:
@@ -755,6 +872,56 @@ def _required_outputs_from_worker_plan(
     if not required:
         required.extend(fallback_required_outputs)
     return tuple(dict.fromkeys(required))
+
+
+def _non_execute_worker_plan_bundle(
+    *,
+    domain_task: Any,
+    step: WorkerPlanStepDraft,
+) -> WorkerExecutionBundle:
+    """Convert a blocked/clarification worker plan step into a runtime bundle."""
+    summary = step.user_safe_message or step.reason or f"Worker plan returned {step.kind}."
+    return WorkerExecutionBundle(
+        result=WorkerTaskResult(
+            run_id=domain_task.run_id,
+            domain_task_id=domain_task.domain_task_id,
+            worker_task_id=f"wt_{domain_task.domain_task_id.removeprefix('dt_')}_{step.step_id}",
+            worker_agent=step.worker_agent or domain_task.to_domain_agent,
+            skill_id=step.skill_id or str(step.kind),
+            status=AgentExecutionStatus.BLOCKED,
+            error_code=str(step.kind),
+            retryable=step.kind is PlanActionKind.ASK_CLARIFICATION,
+            safe_summary=summary,
+        ),
+        artifacts=(),
+        answer=None,
+        table_rows=[],
+    )
+
+
+def _blocked_domain_planning_bundle(
+    *,
+    domain_task: Any,
+    error_code: str,
+    summary: str,
+) -> WorkerExecutionBundle:
+    """Return a blocked bundle for an ExpertAgent planning failure."""
+    return WorkerExecutionBundle(
+        result=WorkerTaskResult(
+            run_id=domain_task.run_id,
+            domain_task_id=domain_task.domain_task_id,
+            worker_task_id=f"wt_{domain_task.domain_task_id.removeprefix('dt_')}_blocked",
+            worker_agent=domain_task.to_domain_agent,
+            skill_id="expert_plan",
+            status=AgentExecutionStatus.BLOCKED,
+            error_code=error_code,
+            retryable=True,
+            safe_summary=summary,
+        ),
+        artifacts=(),
+        answer=None,
+        table_rows=[],
+    )
 
 
 def _audit_worker_bundle(
@@ -992,6 +1159,7 @@ def _root_capability_token(run_id: str) -> CapabilityToken:
             "analysis_mart.read_snapshot",
             "evidence.read_package",
             "provider.read_status",
+            *_DATA_QUESTION_TOOL_ALLOWLIST,
         ),
         expires_at=datetime.now(UTC) + timedelta(hours=1),
         max_tool_calls=8,

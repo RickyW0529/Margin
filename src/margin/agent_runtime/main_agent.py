@@ -1,8 +1,14 @@
-"""MainAgent runtime foundation."""
+"""Legacy v0 MainAgent runtime foundation.
+
+New application-facing flows should use ``margin.agents.runtime.service`` and the
+v1 control-plane runtime. This module remains for compatibility with older tests
+and scheduled flow helpers.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -41,6 +47,14 @@ from margin.research.llm import LLMProvider
 
 class MainAgentPlanningError(RuntimeError):
     """Raised when MainAgent cannot produce a valid LLM-backed Q&A plan.."""
+
+
+@dataclass(frozen=True)
+class QnaAgentSelection:
+    """One v0 Q&A planner selection preserving the selected skill."""
+
+    agent_name: str
+    skill_id: str | None = None
 
 
 class MainAgentRuntime:
@@ -241,8 +255,13 @@ class MainAgentRuntime:
         )
 
         steps = tuple(
-            self._qna_step(agent_name, run_id=run_id, index=index + 1)
-            for index, agent_name in enumerate(selected_agents)
+            self._qna_step(
+                selection.agent_name,
+                run_id=run_id,
+                index=index + 1,
+                skill_id=selection.skill_id,
+            )
+            for index, selection in enumerate(selected_agents)
         )
         for step in steps:
             self._context_store.add_step(step)
@@ -461,7 +480,14 @@ class MainAgentRuntime:
                 return step.expert_agent, step.skill_id
         return None, None
 
-    def _qna_step(self, agent_name: str, *, run_id: str, index: int) -> AgentStep:
+    def _qna_step(
+        self,
+        agent_name: str,
+        *,
+        run_id: str,
+        index: int,
+        skill_id: str | None = None,
+    ) -> AgentStep:
         """Process _qna_step.
 
         Args:
@@ -473,14 +499,14 @@ class MainAgentRuntime:
             AgentStep: .
         """
         card = self._cards.get(agent_name)
-        skill = next(
-            (
-                candidate
-                for candidate in card.skills
-                if candidate.qa_allowed and candidate.write_policy == AgentPermissionMode.READ_ONLY
-            ),
-            None,
+        qa_skills = tuple(
+            candidate
+            for candidate in card.skills
+            if candidate.qa_allowed and candidate.write_policy == AgentPermissionMode.READ_ONLY
         )
+        skill = next((candidate for candidate in qa_skills if candidate.skill_id == skill_id), None)
+        if skill is None:
+            skill = next(iter(qa_skills), None)
         if skill is None:
             raise ValueError(f"agent '{agent_name}' has no Q&A skill")
         step_slug = agent_name.removesuffix("Agent").lower()
@@ -500,7 +526,7 @@ class MainAgentRuntime:
         run_id: str,
         conversation_context: list[dict[str, str]],
         context_pack: ContextPack | None,
-    ) -> tuple[str, ...]:
+    ) -> tuple[QnaAgentSelection, ...]:
         """Process _select_user_qna_agents.
 
         Args:
@@ -510,7 +536,7 @@ class MainAgentRuntime:
             context_pack: ContextPack | None: .
 
         Returns:
-            tuple[str, ...]: .
+            tuple[QnaAgentSelection, ...]: .
         """
         return self._select_user_qna_agents_with_llm(
             user_input=user_input,
@@ -526,7 +552,7 @@ class MainAgentRuntime:
         run_id: str,
         conversation_context: list[dict[str, str]],
         context_pack: ContextPack | None,
-    ) -> tuple[str, ...]:
+    ) -> tuple[QnaAgentSelection, ...]:
         """Process _select_user_qna_agents_with_llm.
 
         Args:
@@ -536,7 +562,7 @@ class MainAgentRuntime:
             context_pack: ContextPack | None: .
 
         Returns:
-            tuple[str, ...]: .
+            tuple[QnaAgentSelection, ...]: .
         """
         if self._llm_provider_factory is None:
             raise MainAgentPlanningError("LLM planner is not configured")
@@ -559,7 +585,7 @@ class MainAgentRuntime:
                         self._cards.list_cards()
                     )
                 ],
-                "artifact_summaries": [],
+                "artifact_summaries": _artifact_summaries_from_context_pack(context_pack),
                 "guardrail_decisions": [],
             },
         )
@@ -581,27 +607,38 @@ class MainAgentRuntime:
             raise MainAgentPlanningError("LLM planner produced no valid Q&A expert")
         return selected
 
-    def _agent_names_from_plan_output(self, output: dict[str, Any]) -> tuple[str, ...]:
+    def _agent_names_from_plan_output(
+        self,
+        output: dict[str, Any],
+    ) -> tuple[QnaAgentSelection, ...]:
         """Process _agent_names_from_plan_output.
 
         Args:
             output: dict[str, Any]: .
 
         Returns:
-            tuple[str, ...]: .
+            tuple[QnaAgentSelection, ...]: .
         """
         raw_steps = output.get("steps")
         if not isinstance(raw_steps, list):
             return ()
-        selected: list[str] = []
+        selected: list[QnaAgentSelection] = []
+        selected_names: set[str] = set()
         for raw_step in raw_steps:
             if not isinstance(raw_step, dict):
                 continue
             agent_name = _coerce_agent_name(raw_step)
-            if not agent_name or agent_name in selected:
+            if not agent_name or agent_name in selected_names:
                 continue
-            if self._is_allowed_qna_agent(agent_name, raw_step.get("skill_id")):
-                selected.append(agent_name)
+            skill_id = raw_step.get("skill_id")
+            if self._is_allowed_qna_agent(agent_name, skill_id):
+                selected.append(
+                    QnaAgentSelection(
+                        agent_name=agent_name,
+                        skill_id=str(skill_id) if skill_id not in (None, "") else None,
+                    )
+                )
+                selected_names.add(agent_name)
         return tuple(selected)
 
     def _is_allowed_qna_agent(
@@ -681,6 +718,31 @@ def _coerce_agent_name(step: dict[str, object]) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
+
+
+def _artifact_summaries_from_context_pack(
+    context_pack: ContextPack | None,
+) -> list[dict[str, object]]:
+    """Return prompt-safe artifact/fact summaries for the legacy v0 planner."""
+    if context_pack is None:
+        return []
+    summaries: list[dict[str, object]] = []
+    for artifact_ref in context_pack.included_artifact_refs:
+        summaries.append({"ref": artifact_ref, "kind": "artifact"})
+    for capsule_ref in context_pack.included_capsule_refs:
+        summaries.append({"ref": capsule_ref, "kind": "capsule"})
+    for fact in context_pack.facts:
+        summaries.append(
+            {
+                "ref": fact.fact_id,
+                "kind": "fact",
+                "fact_type": fact.fact_type,
+                "subject_id": fact.subject_id,
+                "statement": fact.statement,
+                "artifact_refs": list(fact.artifact_refs),
+            }
+        )
+    return summaries
 
 
 def _expected_producers(flow: AgentFlowDefinition) -> dict[str, str]:

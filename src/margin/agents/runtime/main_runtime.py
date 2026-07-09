@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from margin.agents.cards.domain_cards import DomainAgentCard
 from margin.agents.prompts.main_agent import (
@@ -13,6 +13,8 @@ from margin.agents.prompts.main_agent import (
     MAIN_AGENT_SYSTEM_V1,
 )
 from margin.agents.protocol.models import ContextPack, DomainTaskRequest
+from margin.agents.protocol.planning import NON_EXECUTION_KINDS, PlanActionKind
+from margin.agents.runtime.capability_registry import CapabilityRegistry
 from margin.agents.security.capability import CapabilityToken, derive_capability_token
 from margin.research.llm import LLMProvider
 
@@ -31,6 +33,7 @@ class GlobalPlan(BaseModel):
     planning_prompt_ref: str = ""
     planning_prompt_hash: str = ""
     domain_dependency_edges: tuple[dict[str, str], ...] = ()
+    planner_messages: tuple[dict[str, Any], ...] = ()
     created_by: str = "MainAgent"
 
 
@@ -46,6 +49,9 @@ class MainPlanningContext(BaseModel):
     conversation_context: tuple[dict[str, str], ...] = ()
     domain_agent_names: tuple[str, ...]
     domain_agent_catalog: tuple[dict[str, object], ...] = ()
+    context_status: tuple[dict[str, object], ...] = ()
+    capability_snapshot: dict[str, object] = Field(default_factory=dict)
+    data_readiness_refs: tuple[str, ...] = ()
     policy_summary: tuple[str, ...] = (
         "MainAgent cannot call tools directly",
         "MainAgent must delegate through Domain ExpertAgents",
@@ -70,11 +76,30 @@ class MainPlanStepDraft(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     step_id: str
-    agent: str
-    task: str
+    kind: PlanActionKind = PlanActionKind.DELEGATE
+    agent: str | None = None
+    domain: str | None = None
+    task: str = ""
     required_output_types: tuple[str, ...] = ()
     depends_on: tuple[str, ...] = ()
     constraints: dict[str, Any] = Field(default_factory=dict)
+    reason: str = ""
+    missing_inputs: tuple[str, ...] = ()
+    user_safe_message: str = ""
+
+    @model_validator(mode="after")
+    def validate_by_kind(self) -> MainPlanStepDraft:
+        """Validate fields required by this action kind."""
+        if self.kind is PlanActionKind.DELEGATE:
+            if not self.agent:
+                raise ValueError("delegate step requires agent")
+            if not self.task:
+                raise ValueError("delegate step requires task")
+        if self.kind in NON_EXECUTION_KINDS and not (
+            self.reason or self.user_safe_message
+        ):
+            raise ValueError(f"{self.kind} requires reason or user_safe_message")
+        return self
 
 
 class MainPlanDraft(BaseModel):
@@ -85,6 +110,21 @@ class MainPlanDraft(BaseModel):
     steps: tuple[MainPlanStepDraft, ...]
     final_answer_requirements: tuple[str, ...] = ("use_approved_capsules_only",)
     prompt_text: str = ""
+
+    @model_validator(mode="after")
+    def validate_steps(self) -> MainPlanDraft:
+        """Validate step identity and dependencies."""
+        if not self.steps:
+            raise ValueError("steps required")
+        step_ids = [step.step_id for step in self.steps]
+        if len(step_ids) != len(set(step_ids)):
+            raise ValueError("duplicate step_id")
+        known_ids = set(step_ids)
+        for step in self.steps:
+            for dependency_id in step.depends_on:
+                if dependency_id not in known_ids:
+                    raise ValueError(f"unknown depends_on: {dependency_id}")
+        return self
 
 
 class LLMMainAgentPlanner:
@@ -111,7 +151,45 @@ class LLMMainAgentPlanner:
                 "type": "object",
                 "required": ["steps"],
                 "properties": {
-                    "steps": {"type": "array"},
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["step_id"],
+                            "properties": {
+                                "step_id": {"type": "string"},
+                                "kind": {
+                                    "enum": [
+                                        "delegate",
+                                        "inspect_context",
+                                        "ask_clarification",
+                                        "blocked",
+                                        "insufficient_evidence",
+                                        "synthesize",
+                                    ]
+                                },
+                                "agent": {"type": ["string", "null"]},
+                                "domain": {"type": ["string", "null"]},
+                                "task": {"type": "string"},
+                                "required_output_types": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "depends_on": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "constraints": {"type": "object"},
+                                "reason": {"type": "string"},
+                                "missing_inputs": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "user_safe_message": {"type": "string"},
+                            },
+                            "additionalProperties": False,
+                        },
+                    },
                     "final_answer_requirements": {"type": "array"},
                 },
             },
@@ -172,6 +250,7 @@ class MainRuntime:
         domain_cards: tuple[DomainAgentCard, ...],
         planner: LLMMainAgentPlanner,
         tool_gateway: object | None = None,
+        capability_registry: CapabilityRegistry | None = None,
     ) -> None:
         """Init .
 
@@ -186,6 +265,7 @@ class MainRuntime:
         self._domain_cards_by_name = {card.name: card for card in domain_cards}
         self._planner = planner
         self._tool_gateway = tool_gateway
+        self._capability_registry = capability_registry
         self.issued_tokens: dict[str, CapabilityToken] = {}
 
     def create_global_plan(
@@ -210,14 +290,21 @@ class MainRuntime:
         Returns:
             GlobalPlan: .
         """
+        visible_domain_cards = self._visible_domain_cards(capability_token)
+        visible_cards_by_name = {card.name: card for card in visible_domain_cards}
         planning_context = MainPlanningContext(
             run_id=run_id,
             run_type=run_type,
             user_goal=user_goal,
             context_pack_ref=context_pack.context_pack_id,
             conversation_context=tuple(conversation_context[-8:]),
-            domain_agent_names=tuple(card.name for card in self._domain_cards),
-            domain_agent_catalog=tuple(_card_catalog_item(card) for card in self._domain_cards),
+            domain_agent_names=tuple(card.name for card in visible_domain_cards),
+            domain_agent_catalog=tuple(_card_catalog_item(card) for card in visible_domain_cards),
+            context_status=_context_status_from_pack(context_pack),
+            capability_snapshot=self._capability_snapshot(capability_token),
+            data_readiness_refs=tuple(
+                ref for ref in context_pack.included_artifact_refs if "data_readiness" in ref
+            ),
         )
         planning_prompt_ref = _planning_prompt_ref(run_type)
         plan_draft = self._planner.plan(
@@ -226,10 +313,38 @@ class MainRuntime:
         )
         dependency_edges = _dependency_edges_from_plan(plan_draft)
         tasks: list[DomainTaskRequest] = []
+        planner_messages: list[dict[str, Any]] = []
         for step in plan_draft.steps:
-            card = self._domain_cards_by_name.get(step.agent)
+            if step.kind is not PlanActionKind.DELEGATE:
+                planner_messages.append(
+                    {
+                        "step_id": step.step_id,
+                        "kind": step.kind,
+                        "domain": step.domain,
+                        "reason": step.reason,
+                        "missing_inputs": list(step.missing_inputs),
+                        "user_safe_message": step.user_safe_message,
+                    }
+                )
+                continue
+            card = visible_cards_by_name.get(step.agent or "")
             if card is None:
-                raise RuntimeError(f"MainAgent selected unknown ExpertAgent: {step.agent}")
+                fallback_card = self._domain_cards_by_name.get(step.agent or "")
+                planner_messages.append(
+                    {
+                        "step_id": step.step_id,
+                        "kind": PlanActionKind.BLOCKED,
+                        "domain": step.domain or (fallback_card.domain if fallback_card else None),
+                        "reason": (
+                            f"{step.agent or step.domain or 'selected domain'} is not "
+                            "executable in the current capability snapshot"
+                        ),
+                        "missing_inputs": list(step.missing_inputs),
+                        "user_safe_message": step.user_safe_message
+                        or "当前环境没有开放该能力的可执行 worker/tool。",
+                    }
+                )
+                continue
             child_token = derive_capability_token(
                 capability_token,
                 token_id=f"{capability_token.token_id}:{card.name}",
@@ -252,7 +367,10 @@ class MainRuntime:
                     for artifact_type in capability_token.allowed_artifact_types
                     if artifact_type in set(card.required_output_types)
                 ),
-                max_tool_calls=min(capability_token.max_tool_calls, 2),
+                max_tool_calls=min(
+                    capability_token.max_tool_calls,
+                    getattr(card, "max_tool_calls", capability_token.max_tool_calls),
+                ),
                 can_delegate=True,
                 delegation_depth_remaining=1,
             )
@@ -278,7 +396,13 @@ class MainRuntime:
                     idempotency_key=f"{run_id}:{card.name}:{context_pack.payload_hash}",
                 )
             )
-        return GlobalPlan(
+        task_agent_names = {task.to_domain_agent for task in tasks}
+        dependency_edges = tuple(
+            edge
+            for edge in dependency_edges
+            if edge.get("from") in task_agent_names and edge.get("to") in task_agent_names
+        )
+        plan = GlobalPlan(
             run_id=run_id,
             run_type=run_type,
             user_intent=user_goal,
@@ -287,7 +411,32 @@ class MainRuntime:
             planning_prompt_ref=planning_prompt_ref,
             planning_prompt_hash=_stable_short_hash(plan_draft.prompt_text),
             domain_dependency_edges=dependency_edges,
+            planner_messages=tuple(planner_messages),
         )
+        validation = MainPlanValidator(visible_domain_cards).validate(plan)
+        if not validation.valid:
+            raise RuntimeError(
+                "MainAgent plan validation failed: " + ",".join(validation.error_codes)
+            )
+        return plan
+
+    def _visible_domain_cards(
+        self,
+        capability_token: CapabilityToken,
+    ) -> tuple[DomainAgentCard, ...]:
+        if self._capability_registry is None:
+            return self._domain_cards
+        return self._capability_registry.visible_domain_cards(
+            capability_token=capability_token,
+            require_executable_worker=True,
+        )
+
+    def _capability_snapshot(self, capability_token: CapabilityToken) -> dict[str, object]:
+        if self._capability_registry is None:
+            return {}
+        return self._capability_registry.snapshot(
+            capability_token=capability_token,
+        ).model_dump(mode="json")
 
 def _planning_prompt_ref(run_type: str) -> str:
     """Return the prompt ID used for this MainAgent planning mode."""
@@ -325,6 +474,8 @@ def _dependency_edges_from_plan(plan_draft: MainPlanDraft) -> tuple[dict[str, st
             dependency = step_by_id.get(dependency_id)
             if dependency is None:
                 continue
+            if not dependency.agent or not step.agent:
+                continue
             edges.append(
                 {
                     "from": dependency.agent,
@@ -345,6 +496,21 @@ def _card_catalog_item(card: DomainAgentCard) -> dict[str, object]:
         "capability_manifest": list(card.capability_manifest),
         "required_output_types": list(card.required_output_types),
     }
+
+
+def _context_status_from_pack(context_pack: ContextPack) -> tuple[dict[str, object], ...]:
+    """Return data-status facts in a compact planner-safe shape."""
+    return tuple(
+        {
+            "subject_id": fact.subject_id,
+            "statement": fact.statement,
+            "value_json": fact.value_json or {},
+            "artifact_refs": list(fact.artifact_refs),
+        }
+        for fact in context_pack.facts
+        if fact.fact_type == "data_status"
+    )
+
 
 def _stable_short_hash(value: str) -> str:
     """Return a stable short sha256 hash for prompt lineage."""

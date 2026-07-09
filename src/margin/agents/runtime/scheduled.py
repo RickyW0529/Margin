@@ -10,8 +10,10 @@ from zoneinfo import ZoneInfo
 from margin.agent_runtime.context_store import AgentContextStore, make_context_artifact
 from margin.agent_runtime.quant_agent import current_quant_agent_strategy_profile
 from margin.agent_runtime.schedules import AgentScheduleRepository, StockAnalysisSchedule
-from margin.agents.cards.registry import default_domain_agent_cards
+from margin.agents.cards.registry import default_domain_agent_cards, default_worker_agent_cards
 from margin.agents.protocol.models import ContextFact, ContextPack
+from margin.agents.runtime.capability_registry import CapabilityRegistry
+from margin.agents.runtime.executor_registry import ExecutorRegistry
 from margin.agents.runtime.main_runtime import (
     GlobalPlan,
     LLMMainAgentPlanner,
@@ -24,6 +26,7 @@ from margin.agents.security.policies import (
     ProductionWritePolicy,
     ToolPolicy,
 )
+from margin.agents.tools.catalog import default_tool_catalog
 from margin.config_runtime.bootstrap import SCHEDULED_QUANT_PROFILE_KEY
 from margin.config_runtime.models import ConfigReference
 from margin.config_runtime.repository import ConfigResolver
@@ -75,15 +78,23 @@ class ScheduledAgentRuntimeRunner:
             scheduled_task_intent=scheduled_task_intent,
         )
         domain_cards = default_domain_agent_cards()
+        capability_registry = CapabilityRegistry(
+            domain_cards=domain_cards,
+            worker_cards=default_worker_agent_cards(),
+            executor_registry=ExecutorRegistry(),
+            tool_catalog=default_tool_catalog(),
+        )
+        root_token = _scheduled_root_capability_token(run_id)
         global_plan = MainRuntime(
             domain_cards=domain_cards,
             planner=LLMMainAgentPlanner(llm_provider=self._llm_provider_factory()),
+            capability_registry=capability_registry,
         ).create_global_plan(
             run_id=run_id,
             run_type="scheduled_stock_analysis",
             user_goal=_scheduled_task_prompt(schedule),
             context_pack=context_pack,
-            capability_token=_scheduled_root_capability_token(run_id),
+            capability_token=root_token,
         )
         plan_validation = MainPlanValidator(domain_cards).validate(global_plan)
         if not plan_validation.valid:
@@ -98,6 +109,8 @@ class ScheduledAgentRuntimeRunner:
             producer_agent="MainAgent",
             payload_json={
                 "runtime_version": SCHEDULED_AGENT_RUNTIME_VERSION,
+                "scheduled_planner_mode": "dynamic_main_agent_planner",
+                "execution_boundary": "valuation_refresh_service",
                 "global_plan": global_plan.model_dump(mode="json"),
                 "scheduled_task_intent": scheduled_task_intent,
                 "main_agent_plan": _global_plan_summary(global_plan),
@@ -260,6 +273,22 @@ def _scheduled_context_pack(
                 fact_type="platform_status",
                 source_refs=(f"schedule:{schedule.schedule_id}",),
             ),
+            ContextFact(
+                fact_id=f"fact_{run_id}_scheduled_runtime_status",
+                statement=(
+                    "Scheduled v1 uses dynamic MainAgent planning; valuation refresh "
+                    "remains the static execution boundary."
+                ),
+                confidence=1.0,
+                fact_type="data_status",
+                subject_type="run",
+                subject_id=run_id,
+                value_json={
+                    "scheduled_planner_mode": "dynamic_main_agent_planner",
+                    "execution_boundary": "valuation_refresh_service",
+                },
+                source_refs=(f"schedule:{schedule.schedule_id}",),
+            ),
         ),
         compression_policy_version="scheduled-main-planning-v1",
     )
@@ -307,6 +336,10 @@ def _scheduled_root_capability_token(run_id: str) -> CapabilityToken:
             "quant.run_screen",
             "evidence.read_package",
             "provider.read_status",
+            "warehouse.describe_schema",
+            "warehouse.resolve_security",
+            "warehouse.discover_indicators",
+            "warehouse.query_indicator_history",
         ),
         expires_at=datetime.now(UTC) + timedelta(hours=2),
         max_tool_calls=16,
@@ -335,4 +368,5 @@ def _global_plan_summary(global_plan: GlobalPlan) -> dict[str, Any]:
         ],
         "dependency_edges": list(global_plan.domain_dependency_edges),
         "final_answer_requirements": list(global_plan.final_answer_requirements),
+        "planner_messages": list(global_plan.planner_messages),
     }

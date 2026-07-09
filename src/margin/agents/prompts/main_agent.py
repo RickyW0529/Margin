@@ -17,32 +17,45 @@ Hard rules:
 - Do not provide investment advice, trading instructions, or guaranteed return claims.
 """
 
-MAIN_AGENT_QNA_PLANNER_V1 = """Task: Create a domain task plan for the user request.
+MAIN_AGENT_QNA_PLANNER_V1 = """Task: Create a safe, executable domain task plan
+for the user request.
 
 Inputs:
 - USER_MESSAGE
 - CHAT_MEMORY_SUMMARY
 - CONTEXT_PACK
-- REGISTERED_DOMAIN_AGENT_CARDS
+- CONTEXT_STATUS
+- DATA_READINESS
+- CAPABILITY_SNAPSHOT
 - EXECUTOR_VISIBLE_SKILLS
+- REGISTERED_DOMAIN_AGENT_CARDS
 - GLOBAL_POLICY
 
 Planning rules:
-1. Treat REGISTERED_DOMAIN_AGENT_CARDS as the only source of available expert
+1. Treat REGISTERED_DOMAIN_AGENT_CARDS as the only executable expert
    capabilities. Do not use hidden routes or memorized mappings.
-2. Decide dynamically whether the request needs zero, one, or multiple
+2. If the user asks about a hidden or non-executable domain, return a blocked
+   or insufficient_evidence step with a user-safe reason.
+3. Preserve EMPTY, STALE, UNAVAILABLE, NOT_CONFIGURED, PERMISSION_DENIED, and
+   ERROR statuses from DATA_READINESS in constraints; never collapse them into
+   "no context".
+4. If required user inputs are missing, return ask_clarification; do not guess
+   stock names, metric IDs, dates, or strategy IDs.
+5. For "现在能做什么" or platform capability questions, plan a general
+   status/capability answer using DATA_READINESS and CAPABILITY_SNAPSHOT.
+6. For quant result questions, prefer a quant status/result capability if
+   executable; otherwise return insufficient_evidence explaining quant status.
+7. Decide dynamically whether the request needs zero, one, or multiple
    DomainTaskRequests. Prefer the smallest plan that can answer safely.
-3. For each selected expert, write a task prompt that includes the user's concrete
+8. For each selected expert, write a task prompt that includes the user's concrete
    question, the needed output shape, and any constraints from context.
-4. If multiple experts are needed, declare dependencies explicitly through step
+9. If multiple experts are needed, declare dependencies explicitly through step
    ordering and depends_on.
-5. Do not call WorkerAgents, tools, databases, providers, web search, or code
+10. Do not call WorkerAgents, tools, databases, providers, web search, or code
    execution directly. MainAgent only delegates and reviews.
-6. If no visible expert capability can satisfy the request, plan a clarification,
-   insufficient-evidence response, or blocked result instead of inventing an agent.
-7. If the user asks for trading instructions or guaranteed returns, plan a safe
+11. If the user asks for trading instructions or guaranteed returns, plan a safe
    research-only response.
-8. Output only JSON conforming to MainPlanSchema.
+12. Output only JSON conforming to MainPlanSchemaV2 with steps[].kind.
 """
 
 MAIN_AGENT_SCHEDULED_PLANNER_V1 = """Task: Create a dynamic GlobalPlan for a
@@ -74,7 +87,7 @@ Planning rules:
    blocked or insufficient-evidence result rather than inventing an agent.
 7. Fusion or dashboard projection steps must remain research support. Do not use
    buy/sell/hold wording or promise returns.
-8. Output only JSON conforming to MainPlanSchema.
+8. Output only JSON conforming to MainPlanSchemaV2 with steps[].kind.
 """
 
 MAIN_AGENT_FINAL_ANSWER_V1 = """Task: Produce the final user-facing answer.

@@ -85,6 +85,8 @@ class ContextRouter:
                     valid_at=artifact.created_at,
                 )
             )
+            if artifact.artifact_type == "data_readiness":
+                facts.extend(_readiness_facts(artifact))
             for key in artifact.payload_json:
                 if key.lower() in _UNSAFE_KEYS:
                     omissions.append(
@@ -129,3 +131,42 @@ def _fact_type(artifact_type: str) -> str:
     if "data" in artifact_type:
         return "data_status"
     return "metric"
+
+
+def _readiness_facts(artifact: ContextArtifact) -> list[ContextFact]:
+    """Extract source status facts from a data_readiness artifact."""
+    facts: list[ContextFact] = []
+    raw_sources = artifact.payload_json.get("sources")
+    if not isinstance(raw_sources, list | tuple):
+        return facts
+    for raw_source in raw_sources:
+        if not isinstance(raw_source, dict):
+            continue
+        source_name = str(raw_source.get("source_name") or "unknown")
+        status = str(raw_source.get("status") or "unknown")
+        row_count = raw_source.get("row_count")
+        facts.append(
+            ContextFact(
+                fact_id=f"fact_{artifact.artifact_id}_{source_name}",
+                statement=(
+                    f"{source_name} readiness status is {status}; "
+                    f"row_count={row_count}."
+                ),
+                confidence=1.0,
+                fact_type="data_status",
+                subject_type="dataset",
+                subject_id=source_name,
+                value_json={
+                    "status": status,
+                    "row_count": row_count,
+                    "error_code": raw_source.get("error_code"),
+                    "retryable": raw_source.get("retryable", False),
+                    "safe_summary": raw_source.get("safe_summary", ""),
+                },
+                artifact_refs=(artifact.artifact_id,),
+                source_refs=artifact.source_refs,
+                freshness_status="fresh",
+                valid_at=artifact.created_at,
+            )
+        )
+    return facts

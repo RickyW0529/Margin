@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from margin.agents.cards.worker_cards import WorkerAgentCard
 from margin.agents.prompts.domain_experts import DOMAIN_EXPERT_SYSTEM_V1
 from margin.agents.protocol.models import ContextPack, DomainTaskRequest
+from margin.agents.protocol.planning import NON_EXECUTION_KINDS, PlanActionKind
 from margin.research.llm import LLMProvider
 
 
@@ -19,12 +20,30 @@ class WorkerPlanStepDraft(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     step_id: str
-    worker_agent: str
-    skill_id: str
-    task: str
+    kind: PlanActionKind = PlanActionKind.EXECUTE
+    worker_agent: str | None = None
+    skill_id: str | None = None
+    task: str = ""
     required_output_types: tuple[str, ...] = ()
     depends_on: tuple[str, ...] = ()
     constraints: dict[str, Any] = Field(default_factory=dict)
+    reason: str = ""
+    missing_inputs: tuple[str, ...] = ()
+    user_safe_message: str = ""
+
+    @model_validator(mode="after")
+    def validate_by_kind(self) -> WorkerPlanStepDraft:
+        """Validate fields required by this action kind."""
+        if self.kind is PlanActionKind.EXECUTE:
+            if not self.worker_agent or not self.skill_id:
+                raise ValueError("execute step requires worker_agent and skill_id")
+            if not self.task:
+                raise ValueError("execute step requires task")
+        if self.kind in NON_EXECUTION_KINDS and not (
+            self.reason or self.user_safe_message
+        ):
+            raise ValueError(f"{self.kind} requires reason or user_safe_message")
+        return self
 
 
 class ExpertWorkerPlanDraft(BaseModel):
@@ -35,6 +54,21 @@ class ExpertWorkerPlanDraft(BaseModel):
     steps: tuple[WorkerPlanStepDraft, ...]
     audit_requirements: tuple[str, ...] = ("verify_artifacts_before_returning",)
     prompt_text: str = ""
+
+    @model_validator(mode="after")
+    def validate_steps(self) -> ExpertWorkerPlanDraft:
+        """Validate step identity and dependencies."""
+        if not self.steps:
+            raise ValueError("steps required")
+        step_ids = [step.step_id for step in self.steps]
+        if len(step_ids) != len(set(step_ids)):
+            raise ValueError("duplicate step_id")
+        known_ids = set(step_ids)
+        for step in self.steps:
+            for dependency_id in step.depends_on:
+                if dependency_id not in known_ids:
+                    raise ValueError(f"unknown depends_on: {dependency_id}")
+        return self
 
 
 class LLMExpertAgentPlanner:
@@ -63,7 +97,43 @@ class LLMExpertAgentPlanner:
                 "type": "object",
                 "required": ["steps"],
                 "properties": {
-                    "steps": {"type": "array"},
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["step_id"],
+                            "properties": {
+                                "step_id": {"type": "string"},
+                                "kind": {
+                                    "enum": [
+                                        "execute",
+                                        "ask_clarification",
+                                        "blocked",
+                                        "insufficient_evidence",
+                                    ]
+                                },
+                                "worker_agent": {"type": ["string", "null"]},
+                                "skill_id": {"type": ["string", "null"]},
+                                "task": {"type": "string"},
+                                "required_output_types": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "depends_on": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "constraints": {"type": "object"},
+                                "reason": {"type": "string"},
+                                "missing_inputs": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "user_safe_message": {"type": "string"},
+                            },
+                            "additionalProperties": False,
+                        },
+                    },
                     "audit_requirements": {"type": "array"},
                 },
             },
@@ -82,6 +152,8 @@ class LLMExpertAgentPlanner:
         }
         steps = tuple(WorkerPlanStepDraft.model_validate(item) for item in raw_steps)
         for step in steps:
+            if step.kind is not PlanActionKind.EXECUTE:
+                continue
             if (step.worker_agent, step.skill_id) not in allowed_pairs:
                 raise RuntimeError(
                     "ExpertAgent selected unavailable WorkerAgent skill: "

@@ -105,7 +105,7 @@ def test_scheduled_runner_triggers_v1_plan_and_refresh() -> None:
     assert metadata["schedule_id"] == "stock_analysis_daily"
     assert metadata["universe"] == "ALL_A"
     assert metadata["global_plan"]["created_by"] == "MainAgent"
-    assert metadata["global_plan"]["domain_task_count"] >= 3
+    assert metadata["global_plan"]["domain_task_count"] == 0
     assert metadata["quant_agent_strategy_profile"]["strategy_family"] == ("ml_lgbm_lifecycle")
     assert metadata["quant_strategy"]["strategy_family"] == "ml_lgbm_lifecycle"
     assert metadata["scheduled_task_intent"] == {
@@ -117,12 +117,12 @@ def test_scheduled_runner_triggers_v1_plan_and_refresh() -> None:
     }
     assert metadata["main_agent_plan"]["planning_mode"] == "prompt_dynamic"
     assert metadata["main_agent_plan"]["planning_prompt_ref"] == "main_agent_scheduled_planner_v1"
-    assert metadata["main_agent_plan"]["domain_agents"] == [
-        "DataExpertAgent",
-        "QuantExpertAgent",
-        "EvidenceRagExpertAgent",
-        "StockResearchExpertAgent",
-    ]
+    assert metadata["main_agent_plan"]["domain_agents"] == []
+    assert metadata["main_agent_plan"]["planner_messages"]
+    assert any(
+        message["domain"] == "quant"
+        for message in metadata["main_agent_plan"]["planner_messages"]
+    )
     assert metadata["plan_validation"]["valid"] is True
     artifacts = context_store.list_artifacts("ar_sched_20260707_0830")
     assert [artifact.artifact_type for artifact in artifacts] == [

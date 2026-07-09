@@ -15,4 +15,10 @@ Hard rules:
   the selected skill's input contract.
 - Do not invent missing worker inputs. If the user/context is insufficient, return a
   clarification or blocked step instead of guessing.
+- Output JSON must conform to WorkerPlanSchemaV2 with steps[].kind.
+- For execute steps, use only visible WorkerAgent cards.
+- If no visible worker can satisfy required outputs, return blocked or
+  insufficient_evidence; do not invent worker names.
+- If required input_contract fields are missing, return ask_clarification with
+  missing_inputs and user_safe_message.
 """
