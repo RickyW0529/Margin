@@ -1,0 +1,139 @@
+{
+  "manifest_version": "2.0",
+  "profile": "user_qna",
+  "domain_agents": [
+    {
+      "name": "DataExpertAgent",
+      "version": "2.0",
+      "domain": "data",
+      "description": "Plans and reviews data-readiness and warehouse-analysis tasks.",
+      "worker_agent_names": ["DataQuestionWorker"],
+      "capability_manifest": [{"capability_id": "warehouse_analysis", "description": "Read PIT-safe warehouse data through registered tools."}],
+      "required_output_types": ["analysis_table", "qna_answer"],
+      "data_access_policy": ["read_provider_status", "read_analysis_mart"],
+      "production_write_policy": ["write_context_only"],
+      "tool_policy": ["read_only_tools"]
+    },
+    {
+      "name": "GeneralQnaExpertAgent",
+      "version": "2.0",
+      "domain": "general",
+      "description": "Plans and reviews product and dashboard questions.",
+      "worker_agent_names": ["GeneralQnaWorker"],
+      "required_output_types": ["analysis_table", "qna_answer"],
+      "data_access_policy": ["read_chat_summary", "read_dashboard"],
+      "production_write_policy": ["write_context_only"],
+      "tool_policy": ["read_only_tools"]
+    },
+    {
+      "name": "CodeExecutionExpertAgent",
+      "version": "2.0",
+      "domain": "code",
+      "description": "Plans and reviews constrained source-workspace changes.",
+      "worker_agent_names": ["CodeWorkspaceWorker"],
+      "required_output_types": ["code_change", "command_result", "qna_answer", "worker_activity"],
+      "data_access_policy": ["read_workspace"],
+      "production_write_policy": ["write_context_only", "write_workspace"],
+      "tool_policy": ["workspace_tools"]
+    },
+    {
+      "name": "QuantExpertAgent",
+      "version": "2.0",
+      "domain": "quant",
+      "description": "Plans and reviews registered quantitative research workers.",
+      "worker_agent_names": [],
+      "required_output_types": ["quant_result"],
+      "data_access_policy": ["read_analysis_mart"],
+      "production_write_policy": ["write_context_only"],
+      "tool_policy": ["quant_tools"]
+    },
+    {
+      "name": "EvidenceRagExpertAgent",
+      "version": "2.0",
+      "domain": "evidence",
+      "description": "Plans and reviews registered evidence workers.",
+      "worker_agent_names": [],
+      "required_output_types": ["evidence_package"],
+      "data_access_policy": ["read_evidence", "read_vector_index"],
+      "production_write_policy": ["write_context_only"],
+      "tool_policy": ["retrieval_tools"]
+    },
+    {
+      "name": "StockResearchExpertAgent",
+      "version": "2.0",
+      "domain": "stock_research",
+      "description": "Plans and reviews registered stock-research workers.",
+      "worker_agent_names": [],
+      "required_output_types": ["stock_research_context_capsule"],
+      "data_access_policy": ["read_analysis_mart", "read_evidence"],
+      "production_write_policy": ["write_context_only"],
+      "tool_policy": ["read_only_tools"]
+    }
+  ],
+  "worker_agents": [
+    {
+      "name": "DataQuestionWorker",
+      "version": "2.0",
+      "domain": "data",
+      "description": "Uses a LangGraph warehouse workflow to answer financial metric questions.",
+      "skills": [{
+        "skill_id": "answer_financial_metric",
+        "description": "Discover and query PIT financial indicator history.",
+        "input_artifact_types": ["context_pack"],
+        "output_artifact_types": ["analysis_table", "chart_spec", "computed_metric", "qna_answer", "visualization_image", "worker_activity"],
+        "input_contract": {"required_fields": ["user_query", "security_query", "chart_type"], "missing_input_policy": "ask_clarification"},
+        "tool_allowlist": ["warehouse.describe_schema", "warehouse.resolve_security", "warehouse.discover_indicators", "warehouse.query_indicator_history"]
+      }],
+      "supported_runtimes": ["langgraph"],
+      "data_access_policy": ["read_analysis_mart"],
+      "production_write_policy": ["write_context_only"],
+      "tool_policy": ["read_only_tools"],
+      "max_context_tokens": 4096,
+      "max_tool_calls": 4
+    },
+    {
+      "name": "GeneralQnaWorker",
+      "version": "2.0",
+      "domain": "general",
+      "description": "Uses approved context and dashboard tools to answer general questions.",
+      "skills": [{
+        "skill_id": "answer_general_qna",
+        "description": "Read a safe dashboard summary and produce a user-facing answer.",
+        "input_artifact_types": ["context_pack"],
+        "output_artifact_types": ["analysis_table", "qna_answer"],
+        "tool_allowlist": ["dashboard.read_candidates"]
+      }],
+      "supported_runtimes": ["langgraph"],
+      "data_access_policy": ["read_chat_summary", "read_dashboard"],
+      "production_write_policy": ["write_context_only"],
+      "tool_policy": ["read_only_tools"],
+      "max_context_tokens": 4096,
+      "max_tool_calls": 1
+    },
+    {
+      "name": "CodeWorkspaceWorker",
+      "version": "2.0",
+      "domain": "code",
+      "description": "Plans, edits, and verifies code through constrained workspace tools.",
+      "skills": [{
+        "skill_id": "complete_code_task",
+        "description": "Inspect source, write files with optimistic locking, and run allowed verification commands.",
+        "input_artifact_types": ["context_pack"],
+        "input_contract": {"minimum_tool_calls": 1},
+        "output_artifact_types": ["code_change", "command_result", "qna_answer", "worker_activity"],
+        "tool_allowlist": ["workspace.list_files", "workspace.read_file", "workspace.search", "workspace.write_file", "workspace.run_command"],
+        "tool_contracts": [
+          {"tool_name": "workspace.write_file", "produces": ["code_change"]},
+          {"tool_name": "workspace.run_command", "produces": ["command_result"]}
+        ],
+        "retry_policy": {"max_attempts": 3, "retryable_statuses": ["blocked", "failed"]}
+      }],
+      "supported_runtimes": ["langgraph"],
+      "data_access_policy": ["read_workspace"],
+      "production_write_policy": ["write_context_only", "write_workspace"],
+      "tool_policy": ["workspace_tools"],
+      "max_context_tokens": 12000,
+      "max_tool_calls": 24
+    }
+  ]
+}

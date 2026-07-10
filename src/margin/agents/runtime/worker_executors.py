@@ -5,7 +5,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, TypedDict
+
+from langgraph.graph import END, START, StateGraph
 
 from margin.agent_runtime.context_store import ContextArtifact, make_context_artifact
 from margin.agents.context.readiness import CandidateLoadResult, ReadinessStatus
@@ -16,8 +18,6 @@ from margin.agents.runtime.execution_context import (
 )
 from margin.agents.tools.specs import ToolCallRequest, ToolCallStatus
 from margin.agents.workers.data_question_worker import DataQuestionWorker
-from margin.dashboard.models import DashboardFilters, DashboardSort
-from margin.dashboard.service import DashboardServiceBundle
 from margin.research.llm import strip_thinking_blocks
 
 
@@ -58,6 +58,7 @@ class DataQuestionWorkerExecutor:
                 tool_gateway=context.tool_gateway,
                 capability_token=context.capability_token,
                 context_pack_id=context.context_pack.context_pack_id,
+                context_pack_hash=context.context_pack.content_hash,
                 worker_task_id=request.worker_task_id,
                 idempotency_key=request.idempotency_key,
             )
@@ -96,6 +97,7 @@ class DataQuestionWorkerExecutor:
                 skill_id=request.skill_id,
                 status=AgentExecutionStatus.SUCCEEDED,
                 output_artifact_refs=tuple(artifact.artifact_id for artifact in artifacts),
+                audit_event_refs=analysis.audit_event_refs,
                 safe_summary="DataQuestionWorker produced analysis artifacts.",
             ),
             artifacts=artifacts,
@@ -432,17 +434,30 @@ def _financial_metric_clarification_bundle(
     )
 
 
+class GeneralQnaWorkflowState(TypedDict, total=False):
+    """State carried through GeneralQnaWorker's LangGraph workflow."""
+
+    request: WorkerTaskRequest
+    context: WorkerExecutionContext
+    table_artifact: ContextArtifact
+    table_rows: list[dict[str, Any]]
+    answer: str
+    answer_artifact: ContextArtifact
+    bundle: WorkerExecutionBundle
+    audit_event_refs: tuple[str, ...]
+    node_trace: tuple[str, ...]
+
+
 class GeneralQnaWorkerExecutor:
     """Adapter for context-bound general Q&A answers."""
 
     def __init__(
         self,
         *,
-        dashboard_services: DashboardServiceBundle,
         llm_provider_factory: Any,
     ) -> None:
-        self._dashboard_services = dashboard_services
         self._llm_provider_factory = llm_provider_factory
+        self._graph = self._build_graph()
 
     def execute(
         self,
@@ -450,12 +465,70 @@ class GeneralQnaWorkerExecutor:
         context: WorkerExecutionContext,
     ) -> WorkerExecutionBundle:
         """Execute GeneralQnaWorker through the registry path."""
-        table_artifact, table_rows = self._build_candidate_table_artifact(context)
+        final_state = self._graph.invoke(
+            GeneralQnaWorkflowState(
+                request=request,
+                context=context,
+                node_trace=(),
+            )
+        )
+        bundle = final_state.get("bundle")
+        if not isinstance(bundle, WorkerExecutionBundle):
+            raise RuntimeError("GeneralQnaWorker graph did not produce a bundle")
+        return bundle
+
+    def _build_graph(self) -> Any:
+        """Compile the fixed internal LangGraph workflow once per executor."""
+        graph = StateGraph(GeneralQnaWorkflowState)
+        graph.add_node("load_candidates", self._load_candidates_node)
+        graph.add_node("generate_answer", self._generate_answer_node)
+        graph.add_node("finalize", self._finalize_node)
+        graph.add_edge(START, "load_candidates")
+        graph.add_edge("load_candidates", "generate_answer")
+        graph.add_edge("generate_answer", "finalize")
+        graph.add_edge("finalize", END)
+        return graph.compile()
+
+    def _load_candidates_node(
+        self,
+        state: GeneralQnaWorkflowState,
+    ) -> dict[str, Any]:
+        request = state["request"]
+        context = state["context"]
+        table_artifact, table_rows, audit_event_refs = (
+            self._build_candidate_table_artifact(request, context)
+        )
+        return {
+            "table_artifact": table_artifact,
+            "table_rows": table_rows,
+            "audit_event_refs": audit_event_refs,
+            "node_trace": (*state.get("node_trace", ()), "load_candidates"),
+        }
+
+    def _generate_answer_node(
+        self,
+        state: GeneralQnaWorkflowState,
+    ) -> dict[str, Any]:
+        context = state["context"]
         answer = self._answer_with_llm(
             command=context.command,
             context_pack=context.context_pack,
-            table_rows=table_rows,
+            table_rows=state["table_rows"],
         )
+        return {
+            "answer": answer,
+            "node_trace": (*state.get("node_trace", ()), "generate_answer"),
+        }
+
+    def _finalize_node(
+        self,
+        state: GeneralQnaWorkflowState,
+    ) -> dict[str, Any]:
+        request = state["request"]
+        context = state["context"]
+        table_artifact = state["table_artifact"]
+        table_rows = state["table_rows"]
+        answer = state["answer"]
         answer_artifact = qna_answer_artifact(
             run_id=context.command.run_id,
             answer=answer,
@@ -463,7 +536,7 @@ class GeneralQnaWorkerExecutor:
             producer_agent=request.worker_agent,
         )
         artifacts = (table_artifact, answer_artifact)
-        return WorkerExecutionBundle(
+        bundle = WorkerExecutionBundle(
             result=WorkerTaskResult(
                 run_id=request.run_id,
                 domain_task_id=request.domain_task_id,
@@ -472,20 +545,27 @@ class GeneralQnaWorkerExecutor:
                 skill_id=request.skill_id,
                 status=AgentExecutionStatus.SUCCEEDED,
                 output_artifact_refs=tuple(artifact.artifact_id for artifact in artifacts),
+                audit_event_refs=state.get("audit_event_refs", ()),
                 safe_summary="GeneralQnaWorker produced a context-bound answer.",
             ),
             artifacts=artifacts,
             answer=answer,
             table_rows=table_rows,
         )
+        return {
+            "answer_artifact": answer_artifact,
+            "bundle": bundle,
+            "node_trace": (*state.get("node_trace", ()), "finalize"),
+        }
 
     def _build_candidate_table_artifact(
         self,
+        request: WorkerTaskRequest,
         context: WorkerExecutionContext,
-    ) -> tuple[ContextArtifact, list[dict[str, Any]]]:
+    ) -> tuple[ContextArtifact, list[dict[str, Any]], tuple[str, ...]]:
         """Read dashboard candidates and store a table artifact."""
         command = context.command
-        load_result = self._load_candidate_rows(context)
+        load_result = self._load_candidate_rows(request, context)
         rows = list(load_result.rows)
         artifact = make_context_artifact(
             artifact_id=f"ctx_{command.run_id}_dashboard_candidates",
@@ -510,9 +590,13 @@ class GeneralQnaWorkerExecutor:
             },
             source_refs=("dashboard:research_candidates",),
         )
-        return artifact, rows
+        return artifact, rows, ((load_result.audit_ref,) if load_result.audit_ref else ())
 
-    def _load_candidate_rows(self, context: WorkerExecutionContext) -> CandidateLoadResult:
+    def _load_candidate_rows(
+        self,
+        request: WorkerTaskRequest,
+        context: WorkerExecutionContext,
+    ) -> CandidateLoadResult:
         """Load a compact dashboard candidate table without exposing raw internals."""
         command = context.command
         if context.tool_gateway is not None and context.capability_token is not None:
@@ -521,8 +605,8 @@ class GeneralQnaWorkerExecutor:
                     ToolCallRequest(
                         tool_call_id=f"tc_{command.run_id}_dashboard_read_candidates",
                         run_id=command.run_id,
-                        task_id="wt_general_qna_dashboard",
-                        caller_agent="GeneralQnaWorker",
+                        task_id=request.worker_task_id,
+                        caller_agent=request.worker_agent,
                         tool_name="dashboard.read_candidates",
                         tool_version="v1",
                         input_json={
@@ -532,7 +616,10 @@ class GeneralQnaWorkerExecutor:
                         },
                         capability_token=context.capability_token,
                         context_pack_id=context.context_pack.context_pack_id,
-                        idempotency_key=f"{command.run_id}:dashboard.read_candidates",
+                        context_pack_hash=context.context_pack.content_hash,
+                        idempotency_key=(
+                            f"{request.idempotency_key}:dashboard.read_candidates"
+                        ),
                         deadline_ms=30_000,
                     )
                 )
@@ -550,49 +637,14 @@ class GeneralQnaWorkerExecutor:
                     retryable=result.retryable,
                     safe_summary="Dashboard candidate source failed to load.",
                 )
-            return _candidate_load_result_from_tool_output(result.output_json)
-        try:
-            page = self._dashboard_services.query.list_research_candidates_v2(
-                scope_version_id=command.scope_version_id,
-                universe_code=command.universe,
-                filters=DashboardFilters(),
-                sort=DashboardSort(field="final_score", direction="desc"),
-                cursor=None,
-                limit=10,
+            return _candidate_load_result_from_tool_output(result.output_json).model_copy(
+                update={"audit_ref": result.audit_ref}
             )
-        except PermissionError as exc:
-            return CandidateLoadResult(
-                status=ReadinessStatus.PERMISSION_DENIED,
-                error_code=type(exc).__name__,
-                retryable=False,
-                safe_summary="Dashboard candidate source is not permitted.",
-            )
-        except Exception as exc:
-            return CandidateLoadResult(
-                status=ReadinessStatus.ERROR,
-                error_code=type(exc).__name__,
-                retryable=True,
-                safe_summary="Dashboard candidate source failed to load.",
-            )
-        rows = tuple(
-            {
-                "security_id": item.security_id,
-                "symbol": item.symbol,
-                "final_score": item.final_score,
-                "confidence": item.confidence,
-                "screening_status": item.screening_status,
-            }
-            for item in page.items
-        )
         return CandidateLoadResult(
-            status=ReadinessStatus.READY if rows else ReadinessStatus.EMPTY,
-            rows=rows,
-            as_of=page.as_of,
-            safe_summary=(
-                f"Dashboard candidate source has {len(rows)} rows."
-                if rows
-                else "Dashboard candidate source is empty for current scope."
-            ),
+            status=ReadinessStatus.ERROR,
+            error_code="tool_gateway_unavailable",
+            retryable=False,
+            safe_summary="Dashboard ToolGateway is required for GeneralQnaWorker.",
         )
 
     def _answer_with_llm(

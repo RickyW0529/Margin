@@ -64,6 +64,8 @@ def _root_token() -> CapabilityToken:
         ),
         allowed_artifact_types=(
             "explanation",
+            "analysis_table",
+            "qna_answer",
             "data_readiness",
             "quant_result",
             "evidence_package",
@@ -103,22 +105,6 @@ def _context_pack() -> ContextPack:
     )
 
 
-class ExplodingToolGateway:
-    """Worker gateway that intentionally blocks any call through this helper.."""
-
-    def call(self, *_args, **_kwargs):  # noqa: ANN002, ANN003, ANN201
-        """Process tool call invocation for the exploding gateway.
-
-        Args:
-            *_args: Any: .
-            **_kwargs: Any: .
-
-        Returns:
-            Any: .
-        """
-        raise AssertionError("L1 runtime must not call tools directly")
-
-
 def test_state_machine_rejects_invalid_transition() -> None:
     """test_state_machine_rejects_invalid_transition implementation.
 
@@ -145,7 +131,6 @@ def test_main_runtime_does_not_call_tools_and_creates_domain_tasks() -> None:
         planner=LLMMainAgentPlanner(
             llm_provider=DeterministicLLMProvider(response=_main_plan_response("DataExpertAgent")),
         ),
-        tool_gateway=ExplodingToolGateway(),
     )
 
     plan = runtime.create_global_plan(
@@ -170,7 +155,6 @@ def test_main_runtime_plans_financial_metric_question_to_data_expert() -> None:
         planner=LLMMainAgentPlanner(
             llm_provider=DeterministicLLMProvider(response=_main_plan_response("DataExpertAgent")),
         ),
-        tool_gateway=ExplodingToolGateway(),
     )
 
     plan = runtime.create_global_plan(
@@ -192,7 +176,6 @@ def test_main_runtime_qna_prompt_uses_agent_cards_not_fixed_routes() -> None:
     runtime = MainRuntime(
         domain_cards=default_domain_agent_cards(),
         planner=LLMMainAgentPlanner(llm_provider=llm_provider),
-        tool_gateway=ExplodingToolGateway(),
     )
 
     runtime.create_global_plan(
@@ -206,9 +189,9 @@ def test_main_runtime_qna_prompt_uses_agent_cards_not_fixed_routes() -> None:
     prompt = llm_provider.prompts[0]
     assert "domain_agent_catalog" in prompt
     assert "capability_manifest" in prompt
-    assert "warehouse_financial_timeseries" in prompt
-    assert "warehouse.describe_schema" in prompt
-    assert "warehouse.discover_indicators" in prompt
+    assert "warehouse_analysis" in prompt
+    assert "warehouse.describe_schema" not in prompt
+    assert "warehouse.discover_indicators" not in prompt
     assert "n_income_attr_p" not in prompt
     assert "Use DataExpertAgent" not in prompt
     assert "Use QuantExpertAgent" not in prompt
@@ -224,7 +207,6 @@ def test_main_runtime_plans_followup_chart_request_with_recent_context() -> None
     runtime = MainRuntime(
         domain_cards=default_domain_agent_cards(),
         planner=LLMMainAgentPlanner(llm_provider=llm_provider),
-        tool_gateway=ExplodingToolGateway(),
     )
 
     plan = runtime.create_global_plan(
@@ -288,7 +270,6 @@ def test_main_runtime_plans_scheduled_stock_research_from_prompt_context() -> No
                 }
             ),
         ),
-        tool_gateway=ExplodingToolGateway(),
     )
 
     plan = runtime.create_global_plan(
@@ -314,10 +295,10 @@ def test_main_runtime_plans_scheduled_stock_research_from_prompt_context() -> No
     assert {
         (edge["from"], edge["to"]) for edge in plan.domain_dependency_edges
     } >= {
-        ("DataExpertAgent", "QuantExpertAgent"),
-        ("DataExpertAgent", "EvidenceRagExpertAgent"),
-        ("QuantExpertAgent", "StockResearchExpertAgent"),
-        ("EvidenceRagExpertAgent", "StockResearchExpertAgent"),
+        ("dt_s_data", "dt_s_quant"),
+        ("dt_s_data", "dt_s_evidence"),
+        ("dt_s_quant", "dt_s_stock"),
+        ("dt_s_evidence", "dt_s_stock"),
     }
 
 
@@ -329,7 +310,6 @@ def test_main_runtime_scheduled_prompt_uses_goal_not_fixed_flow() -> None:
     runtime = MainRuntime(
         domain_cards=default_domain_agent_cards(),
         planner=LLMMainAgentPlanner(llm_provider=llm_provider),
-        tool_gateway=ExplodingToolGateway(),
     )
 
     runtime.create_global_plan(
@@ -424,7 +404,8 @@ def test_expert_runtime_plans_workers_from_worker_cards() -> None:
     assert '"tool_allowlist"' in llm_provider.prompts[0]
     assert "warehouse.describe_schema" in llm_provider.prompts[0]
     assert "warehouse.discover_indicators" in llm_provider.prompts[0]
-    assert "For DataQuestionWorker.answer_financial_metric" in llm_provider.prompts[0]
+    assert "each selected skill's input_contract" in llm_provider.prompts[0]
+    assert "For DataQuestionWorker.answer_financial_metric" not in llm_provider.prompts[0]
     assert "current user turn" in llm_provider.prompts[0]
     assert "prior assistant answers" in llm_provider.prompts[0]
     assert "MainAgent" not in worker_plan.steps[0].worker_agent

@@ -46,6 +46,10 @@ from margin.valuation_discovery.orchestrator import (
 from margin.valuation_discovery.repository import MemoryValuationDiscoveryRepository
 from margin.valuation_discovery.service import ValuationDiscoveryService
 
+SCHEDULED_RUN_ID = (
+    "ar_sched_20260707_0830_c5782f54_20260707T003100000000Z"
+)
+
 
 def test_compute_next_run_at_rolls_to_next_local_day() -> None:
     """Test daily schedule next-run calculation in local time.
@@ -101,12 +105,14 @@ def test_scheduled_runner_triggers_v1_plan_and_refresh() -> None:
     assert idempotency_key == "stock_analysis_daily:2026-07-07"
     assert metadata is not None
     assert metadata["agent_runtime_version"] == "scheduled-agent-runtime-v1"
-    assert metadata["agent_run_id"] == "ar_sched_20260707_0830"
+    assert metadata["agent_run_id"] == SCHEDULED_RUN_ID
     assert metadata["schedule_id"] == "stock_analysis_daily"
     assert metadata["universe"] == "ALL_A"
     assert metadata["global_plan"]["created_by"] == "MainAgent"
     assert metadata["global_plan"]["domain_task_count"] >= 1
-    assert metadata["execution_boundary"] == "l3_worker_runtime"
+    assert metadata["execution_boundary"] == "a2a_hierarchical_runtime"
+    assert metadata["dispatch_protocol"] == "A2A"
+    assert metadata["worker_runtime"] == "langgraph"
     assert metadata["quant_agent_strategy_profile"]["strategy_family"] == ("ml_lgbm_lifecycle")
     assert metadata["quant_strategy"]["strategy_family"] == "ml_lgbm_lifecycle"
     assert metadata["scheduled_task_intent"] == {
@@ -119,23 +125,74 @@ def test_scheduled_runner_triggers_v1_plan_and_refresh() -> None:
     assert metadata["main_agent_plan"]["planning_mode"] == "prompt_dynamic"
     assert metadata["main_agent_plan"]["planning_prompt_ref"] == "main_agent_scheduled_planner_v1"
     assert metadata["plan_validation"]["valid"] is True
-    artifacts = context_store.list_artifacts("ar_sched_20260707_0830")
-    assert [artifact.artifact_type for artifact in artifacts] == [
+    artifacts = context_store.list_artifacts(SCHEDULED_RUN_ID)
+    artifact_types = {artifact.artifact_type for artifact in artifacts}
+    assert {
         "scheduled_global_plan",
         "data_readiness",
         "valuation_refresh",
+        "quant_result",
+        "worker_activity",
+        "domain_context_capsule",
+        "domain_audit_report",
         "l3_execution_report",
-    ]
-    assert artifacts[0].producer_agent == "MainAgent"
-    assert artifacts[2].producer_agent == "QuantExpertAgent"
-    assert artifacts[2].payload_json["valuation_refresh_run_id"] == "refresh-1"
-    assert artifacts[2].payload_json["dashboard_projection"] == "expected_after_refresh"
-    assert artifacts[2].payload_json["worker_layer"] == "L3"
+    }.issubset(artifact_types)
+    plan = next(
+        artifact for artifact in artifacts if artifact.artifact_type == "scheduled_global_plan"
+    )
+    refresh = next(
+        artifact for artifact in artifacts if artifact.artifact_type == "valuation_refresh"
+    )
+    assert plan.producer_agent == "MainAgent"
+    assert refresh.producer_agent == "ValuationRefreshWorker"
+    assert refresh.payload_json["valuation_refresh_run_id"] == "refresh-1"
+    assert refresh.payload_json["dashboard_projection"] == "expected_after_refresh"
+    assert refresh.payload_json["worker_layer"] == "L3"
     assert (
-        artifacts[2].payload_json["quant_agent_strategy_profile"]["profile_id"]
+        refresh.payload_json["quant_agent_strategy_profile"]["profile_id"]
         == "liquid-large-mid-lgbm-recent-trend80-ddstop-v1"
     )
     assert repository.saved.last_triggered_at == datetime(2026, 7, 7, 0, 31, tzinfo=UTC)
+
+
+def test_scheduled_runner_uses_a_new_run_id_for_same_day_retry() -> None:
+    """Execution IDs differ per trigger while valuation idempotency remains daily."""
+    context_store = MemoryAgentContextStore()
+    valuation_service = _FakeValuationService()
+    repository = _DueScheduleRepository(
+        StockAnalysisSchedule(
+            enabled=True,
+            hour=8,
+            minute=30,
+            timezone="Asia/Shanghai",
+            scope_version_id="scope-current",
+            universe="ALL_A",
+            next_run_at=datetime(2026, 7, 7, 0, 30, tzinfo=UTC),
+        )
+    )
+    runner = ScheduledAgentRuntimeRunner(
+        repository=repository,
+        context_store=context_store,
+        valuation_service=valuation_service,
+        scope_resolver=lambda scope: scope,
+        llm_provider_factory=_scheduled_planner_factory,
+    )
+
+    assert runner.run_once(now=datetime(2026, 7, 7, 0, 31, tzinfo=UTC)) == 1
+    assert runner.run_once(now=datetime(2026, 7, 7, 0, 32, tzinfo=UTC)) == 1
+
+    run_ids = [str(call[3]["agent_run_id"]) for call in valuation_service.calls]
+    assert run_ids == [
+        SCHEDULED_RUN_ID,
+        "ar_sched_20260707_0830_c5782f54_20260707T003200000000Z",
+    ]
+    assert len(set(run_ids)) == 2
+    assert all(len(run_id) <= 64 for run_id in run_ids)
+    assert [call[2] for call in valuation_service.calls] == [
+        "stock_analysis_daily:2026-07-07",
+        "stock_analysis_daily:2026-07-07",
+    ]
+    assert all(context_store.list_artifacts(run_id) for run_id in run_ids)
 
 
 def test_scheduled_runner_records_quant_profile_config_resolution_snapshot() -> None:
@@ -270,11 +327,11 @@ def test_scheduled_runner_can_drive_full_adjusted_dashboard_projection() -> None
         "DashboardPublisherWorker"
     }
     portfolio_artifact = context_store.get_artifact(
-        "ctx_ar_sched_20260707_0830_portfolio_adjustment"
+        f"ctx_{SCHEDULED_RUN_ID}_portfolio_adjustment"
     )
     assert portfolio_artifact is not None
     assert portfolio_artifact.payload_json["removed_security_ids"] == ["000003.SZ"]
-    assert context_store.get_artifact("ctx_ar_sched_20260707_0830_dashboard_projection_event")
+    assert context_store.get_artifact(f"ctx_{SCHEDULED_RUN_ID}_dashboard_projection_event")
     assert valuation_repository.list_effective_assessment_pointers()
 
 

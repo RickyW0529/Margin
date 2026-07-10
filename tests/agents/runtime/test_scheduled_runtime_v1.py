@@ -9,12 +9,18 @@ from typing import Any
 from margin.agent_runtime.context_store import MemoryAgentContextStore
 from margin.agent_runtime.schedules import StockAnalysisSchedule
 from margin.agents.runtime.scheduled import ScheduledAgentRuntimeRunner
+from margin.agents.tools.audit import InMemoryToolAuditStore
 from margin.research.llm import DeterministicLLMProvider
+
+SCHEDULED_RUN_ID = (
+    "ar_sched_20260707_0830_c5782f54_20260707T003100000000Z"
+)
 
 
 def test_v1_scheduled_runner_starts_refresh_and_writes_v1_artifacts() -> None:
     """Due schedules should run without the legacy MainAgent runtime."""
     context_store = MemoryAgentContextStore()
+    tool_audit_store = InMemoryToolAuditStore()
     valuation_service = _FakeValuationService()
     repository = _DueScheduleRepository(
         StockAnalysisSchedule(
@@ -34,6 +40,7 @@ def test_v1_scheduled_runner_starts_refresh_and_writes_v1_artifacts() -> None:
         valuation_service=valuation_service,
         scope_resolver=lambda scope: "scope-1" if scope == "scope-current" else scope,
         llm_provider_factory=_scheduled_planner_factory,
+        tool_audit_store=tool_audit_store,
     ).run_once(now=datetime(2026, 7, 7, 0, 31, tzinfo=UTC))
 
     assert processed == 1
@@ -49,25 +56,111 @@ def test_v1_scheduled_runner_starts_refresh_and_writes_v1_artifacts() -> None:
     assert metadata["main_agent_plan"]["planning_mode"] == "prompt_dynamic"
     assert metadata["main_agent_plan"]["planning_prompt_ref"] == "main_agent_scheduled_planner_v1"
     assert metadata["plan_validation"]["valid"] is True
-    assert metadata["execution_boundary"] == "l3_worker_runtime"
+    assert metadata["execution_boundary"] == "a2a_hierarchical_runtime"
+    assert metadata["dispatch_protocol"] == "A2A"
+    assert metadata["worker_runtime"] == "langgraph"
+    assert "data_readiness" in {
+        item["artifact_type"] for item in metadata["input_artifacts"]
+    }
 
-    artifacts = context_store.list_artifacts("ar_sched_20260707_0830")
-    types = [artifact.artifact_type for artifact in artifacts]
-    assert types == [
+    artifacts = context_store.list_artifacts(SCHEDULED_RUN_ID)
+    artifacts_by_type = {
+        artifact.artifact_type: artifact
+        for artifact in artifacts
+        if artifact.artifact_type != "worker_activity"
+    }
+    assert {
         "scheduled_global_plan",
         "data_readiness",
         "valuation_refresh",
+        "quant_result",
+        "domain_context_capsule",
+        "domain_audit_report",
         "l3_execution_report",
+    }.issubset(artifacts_by_type)
+    plan = artifacts_by_type["scheduled_global_plan"]
+    assert plan.producer_agent == "MainAgent"
+    assert plan.payload_json["scheduled_planner_mode"] == "dynamic_main_agent_planner"
+    assert plan.payload_json["execution_boundary"] == "a2a_hierarchical_runtime"
+    assert plan.payload_json["dispatch_protocol"] == "A2A"
+    assert plan.payload_json["worker_runtime"] == "langgraph"
+    assert plan.payload_json["tool_names"] == [
+        "schedule.inspect_data",
+        "valuation.start_refresh",
     ]
-    assert artifacts[0].producer_agent == "MainAgent"
-    assert artifacts[0].payload_json["scheduled_planner_mode"] == "dynamic_main_agent_planner"
-    assert artifacts[0].payload_json["execution_boundary"] == "l3_worker_runtime"
-    assert artifacts[1].producer_agent == "DataInspectionWorker"
-    assert artifacts[2].producer_agent == "QuantExpertAgent"
-    assert artifacts[2].payload_json["valuation_refresh_run_id"] == "refresh-1"
-    assert artifacts[2].payload_json["worker_layer"] == "L3"
-    assert artifacts[3].artifact_type == "l3_execution_report"
+    assert [
+        task["to_domain_agent"] for task in plan.payload_json["global_plan"]["domain_tasks"]
+    ] == ["DataExpertAgent", "QuantExpertAgent"]
+    assert artifacts_by_type["data_readiness"].producer_agent == "DataInspectionWorker"
+    refresh = artifacts_by_type["valuation_refresh"]
+    assert refresh.producer_agent == "ValuationRefreshWorker"
+    assert refresh.payload_json["valuation_refresh_run_id"] == "refresh-1"
+    assert refresh.payload_json["worker_layer"] == "L3"
+
+    activities = [artifact for artifact in artifacts if artifact.artifact_type == "worker_activity"]
+    assert {activity.producer_agent for activity in activities} == {
+        "DataInspectionWorker",
+        "ValuationRefreshWorker",
+    }
+    assert {
+        tool_name for activity in activities for tool_name in activity.payload_json["tool_calls"]
+    } == {"schedule.inspect_data", "valuation.start_refresh"}
+
+    report = artifacts_by_type["l3_execution_report"]
+    assert report.producer_agent == "MainAgent"
+    assert report.payload_json["main_agent_review"]["decision"] == "dispatched"
+    assert report.payload_json["research_status"] == "refresh_pending"
+    assert report.payload_json["a2a_task_ids"] == [
+        f"a2a_{SCHEDULED_RUN_ID}_dt_data",
+        f"a2a_{SCHEDULED_RUN_ID}_dt_quant",
+    ]
+    assert {
+        (record.tool_name, record.caller_agent) for record in tool_audit_store.records.values()
+    } == {
+        ("schedule.inspect_data", "DataInspectionWorker"),
+        ("valuation.start_refresh", "ValuationRefreshWorker"),
+    }
     assert repository.saved.last_triggered_at == datetime(2026, 7, 7, 0, 31, tzinfo=UTC)
+
+
+def test_data_failure_skips_dependent_valuation_worker() -> None:
+    """A failed data domain task must prevent the dependent write tool call."""
+    context_store = MemoryAgentContextStore()
+    tool_audit_store = InMemoryToolAuditStore()
+    valuation_service = _FakeValuationService()
+    repository = _DueScheduleRepository(
+        StockAnalysisSchedule(
+            enabled=True,
+            hour=8,
+            minute=30,
+            timezone="Asia/Shanghai",
+            scope_version_id="scope-current",
+            universe="ALL_A",
+            next_run_at=datetime(2026, 7, 7, 0, 30, tzinfo=UTC),
+        )
+    )
+
+    processed = ScheduledAgentRuntimeRunner(
+        repository=repository,
+        context_store=context_store,
+        valuation_service=valuation_service,
+        scope_resolver=lambda _scope: "",
+        llm_provider_factory=_scheduled_planner_factory,
+        tool_audit_store=tool_audit_store,
+    ).run_once(now=datetime(2026, 7, 7, 0, 31, tzinfo=UTC))
+
+    assert processed == 1
+    assert valuation_service.calls == []
+    assert {record.tool_name for record in tool_audit_store.records.values()} == {
+        "schedule.inspect_data"
+    }
+    report = context_store.get_artifact(f"ctx_{SCHEDULED_RUN_ID}_l3_execution_report")
+    assert report is not None
+    assert report.payload_json["main_agent_review"]["decision"] == "blocked"
+    assert report.payload_json["main_agent_review"]["missing_domain_task_ids"] == [
+        "dt_data",
+        "dt_quant",
+    ]
 
 
 def test_worker_uses_v1_scheduled_runner_not_legacy_main_runtime() -> None:
@@ -81,6 +174,19 @@ def test_worker_uses_v1_scheduled_runner_not_legacy_main_runtime() -> None:
     assert "get_main_agent_runtime" not in source
     scheduled_source = inspect.getsource(ScheduledAgentRuntimeRunner)
     assert "load_scheduled_stock_analysis_flow" not in scheduled_source
+    assert "run_scheduled_l3_pipeline" not in scheduled_source
+    assert "_ensure_scheduled_domain_tasks" not in scheduled_source
+
+    import margin.agents.runtime.scheduled_workers as scheduled_workers_module
+
+    worker_source = inspect.getsource(scheduled_workers_module)
+    assert "scheduled_domain_agent_cards()" in worker_source
+    assert "scheduled_worker_agent_cards()" in worker_source
+    assert "DomainAgentCard(" not in worker_source
+    assert "WorkerAgentCard(" not in worker_source
+    assert "WorkerSkill(" not in worker_source
+    assert "if request.worker_agent" not in worker_source
+    assert "elif request.worker_agent" not in worker_source
 
 
 def test_api_dependencies_use_v1_dashboard_publisher_worker() -> None:

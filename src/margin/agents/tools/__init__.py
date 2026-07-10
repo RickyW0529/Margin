@@ -8,6 +8,7 @@ from margin.agents.tools.audit import (
 from margin.agents.tools.catalog import ToolCatalog
 from margin.agents.tools.gateway import ToolGateway
 from margin.agents.tools.specs import ToolCallRequest, ToolCallResult, ToolCallStatus, ToolSpec
+from margin.agents.tools.workspace import register_workspace_tools
 
 __all__ = [
     "InMemoryToolAuditStore",
@@ -19,4 +20,5 @@ __all__ = [
     "ToolCatalog",
     "ToolGateway",
     "ToolSpec",
+    "register_workspace_tools",
 ]

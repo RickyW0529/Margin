@@ -13,7 +13,11 @@ from margin.agents.protocol.models import (
     DomainTaskResult,
     WorkerTaskResult,
 )
-from margin.agents.security.capability import CapabilityToken, derive_capability_token
+from margin.agents.security.capability import (
+    CapabilityAuthority,
+    CapabilityToken,
+    derive_capability_token,
+)
 from margin.agents.security.policies import (
     DataAccessPolicy,
     ProductionWritePolicy,
@@ -61,6 +65,90 @@ def test_capability_token_can_only_be_narrowed() -> None:
             data_access=(DataAccessPolicy.READ_ANALYSIS_MART,),
             production_write=(ProductionWritePolicy.WRITE_CONTEXT_ONLY,),
             tool_policy=(ToolPolicy.RETRIEVAL_TOOLS,),
+        )
+
+
+def test_capability_derivation_preserves_explicit_empty_scope() -> None:
+    parent = _token(
+        data_access=(DataAccessPolicy.READ_EVIDENCE,),
+        production_write=(ProductionWritePolicy.WRITE_CONTEXT_ONLY,),
+        tool_policy=(ToolPolicy.RETRIEVAL_TOOLS,),
+        can_delegate=True,
+        delegation_depth_remaining=1,
+    )
+
+    child = derive_capability_token(
+        parent,
+        token_id="cap_empty",
+        issued_to="NoToolWorker",
+        data_access=(),
+        production_write=(),
+        tool_policy=(),
+        allowed_artifact_types=(),
+        allowed_tool_names=(),
+        max_tool_calls=0,
+    )
+
+    assert child.allowed_artifact_types == ()
+    assert child.allowed_tool_names == ()
+
+
+def test_capability_authority_binds_reference_to_agent_and_task() -> None:
+    authority = CapabilityAuthority()
+    token = _token(
+        data_access=(DataAccessPolicy.READ_EVIDENCE,),
+        production_write=(ProductionWritePolicy.WRITE_CONTEXT_ONLY,),
+        tool_policy=(ToolPolicy.RETRIEVAL_TOOLS,),
+        can_delegate=False,
+        delegation_depth_remaining=0,
+    ).model_copy(
+        update={
+            "issued_to": "EvidenceWorker",
+            "bound_task_id": "wt_evidence",
+            "bound_context_pack_id": "ctx_evidence",
+            "bound_context_pack_hash": "context-hash",
+        }
+    )
+    authority.issue(token)
+
+    assert authority.resolve(
+        token.token_id,
+        run_id=token.run_id,
+        issued_to="EvidenceWorker",
+        task_id="wt_evidence",
+        context_pack_id="ctx_evidence",
+        context_pack_hash="context-hash",
+    ) == token
+    with pytest.raises(ValueError, match="task mismatch"):
+        authority.resolve(
+            token.token_id,
+            run_id=token.run_id,
+            issued_to="EvidenceWorker",
+            task_id="wt_other",
+            context_pack_id="ctx_evidence",
+            context_pack_hash="context-hash",
+        )
+    with pytest.raises(ValueError, match="context hash mismatch"):
+        authority.resolve(
+            token.token_id,
+            run_id=token.run_id,
+            issued_to="EvidenceWorker",
+            task_id="wt_evidence",
+            context_pack_id="ctx_evidence",
+            context_pack_hash="tampered-hash",
+        )
+    expired = token.model_copy(
+        update={"token_id": "cap_expired", "expires_at": datetime(2000, 1, 1, tzinfo=UTC)}
+    )
+    authority.issue(expired)
+    with pytest.raises(ValueError, match="expired"):
+        authority.resolve(
+            expired.token_id,
+            run_id=expired.run_id,
+            issued_to="EvidenceWorker",
+            task_id="wt_evidence",
+            context_pack_id="ctx_evidence",
+            context_pack_hash="context-hash",
         )
 
 
@@ -121,6 +209,38 @@ def test_context_pack_requires_token_budget() -> None:
             facts=(),
             compression_policy_version="context-pack-v1",
         )
+
+
+def test_context_pack_content_hash_ignores_routing_but_binds_payload() -> None:
+    original = ContextPack(
+        context_pack_id="ctxpack_1",
+        run_id="ar_1",
+        requester_agent="MainAgent",
+        target_agent="EvidenceExpert",
+        purpose="expert_planning",
+        token_budget=100,
+        included_artifact_refs=("artifact-1",),
+        facts=(),
+        compression_policy_version="context-pack-v1",
+    )
+    routed = ContextPack.model_validate(
+        {
+            **original.model_dump(mode="json", exclude={"payload_hash"}),
+            "requester_agent": "EvidenceExpert",
+            "target_agent": "EvidenceWorker",
+            "purpose": "worker_execution",
+        }
+    )
+    tampered = ContextPack.model_validate(
+        {
+            **original.model_dump(mode="json", exclude={"payload_hash"}),
+            "included_artifact_refs": ["artifact-2"],
+        }
+    )
+
+    assert routed.content_hash == original.content_hash
+    assert routed.payload_hash != original.payload_hash
+    assert tampered.content_hash != original.content_hash
 
 
 def _token(

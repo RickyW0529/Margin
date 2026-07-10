@@ -1,0 +1,74 @@
+{
+  "manifest_version": "2.0",
+  "profile": "scheduled",
+  "domain_agents": [
+    {
+      "name": "DataExpertAgent",
+      "version": "2.0",
+      "domain": "data",
+      "description": "Plans and reviews scheduled data-readiness work.",
+      "worker_agent_names": ["DataInspectionWorker"],
+      "required_output_types": ["data_readiness"],
+      "data_access_policy": ["read_provider_status", "read_analysis_mart"],
+      "production_write_policy": ["write_context_only"],
+      "tool_policy": ["data_sync_tools"]
+    },
+    {
+      "name": "QuantExpertAgent",
+      "version": "2.0",
+      "domain": "quant",
+      "description": "Plans and reviews scheduled valuation-refresh work.",
+      "worker_agent_names": ["ValuationRefreshWorker"],
+      "required_output_types": ["quant_result"],
+      "data_access_policy": ["read_analysis_mart"],
+      "production_write_policy": [
+        "write_context_only",
+        "write_analysis_mart",
+        "write_dashboard_projection"
+      ],
+      "tool_policy": ["quant_tools"]
+    }
+  ],
+  "worker_agents": [
+    {
+      "name": "DataInspectionWorker",
+      "version": "2.0",
+      "domain": "data",
+      "description": "Checks scheduled data readiness through an audited tool.",
+      "skills": [{
+        "skill_id": "scheduled_data_readiness",
+        "description": "Check scope and provider readiness.",
+        "input_artifact_types": ["context_pack"],
+        "output_artifact_types": ["data_readiness", "worker_activity"],
+        "tool_allowlist": ["schedule.inspect_data"]
+      }],
+      "supported_runtimes": ["langgraph"],
+      "data_access_policy": ["read_provider_status", "read_analysis_mart"],
+      "production_write_policy": ["write_context_only"],
+      "tool_policy": ["data_sync_tools"],
+      "max_tool_calls": 1
+    },
+    {
+      "name": "ValuationRefreshWorker",
+      "version": "2.0",
+      "domain": "quant",
+      "description": "Starts valuation discovery through an audited tool.",
+      "skills": [{
+        "skill_id": "start_valuation_refresh",
+        "description": "Start the configured valuation refresh and return a run receipt.",
+        "input_artifact_types": ["context_pack", "data_readiness"],
+        "output_artifact_types": ["valuation_refresh", "quant_result", "worker_activity"],
+        "tool_allowlist": ["valuation.start_refresh"]
+      }],
+      "supported_runtimes": ["langgraph"],
+      "data_access_policy": ["read_analysis_mart"],
+      "production_write_policy": [
+        "write_context_only",
+        "write_analysis_mart",
+        "write_dashboard_projection"
+      ],
+      "tool_policy": ["quant_tools"],
+      "max_tool_calls": 1
+    }
+  ]
+}

@@ -35,6 +35,8 @@ class ToolSpec(BaseModel):
     owner_domain: str
     input_schema_ref: str
     output_schema_ref: str
+    input_schema: dict[str, Any] = Field(default_factory=dict)
+    output_schema: dict[str, Any] = Field(default_factory=dict)
     required_data_access: tuple[DataAccessPolicy, ...] = ()
     required_write_policy: tuple[ProductionWritePolicy, ...] = ()
     required_tool_policy: tuple[ToolPolicy, ...] = ()
@@ -60,6 +62,7 @@ class ToolCallRequest(BaseModel):
     input_json: dict[str, Any]
     capability_token: CapabilityToken
     context_pack_id: str | None = None
+    context_pack_hash: str | None = None
     idempotency_key: str
     deadline_ms: int = Field(ge=1)
 

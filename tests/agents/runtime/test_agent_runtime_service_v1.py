@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from pathlib import Path
 from types import SimpleNamespace
 
 from margin.agent_runtime.context_store import MemoryAgentContextStore, SQLAlchemyAgentContextStore
@@ -14,6 +15,7 @@ from margin.agent_runtime.db_models import (
     AgentRuntimeRunRow,
     AgentRuntimeStepRow,
 )
+from margin.agent_runtime.models import AgentPermissionMode
 from margin.agents.context.repository import MemoryContextRepository
 from margin.agents.protocol.models import AgentExecutionStatus
 from margin.agents.runtime.service import (
@@ -76,13 +78,13 @@ def test_v1_user_qna_service_creates_plan_and_final_answer_artifact() -> None:
     tool_records = service._tool_gateway._audit_store.records.values()  # noqa: SLF001
     assert [record.tool_name for record in tool_records] == ["dashboard.read_candidates"]
     assert context_repository.get_context_pack("ctxpack_ar_qna_v1_mainagent") is not None
-    assert context_repository.get_domain_capsule("dcc_ar_qna_v1_general") is not None
+    assert context_repository.get_domain_capsule("dcc_ar_qna_v1_s1") is not None
     assert {
         (edge.from_ref, edge.to_ref, edge.edge_type)
         for edge in context_repository.list_lineage_edges("ar_qna_v1")
     } >= {
         ("ctxpack_ar_qna_v1_mainagent", "chat_summary:e3b0c44298fc1c14", "source_ref"),
-        ("dcc_ar_qna_v1_general", "ctxpack_ar_qna_v1_mainagent", "source_ref"),
+        ("dcc_ar_qna_v1_s1", "ctxpack_ar_qna_v1_mainagent", "source_ref"),
     }
     artifact_ids = {artifact.artifact_id for artifact in result.artifacts}
     assert result.final_answer.artifact_id in artifact_ids
@@ -207,6 +209,108 @@ def test_v1_user_qna_service_answers_financial_metric_with_data_artifacts() -> N
     assert artifact_by_type["chart_spec"].payload_json["series"][0]["metric"] == "roe_ttm"
     assert artifact_by_type["computed_metric"].payload_json["latest_value"] == 12.3
     assert artifact_by_type["visualization_image"].payload_json["image_format"] == "svg"
+
+
+def test_v1_user_qna_code_worker_writes_and_verifies_workspace(tmp_path: Path) -> None:
+    """A code task should traverse both A2A hops and execute only Worker tools."""
+    llm_provider = _HierarchicalCodeLLMProvider()
+    context_store = MemoryAgentContextStore()
+    service = AgentRuntimeService(
+        context_store=context_store,
+        context_repository=MemoryContextRepository(),
+        dashboard_services=_dashboard_services(),
+        llm_provider_factory=lambda: llm_provider,
+        workspace_root=tmp_path,
+        code_tools_enabled=True,
+    )
+
+    result = service.run_user_qna(
+        UserQnaCommand(
+            run_id="ar_qna_code",
+            scope_version_id="scope-1",
+            message="创建 generated_module.py 并用 ruff 检查。",
+            universe="ALL_A",
+            language="zh",
+            allow_workspace_tools=True,
+        )
+    )
+
+    assert (tmp_path / "generated_module.py").read_text() == "VALUE = 42\n"
+    assert context_store.get_run("ar_qna_code").permission_mode is AgentPermissionMode.WRITE_ALLOWED
+    assert result.global_plan.domain_tasks[0].to_domain_agent == "CodeExecutionExpertAgent"
+    assert set(result.global_plan.domain_tasks[0].required_output_types) == {
+        "code_change",
+        "command_result",
+        "qna_answer",
+        "worker_activity",
+    }
+    assert result.trace_steps[0].skill_id == "complete_code_task"
+    artifact_types = {artifact.artifact_type for artifact in result.artifacts}
+    assert {"code_change", "command_result", "qna_answer", "worker_activity"} <= artifact_types
+    code_change = next(
+        artifact for artifact in result.artifacts if artifact.artifact_type == "code_change"
+    )
+    assert "agent:langgraph-worker" in code_change.source_refs
+    assert any(ref.startswith("tool_audit_") for ref in code_change.source_refs)
+    assert code_change.payload_json["tool_results"][0]["output"]["diff"]["unified"][
+        "redacted"
+    ] is True
+    command_result = next(
+        artifact for artifact in result.artifacts if artifact.artifact_type == "command_result"
+    )
+    assert command_result.payload_json["tool_results"][0]["output"]["result"][
+        "stdout"
+    ]["redacted"] is True
+    audit_records = service._tool_gateway._audit_store.records.values()  # noqa: SLF001
+    assert [record.tool_name for record in audit_records] == [
+        "workspace.write_file",
+        "workspace.run_command",
+    ]
+    assert llm_provider.calls == [
+        "main_plan",
+        "expert_plan",
+        "worker_write",
+        "worker_verify",
+        "worker_finish",
+    ]
+
+
+def test_v1_user_qna_hides_code_domain_when_workspace_tools_are_disabled(
+    tmp_path: Path,
+) -> None:
+    """The operational kill switch must hide Code capabilities before dispatch."""
+    llm_provider = _SequencedLLMProvider(
+        main_plan=_main_plan("CodeExecutionExpertAgent"),
+        expert_plan=_expert_plan("CodeWorkspaceWorker", "complete_code_task"),
+        answers=(),
+    )
+    service = AgentRuntimeService(
+        context_store=MemoryAgentContextStore(),
+        context_repository=MemoryContextRepository(),
+        dashboard_services=_dashboard_services(),
+        llm_provider_factory=lambda: llm_provider,
+        warehouse_repository=_FinancialMetricWarehouse(),
+        workspace_root=tmp_path / "does-not-need-to-exist",
+        code_tools_enabled=False,
+    )
+
+    result = service.run_user_qna(
+        UserQnaCommand(
+            run_id="ar_qna_code_disabled",
+            scope_version_id="scope-1",
+            message="修改代码",
+            universe="ALL_A",
+            language="zh",
+        )
+    )
+
+    assert service._startup_contract_report.valid is True  # noqa: SLF001
+    assert result.global_plan.domain_tasks == ()
+    assert result.trace_steps == ()
+    assert llm_provider.calls == ["main_plan"]
+    assert {
+        card.name for card in service._a2a_transport.list_agents()  # noqa: SLF001
+    }.isdisjoint({"CodeExecutionExpertAgent", "CodeWorkspaceWorker"})
 
 
 def test_v1_user_qna_service_uses_inline_current_user_for_metric_lookup() -> None:
@@ -379,11 +483,11 @@ def test_v1_user_qna_service_executes_all_main_planned_domain_tasks() -> None:
         "GeneralQnaExpertAgent",
     ]
     assert result.final_answer.used_domain_capsule_refs == (
-        "dcc_ar_qna_multi_domain_data",
-        "dcc_ar_qna_multi_domain_general",
+        "dcc_ar_qna_multi_domain_s_data",
+        "dcc_ar_qna_multi_domain_s_general",
     )
-    assert context_repository.get_domain_capsule("dcc_ar_qna_multi_domain_data") is not None
-    assert context_repository.get_domain_capsule("dcc_ar_qna_multi_domain_general") is not None
+    assert context_repository.get_domain_capsule("dcc_ar_qna_multi_domain_s_data") is not None
+    assert context_repository.get_domain_capsule("dcc_ar_qna_multi_domain_s_general") is not None
     assert "### 综合回答" in result.answer
     assert "#### DataExpertAgent" in result.answer
     assert "#### GeneralQnaExpertAgent" in result.answer
@@ -469,14 +573,16 @@ def test_v1_user_qna_service_does_not_directly_select_data_worker() -> None:
 
 
 def test_agent_runtime_service_has_no_worker_name_if_else_dispatch() -> None:
-    """Worker execution must go through WorkerRuntime instead of service branches."""
+    """Only the Worker A2A endpoint may invoke WorkerRuntime."""
+    import margin.agents.runtime.hierarchy as hierarchy_module
     import margin.agents.runtime.service as service_module
 
-    source = inspect.getsource(service_module.AgentRuntimeService._execute_worker_task)
+    service_source = inspect.getsource(service_module.AgentRuntimeService)
+    endpoint_source = inspect.getsource(hierarchy_module.WorkerAgentEndpoint.__call__)
 
-    assert 'worker_task.worker_agent == "DataQuestionWorker"' not in source
-    assert 'worker_task.worker_agent == "GeneralQnaWorker"' not in source
-    assert "_worker_runtime.execute" in source
+    assert "_execute_worker_task" not in service_source
+    assert "_worker_runtime.execute" not in service_source
+    assert "_worker_runtime.execute" in endpoint_source
 
 
 def test_main_planner_only_sees_executable_domains() -> None:
@@ -618,16 +724,17 @@ def test_v1_user_qna_service_derives_metric_inputs_from_current_turn() -> None:
     assert "ROE TTM" in result.answer
 
 
-def test_v1_user_qna_service_replans_when_worker_artifacts_fail_audit() -> None:
-    """Missing required worker artifacts should be treated as bad output and replanned."""
+def test_v1_user_qna_service_blocks_unproducible_output_before_dispatch() -> None:
+    """Planner output hallucinations must be blocked before Expert/Worker dispatch."""
+    main_plan = _main_plan("GeneralQnaExpertAgent")
+    main_plan["steps"][0]["required_output_types"] = [
+        "qna_answer",
+        "evidence_package",
+    ]
     llm_provider = _SequencedLLMProvider(
-        main_plan=_main_plan("GeneralQnaExpertAgent"),
-        expert_plan=_expert_plan(
-            "GeneralQnaWorker",
-            "answer_general_qna",
-            required_output_types=("qna_answer", "evidence_package"),
-        ),
-        answers=("只有普通回答，没有证据包。", "再次普通回答，仍没有证据包。"),
+        main_plan=main_plan,
+        expert_plan=_expert_plan("GeneralQnaWorker", "answer_general_qna"),
+        answers=(),
     )
     service = AgentRuntimeService(
         context_store=MemoryAgentContextStore(),
@@ -647,10 +754,10 @@ def test_v1_user_qna_service_replans_when_worker_artifacts_fail_audit() -> None:
         )
     )
 
-    assert llm_provider.calls == ["main_plan", "expert_plan", "answer", "expert_plan", "answer"]
-    assert any("missing_required_artifacts" in prompt for prompt in llm_provider.prompts)
-    assert result.trace_steps[0].status is AgentExecutionStatus.BLOCKED
-    assert "missing required artifacts" in result.answer
+    assert llm_provider.calls == ["main_plan"]
+    assert result.trace_steps == ()
+    assert result.global_plan.domain_tasks == ()
+    assert "无法产出计划要求" in result.answer
 
 
 def test_dashboard_query_error_surfaces_safe_error_code() -> None:
@@ -683,7 +790,7 @@ def test_dashboard_query_error_surfaces_safe_error_code() -> None:
     )
 
     assert table.payload_json["status"] == "error"
-    assert table.payload_json["error_code"] == "RuntimeError"
+    assert table.payload_json["error_code"] == "tool_execution_failed:RuntimeError"
     assert "dashboard_candidates" in llm_provider.prompts[-1]
     assert "RuntimeError" in llm_provider.prompts[-1]
 
@@ -844,6 +951,106 @@ class _SequencedLLMProvider(DeterministicLLMProvider):
             success=True,
             latency_ms=0.0,
             raw_response=answer,
+        )
+
+
+class _HierarchicalCodeLLMProvider(DeterministicLLMProvider):
+    """Structured planner for one end-to-end CodeWorkspaceWorker run."""
+
+    def __init__(self) -> None:
+        super().__init__(response={})
+        self.calls: list[str] = []
+        self._worker_actions = [
+            (
+                "worker_write",
+                {
+                    "action": "tool",
+                    "tool_name": "workspace.write_file",
+                    "tool_input": {
+                        "path": "generated_module.py",
+                        "content": "VALUE = 42\n",
+                    },
+                },
+            ),
+            (
+                "worker_verify",
+                {
+                    "action": "tool",
+                    "tool_name": "workspace.run_command",
+                    "tool_input": {
+                        "argv": ["ruff", "check", "generated_module.py"],
+                    },
+                },
+            ),
+            (
+                "worker_finish",
+                {
+                    "action": "finish",
+                    "answer": "已创建 generated_module.py，并通过 ruff 检查。",
+                    "artifacts": [
+                        {
+                            "artifact_type": "code_change",
+                            "payload_json": {"path": "generated_module.py"},
+                        },
+                        {
+                            "artifact_type": "command_result",
+                            "payload_json": {"command": "ruff check", "status": "passed"},
+                        },
+                    ],
+                },
+            ),
+        ]
+
+    def complete(
+        self,
+        prompt: str,
+        *,
+        response_schema: dict[str, object] | None = None,
+        temperature: float = 0.0,
+    ) -> LLMResult:
+        del prompt, temperature
+        assert response_schema is not None
+        properties = response_schema.get("properties", {})
+        if "action" in properties:
+            call_name, output = self._worker_actions.pop(0)
+        else:
+            steps = properties.get("steps", {})
+            item_properties = steps.get("items", {}).get("properties", {})
+            if "agent" in item_properties:
+                call_name = "main_plan"
+                output = {
+                    "steps": [
+                        {
+                            "step_id": "code",
+                            "agent": "CodeExecutionExpertAgent",
+                            "task": "Create generated_module.py and verify it with ruff.",
+                            "required_output_types": [
+                                "qna_answer",
+                                "worker_activity",
+                            ],
+                        }
+                    ]
+                }
+            else:
+                call_name = "expert_plan"
+                output = _expert_plan(
+                    "CodeWorkspaceWorker",
+                    "complete_code_task",
+                    task="Create generated_module.py and verify it with ruff.",
+                    required_output_types=(
+                        "code_change",
+                        "command_result",
+                        "qna_answer",
+                        "worker_activity",
+                    ),
+                )
+        self.calls.append(call_name)
+        return LLMResult(
+            output=output,
+            model="test",
+            success=True,
+            latency_ms=0.0,
+            raw_response=call_name,
         )
 
 

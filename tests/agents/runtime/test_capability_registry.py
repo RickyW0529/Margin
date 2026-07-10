@@ -29,6 +29,13 @@ _WAREHOUSE_TOOLS = (
     "warehouse.query_indicator_history",
 )
 _DASHBOARD_TOOLS = ("dashboard.read_candidates",)
+_WORKSPACE_TOOLS = (
+    "workspace.list_files",
+    "workspace.read_file",
+    "workspace.search",
+    "workspace.write_file",
+    "workspace.run_command",
+)
 _ALL_TOOLS = (*_WAREHOUSE_TOOLS, *_DASHBOARD_TOOLS)
 
 
@@ -92,10 +99,14 @@ def test_tool_denied_by_capability_token_is_hidden() -> None:
 
 
 def test_default_card_output_contracts_are_consistent_for_executable_domains() -> None:
-    """Default Data/General domain outputs should be producible by their workers."""
+    """All executable default card outputs should be producible by their workers."""
     registry = _capability_registry(
-        executor_registry=_executor_registry(include_data=True, include_general=True),
-        tool_catalog=_tool_catalog(*_ALL_TOOLS),
+        executor_registry=_executor_registry(
+            include_data=True,
+            include_general=True,
+            include_code=True,
+        ),
+        tool_catalog=_tool_catalog(*_ALL_TOOLS, *_WORKSPACE_TOOLS),
     )
 
     report = registry.validate_startup_contracts()
@@ -167,6 +178,7 @@ def _executor_registry(
     *,
     include_data: bool = False,
     include_general: bool = False,
+    include_code: bool = False,
 ) -> ExecutorRegistry:
     registry = ExecutorRegistry()
     if include_data:
@@ -194,10 +206,27 @@ def _executor_registry(
                 agent_name="GeneralQnaWorker",
                 skill_id="answer_general_qna",
                 executor=object(),
-                runtime="deterministic",
+                runtime="langgraph",
                 required_tools=_DASHBOARD_TOOLS,
                 output_artifact_types=("analysis_table", "qna_answer"),
                 domain="general",
+            )
+        )
+    if include_code:
+        registry.register_spec(
+            ExecutorSpec(
+                agent_name="CodeWorkspaceWorker",
+                skill_id="complete_code_task",
+                executor=object(),
+                runtime="langgraph",
+                required_tools=_WORKSPACE_TOOLS,
+                output_artifact_types=(
+                    "code_change",
+                    "command_result",
+                    "qna_answer",
+                    "worker_activity",
+                ),
+                domain="code",
             )
         )
     return registry
@@ -223,6 +252,8 @@ def _tool_spec(tool_name: str) -> ToolSpec:
         owner_domain="data",
         input_schema_ref=f"{tool_name}.input",
         output_schema_ref=f"{tool_name}.output",
+        input_schema={"type": "object"},
+        output_schema={"type": "object"},
         required_data_access=data_access,
         required_write_policy=(),
         required_tool_policy=(ToolPolicy.READ_ONLY_TOOLS,),

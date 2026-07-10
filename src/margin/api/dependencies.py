@@ -484,6 +484,7 @@ def get_agent_runtime_service() -> AgentRuntimeService:
     """
     runtime_factory = get_provider_runtime_factory()
     container = get_app_container()
+    settings = get_settings()
     return AgentRuntimeService(
         context_store=get_agent_context_store(),
         context_repository=get_context_repository(),
@@ -491,6 +492,10 @@ def get_agent_runtime_service() -> AgentRuntimeService:
         llm_provider_factory=lambda: runtime_factory.build_llm().adapter,
         warehouse_repository=SQLAlchemyWarehouseRepository(container.session_factory),
         tool_audit_store=get_tool_audit_store(),
+        workspace_root=settings.agent_workspace_root,
+        code_tools_enabled=settings.agent_code_tools_enabled,
+        main_max_concurrency=settings.graph_max_concurrency,
+        expert_max_concurrency=settings.graph_max_concurrency,
     )
 
 

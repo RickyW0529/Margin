@@ -309,6 +309,8 @@ def _read_only_warehouse_tool_spec(tool_name: str) -> ToolSpec:
         owner_domain="data",
         input_schema_ref=f"{tool_name}.input",
         output_schema_ref=f"{tool_name}.output",
+        input_schema=_warehouse_input_schema(tool_name),
+        output_schema=_warehouse_output_schema(tool_name),
         required_data_access=(DataAccessPolicy.READ_ANALYSIS_MART,),
         required_write_policy=(),
         required_tool_policy=(ToolPolicy.READ_ONLY_TOOLS,),
@@ -329,6 +331,26 @@ def _read_only_dashboard_tool_spec(tool_name: str) -> ToolSpec:
         owner_domain="general",
         input_schema_ref=f"{tool_name}.input",
         output_schema_ref=f"{tool_name}.output",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "scope_version_id": {"type": "string"},
+                "universe": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+            },
+            "additionalProperties": False,
+        },
+        output_schema={
+            "type": "object",
+            "required": ["scope_version_id", "universe", "status", "row_count", "rows"],
+            "properties": {
+                "scope_version_id": {"type": "string"},
+                "universe": {"type": "string"},
+                "status": {"type": "string"},
+                "row_count": {"type": "integer"},
+                "rows": {"type": "array", "items": {"type": "object"}},
+            },
+        },
         required_data_access=(DataAccessPolicy.READ_DASHBOARD,),
         required_write_policy=(),
         required_tool_policy=(ToolPolicy.READ_ONLY_TOOLS,),
@@ -337,5 +359,73 @@ def _read_only_dashboard_tool_spec(tool_name: str) -> ToolSpec:
         timeout_ms=30_000,
         max_output_bytes=64_000,
         returns_raw_payload=False,
-        allowed_runtimes=("deterministic",),
+        allowed_runtimes=("langgraph",),
     )
+
+
+def _warehouse_input_schema(tool_name: str) -> dict[str, Any]:
+    schemas: dict[str, dict[str, Any]] = {
+        "warehouse.describe_schema": {"type": "object", "additionalProperties": False},
+        "warehouse.resolve_security": {
+            "type": "object",
+            "required": ["query_text"],
+            "properties": {
+                "query_text": {"type": "string", "minLength": 1},
+                "decision_at": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+            },
+            "additionalProperties": False,
+        },
+        "warehouse.discover_indicators": {
+            "type": "object",
+            "required": ["security_ids", "query_text"],
+            "properties": {
+                "security_ids": {"type": "array", "items": {"type": "string"}},
+                "query_text": {"type": "string", "minLength": 1},
+                "decision_at": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+            },
+            "additionalProperties": False,
+        },
+        "warehouse.query_indicator_history": {
+            "type": "object",
+            "required": ["security_ids", "indicator_ids"],
+            "properties": {
+                "security_ids": {"type": "array", "items": {"type": "string"}},
+                "indicator_ids": {"type": "array", "items": {"type": "string"}},
+                "decision_at": {"type": "string"},
+                "years": {"type": "integer", "minimum": 1, "maximum": 20},
+                "max_points_per_indicator": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 200,
+                },
+            },
+            "additionalProperties": False,
+        },
+        "warehouse.query_data_freshness": {
+            "type": "object",
+            "properties": {
+                "domains": {"type": "array", "items": {"type": "string"}},
+                "dataset": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+    }
+    return schemas[tool_name]
+
+
+def _warehouse_output_schema(tool_name: str) -> dict[str, Any]:
+    if tool_name == "warehouse.resolve_security":
+        return {
+            "type": "object",
+            "required": ["profiles"],
+            "properties": {"profiles": {"type": "array", "items": {"type": "object"}}},
+        }
+    if tool_name == "warehouse.query_indicator_history":
+        return {
+            "type": "object",
+            "required": ["history"],
+            "properties": {"history": {"type": "array", "items": {"type": "object"}}},
+        }
+    return {"type": "object"}

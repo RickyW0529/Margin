@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
-from margin.agents.security.capability import CapabilityToken
+from margin.agents.security.capability import CapabilityAuthority, CapabilityToken
 from margin.agents.security.policies import (
     DataAccessPolicy,
     ProductionWritePolicy,
@@ -93,6 +95,7 @@ def _request(
     tool_name: str = "context.echo",
     input_json: dict | None = None,
     idempotency_key: str = "idem-tool",
+    tool_call_id: str | None = None,
     token: CapabilityToken | None = None,
 ) -> ToolCallRequest:
     """Helper request.
@@ -107,7 +110,7 @@ def _request(
         ToolCallRequest: .
     """
     return ToolCallRequest(
-        tool_call_id=f"tc_{idempotency_key}",
+        tool_call_id=tool_call_id or f"tc_{idempotency_key}",
         run_id="run_tool",
         task_id="wt_echo",
         caller_agent="EchoWorker",
@@ -133,6 +136,30 @@ def test_tool_gateway_blocks_expired_capability() -> None:
 
     assert result.status is ToolCallStatus.BLOCKED
     assert result.error_code == "capability_expired"
+
+
+def test_expiry_is_rechecked_before_replaying_a_tool_call_id() -> None:
+    catalog = ToolCatalog()
+    catalog.register(_spec(), lambda request: {"message": request.input_json["message"]})
+    audit_store = InMemoryToolAuditStore()
+    gateway = ToolGateway(catalog=catalog, audit_store=audit_store)
+    request = _request(tool_call_id="tc_expiry_replay")
+
+    first = gateway.call(request)
+    expired = gateway.call(
+        request.model_copy(
+            update={
+                "capability_token": request.capability_token.model_copy(
+                    update={"expires_at": datetime(2000, 1, 1, tzinfo=UTC)}
+                )
+            }
+        )
+    )
+
+    assert first.status is ToolCallStatus.SUCCEEDED
+    assert expired.status is ToolCallStatus.BLOCKED
+    assert expired.error_code == "capability_expired"
+    assert expired.audit_ref != first.audit_ref
 
 
 def test_tool_gateway_blocks_max_tool_calls() -> None:
@@ -194,7 +221,10 @@ def test_tool_gateway_audits_and_redacts_every_call() -> None:
         lambda request: {
             "message": request.input_json["message"],
             "provider_token": "secret-token",
+            "access_token": "access-secret",
+            "client_secret": "client-secret",
             "raw_text": "raw provider payload",
+            "items": [{"stdout": "large command output"}],
         },
     )
     gateway = ToolGateway(catalog=catalog, audit_store=audit_store)
@@ -205,10 +235,16 @@ def test_tool_gateway_audits_and_redacts_every_call() -> None:
     assert result.output_json == {
         "message": "hello",
         "provider_token": "[redacted]",
+        "access_token": "[redacted]",
+        "client_secret": "[redacted]",
         "raw_text": "[redacted]",
+        "items": [{"stdout": "large command output"}],
     }
     assert result.audit_ref in audit_store.records
     assert audit_store.records[result.audit_ref].input_redacted_json == {"message": "hello"}
+    assert audit_store.records[result.audit_ref].output_redacted_json["items"][0][
+        "stdout"
+    ]["redacted"] is True
 
 
 def test_tool_gateway_blocks_output_size_limit() -> None:
@@ -258,6 +294,93 @@ def test_tool_gateway_replays_idempotent_call_without_reexecuting() -> None:
     assert calls["count"] == 1
 
 
+def test_tool_gateway_coalesces_concurrent_idempotent_calls() -> None:
+    """Parallel DAG branches must not execute the same idempotency key twice."""
+    calls = {"count": 0}
+    catalog = ToolCatalog()
+
+    def handler(request):
+        calls["count"] += 1
+        time.sleep(0.05)
+        return {"message": request.input_json["message"], "count": calls["count"]}
+
+    catalog.register(_spec(), handler)
+    gateway = ToolGateway(catalog=catalog, audit_store=InMemoryToolAuditStore())
+    request = _request(idempotency_key="parallel-same")
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = tuple(executor.map(gateway.call, (request, request)))
+
+    assert results[0] == results[1]
+    assert calls["count"] == 1
+
+
+def test_tool_gateway_rejects_idempotency_key_with_different_payload() -> None:
+    catalog = ToolCatalog()
+    catalog.register(_spec(), lambda request: {"message": request.input_json["message"]})
+    gateway = ToolGateway(catalog=catalog, audit_store=InMemoryToolAuditStore())
+
+    first = gateway.call(
+        _request(
+            idempotency_key="same",
+            tool_call_id="tc_same_first",
+            input_json={"message": "one"},
+        )
+    )
+    second = gateway.call(
+        _request(
+            idempotency_key="same",
+            tool_call_id="tc_same_second",
+            input_json={"message": "two"},
+        )
+    )
+
+    assert first.status is ToolCallStatus.SUCCEEDED
+    assert second.status is ToolCallStatus.BLOCKED
+    assert second.error_code == "idempotency_conflict"
+
+
+def test_tool_gateway_binds_capability_to_run_agent_and_issued_payload() -> None:
+    catalog = ToolCatalog()
+    catalog.register(_spec(), lambda request: {"message": request.input_json["message"]})
+    authority = CapabilityAuthority()
+    issued = _token()
+    authority.issue(issued)
+    gateway = ToolGateway(
+        catalog=catalog,
+        audit_store=InMemoryToolAuditStore(),
+        capability_authority=authority,
+    )
+
+    wrong_agent = gateway.call(
+        _request(token=issued.model_copy(update={"issued_to": "OtherWorker"}))
+    )
+    forged_payload = gateway.call(
+        _request(
+            idempotency_key="forged",
+            token=issued.model_copy(update={"max_tool_calls": 99}),
+        )
+    )
+
+    assert wrong_agent.error_code == "capability_agent_mismatch"
+    assert forged_payload.error_code == "capability_payload_mismatch"
+
+
+def test_tool_gateway_audits_handler_failures() -> None:
+    audit_store = InMemoryToolAuditStore()
+    catalog = ToolCatalog()
+
+    def fail(_request):
+        raise RuntimeError("private failure detail")
+
+    catalog.register(_spec(), fail)
+    result = ToolGateway(catalog=catalog, audit_store=audit_store).call(_request())
+
+    assert result.status is ToolCallStatus.FAILED
+    assert result.error_code == "tool_execution_failed:RuntimeError"
+    assert audit_store.records[result.audit_ref].status is ToolCallStatus.FAILED
+
+
 def test_tool_gateway_does_not_replay_non_idempotent_call() -> None:
     """Non-idempotent tools must execute again even with the same idempotency key."""
     calls = {"count": 0}
@@ -270,11 +393,49 @@ def test_tool_gateway_does_not_replay_non_idempotent_call() -> None:
     catalog.register(_spec(idempotent=False), handler)
     gateway = ToolGateway(catalog=catalog, audit_store=InMemoryToolAuditStore())
 
-    first = gateway.call(_request(idempotency_key="non-idem"))
-    second = gateway.call(_request(idempotency_key="non-idem"))
+    first = gateway.call(
+        _request(idempotency_key="non-idem", tool_call_id="tc_non_idem_first")
+    )
+    second = gateway.call(
+        _request(idempotency_key="non-idem", tool_call_id="tc_non_idem_second")
+    )
 
     assert first.output_json != second.output_json
     assert calls["count"] == 2
+
+
+def test_tool_gateway_rejects_rebinding_a_tool_call_id() -> None:
+    calls = {"count": 0}
+    catalog = ToolCatalog()
+
+    def handler(request):
+        calls["count"] += 1
+        return {"message": request.input_json["message"]}
+
+    catalog.register(_spec(), handler)
+    audit_store = InMemoryToolAuditStore()
+    gateway = ToolGateway(catalog=catalog, audit_store=audit_store)
+
+    first = gateway.call(
+        _request(
+            tool_call_id="tc_immutable",
+            idempotency_key="first",
+            input_json={"message": "one"},
+        )
+    )
+    conflict = gateway.call(
+        _request(
+            tool_call_id="tc_immutable",
+            idempotency_key="second",
+            input_json={"message": "two"},
+        )
+    )
+
+    assert first.status is ToolCallStatus.SUCCEEDED
+    assert conflict.status is ToolCallStatus.BLOCKED
+    assert conflict.error_code == "tool_call_id_conflict"
+    assert calls["count"] == 1
+    assert conflict.audit_ref != first.audit_ref
 
 
 def test_tool_gateway_validates_input_and_output_schema_refs() -> None:

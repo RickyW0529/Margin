@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
@@ -15,7 +16,10 @@ from margin.agent_runtime.context_store import (
     make_context_artifact,
 )
 from margin.agent_runtime.schedules import MemoryAgentScheduleRepository
-from margin.agents.runtime.service import AgentRuntimeService
+from margin.agents.runtime.service import (
+    AgentRuntimeService,
+    UserQnaCommand,
+)
 from margin.api.main import create_app
 from margin.core.hashing import stable_json_hash
 from margin.dashboard.models import ResearchItem, ResearchRun
@@ -23,6 +27,7 @@ from margin.dashboard.repository import MemoryDashboardRepository
 from margin.dashboard.service import DashboardServiceBundle
 from margin.platform_runtime.repository import IdempotencyKeyRecord, MemoryIdempotencyStore
 from margin.research.llm import DeterministicLLMProvider, LLMResult
+from margin.settings import MarginSettings
 
 DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 
@@ -304,6 +309,10 @@ def test_agent_runtime_mutations_require_idempotency_key() -> None:
         "/api/v1/agent-runs/user-qna",
         json={"scope_version_id": "scope-1", "message": "你好"},
     )
+    workspace_response = client.post(
+        "/api/v1/agent-runs/workspace",
+        json={"scope_version_id": "scope-1", "message": "你好"},
+    )
     schedule_response = client.put(
         "/api/v1/agent-schedules/stock-analysis",
         json={
@@ -317,9 +326,92 @@ def test_agent_runtime_mutations_require_idempotency_key() -> None:
     )
 
     assert qna_response.status_code == 400
+    assert workspace_response.status_code == 400
     assert schedule_response.status_code == 400
     assert qna_response.json()["detail"] == "Idempotency-Key header is required"
+    assert workspace_response.json()["detail"] == "Idempotency-Key header is required"
     assert schedule_response.json()["detail"] == "Idempotency-Key header is required"
+
+
+def test_workspace_agent_uses_explicit_tool_grant_and_independent_idempotency_scope(
+    monkeypatch,
+) -> None:
+    """Normal Q&A stays read-only while the admin route opts into workspace tools."""
+    commands: list[UserQnaCommand] = []
+
+    def record_command(
+        runtime: AgentRuntimeService,
+        command: UserQnaCommand,
+    ) -> SimpleNamespace:
+        del runtime
+        commands.append(command)
+        return _fake_user_qna_result()
+
+    monkeypatch.setattr(AgentRuntimeService, "run_user_qna", record_command)
+    idempotency_store = MemoryIdempotencyStore()
+    client = _client_with_agent_runtime(idempotency_store=idempotency_store)
+    headers = _idempotency_headers("shared-qna-key")
+    body = {"scope_version_id": "scope-1", "message": "你好"}
+
+    user_response = client.post(
+        "/api/v1/agent-runs/user-qna",
+        headers=headers,
+        json=body,
+    )
+    workspace_response = client.post(
+        "/api/v1/agent-runs/workspace",
+        headers=headers,
+        json=body,
+    )
+
+    assert user_response.status_code == 200
+    assert workspace_response.status_code == 200
+    assert [command.allow_workspace_tools for command in commands] == [False, True]
+    assert idempotency_store.get_idempotency_key("agent.user_qna:shared-qna-key") is not None
+    workspace_record = idempotency_store.get_idempotency_key(
+        "agent.workspace_qna:shared-qna-key"
+    )
+    assert workspace_record is not None
+    assert workspace_record.scope == "agent.workspace_qna"
+
+
+def test_workspace_agent_requires_admin_bearer_token_in_production(monkeypatch) -> None:
+    """Workspace-capable requests are protected by the production admin guard."""
+    monkeypatch.setattr(
+        AgentRuntimeService,
+        "run_user_qna",
+        lambda _runtime, _command: _fake_user_qna_result(),
+    )
+    client = _client_with_agent_runtime()
+    monkeypatch.setattr(
+        "margin.api.dependencies.get_settings",
+        lambda: MarginSettings(
+            _env_file=None,
+            environment="production",
+            database_url="postgresql+psycopg://margin_app:strong@db:5432/margin",
+            secret_master_key="!" * 32,
+            admin_api_token="admin-secret",
+        ),
+    )
+    body = {"scope_version_id": "scope-1", "message": "你好"}
+
+    unauthorized = client.post(
+        "/api/v1/agent-runs/workspace",
+        headers=_idempotency_headers("workspace-auth"),
+        json=body,
+    )
+    authorized = client.post(
+        "/api/v1/agent-runs/workspace",
+        headers={
+            **_idempotency_headers("workspace-auth"),
+            "Authorization": "Bearer admin-secret",
+        },
+        json=body,
+    )
+
+    assert unauthorized.status_code == 401
+    assert unauthorized.json()["detail"] == "admin bearer token is required"
+    assert authorized.status_code == 200
 
 
 def test_user_qna_guardrail_blocks_guaranteed_return_claims() -> None:
@@ -340,6 +432,22 @@ def test_user_qna_guardrail_blocks_guaranteed_return_claims() -> None:
     body = response.json()["detail"]
     assert body["code"] == "agent_guardrail_blocked"
     assert body["triggered_policies"] == ["financial_guarantee"]
+
+
+def _fake_user_qna_result() -> SimpleNamespace:
+    """Return the API-facing subset of a successful runtime result."""
+    return SimpleNamespace(
+        answer="test answer",
+        guardrail=SimpleNamespace(
+            allowed=True,
+            decision="allow",
+            summary="request allowed",
+            triggered_policies=(),
+        ),
+        trace_steps=(),
+        artifacts=(),
+        references=(),
+    )
 
 
 def _client_with_agent_runtime(

@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Margin" }]
 dependencies = [
+    "a2a-sdk>=1.1,<2",
     "alembic>=1.14",
     "apscheduler>=3.10",
     "beautifulsoup4>=4.12",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, Protocol
+from typing import Annotated, Any, Literal, Protocol
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -51,6 +51,7 @@ ChatRepo = Annotated[
 ]
 IdempotencyKey = Annotated[str, Depends(require_idempotency_key)]
 _USER_QNA_SCOPE = "agent.user_qna"
+_WORKSPACE_QNA_SCOPE = "agent.workspace_qna"
 _USER_QNA_TTL = timedelta(hours=24)
 
 
@@ -85,7 +86,7 @@ class UserQnaRunRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     session_id: str | None = Field(default=None, min_length=1, max_length=96)
     universe: str = Field(default="ALL_A", min_length=1, max_length=32)
-    language: str = Field(default="zh", pattern="^(zh|en)$")
+    language: Literal["zh", "en"] = "zh"
 
 
 class GuardrailSummaryResponse(BaseModel):
@@ -227,12 +228,55 @@ def run_user_qna_agent(
     Retries with the same Idempotency-Key and request body replay the stored
     response without re-executing the LLM path or appending chat messages.
     """
+    return _run_user_qna_agent(
+        request=request,
+        runtime=runtime,
+        chat_repository=chat_repository,
+        idempotency_key=idempotency_key,
+        idempotency_store=idempotency_store,
+        idempotency_scope=_USER_QNA_SCOPE,
+        allow_workspace_tools=False,
+    )
+
+
+@router.post("/agent-runs/workspace", response_model=UserQnaRunResponse)
+def run_workspace_agent(
+    request: UserQnaRunRequest,
+    runtime: RuntimeDep,
+    chat_repository: ChatRepo,
+    idempotency_key: IdempotencyKey,
+    idempotency_store: IdempotencyStoreDep,
+    _actor_id: Annotated[str, Depends(require_local_admin)],
+) -> UserQnaRunResponse:
+    """Run an administrator-authorized request with workspace tools enabled."""
+    return _run_user_qna_agent(
+        request=request,
+        runtime=runtime,
+        chat_repository=chat_repository,
+        idempotency_key=idempotency_key,
+        idempotency_store=idempotency_store,
+        idempotency_scope=_WORKSPACE_QNA_SCOPE,
+        allow_workspace_tools=True,
+    )
+
+
+def _run_user_qna_agent(
+    *,
+    request: UserQnaRunRequest,
+    runtime: AgentRuntimeService,
+    chat_repository: AgentChatRepository,
+    idempotency_key: str,
+    idempotency_store: _IdempotencyStore,
+    idempotency_scope: str,
+    allow_workspace_tools: bool,
+) -> UserQnaRunResponse:
+    """Execute the shared Q&A lifecycle for one explicitly selected capability scope."""
     request_hash = stable_json_hash(request.model_dump(mode="json"))
-    scoped_key = f"{_USER_QNA_SCOPE}:{idempotency_key}"
+    scoped_key = f"{idempotency_scope}:{idempotency_key}"
     now = datetime.now(UTC)
     pending = IdempotencyKeyRecord(
         idempotency_key=scoped_key,
-        scope=_USER_QNA_SCOPE,
+        scope=idempotency_scope,
         request_hash=request_hash,
         response_hash=None,
         response_ref=None,
@@ -320,6 +364,7 @@ def run_user_qna_agent(
                 universe=request.universe,
                 language=request.language,
                 conversation_context=tuple(conversation_context),
+                allow_workspace_tools=allow_workspace_tools,
             )
         )
     except AgentInputBlockedError as exc:
@@ -387,7 +432,7 @@ def run_user_qna_agent(
     response_payload = response.model_dump_json()
     record = IdempotencyKeyRecord(
         idempotency_key=scoped_key,
-        scope=_USER_QNA_SCOPE,
+        scope=idempotency_scope,
         request_hash=request_hash,
         response_hash=stable_json_hash(json.loads(response_payload)),
         response_ref=response_payload,

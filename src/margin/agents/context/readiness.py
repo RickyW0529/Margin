@@ -65,3 +65,4 @@ class CandidateLoadResult(BaseModel):
     error_code: str | None = None
     retryable: bool = False
     safe_summary: str = ""
+    audit_ref: str | None = None

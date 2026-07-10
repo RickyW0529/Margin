@@ -68,6 +68,8 @@ class ExpertWorkerPlanDraft(BaseModel):
             for dependency_id in step.depends_on:
                 if dependency_id not in known_ids:
                     raise ValueError(f"unknown depends_on: {dependency_id}")
+        if _has_step_cycle(self.steps):
+            raise ValueError("worker plan contains a dependency cycle")
         return self
 
 
@@ -144,8 +146,8 @@ class LLMExpertAgentPlanner:
         raw_steps = result.output.get("steps")
         if not isinstance(raw_steps, list) or not raw_steps:
             raise RuntimeError("ExpertAgent planning returned no worker steps")
-        allowed_pairs = {
-            (card.name, skill.skill_id)
+        skills_by_pair = {
+            (card.name, skill.skill_id): skill
             for card in worker_cards
             for skill in card.skills
             if not skill.planned_only
@@ -154,10 +156,21 @@ class LLMExpertAgentPlanner:
         for step in steps:
             if step.kind is not PlanActionKind.EXECUTE:
                 continue
-            if (step.worker_agent, step.skill_id) not in allowed_pairs:
+            skill = skills_by_pair.get((step.worker_agent, step.skill_id))
+            if skill is None:
                 raise RuntimeError(
                     "ExpertAgent selected unavailable WorkerAgent skill: "
                     f"{step.worker_agent}.{step.skill_id}"
+                )
+            unsupported_outputs = tuple(
+                output
+                for output in step.required_output_types
+                if output not in skill.output_artifact_types
+            )
+            if unsupported_outputs:
+                raise RuntimeError(
+                    "ExpertAgent requested unsupported WorkerAgent outputs: "
+                    + ", ".join(unsupported_outputs)
                 )
         audit_requirements = result.output.get("audit_requirements")
         if not isinstance(audit_requirements, list):
@@ -167,6 +180,78 @@ class LLMExpertAgentPlanner:
             audit_requirements=tuple(str(item) for item in audit_requirements),
             prompt_text=prompt_text,
         )
+
+
+class CapabilityExpertPlanner:
+    """Deterministic fallback that composes visible skills from their contracts."""
+
+    def plan(
+        self,
+        *,
+        domain_task: DomainTaskRequest,
+        worker_cards: tuple[WorkerAgentCard, ...],
+        context_pack: ContextPack,
+    ) -> ExpertWorkerPlanDraft:
+        """Cover required outputs without relying on worker names or domain recipes."""
+        del context_pack
+        candidates = [
+            (card, skill)
+            for card in worker_cards
+            for skill in card.skills
+            if not skill.planned_only
+        ]
+        required = set(domain_task.required_output_types)
+        uncovered = set(required)
+        selected: list[tuple[WorkerAgentCard, Any]] = []
+        while candidates and (uncovered or not selected):
+            card, skill = max(
+                candidates,
+                key=lambda item: len(set(item[1].output_artifact_types) & uncovered),
+            )
+            coverage = set(skill.output_artifact_types) & uncovered
+            if required and not coverage:
+                break
+            selected.append((card, skill))
+            uncovered -= coverage
+            candidates.remove((card, skill))
+            if not uncovered:
+                break
+        if uncovered or not selected:
+            return _blocked_capability_plan(
+                "No executable worker skill covers: " + ", ".join(sorted(uncovered or required))
+            )
+        if any(_required_input_fields(skill) for _card, skill in selected):
+            return _blocked_capability_plan(
+                "Worker input fields require LLM planning or user clarification."
+            )
+        steps: list[WorkerPlanStepDraft] = []
+        produced_by_step: dict[str, set[str]] = {}
+        for index, (card, skill) in enumerate(selected, start=1):
+            step_id = f"worker_{index}"
+            inputs = set(skill.input_artifact_types)
+            dependencies = tuple(
+                previous_step_id
+                for previous_step_id, outputs in produced_by_step.items()
+                if inputs & outputs
+            )
+            steps.append(
+                WorkerPlanStepDraft(
+                    step_id=step_id,
+                    worker_agent=card.name,
+                    skill_id=skill.skill_id,
+                    task=domain_task.task_goal,
+                    required_output_types=tuple(
+                        output
+                        for output in domain_task.required_output_types
+                        if output in skill.output_artifact_types
+                    )
+                    or skill.output_artifact_types,
+                    depends_on=dependencies,
+                    constraints={"planned_by": "capability_fallback"},
+                )
+            )
+            produced_by_step[step_id] = set(skill.output_artifact_types)
+        return ExpertWorkerPlanDraft(steps=tuple(steps), prompt_text="capability_fallback")
 
 
 def _build_expert_planning_prompt(
@@ -217,15 +302,50 @@ def _build_expert_planning_prompt(
                 "answers, ContextPack JSON, or DomainTask JSON."
             ),
             (
-                "For DataQuestionWorker.answer_financial_metric, user_query must be "
-                "the exact current user question; security_query must be only the "
-                "standalone security name or code such as 中国平安 or 601318.SH; "
-                "indicator_id must be a supported id such as roe_ttm. If the current "
-                "user turn does not contain both a financial metric and a target, "
-                "return ask_clarification instead of reusing earlier turns."
+                "Populate worker_inputs only from each selected skill's input_contract. "
+                "Do not use worker names, remembered examples, or domain keywords as "
+                "implicit input rules."
             ),
             domain_task.model_dump_json(),
             context_pack.model_dump_json(),
             json.dumps(worker_catalog, ensure_ascii=False),
         )
+    )
+
+
+def _has_step_cycle(steps: tuple[WorkerPlanStepDraft, ...]) -> bool:
+    dependencies = {step.step_id: set(step.depends_on) for step in steps}
+    remaining = set(dependencies)
+    while remaining:
+        ready = {
+            step_id
+            for step_id in remaining
+            if not (dependencies[step_id] & remaining)
+        }
+        if not ready:
+            return True
+        remaining -= ready
+    return False
+
+
+def _required_input_fields(skill: Any) -> tuple[str, ...]:
+    fields = skill.input_contract.get("required_fields", ())
+    if isinstance(fields, str):
+        return (fields,)
+    if isinstance(fields, list | tuple):
+        return tuple(str(field) for field in fields)
+    return ()
+
+
+def _blocked_capability_plan(reason: str) -> ExpertWorkerPlanDraft:
+    return ExpertWorkerPlanDraft(
+        steps=(
+            WorkerPlanStepDraft(
+                step_id="capability_blocked",
+                kind=PlanActionKind.BLOCKED,
+                reason=reason,
+                user_safe_message=reason,
+            ),
+        ),
+        prompt_text="capability_fallback",
     )

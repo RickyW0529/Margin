@@ -80,6 +80,25 @@ def test_memory_context_store_hashes_and_filters_artifacts() -> None:
     assert store.list_artifacts(run.run_id, artifact_type="news_context_bundle") == []
 
 
+def test_make_context_artifact_snapshots_nested_payload() -> None:
+    """Artifact hashes must not be invalidated by later graph-state mutation."""
+    payload = {"observations": [{"output": {"paths": ["before.py"]}}]}
+
+    artifact = make_context_artifact(
+        artifact_id="ctx_snapshot",
+        run_id="ar_test",
+        artifact_type="worker_activity",
+        producer_agent="WorkerAgent",
+        payload_json=payload,
+    )
+    payload["observations"][0]["output"]["paths"].append("after.py")
+
+    assert artifact.payload_json == {
+        "observations": [{"output": {"paths": ["before.py"]}}]
+    }
+    assert artifact.payload_hash == stable_json_hash(artifact.payload_json)
+
+
 def test_memory_context_store_rejects_artifact_mutation() -> None:
     """Test memory_context_store_rejects_artifact_mutation.
 

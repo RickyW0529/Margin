@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from threading import RLock
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -33,6 +34,8 @@ class ToolAuditRecord:
     error_code: str | None
     started_at: datetime
     finished_at: datetime
+    capability_token_id: str
+    idempotency_key: str
 
 
 class InMemoryToolAuditStore:
@@ -45,6 +48,7 @@ class InMemoryToolAuditStore:
             None: .
         """
         self.records: dict[str, ToolAuditRecord] = {}
+        self._lock = RLock()
 
     def get_record(self, audit_ref: str) -> ToolAuditRecord | None:
         """Return one audit record by reference.
@@ -98,8 +102,19 @@ class InMemoryToolAuditStore:
             error_code=error_code,
             started_at=now,
             finished_at=now,
+            capability_token_id=request.capability_token.token_id,
+            idempotency_key=request.idempotency_key,
         )
-        self.records[audit_ref] = record
+        with self._lock:
+            existing = self.records.get(audit_ref)
+            if existing is not None:
+                if _audit_record_fingerprint(existing) != _audit_record_fingerprint(record):
+                    raise ValueError(
+                        f"tool_call_id already bound to another audit payload: "
+                        f"{request.tool_call_id}"
+                    )
+                return existing
+            self.records[audit_ref] = record
         return record
 
 
@@ -185,7 +200,20 @@ class SQLAlchemyToolAuditStore:
                 session.add(result_payload)
             else:
                 existing_result = session.get(ToolResultRow, request.tool_call_id)
-                return _record_from_rows(existing_call, existing_result)
+                existing_record = _record_from_rows(existing_call, existing_result)
+                expected_fingerprint = _request_audit_fingerprint(
+                    request=request,
+                    status=status,
+                    input_redacted_json=input_redacted_json,
+                    output_redacted_json=output_redacted_json,
+                    error_code=error_code,
+                )
+                if _audit_record_fingerprint(existing_record) != expected_fingerprint:
+                    raise ValueError(
+                        "tool_call_id already bound to another audit payload: "
+                        f"{request.tool_call_id}"
+                    )
+                return existing_record
         return self.get_record(f"tool_audit_{request.tool_call_id}")  # type: ignore[return-value]
 
 
@@ -215,6 +243,8 @@ def _record_from_rows(
         error_code=call_row.error_code,
         started_at=call_row.started_at,
         finished_at=call_row.finished_at or call_row.started_at,
+        capability_token_id=call_row.capability_token_id,
+        idempotency_key=call_row.idempotency_key,
     )
 
 
@@ -225,3 +255,56 @@ def _json_size(value: dict[str, Any] | None) -> int:
     import json
 
     return len(json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+
+
+def _audit_record_fingerprint(record: ToolAuditRecord) -> str:
+    return stable_json_hash(
+        {
+            "tool_call_id": record.tool_call_id,
+            "run_id": record.run_id,
+            "task_id": record.task_id,
+            "caller_agent": record.caller_agent,
+            "tool_name": record.tool_name,
+            "tool_version": record.tool_version,
+            "input_hash": record.input_hash,
+            "input_redacted_json": record.input_redacted_json,
+            "output_hash": record.output_hash,
+            "output_redacted_json": record.output_redacted_json,
+            "status": record.status.value,
+            "error_code": record.error_code,
+            "capability_token_id": record.capability_token_id,
+            "idempotency_key": record.idempotency_key,
+        }
+    )
+
+
+def _request_audit_fingerprint(
+    *,
+    request: ToolCallRequest,
+    status: ToolCallStatus,
+    input_redacted_json: dict[str, Any],
+    output_redacted_json: dict[str, Any] | None,
+    error_code: str | None,
+) -> str:
+    return stable_json_hash(
+        {
+            "tool_call_id": request.tool_call_id,
+            "run_id": request.run_id,
+            "task_id": request.task_id,
+            "caller_agent": request.caller_agent,
+            "tool_name": request.tool_name,
+            "tool_version": request.tool_version,
+            "input_hash": stable_json_hash(request.input_json),
+            "input_redacted_json": input_redacted_json,
+            "output_hash": (
+                None
+                if output_redacted_json is None
+                else stable_json_hash(output_redacted_json)
+            ),
+            "output_redacted_json": output_redacted_json,
+            "status": status.value,
+            "error_code": error_code,
+            "capability_token_id": request.capability_token.token_id,
+            "idempotency_key": request.idempotency_key,
+        }
+    )

@@ -28,6 +28,7 @@ class FinancialMetricAnalysis:
     metric_artifact: ContextArtifact
     table_rows: list[dict[str, Any]]
     worker_activity_artifact: ContextArtifact
+    audit_event_refs: tuple[str, ...] = ()
     skill_id: str = "answer_financial_metric"
 
 
@@ -51,6 +52,7 @@ class FinancialMetricWorkflowState(BaseModel):
     history: list[Any] = Field(default_factory=list)
     metric_schema: dict[str, Any] = Field(default_factory=dict)
     tool_calls: tuple[str, ...] = ()
+    audit_event_refs: tuple[str, ...] = ()
 
 
 class DataQuestionWorker:
@@ -75,6 +77,7 @@ class DataQuestionWorker:
         tool_gateway: Any | None = None,
         capability_token: CapabilityToken | None = None,
         context_pack_id: str | None = None,
+        context_pack_hash: str | None = None,
         worker_task_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> FinancialMetricAnalysis | None:
@@ -94,6 +97,7 @@ class DataQuestionWorker:
             tool_gateway=tool_gateway,
             capability_token=capability_token,
             context_pack_id=context_pack_id,
+            context_pack_hash=context_pack_hash,
             worker_task_id=worker_task_id,
             idempotency_key=idempotency_key,
         )
@@ -107,6 +111,7 @@ class DataQuestionWorker:
                 metric=metric,
                 message=state.security_query_text or state.user_query_text,
                 workflow_tool_calls=state.tool_calls,
+                audit_event_refs=state.audit_event_refs,
             )
         return _financial_metric_analysis_from_history(
             run_id=run_id,
@@ -115,6 +120,7 @@ class DataQuestionWorker:
             history=list(state.history),
             chart_type=state.chart_type,
             workflow_tool_calls=state.tool_calls,
+            audit_event_refs=state.audit_event_refs,
         )
 
 
@@ -130,6 +136,7 @@ def _run_financial_metric_workflow(
     tool_gateway: Any | None = None,
     capability_token: CapabilityToken | None = None,
     context_pack_id: str | None = None,
+    context_pack_hash: str | None = None,
     worker_task_id: str | None = None,
     idempotency_key: str | None = None,
 ) -> FinancialMetricWorkflowState:
@@ -142,6 +149,7 @@ def _run_financial_metric_workflow(
             run_id=run_id,
             worker_task_id=worker_task_id or f"wt_{run_id}_data_question",
             context_pack_id=context_pack_id,
+            context_pack_hash=context_pack_hash,
             idempotency_key=idempotency_key or run_id,
         )
         if tool_gateway is not None and capability_token is not None
@@ -164,6 +172,7 @@ def _run_financial_metric_workflow(
         return {
             "metric_schema": schema.output,
             "tool_calls": (*state.tool_calls, schema.tool_name),
+            "audit_event_refs": _append_audit_ref(state.audit_event_refs, schema.audit_ref),
         }
 
     def resolve_security(state: FinancialMetricWorkflowState) -> dict[str, Any]:
@@ -175,6 +184,10 @@ def _run_financial_metric_workflow(
             "profiles": security_result.output.get("raw_profiles")
             or security_result.output.get("profiles", []),
             "tool_calls": (*state.tool_calls, security_result.tool_name),
+            "audit_event_refs": _append_audit_ref(
+                state.audit_event_refs,
+                security_result.audit_ref,
+            ),
         }
 
     def discover_indicators(state: FinancialMetricWorkflowState) -> dict[str, Any]:
@@ -187,6 +200,10 @@ def _run_financial_metric_workflow(
         return {
             "indicator_catalog": catalog_result.output.get("indicators", []),
             "tool_calls": (*state.tool_calls, catalog_result.tool_name),
+            "audit_event_refs": _append_audit_ref(
+                state.audit_event_refs,
+                catalog_result.audit_ref,
+            ),
         }
 
     def select_indicator(state: FinancialMetricWorkflowState) -> dict[str, Any]:
@@ -205,6 +222,7 @@ def _run_financial_metric_workflow(
         }
 
     def query_indicator_history(state: FinancialMetricWorkflowState) -> dict[str, Any]:
+        audit_event_refs = state.audit_event_refs
         if state.metric is None or not state.profiles:
             history: list[Any] = []
         else:
@@ -216,9 +234,14 @@ def _run_financial_metric_workflow(
                 decision_at=state.decision_at,
             )
             history = history_result.output.get("history", [])
+            audit_event_refs = _append_audit_ref(
+                audit_event_refs,
+                history_result.audit_ref,
+            )
         return {
             "history": history,
             "tool_calls": (*state.tool_calls, "warehouse.query_indicator_history"),
+            "audit_event_refs": audit_event_refs,
         }
 
     def prepare_chart(state: FinancialMetricWorkflowState) -> dict[str, Any]:
@@ -265,6 +288,7 @@ class _GatewayWarehouseReadTools:
         run_id: str,
         worker_task_id: str,
         context_pack_id: str | None,
+        context_pack_hash: str | None,
         idempotency_key: str,
     ) -> None:
         self._gateway = gateway
@@ -272,6 +296,7 @@ class _GatewayWarehouseReadTools:
         self._run_id = run_id
         self._worker_task_id = worker_task_id
         self._context_pack_id = context_pack_id
+        self._context_pack_hash = context_pack_hash
         self._idempotency_key = idempotency_key
 
     def describe_schema(self) -> WarehouseToolResult:
@@ -347,13 +372,27 @@ class _GatewayWarehouseReadTools:
                 input_json=input_json,
                 capability_token=self._capability_token,
                 context_pack_id=self._context_pack_id,
+                context_pack_hash=self._context_pack_hash,
                 idempotency_key=f"{self._idempotency_key}:{tool_name}:{payload_hash}",
                 deadline_ms=30_000,
             )
         )
         if result.status is not ToolCallStatus.SUCCEEDED or result.output_json is None:
             raise RuntimeError(result.error_code or f"{tool_name} failed")
-        return WarehouseToolResult(tool_name=tool_name, output=result.output_json)
+        return WarehouseToolResult(
+            tool_name=tool_name,
+            output=result.output_json,
+            audit_ref=result.audit_ref,
+        )
+
+
+def _append_audit_ref(
+    refs: tuple[str, ...],
+    audit_ref: str | None,
+) -> tuple[str, ...]:
+    if not audit_ref:
+        return refs
+    return tuple(dict.fromkeys((*refs, audit_ref)))
 
 
 def _analysis_text_with_context(
@@ -686,6 +725,7 @@ def _financial_metric_analysis_from_history(
     history: list[Any],
     chart_type: str,
     workflow_tool_calls: tuple[str, ...],
+    audit_event_refs: tuple[str, ...] = (),
 ) -> FinancialMetricAnalysis:
     """Build table/chart/metric artifacts and a user-facing answer from history."""
     profile_by_security_id = {_profile_security_id(profile): profile for profile in profiles}
@@ -712,6 +752,8 @@ def _financial_metric_analysis_from_history(
             metric=metric,
             message=_profile_name(profiles[0]) if profiles else "",
             chart_type=chart_type,
+            workflow_tool_calls=workflow_tool_calls,
+            audit_event_refs=audit_event_refs,
         )
     latest = rows[-1]
     previous = rows[-2] if len(rows) > 1 else None
@@ -821,6 +863,7 @@ def _financial_metric_analysis_from_history(
         metric_artifact=metric_artifact,
         table_rows=rows,
         worker_activity_artifact=worker_activity_artifact,
+        audit_event_refs=audit_event_refs,
     )
 
 
@@ -831,6 +874,7 @@ def _empty_financial_metric_analysis(
     message: str,
     chart_type: str = "line",
     workflow_tool_calls: tuple[str, ...] = (),
+    audit_event_refs: tuple[str, ...] = (),
 ) -> FinancialMetricAnalysis:
     """Return a traceable empty analysis when the warehouse has no matching facts."""
     display_message = (
@@ -913,6 +957,7 @@ def _empty_financial_metric_analysis(
         metric_artifact=metric_artifact,
         table_rows=[],
         worker_activity_artifact=worker_activity_artifact,
+        audit_event_refs=audit_event_refs,
     )
 
 

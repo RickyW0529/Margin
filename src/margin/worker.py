@@ -303,8 +303,10 @@ def main() -> None:
                 get_agent_context_store,
                 get_agent_schedule_repository,
                 get_config_resolver,
+                get_context_repository,
                 get_provider_runtime_factory,
                 get_strategy_service,
+                get_tool_audit_store,
                 get_valuation_discovery_service_for_api,
             )
 
@@ -334,6 +336,8 @@ def main() -> None:
                 scope_resolver=resolve_scope,
                 llm_provider_factory=lambda: get_provider_runtime_factory().build_llm().adapter,
                 config_resolver=get_config_resolver(),
+                context_repository=get_context_repository(),
+                tool_audit_store=get_tool_audit_store(),
             ).run_once(now=datetime.now(UTC))
             logger.info(
                 "scheduled_agent_sweep_completed",

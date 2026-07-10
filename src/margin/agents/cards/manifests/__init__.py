@@ -1,0 +1,2 @@
+"""Packaged Agent card manifests."""
+

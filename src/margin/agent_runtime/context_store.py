@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
@@ -48,13 +49,14 @@ def make_context_artifact(
     Returns:
         ContextArtifact: .
     """
+    payload_snapshot = deepcopy(payload_json)
     return ContextArtifact(
         artifact_id=artifact_id,
         run_id=run_id,
         artifact_type=artifact_type,
         producer_agent=producer_agent,
-        payload_json=payload_json,
-        payload_hash=stable_json_hash(payload_json),
+        payload_json=payload_snapshot,
+        payload_hash=stable_json_hash(payload_snapshot),
         source_refs=source_refs,
         evidence_refs=evidence_refs,
     )

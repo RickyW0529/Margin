@@ -56,6 +56,10 @@ class MarginSettings(BaseSettings):
     data_freshness_timezone: str = "Asia/Shanghai"
     data_smoke_symbols: str = "000001.SZ"
 
+    # Agent workspace
+    agent_workspace_root: Path = Path(".")
+    agent_code_tools_enabled: bool = False
+
     # Capacity / budget governance
     capacity_limit_version: str = "limits-v0.2.0"
     worker_max_concurrency: int = Field(default=4, gt=0)

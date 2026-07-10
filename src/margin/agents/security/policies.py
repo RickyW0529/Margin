@@ -15,6 +15,7 @@ class DataAccessPolicy(StrEnum):
     READ_EVIDENCE = "read_evidence"
     READ_VECTOR_INDEX = "read_vector_index"
     READ_PROVIDER_STATUS = "read_provider_status"
+    READ_WORKSPACE = "read_workspace"
     READ_RAW_FORBIDDEN = "read_raw_forbidden"
 
 
@@ -28,6 +29,7 @@ class ProductionWritePolicy(StrEnum):
     WRITE_PROVIDER_CONFIG = "write_provider_config"
     WRITE_SCHEDULE = "write_schedule"
     WRITE_BACKFILL_STATE = "write_backfill_state"
+    WRITE_WORKSPACE = "write_workspace"
 
 
 class ToolPolicy(StrEnum):
@@ -39,3 +41,4 @@ class ToolPolicy(StrEnum):
     DATA_SYNC_TOOLS = "data_sync_tools"
     QUANT_TOOLS = "quant_tools"
     SANDBOX_TOOLS = "sandbox_tools"
+    WORKSPACE_TOOLS = "workspace_tools"

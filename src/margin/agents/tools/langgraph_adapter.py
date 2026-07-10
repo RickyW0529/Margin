@@ -19,6 +19,7 @@ class LangGraphRuntimeContext(BaseModel):
     worker_agent: str
     capability_token: CapabilityToken
     context_pack_id: str | None = None
+    context_pack_hash: str | None = None
     idempotency_key: str
     deadline_ms: int = Field(ge=1)
 
@@ -61,6 +62,7 @@ class LangGraphToolAdapter:
                 input_json=input_json,
                 capability_token=runtime_context.capability_token,
                 context_pack_id=runtime_context.context_pack_id,
+                context_pack_hash=runtime_context.context_pack_hash,
                 idempotency_key=runtime_context.idempotency_key,
                 deadline_ms=runtime_context.deadline_ms,
             )

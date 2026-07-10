@@ -221,7 +221,7 @@ class MainPlanValidator:
     def validate(self, plan: GlobalPlan) -> MainPlanValidationResult:
         """Return whether the plan uses only allowed experts and dependencies."""
         errors: list[str] = []
-        task_agents = [task.to_domain_agent for task in plan.domain_tasks]
+        task_ids = {task.domain_task_id for task in plan.domain_tasks}
         for task in plan.domain_tasks:
             card = self._domain_cards_by_name.get(task.to_domain_agent)
             if card is None:
@@ -231,13 +231,10 @@ class MainPlanValidator:
                 errors.append("domain_mismatch")
             if not task.required_output_types:
                 errors.append("missing_required_outputs")
-        known_agents = set(task_agents)
-        if "unknown_domain_agent" not in errors:
-            for edge in plan.domain_dependency_edges:
-                if edge.get("from") not in known_agents or edge.get("to") not in known_agents:
-                    errors.append("unknown_dependency_agent")
-        if len(task_agents) != len(set(task_agents)):
-            errors.append("duplicate_domain_agent")
+            if any(dependency_id not in task_ids for dependency_id in task.depends_on):
+                errors.append("unknown_dependency_task")
+        if _has_dependency_cycle(plan.domain_tasks):
+            errors.append("dependency_cycle")
         return MainPlanValidationResult(valid=not errors, error_codes=tuple(dict.fromkeys(errors)))
 
 
@@ -249,14 +246,13 @@ class MainRuntime:
         *,
         domain_cards: tuple[DomainAgentCard, ...],
         planner: LLMMainAgentPlanner,
-        tool_gateway: object | None = None,
         capability_registry: CapabilityRegistry | None = None,
     ) -> None:
         """Init .
 
         Args:
             domain_cards: tuple[DomainAgentCard, ...]: .
-            tool_gateway: object | None: .
+            capability_registry: Registry used to expose only executable agents.
 
         Returns:
             None: .
@@ -264,7 +260,6 @@ class MainRuntime:
         self._domain_cards = domain_cards
         self._domain_cards_by_name = {card.name: card for card in domain_cards}
         self._planner = planner
-        self._tool_gateway = tool_gateway
         self._capability_registry = capability_registry
         self.issued_tokens: dict[str, CapabilityToken] = {}
 
@@ -345,9 +340,35 @@ class MainRuntime:
                     }
                 )
                 continue
+            domain_task_id = f"dt_{step.step_id}"
+            required_output_types = tuple(
+                dict.fromkeys((*card.required_output_types, *step.required_output_types))
+            )
+            unsupported_outputs = self._unsupported_outputs(
+                card=card,
+                required_output_types=required_output_types,
+                capability_token=capability_token,
+            )
+            if unsupported_outputs:
+                planner_messages.append(
+                    {
+                        "step_id": step.step_id,
+                        "kind": PlanActionKind.BLOCKED,
+                        "domain": card.domain,
+                        "reason": (
+                            "selected expert cannot produce authorized outputs: "
+                            + ", ".join(unsupported_outputs)
+                        ),
+                        "missing_inputs": [],
+                        "user_safe_message": (
+                            "当前可执行 worker 无法产出计划要求的结果类型。"
+                        ),
+                    }
+                )
+                continue
             child_token = derive_capability_token(
                 capability_token,
-                token_id=f"{capability_token.token_id}:{card.name}",
+                token_id=f"{capability_token.token_id}:{step.step_id}:{card.name}",
                 issued_to=card.name,
                 data_access=tuple(
                     policy
@@ -362,27 +383,26 @@ class MainRuntime:
                 tool_policy=tuple(
                     policy for policy in card.tool_policy if policy in capability_token.tool_policy
                 ),
-                allowed_artifact_types=tuple(
-                    artifact_type
-                    for artifact_type in capability_token.allowed_artifact_types
-                    if artifact_type in set(card.required_output_types)
-                ),
+                allowed_artifact_types=capability_token.allowed_artifact_types,
                 max_tool_calls=min(
                     capability_token.max_tool_calls,
                     getattr(card, "max_tool_calls", capability_token.max_tool_calls),
                 ),
                 can_delegate=True,
                 delegation_depth_remaining=1,
+                domain=card.domain,
+                bound_task_id=domain_task_id,
+                bound_context_pack_id=context_pack.context_pack_id,
+                bound_context_pack_hash=context_pack.content_hash,
             )
             self.issued_tokens[child_token.token_id] = child_token
-            required_output_types = step.required_output_types or card.required_output_types
             constraints = dict(step.constraints)
             constraints.setdefault("planned_by", "MainAgent")
             constraints.setdefault("main_agent_direct_tool_access", False)
             tasks.append(
                 DomainTaskRequest(
                     run_id=run_id,
-                    domain_task_id=f"dt_{step.step_id}",
+                    domain_task_id=domain_task_id,
                     to_domain_agent=card.name,
                     domain=card.domain,
                     user_intent_summary=user_goal,
@@ -391,16 +411,27 @@ class MainRuntime:
                     input_context_pack_ref=context_pack.context_pack_id,
                     capability_token_ref=child_token.token_id,
                     constraints=constraints,
+                    depends_on=tuple(f"dt_{dependency_id}" for dependency_id in step.depends_on),
                     token_budget=min(context_pack.token_budget, card.max_context_tokens),
                     deadline_ms=30_000,
-                    idempotency_key=f"{run_id}:{card.name}:{context_pack.payload_hash}",
+                    idempotency_key=(
+                        f"{run_id}:{step.step_id}:{card.name}:{context_pack.payload_hash}"
+                    ),
                 )
             )
-        task_agent_names = {task.to_domain_agent for task in tasks}
+        tasks, dependency_messages = _prune_unavailable_dependency_tasks(tasks)
+        planner_messages.extend(dependency_messages)
+        retained_token_refs = {task.capability_token_ref for task in tasks}
+        self.issued_tokens = {
+            token_ref: token
+            for token_ref, token in self.issued_tokens.items()
+            if token.run_id != run_id or token_ref in retained_token_refs
+        }
+        task_ids = {task.domain_task_id for task in tasks}
         dependency_edges = tuple(
             edge
             for edge in dependency_edges
-            if edge.get("from") in task_agent_names and edge.get("to") in task_agent_names
+            if edge.get("from") in task_ids and edge.get("to") in task_ids
         )
         plan = GlobalPlan(
             run_id=run_id,
@@ -438,6 +469,32 @@ class MainRuntime:
             capability_token=capability_token,
         ).model_dump(mode="json")
 
+    def _unsupported_outputs(
+        self,
+        *,
+        card: DomainAgentCard,
+        required_output_types: tuple[str, ...],
+        capability_token: CapabilityToken,
+    ) -> tuple[str, ...]:
+        authorized = set(capability_token.allowed_artifact_types)
+        denied = tuple(
+            output for output in required_output_types if output not in authorized
+        )
+        if self._capability_registry is None:
+            return denied
+        producible = set(
+            self._capability_registry.producible_output_types(
+                domain=card.domain,
+                capability_token=capability_token,
+            )
+        )
+        return tuple(
+            output
+            for output in required_output_types
+            if output not in authorized or output not in producible
+        )
+
+
 def _planning_prompt_ref(run_type: str) -> str:
     """Return the prompt ID used for this MainAgent planning mode."""
     if run_type == "scheduled_stock_analysis":
@@ -467,10 +524,9 @@ def _build_planning_prompt(
                 "the required target or metric."
             ),
             (
-                "For financial metric questions, delegate to DataAgent only when "
-                "the current user_goal itself contains both a target security and a "
-                "supported metric such as ROE. Otherwise ask clarification or answer "
-                "as general chat."
+                "Use each visible capability's input contract to decide whether the "
+                "current user_goal has enough input. Ask for missing fields instead of "
+                "routing by remembered examples or domain keywords."
             ),
             planning_context.model_dump_json(),
         )
@@ -490,12 +546,51 @@ def _dependency_edges_from_plan(plan_draft: MainPlanDraft) -> tuple[dict[str, st
                 continue
             edges.append(
                 {
-                    "from": dependency.agent,
-                    "to": step.agent,
+                    "from": f"dt_{dependency_id}",
+                    "to": f"dt_{step.step_id}",
                     "reason": f"{dependency_id}->{step.step_id}",
                 }
             )
     return tuple(edges)
+
+
+def _prune_unavailable_dependency_tasks(
+    tasks: list[DomainTaskRequest],
+) -> tuple[list[DomainTaskRequest], list[dict[str, Any]]]:
+    remaining = {task.domain_task_id: task for task in tasks}
+    messages: list[dict[str, Any]] = []
+    while True:
+        blocked = tuple(
+            task
+            for task in remaining.values()
+            if any(dependency_id not in remaining for dependency_id in task.depends_on)
+        )
+        if not blocked:
+            break
+        for task in blocked:
+            missing_dependencies = tuple(
+                dependency_id
+                for dependency_id in task.depends_on
+                if dependency_id not in remaining
+            )
+            remaining.pop(task.domain_task_id, None)
+            messages.append(
+                {
+                    "step_id": task.domain_task_id.removeprefix("dt_"),
+                    "kind": PlanActionKind.BLOCKED,
+                    "domain": task.domain,
+                    "reason": (
+                        "required plan dependencies are not executable: "
+                        + ", ".join(missing_dependencies)
+                    ),
+                    "missing_inputs": [],
+                    "user_safe_message": "前置 Agent 能力不可执行，已跳过依赖任务。",
+                }
+            )
+    return (
+        [task for task in tasks if task.domain_task_id in remaining],
+        messages,
+    )
 
 
 def _card_catalog_item(card: DomainAgentCard) -> dict[str, object]:
@@ -529,3 +624,18 @@ def _stable_short_hash(value: str) -> str:
     import hashlib
 
     return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+
+
+def _has_dependency_cycle(tasks: tuple[DomainTaskRequest, ...]) -> bool:
+    dependencies = {task.domain_task_id: set(task.depends_on) for task in tasks}
+    remaining = set(dependencies)
+    while remaining:
+        ready = {
+            task_id
+            for task_id in remaining
+            if not (dependencies[task_id] & remaining)
+        }
+        if not ready:
+            return True
+        remaining -= ready
+    return False

@@ -20,6 +20,7 @@ class WarehouseToolResult:
 
     tool_name: str
     output: dict[str, Any]
+    audit_ref: str | None = None
 
 
 class WarehouseReadTools:

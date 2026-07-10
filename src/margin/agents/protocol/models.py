@@ -118,22 +118,28 @@ class ContextPack(BaseModel):
     compression_policy_version: str
     payload_hash: str = ""
 
-    @model_validator(mode="before")
-    @classmethod
-    def fill_hash(cls, data: object) -> object:
-        """Fill a stable hash when the caller did not provide one.
+    @model_validator(mode="after")
+    def fill_hash(self) -> ContextPack:
+        """Hash the normalized JSON model when the caller omitted a hash."""
+        if not self.payload_hash:
+            payload = self.model_dump(mode="json", exclude={"payload_hash"})
+            object.__setattr__(self, "payload_hash", stable_json_hash(payload))
+        return self
 
-        Args:
-            data: object: .
-
-        Returns:
-            object: .
-        """
-        if isinstance(data, dict) and not data.get("payload_hash"):
-            payload = dict(data)
-            payload.pop("payload_hash", None)
-            data["payload_hash"] = stable_json_hash(payload)
-        return data
+    @property
+    def content_hash(self) -> str:
+        """Hash immutable context content independently of hop-specific routing."""
+        return stable_json_hash(
+            self.model_dump(
+                mode="json",
+                exclude={
+                    "payload_hash",
+                    "requester_agent",
+                    "target_agent",
+                    "purpose",
+                },
+            )
+        )
 
 
 class DomainTaskRequest(BaseModel):
@@ -154,9 +160,15 @@ class DomainTaskRequest(BaseModel):
     input_artifact_refs: tuple[str, ...] = ()
     capability_token_ref: str
     constraints: dict[str, Any] = Field(default_factory=dict)
+    depends_on: tuple[str, ...] = ()
     token_budget: int = Field(ge=1)
     deadline_ms: int = Field(ge=1)
     idempotency_key: str
+
+    @property
+    def step_id(self) -> str:
+        """Expose the task identity to the generic DAG scheduler."""
+        return self.domain_task_id
 
 
 class WorkerTaskRequest(BaseModel):
@@ -176,12 +188,18 @@ class WorkerTaskRequest(BaseModel):
     input_artifact_refs: tuple[str, ...] = ()
     required_output_types: tuple[str, ...]
     constraints: dict[str, Any] = Field(default_factory=dict)
+    depends_on: tuple[str, ...] = ()
     tool_policy_ref: str
     capability_token_ref: str
     token_budget: int = Field(ge=1)
     max_tool_calls: int = Field(ge=0)
     deadline_ms: int = Field(ge=1)
     idempotency_key: str
+
+    @property
+    def step_id(self) -> str:
+        """Expose the task identity to the generic DAG scheduler."""
+        return self.worker_task_id
 
 
 class WorkerTaskResult(BaseModel):
@@ -280,22 +298,13 @@ class DomainContextCapsule(BaseModel):
     input_hash: str
     payload_hash: str = ""
 
-    @model_validator(mode="before")
-    @classmethod
-    def fill_hash(cls, data: object) -> object:
-        """Fill a stable hash when absent.
-
-        Args:
-            data: object: .
-
-        Returns:
-            object: .
-        """
-        if isinstance(data, dict) and not data.get("payload_hash"):
-            payload = dict(data)
-            payload.pop("payload_hash", None)
-            data["payload_hash"] = stable_json_hash(payload)
-        return data
+    @model_validator(mode="after")
+    def fill_hash(self) -> DomainContextCapsule:
+        """Hash the normalized JSON model when the caller omitted a hash."""
+        if not self.payload_hash:
+            payload = self.model_dump(mode="json", exclude={"payload_hash"})
+            object.__setattr__(self, "payload_hash", stable_json_hash(payload))
+        return self
 
 
 class DomainAuditReport(BaseModel):

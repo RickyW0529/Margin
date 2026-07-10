@@ -138,7 +138,15 @@ class CapabilityRegistry:
             if card.domain != domain or not self._enabled(card.name, card.domain):
                 continue
             skills = tuple(
-                skill
+                skill.model_copy(
+                    update={
+                        "output_artifact_types": tuple(
+                            output
+                            for output in skill.output_artifact_types
+                            if output in capability_token.allowed_artifact_types
+                        )
+                    }
+                )
                 for skill in card.skills
                 if self._worker_skill_status(
                     card,
@@ -151,6 +159,25 @@ class CapabilityRegistry:
             if skills:
                 visible.append(card.model_copy(update={"skills": skills}))
         return tuple(visible)
+
+    def producible_output_types(
+        self,
+        *,
+        domain: str,
+        capability_token: CapabilityToken,
+    ) -> tuple[str, ...]:
+        """Return the authorized union of outputs from executable domain workers."""
+        return tuple(
+            dict.fromkeys(
+                output
+                for card in self.visible_worker_cards(
+                    domain=domain,
+                    capability_token=capability_token,
+                )
+                for skill in card.skills
+                for output in skill.output_artifact_types
+            )
+        )
 
     def snapshot(self, *, capability_token: CapabilityToken) -> CapabilitySnapshot:
         """Return a full capability snapshot with hidden capability reasons."""
@@ -186,6 +213,28 @@ class CapabilityRegistry:
                     errors.append(
                         self._executor_registry.explain_missing(card, skill)
                     )
+                    continue
+                executor = self._executor_registry.get_spec(card.name, skill.skill_id)
+                assert executor is not None
+                if executor.domain != card.domain:
+                    errors.append(
+                        f"{card.name}.{skill.skill_id} executor domain mismatch"
+                    )
+                if executor.runtime not in card.supported_runtimes:
+                    errors.append(
+                        f"{card.name}.{skill.skill_id} executor runtime "
+                        f"{executor.runtime} is not supported"
+                    )
+                if set(executor.required_tools) != set(skill.tool_allowlist):
+                    errors.append(
+                        f"{card.name}.{skill.skill_id} executor tool contract mismatch"
+                    )
+                if set(executor.output_artifact_types) != set(
+                    skill.output_artifact_types
+                ):
+                    errors.append(
+                        f"{card.name}.{skill.skill_id} executor output contract mismatch"
+                    )
                 missing_tools = [
                     tool_name
                     for tool_name in skill.tool_allowlist
@@ -193,6 +242,53 @@ class CapabilityRegistry:
                 ]
                 for tool_name in missing_tools:
                     errors.append(f"{card.name}.{skill.skill_id} missing tool {tool_name}")
+                for contract in skill.tool_contracts:
+                    contract_tool = contract.get("tool_name")
+                    produced = contract.get("produces")
+                    if not isinstance(contract_tool, str) or not contract_tool:
+                        errors.append(
+                            f"{card.name}.{skill.skill_id} has an invalid tool contract"
+                        )
+                        continue
+                    if contract_tool not in skill.tool_allowlist:
+                        errors.append(
+                            f"{card.name}.{skill.skill_id} tool contract references "
+                            f"non-allowlisted tool {contract_tool}"
+                        )
+                    if not isinstance(produced, list | tuple) or not produced:
+                        errors.append(
+                            f"{card.name}.{skill.skill_id} tool contract for "
+                            f"{contract_tool} has no produced artifacts"
+                        )
+                        continue
+                    unsupported_contract_outputs = tuple(
+                        str(output)
+                        for output in produced
+                        if str(output) not in skill.output_artifact_types
+                    )
+                    if unsupported_contract_outputs:
+                        errors.append(
+                            f"{card.name}.{skill.skill_id} tool contract for "
+                            f"{contract_tool} declares unsupported outputs: "
+                            + ", ".join(unsupported_contract_outputs)
+                        )
+                for tool_name in skill.tool_allowlist:
+                    tool_specs = self._tool_catalog.specs_for_name(tool_name)
+                    for tool_spec in tool_specs:
+                        if not tool_spec.input_schema or not tool_spec.output_schema:
+                            errors.append(
+                                f"{card.name}.{skill.skill_id} tool {tool_name} "
+                                "has no executable inline schema"
+                            )
+                    if tool_specs and not any(
+                        not tool_spec.allowed_runtimes
+                        or executor.runtime in tool_spec.allowed_runtimes
+                        for tool_spec in tool_specs
+                    ):
+                        errors.append(
+                            f"{card.name}.{skill.skill_id} tool {tool_name} "
+                            f"does not support runtime {executor.runtime}"
+                        )
         for domain_card in self._domain_cards:
             if not self._enabled(domain_card.name, domain_card.domain):
                 continue
@@ -254,6 +350,7 @@ class CapabilityRegistry:
             output
             for view in executable_workers
             for output in view.output_artifact_types
+            if output in capability_token.allowed_artifact_types
         }
         missing_outputs = tuple(
             output for output in card.required_output_types if output not in produced_outputs
@@ -299,7 +396,11 @@ class CapabilityRegistry:
             domain=card.domain,
             skill_id=skill.skill_id,
             status=status,
-            output_artifact_types=skill.output_artifact_types,
+            output_artifact_types=tuple(
+                output
+                for output in skill.output_artifact_types
+                if output in capability_token.allowed_artifact_types
+            ),
             tool_allowlist=skill.tool_allowlist,
             runtime=runtime,
             reason=reason,
@@ -345,6 +446,21 @@ class CapabilityRegistry:
             return (
                 CapabilityStatus.DEPENDENCY_UNAVAILABLE,
                 "skill cannot produce required outputs: " + ", ".join(missing_outputs),
+                spec,
+            )
+        denied_outputs = tuple(
+            output
+            for output in (required_output_types or skill.output_artifact_types)
+            if output not in capability_token.allowed_artifact_types
+        )
+        if denied_outputs and (
+            required_output_types
+            or len(denied_outputs) == len(skill.output_artifact_types)
+        ):
+            return (
+                CapabilityStatus.TOKEN_DENIED,
+                "capability token denies artifact outputs: "
+                + ", ".join(denied_outputs),
                 spec,
             )
         missing_tools = tuple(
@@ -414,8 +530,8 @@ def _tool_capability_view(
     return ToolCapabilityView(
         tool_name=spec.tool_name,
         status=status,
-        input_schema={"schema_ref": spec.input_schema_ref},
-        output_schema={"schema_ref": spec.output_schema_ref},
+        input_schema=spec.input_schema or {"schema_ref": spec.input_schema_ref},
+        output_schema=spec.output_schema or {"schema_ref": spec.output_schema_ref},
         reason=reason,
     )
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
+
 from margin.agents.security.capability import CapabilityToken
 from margin.agents.security.policies import (
     DataAccessPolicy,
@@ -62,6 +64,16 @@ def test_sqlalchemy_tool_audit_store_round_trips_redacted_records(
     assert stored is not None
     assert stored.input_redacted_json["provider_token"] == "[redacted]"
     assert stored.output_hash is not None
+
+    conflicting_request = request.model_copy(update={"input_json": {"message": "changed"}})
+    with pytest.raises(ValueError, match="already bound"):
+        store.write(
+            request=conflicting_request,
+            status=ToolCallStatus.SUCCEEDED,
+            input_redacted_json={"message": "changed"},
+            output_redacted_json={"message": "changed"},
+            error_code=None,
+        )
 
 
 def _token() -> CapabilityToken:
