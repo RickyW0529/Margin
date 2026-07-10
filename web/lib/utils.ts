@@ -8,6 +8,19 @@ export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
+/** Return an external HTTP(S) URL, rejecting executable or malformed schemes. */
+export function safeExternalHref(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Format an ISO timestamp as MM/DD HH:mm. */
 export function formatDate(value: string | null | undefined): string {
   if (!value) {

@@ -693,6 +693,7 @@ class QuantAdapter:
         *,
         scope_version_id: str,
         decision_at: datetime,
+        strategy_metadata: dict[str, Any] | None = None,
     ) -> QuantInputSnapshot:
         """Resolve the scope and persist its frozen PIT quant input.
 
@@ -704,6 +705,7 @@ class QuantAdapter:
             QuantInputSnapshot: .
         """
         scope = self._scope_provider.get_scope_binding(scope_version_id)
+        scope = _scope_with_strategy_override(scope, strategy_metadata)
         snapshot = self._snapshot_builder.build(
             scope=scope,
             decision_at=decision_at,
@@ -723,6 +725,7 @@ class QuantAdapter:
         scope_version_id: str,
         decision_at: datetime,
         input_snapshot: QuantInputSnapshot | None = None,
+        strategy_metadata: dict[str, Any] | None = None,
     ) -> QuantAdapterResult:
         """Build a snapshot, run quant, and return a result with results.
 
@@ -737,10 +740,12 @@ class QuantAdapter:
         snapshot = input_snapshot or self.build_input(
             scope_version_id=scope_version_id,
             decision_at=decision_at,
+            strategy_metadata=strategy_metadata,
         )
         snapshot = self._bind_scope_metadata(
             snapshot,
             scope_version_id=scope_version_id,
+            strategy_metadata=strategy_metadata,
         )
         quant_run: QuantRun = self._quant_service.run(snapshot, decision_at=decision_at)
         results = self._quant_repository.list_results(quant_run.quant_run_id)
@@ -754,6 +759,7 @@ class QuantAdapter:
         snapshot: QuantInputSnapshot,
         *,
         scope_version_id: str,
+        strategy_metadata: dict[str, Any] | None = None,
     ) -> QuantInputSnapshot:
         """Attach scope strategy metadata to snapshots reloaded from persistence.
 
@@ -765,6 +771,7 @@ class QuantAdapter:
             QuantInputSnapshot: .
         """
         scope = self._scope_provider.get_scope_binding(scope_version_id)
+        scope = _scope_with_strategy_override(scope, strategy_metadata)
         if snapshot.scope_version_id != scope.scope_version_id:
             raise ValueError("quant input snapshot scope mismatch")
         return snapshot.model_copy(
@@ -773,7 +780,6 @@ class QuantAdapter:
                 "user_indicator_view": scope.user_indicator_view,
             }
         )
-
     def load_input(self, snapshot_id: str) -> QuantInputSnapshot:
         """Reload a persisted frozen input snapshot by output reference.
 
@@ -804,3 +810,21 @@ class QuantAdapter:
             quant_run_id=quant_run.quant_run_id,
             results=self._quant_repository.list_results(quant_run.quant_run_id),
         )
+
+
+def _scope_with_strategy_override(
+    scope: ScopeBinding,
+    strategy_metadata: dict[str, Any] | None,
+) -> ScopeBinding:
+    """Bind a run-frozen QuantAgent profile to the actual serving snapshot."""
+    if not strategy_metadata:
+        return scope
+    feature_metadata = dict(scope.quant_feature_set.metadata)
+    feature_metadata["quant_strategy"] = dict(strategy_metadata)
+    return scope.model_copy(
+        update={
+            "quant_feature_set": scope.quant_feature_set.model_copy(
+                update={"metadata": feature_metadata}
+            )
+        }
+    )

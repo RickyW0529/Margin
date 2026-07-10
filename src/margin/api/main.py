@@ -48,6 +48,7 @@ from margin.api.routes.backfill import router as backfill_router
 from margin.api.routes.context import router as context_router
 from margin.api.routes.dashboard import router as dashboard_router
 from margin.api.routes.data_sync import router as data_sync_router
+from margin.api.routes.evidence import router as evidence_router
 from margin.api.routes.freshness import router as freshness_router
 from margin.api.routes.health import router as health_router
 from margin.api.routes.news import router as news_router
@@ -210,6 +211,7 @@ def create_app(
     application.include_router(valuation_discovery_router)
     application.include_router(news_router)
     application.include_router(data_sync_router)
+    application.include_router(evidence_router)
     application.include_router(freshness_router)
     application.include_router(backfill_router)
     application.include_router(tool_audit_router)

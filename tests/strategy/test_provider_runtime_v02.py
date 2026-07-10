@@ -470,3 +470,41 @@ def test_runtime_factory_builds_embedding_from_active_provider_category(
     assert runtime.config_version_id == "provider-jina-embedding-active"
     assert runtime.adapter.descriptor.config["base_url"] == ("https://api.jina.ai/v1/embeddings")
     assert runtime.adapter.descriptor.config["model"] == "jina-embeddings-v3"
+
+
+def test_runtime_factory_builds_detected_firecrawl_websearch(
+    secret_store: SecretStore,
+) -> None:
+    """A generic websearch config detected as Firecrawl must not build Tavily."""
+    metadata = secret_store.create_or_replace(
+        WriteSecretCommand(
+            provider_name="websearch",
+            secret_name="api_key",
+            secret_value="firecrawl-secret",
+            actor_id="local-admin",
+            idempotency_key=f"runtime-firecrawl-{uuid4().hex}",
+        )
+    )
+    repository = MemoryStrategyRepository()
+    repository.save_provider_config(
+        ProviderConfigVersion(
+            version_id="provider-firecrawl-active",
+            provider_name="websearch",
+            provider_type="websearch",
+            base_url="https://api.firecrawl.dev/v2/search",
+            non_sensitive_config={
+                "provider_category": "web_search",
+                "detected_provider": "firecrawl",
+            },
+            secret_version_id=metadata.version_id,
+            lifecycle=ConfigLifecycle.ACTIVE,
+        )
+    )
+
+    runtime = ProviderRuntimeFactory(
+        ProviderRuntimeResolver(repository, secret_store)
+    ).build_websearch()
+
+    assert runtime.config_version_id == "provider-firecrawl-active"
+    assert runtime.adapter.descriptor.name == "firecrawl_websearch"
+    assert runtime.adapter.descriptor.config["base_url"] == "https://api.firecrawl.dev"

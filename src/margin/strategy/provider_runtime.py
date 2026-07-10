@@ -13,6 +13,8 @@ from margin.strategy.provider_router import provider_category_for_config
 T = TypeVar("T")
 
 _DEFAULT_PROVIDER_CAPABILITIES: dict[str, frozenset[str]] = {
+    "firecrawl": frozenset({"search", "scrape"}),
+    "tavily": frozenset({"search"}),
     "tushare": frozenset(
         {
             "market_quote",
@@ -247,14 +249,28 @@ class ProviderRuntimeFactory:
         )
 
     def build_websearch(self) -> RuntimeBoundProvider:
-        """Build the Tavily WebSearch adapter.
+        """Build the active WebSearch adapter (Tavily or Firecrawl).
 
         Returns:
             RuntimeBoundProvider: .
         """
+        runtime = self._resolver.resolve_category("web_search")
+        provider_name = _runtime_provider_name_for_config(runtime.config)
+        if provider_name == "firecrawl":
+            from margin.news.providers.firecrawl import (
+                DEFAULT_FIRECRAWL_BASE_URL,
+                FirecrawlSearchAdapter,
+            )
+
+            return RuntimeBoundProvider(
+                adapter=FirecrawlSearchAdapter(
+                    api_key=_required_secret(runtime),
+                    base_url=(runtime.config.base_url or DEFAULT_FIRECRAWL_BASE_URL),
+                ),
+                config_version_id=runtime.config.version_id,
+            )
         from margin.news.providers.tavily import TavilySearchAdapter
 
-        runtime = self._resolver.resolve_category("web_search")
         return RuntimeBoundProvider(
             adapter=TavilySearchAdapter(
                 api_key=_required_secret(runtime),

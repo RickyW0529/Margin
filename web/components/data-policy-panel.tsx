@@ -122,9 +122,10 @@ export function DataPolicyPanel({
     setSuccess(null);
     try {
       const run = await triggerSync();
-      setSuccess(`后台同步已创建：${run.sync_run_id}`);
+      void run;
+      setSuccess("后台同步已创建，完成后会刷新可用数据。");
     } catch {
-      setError("同步任务创建失败，请检查 Provider、管理员会话和 Worker 状态。");
+      setError("同步任务创建失败，请稍后重试。");
     } finally {
       setBusyAction(null);
     }
@@ -141,7 +142,7 @@ export function DataPolicyPanel({
             <CardTitle className="mt-1">当前数据窗口</CardTitle>
           </div>
           <Badge tone="positive">
-            {activePolicy?.lifecycle ?? "default"}
+            {lifecycleLabel(activePolicy?.lifecycle)}
           </Badge>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -283,7 +284,8 @@ export function DataPolicyPanel({
                     {policy.rolling_window_months} 个月
                   </strong>
                   <span className="text-xs text-muted-foreground">
-                    {policy.lifecycle} · {formatDateShort(policy.window_start)}
+                    {lifecycleLabel(policy.lifecycle)} ·{" "}
+                    {formatDateShort(policy.window_start)}
                   </span>
                 </div>
                 <Button
@@ -318,4 +320,18 @@ export function DataPolicyPanel({
       ) : null}
     </div>
   );
+}
+
+function lifecycleLabel(lifecycle: string | null | undefined): string {
+  if (!lifecycle) {
+    return "默认";
+  }
+  const labels: Record<string, string> = {
+    active: "已激活",
+    archived: "已归档",
+    deprecated: "已停用",
+    draft: "草稿",
+    review: "待审核",
+  };
+  return labels[lifecycle] ?? "已保存";
 }

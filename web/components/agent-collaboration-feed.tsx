@@ -21,9 +21,7 @@ type AgentConversationItem = {
   message: string;
   owner: string;
   breakpoint: string | null;
-  progress: number;
   state: RefreshRunNodeState;
-  status: string;
   time: string | null;
 };
 
@@ -31,7 +29,7 @@ type AgentCollaborationFeedProps = {
   run: ResearchRunDetailV2 | null;
 };
 
-/** Renders Agent progress as a group-chat style collaboration timeline. */
+/** Renders Agent progress as a compact collaboration timeline. */
 export function AgentCollaborationFeed({ run }: AgentCollaborationFeedProps) {
   const items = visibleConversationItems(buildConversationItems(run), run);
 
@@ -63,9 +61,7 @@ function AgentActivityRow({
   const tone = bubbleTone(item.state);
   return (
     <article
-      className={cn(
-        "relative grid grid-cols-[2rem_minmax(0,1fr)] gap-3 pb-5 last:pb-0",
-      )}
+      className="relative grid grid-cols-[2rem_minmax(0,1fr)] gap-3 pb-5 last:pb-0"
       data-agent-state={item.state}
       data-testid={`agent-activity-${item.id}`}
     >
@@ -97,33 +93,15 @@ function AgentActivityRow({
             {stateText(item.state)}
           </span>
         </div>
-        <div className="mt-3 rounded-lg bg-muted/70 px-3 py-2 text-sm leading-relaxed text-foreground">
-          {item.message}
-        </div>
+        <p className="mt-3 text-sm leading-relaxed text-foreground">{item.message}</p>
         {item.breakpoint ? (
-          <div className="mt-3 rounded-md border border-caution-soft bg-caution-soft px-3 py-2 text-xs font-medium text-caution">
-            断点：{item.breakpoint}
-          </div>
+          <p className="mt-2 text-xs text-caution">
+            {humanizeBreakpoint(item.breakpoint)}
+          </p>
         ) : null}
-        <div className="mt-3">
-          <div className="mb-1 flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
-            <span>状态：{item.status}</span>
-            <span>{item.time ? formatDate(item.time) : "--"}</span>
-          </div>
-          <div
-            aria-label={`${item.label} progress`}
-            aria-valuemax={100}
-            aria-valuemin={0}
-            aria-valuenow={item.progress}
-            className="h-2 overflow-hidden rounded-full bg-muted"
-            role="progressbar"
-          >
-            <div
-              className={cn("h-full rounded-full transition-all duration-500", tone.bar)}
-              style={{ width: `${item.progress}%` }}
-            />
-          </div>
-        </div>
+        {item.time ? (
+          <p className="mt-2 text-[11px] text-muted-foreground">{formatDate(item.time)}</p>
+        ) : null}
       </div>
     </article>
   );
@@ -131,24 +109,7 @@ function AgentActivityRow({
 
 function buildConversationItems(run: ResearchRunDetailV2 | null): AgentConversationItem[] {
   const nodes = buildRefreshRunNodes(run);
-  const mainState = mainDispatchState(run, nodes);
-  return [
-    {
-      id: "main_agent_dispatch",
-      label: "任务分配",
-      message:
-        mainState === "completed"
-          ? "MainAgent 已完成研究任务拆分，专家 Agent 正在按顺序协作。"
-          : "MainAgent 正在读取任务范围并分配数据检查、量化、新闻和复核任务。",
-      owner: "MainAgent",
-      breakpoint: null,
-      progress: progressForState(mainState),
-      state: mainState,
-      status: mainState === "completed" ? "assigned" : "dispatching",
-      time: run ? null : null,
-    },
-    ...nodes.map(nodeToConversationItem),
-  ];
+  return nodes.map(nodeToConversationItem);
 }
 
 function nodeToConversationItem(node: RefreshRunNode): AgentConversationItem {
@@ -158,9 +119,7 @@ function nodeToConversationItem(node: RefreshRunNode): AgentConversationItem {
     breakpoint: node.errorCode,
     message: messageForNode(node),
     owner: node.owner,
-    progress: progressForState(node.state),
     state: node.state,
-    status: node.status,
     time: node.finishedAt ?? node.startedAt,
   };
 }
@@ -188,19 +147,6 @@ function visibleConversationItems(
   return items;
 }
 
-function mainDispatchState(
-  run: ResearchRunDetailV2 | null,
-  nodes: RefreshRunNode[],
-): RefreshRunNodeState {
-  if (!run) {
-    return "pending";
-  }
-  if (nodes.some((node) => node.state !== "pending")) {
-    return "completed";
-  }
-  return "active";
-}
-
 function messageForNode(node: RefreshRunNode): string {
   if (node.state === "completed") {
     return `${agentDisplayName(node.owner)} 已完成「${node.label}」。`;
@@ -210,44 +156,31 @@ function messageForNode(node: RefreshRunNode): string {
   }
   if (node.state === "waiting") {
     return node.errorCode
-      ? `${agentDisplayName(node.owner)} 在「${node.label}」等待重试，断点如下。`
-      : `${agentDisplayName(node.owner)} 正在等待外部资源或预算恢复。`;
+      ? `${agentDisplayName(node.owner)} 在「${node.label}」等待重试。`
+      : `${agentDisplayName(node.owner)} 正在等待外部资源恢复。`;
   }
   if (node.state === "failed") {
-    return node.errorCode
-      ? `${agentDisplayName(node.owner)} 在「${node.label}」中失败，断点如下。`
-      : `${agentDisplayName(node.owner)} 在「${node.label}」中遇到阻断。`;
+    return `${agentDisplayName(node.owner)} 在「${node.label}」中失败。`;
   }
   return `${agentDisplayName(node.owner)} 等待接收「${node.label}」任务。`;
 }
 
-function progressForState(state: RefreshRunNodeState): number {
-  if (state === "completed") {
-    return 100;
-  }
-  if (state === "active") {
-    return 68;
-  }
-  if (state === "waiting") {
-    return 52;
-  }
-  if (state === "queued") {
-    return 32;
-  }
-  if (state === "failed") {
-    return 100;
-  }
-  return 6;
+function humanizeBreakpoint(code: string): string {
+  return code.replace(/[_-]+/g, " ").trim();
 }
 
 function agentDisplayName(owner: string): string {
   const labels: Record<string, string> = {
     Dashboard: "Dashboard",
-    DataInspectionAgent: "数据检查 Agent",
+    DataInspectionAgent: "数据检查",
+    EarningsCatalystWorker: "财报催化 Worker",
     MainAgent: "主 Agent",
-    NewsAcquisitionAgent: "新闻研报 Agent",
-    QuantAgent: "量化 Agent",
-    StockAnalystAgent: "股票分析 Agent",
+    MLQuantWorker: "ML 量化 Worker",
+    NewsAcquisitionAgent: "新闻研报",
+    QuantAgent: "量化",
+    RecommendationFusionWorker: "融合 Worker",
+    ResearchPublisher: "推荐发布",
+    StockAnalystAgent: "股票分析",
   };
   return labels[owner] ?? owner;
 }
@@ -288,7 +221,6 @@ function bubbleTone(state: RefreshRunNodeState) {
   if (state === "completed") {
     return {
       badge: "bg-positive-soft text-positive",
-      bar: "bg-positive",
       border: "border-positive-soft",
       icon: "bg-positive text-white",
     };
@@ -296,7 +228,6 @@ function bubbleTone(state: RefreshRunNodeState) {
   if (state === "active") {
     return {
       badge: "bg-accent/10 text-accent",
-      bar: "bg-accent",
       border: "border-accent/30",
       icon: "bg-accent text-white",
     };
@@ -304,7 +235,6 @@ function bubbleTone(state: RefreshRunNodeState) {
   if (state === "waiting" || state === "queued") {
     return {
       badge: "bg-caution-soft text-caution",
-      bar: "bg-caution",
       border: "border-caution-soft",
       icon: "bg-caution text-white",
     };
@@ -312,14 +242,12 @@ function bubbleTone(state: RefreshRunNodeState) {
   if (state === "failed") {
     return {
       badge: "bg-negative-soft text-negative",
-      bar: "bg-negative",
       border: "border-negative-soft",
       icon: "bg-negative text-white",
     };
   }
   return {
     badge: "bg-muted text-muted-foreground",
-    bar: "bg-muted-foreground",
     border: "border-border",
     icon: "bg-muted-foreground text-white",
   };

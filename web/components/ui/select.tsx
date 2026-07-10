@@ -11,7 +11,7 @@ export const Select = React.forwardRef<
     <select
       ref={ref}
       className={cn(
-        "flex h-9 w-full appearance-none rounded-md border border-border bg-input-background px-3 pr-8 text-sm text-foreground focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+        "flex h-11 w-full appearance-none rounded-xl border border-border bg-input-background px-4 pr-10 text-[15px] text-foreground focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
         className,
       )}
       {...props}

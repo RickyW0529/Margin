@@ -8,13 +8,20 @@ failures appropriately.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
+from margin.news.models import TargetTriggerType
 from margin.valuation_discovery.models import (
     DataStatus,
     QuantResult,
     ResearchGuardrail,
     ScreeningStatus,
 )
-from margin.valuation_discovery.news_targets import NewsTargetSelector
+from margin.valuation_discovery.news_targets import (
+    FilingCatalystSeed,
+    NewsTargetSelector,
+    SQLAlchemyFilingCatalystCandidateLoader,
+)
 from margin.valuation_discovery.refresh_policy import RefreshPolicy
 
 
@@ -110,6 +117,62 @@ def test_priority_increases_for_review_due_and_material_events() -> None:
     assert targets[0].priority > targets[1].priority
 
 
+def test_new_filing_can_select_quant_reject_as_independent_catalyst_target() -> None:
+    """Indexed filings enter research without requiring an ML pass."""
+    decision_at = datetime(2026, 7, 15, tzinfo=UTC)
+    filing_loader = _FilingCandidateLoader(
+        seeds=(
+            _filing_seed("000001.SZ", decision_at),
+            _filing_seed("000002.SZ", decision_at),
+            _filing_seed("000003.SZ", decision_at),
+            _filing_seed("999999.SZ", decision_at),
+        )
+    )
+    selector = NewsTargetSelector(filing_candidate_loader=filing_loader)
+    results = (
+        _result_with_status("000001.SZ", ScreeningStatus.PASS),
+        _result_with_status("000002.SZ", ScreeningStatus.REJECT),
+        _result_with_status(
+            "000003.SZ",
+            ScreeningStatus.REJECT,
+            guardrail=ResearchGuardrail.RESEARCH_BLOCKED,
+        ),
+    )
+
+    targets = selector.select(
+        scope_version_id="scope-1",
+        quant_run_id="quant-1",
+        results=results,
+        decision_at=decision_at,
+    )
+
+    assert filing_loader.calls == [("scope-1", decision_at)]
+    assert [target.security_id for target in targets] == ["000001.SZ", "000002.SZ"]
+    assert all(target.trigger_type is TargetTriggerType.MATERIAL_FILING for target in targets)
+    assert targets[1].filing_event_ids == ("filing-000002.SZ",)
+    assert len({target.security_id for target in targets}) == len(targets)
+
+
+def test_sql_filing_loader_groups_only_unconsumed_reporting_window_events() -> None:
+    """The production loader retries unreviewed filings and suppresses reviewed ones."""
+    decision_at = datetime(2026, 7, 15, tzinfo=UTC)
+    session = _FilingLoaderSession(
+        prior_payloads=[{"new_filing_document_ids": ["filing-consumed"]}],
+        filing_rows=[
+            ("000001.SZ", "filing-consumed", datetime(2026, 7, 2, tzinfo=UTC)),
+            ("000001.SZ", "filing-new-1", datetime(2026, 7, 10, tzinfo=UTC)),
+            ("000002.SZ", "filing-new-2", datetime(2026, 7, 12, tzinfo=UTC)),
+        ],
+    )
+    loader = SQLAlchemyFilingCatalystCandidateLoader(lambda: session)  # type: ignore[arg-type]
+
+    seeds = loader.load(scope_version_id="scope-1", decision_at=decision_at)
+
+    assert [seed.security_id for seed in seeds] == ["000001.SZ", "000002.SZ"]
+    assert seeds[0].filing_event_ids == ("filing-new-1",)
+    assert seeds[1].latest_available_at == datetime(2026, 7, 12, tzinfo=UTC)
+
+
 def test_price_change_only_recalculates_discount_without_ai_event() -> None:
     """Verify a price change only recalculates discount without triggering an AI event.
 
@@ -188,4 +251,65 @@ def _result_with_status(
         review_required=review_required,
         research_guardrail=guardrail,
         factor_details=factor_details or {},
+    )
+
+
+class _FilingCandidateLoader:
+    """Deterministic filing seed boundary for selector tests."""
+
+    def __init__(self, *, seeds: tuple[FilingCatalystSeed, ...]) -> None:
+        self.seeds = seeds
+        self.calls: list[tuple[str, datetime]] = []
+
+    def load(
+        self,
+        *,
+        scope_version_id: str,
+        decision_at: datetime,
+    ) -> tuple[FilingCatalystSeed, ...]:
+        self.calls.append((scope_version_id, decision_at))
+        return self.seeds
+
+
+class _Rows:
+    """Small SQLAlchemy-result stand-in for loader unit tests."""
+
+    def __init__(self, values: list[object]) -> None:
+        self._values = values
+
+    def all(self) -> list[object]:
+        return self._values
+
+
+class _FilingLoaderSession:
+    """Context-managed session returning deterministic query rows."""
+
+    def __init__(
+        self,
+        *,
+        prior_payloads: list[dict[str, object]],
+        filing_rows: list[tuple[str, str, datetime]],
+    ) -> None:
+        self.prior_payloads = prior_payloads
+        self.filing_rows = filing_rows
+
+    def __enter__(self) -> _FilingLoaderSession:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def scalars(self, _statement: object) -> _Rows:
+        return _Rows(list(self.prior_payloads))
+
+    def execute(self, _statement: object) -> _Rows:
+        return _Rows(list(self.filing_rows))
+
+
+def _filing_seed(security_id: str, available_at: datetime) -> FilingCatalystSeed:
+    """Build one newly indexed filing seed."""
+    return FilingCatalystSeed(
+        security_id=security_id,
+        filing_event_ids=(f"filing-{security_id}",),
+        latest_available_at=available_at,
     )

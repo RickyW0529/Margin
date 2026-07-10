@@ -97,6 +97,7 @@ def default_tool_catalog(
     *,
     warehouse_repository: object | None = None,
     dashboard_services: object | None = None,
+    firecrawl_adapter: object | None = None,
 ) -> ToolCatalog:
     """Return the default executable tool catalog for configured dependencies."""
     catalog = ToolCatalog()
@@ -122,6 +123,10 @@ def default_tool_catalog(
         }
         for tool_name in handlers:
             catalog.register(_read_only_warehouse_tool_spec(tool_name), handlers[tool_name])
+    if firecrawl_adapter is not None:
+        from margin.agents.tools.firecrawl_tools import register_firecrawl_tools
+
+        register_firecrawl_tools(catalog, firecrawl_adapter)
     return catalog
 
 
@@ -283,6 +288,7 @@ def _indicator_history_json(value: object) -> dict[str, Any]:
             "fetched_at": getattr(value, "fetched_at", None),
             "numeric_value": getattr(value, "numeric_value", None),
             "quality_score": getattr(value, "quality_score", None),
+            "raw_snapshot_id": getattr(value, "raw_snapshot_id", None),
         }
     return _json_safe(data)
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from margin.agent_runtime.models import ContextArtifact
+from margin.agents.context.turn_context import ResolvedTurnContext
 from margin.agents.protocol.models import ContextFact, ContextOmission, ContextPack
 
 CONTEXT_POLICY_VERSION = "context-pack-v1"
@@ -34,6 +35,7 @@ class ContextRouter:
         artifacts: Iterable[ContextArtifact] = (),
         included_capsule_refs: tuple[str, ...] = (),
         included_chat_summary_ref: str | None = None,
+        resolved_turn_context: ResolvedTurnContext | None = None,
     ) -> ContextPack:
         """Build a compact context pack without raw artifact payloads.
 
@@ -105,6 +107,7 @@ class ContextRouter:
             included_artifact_refs=tuple(dict.fromkeys(included_artifact_refs)),
             included_capsule_refs=included_capsule_refs,
             included_chat_summary_ref=included_chat_summary_ref,
+            resolved_turn_context=resolved_turn_context,
             facts=tuple(facts),
             evidence_refs=tuple(dict.fromkeys(evidence_refs)),
             source_refs=tuple(dict.fromkeys(source_refs)),

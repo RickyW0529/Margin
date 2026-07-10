@@ -7,6 +7,7 @@ an opaque safe cursor.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 from margin.dashboard.models import (
@@ -19,6 +20,7 @@ from margin.dashboard.models import (
     ResearchRun,
 )
 from margin.dashboard.repository import MemoryDashboardRepository
+from margin.dashboard.service import DashboardQueryService
 
 DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 
@@ -64,6 +66,71 @@ def test_candidate_list_response_separates_current_and_effective() -> None:
     assert response.items[0].current_review_outcome == "review_deferred"
     assert response.items[0].effective_assessment_id == "assess-old"
     assert response.page_info.has_next_page is True
+
+
+def test_memory_repository_returns_typed_fusion_portfolio_summary() -> None:
+    """The API contract exposes stock/cash weights without parsing run.summary."""
+    repository = MemoryDashboardRepository()
+    run = ResearchRun(
+        run_id="fusion-run",
+        decision_at=DECISION_AT,
+        strategy_id="recommendation_fusion:fusion-1",
+        version_id="scope-1",
+        universe=["000001.SZ"],
+        summary=json.dumps(
+            {
+                "type": "recommendation_fusion",
+                "portfolio_summary": {
+                    "stock_weight": 0.8,
+                    "cash_weight": 0.2,
+                    "max_stock_exposure": 0.8,
+                    "fusion_run_id": "fusion-1",
+                },
+            }
+        ),
+        item_count=1,
+        published_count=1,
+    )
+    repository.add_run(run)
+    repository.add_items(
+        [
+            ResearchItem(
+                item_id="fusion-item",
+                run_id=run.run_id,
+                symbol="000001.SZ",
+                target_weight=0.7,
+                adjusted_weight=0.8,
+                created_at=DECISION_AT,
+            )
+        ]
+    )
+
+    response = repository.list_research_candidates_v2(
+        scope_version_id="scope-1",
+        universe_code="ALL_A",
+        filters=DashboardFilters(),
+        sort=DashboardSort(),
+        cursor=None,
+        limit=50,
+    )
+
+    assert response.portfolio_summary is not None
+    assert response.portfolio_summary.stock_weight == 0.8
+    assert response.portfolio_summary.cash_weight == 0.2
+    assert response.portfolio_summary.fusion_run_id == "fusion-1"
+
+    enriched = DashboardQueryService(
+        repository,
+        quant_profile_loader=lambda _security_id: {"display_name": "平安银行"},
+    ).list_research_candidates_v2(
+        scope_version_id="scope-1",
+        universe_code="ALL_A",
+        filters=DashboardFilters(),
+        sort=DashboardSort(),
+        cursor=None,
+        limit=50,
+    )
+    assert enriched.portfolio_summary == response.portfolio_summary
 
 
 def test_memory_repository_paginates_candidates_with_opaque_cursor() -> None:

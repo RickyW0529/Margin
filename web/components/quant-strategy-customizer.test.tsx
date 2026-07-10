@@ -78,7 +78,7 @@ test("quant customizer saves a no-top-n strategy version for selected pool", asy
     rebalance_frequency: "monthly",
   });
   expect(
-    await screen.findByText("quant-strategy-csi300-123 已保存，激活前不会生效。"),
+    await screen.findByText("策略版本已保存，激活前不会影响线上筛选。"),
   ).toBeInTheDocument();
 });
 

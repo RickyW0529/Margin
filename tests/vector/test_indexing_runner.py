@@ -108,8 +108,9 @@ class FakeVectorRepository:
         self.chunks = []
         self.embeddings = []
         self.audits = []
+        self.links = []
 
-    def upsert_chunks(self, chunks):
+    def upsert_chunks(self, chunks, *, links=None):
         """Store chunks and return the count added.
 
         Args:
@@ -119,6 +120,7 @@ class FakeVectorRepository:
             Any: .
         """
         self.chunks.extend(chunks)
+        self.links.extend(links or [])
         return len(chunks)
 
     def upsert_embeddings(self, items, **metadata):
@@ -181,3 +183,37 @@ def test_indexing_runner_consumes_outbox_and_persists_chunks_and_vectors():
     assert vector_repository.audits[0]["degraded"] is False
     assert news_repository.delivered == [1]
     assert news_repository.failed == []
+
+
+def test_indexing_runner_uses_full_markdown_offsets_and_structure() -> None:
+    """Canonical Markdown chunks must retain global source spans without dropping text."""
+    content = "# 经营情况\n\n" + ("需求持续增长。" * 400)
+    event = make_document_event(
+        source_url="https://example.com/full-report",
+        source_name="exchange",
+        source_level=SourceLevel.L1,
+        title="经营情况",
+        content=content,
+        symbols=["000001.SZ", "600000.SH"],
+        doc_type="filing",
+        published_at=datetime(2026, 6, 18, tzinfo=UTC),
+        available_at=datetime(2026, 6, 18, tzinfo=UTC),
+    )
+    news_repository = FakeNewsRepository(event)
+    vector_repository = FakeVectorRepository()
+    runner = DocumentIndexingRunner(
+        news_repository=news_repository,
+        vector_repository=vector_repository,
+        embedding_provider=FakeEmbeddingProvider(),
+    )
+
+    indexed = runner.run_once()
+
+    assert indexed == len(vector_repository.chunks)
+    assert indexed > 1
+    assert len(vector_repository.links) == indexed * 2
+    for chunk in vector_repository.chunks:
+        assert chunk.quote_span is not None
+        start, end = chunk.quote_span
+        assert event.content[start:end] == chunk.content
+        assert chunk.section == "经营情况"

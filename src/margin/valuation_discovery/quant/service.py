@@ -38,6 +38,12 @@ from margin.valuation_discovery.quant.ml_lifecycle import (
     EXECUTION_BOUNDARY as ML_EXECUTION_BOUNDARY,
 )
 from margin.valuation_discovery.quant.ml_lifecycle import (
+    IMPLEMENTATION as ML_IMPLEMENTATION,
+)
+from margin.valuation_discovery.quant.ml_lifecycle import (
+    LEGACY_STRATEGY_FAMILY as LEGACY_ML_STRATEGY_FAMILY,
+)
+from margin.valuation_discovery.quant.ml_lifecycle import (
     MODEL_FAMILY as ML_MODEL_FAMILY,
 )
 from margin.valuation_discovery.quant.ml_lifecycle import (
@@ -123,7 +129,10 @@ class QuantService:
             config_hash=self._config_hash(),
             status="completed",
         )
-        if _strategy_family(strategy_metadata) == ML_STRATEGY_FAMILY:
+        if _strategy_family(strategy_metadata) in {
+            ML_STRATEGY_FAMILY,
+            LEGACY_ML_STRATEGY_FAMILY,
+        }:
             results = self._run_ml_lifecycle(
                 quant_run=quant_run,
                 snapshot=snapshot,
@@ -202,6 +211,7 @@ class QuantService:
                 filter_result=filter_result.by_security[security_id],
                 scored_row=scored_by_security.get(security_id),
                 config=config,
+                strategy_metadata=strategy_metadata,
             )
             for security_id in _ordered_security_ids(snapshot, cross_section)
         )
@@ -298,6 +308,7 @@ class QuantService:
         filter_result: SecurityFilterResult,
         scored_row: pd.Series | None,
         config: MLLifecycleConfig,
+        strategy_metadata: dict[str, Any],
     ) -> QuantResult:
         """Build an ML lifecycle ``QuantResult`` with serving metadata.
 
@@ -321,8 +332,10 @@ class QuantService:
                 update={
                     "factor_details": {
                         **blocked.factor_details,
-                        "strategy_family": ML_STRATEGY_FAMILY,
-                        "ml_strategy": _empty_ml_strategy(config),
+                        "strategy_family": str(
+                            strategy_metadata.get("strategy_family") or ML_STRATEGY_FAMILY
+                        ),
+                        "ml_strategy": _empty_ml_strategy(config, strategy_metadata),
                     }
                 }
             )
@@ -340,7 +353,7 @@ class QuantService:
             screening_status=screening_status,
             risk_reasons=risk_reasons,
         )
-        ml_strategy = _ml_strategy_details(scored_row, config)
+        ml_strategy = _ml_strategy_details(scored_row, config, strategy_metadata)
         ai_quant_profile = _ml_ai_quant_profile(
             scored_row,
             status=screening_status,
@@ -366,7 +379,9 @@ class QuantService:
                 "name": scored_row.get("name"),
                 "symbol": scored_row.get("security_id"),
                 "industry_id": scored_row.get("industry_id"),
-                "strategy_family": ML_STRATEGY_FAMILY,
+                "strategy_family": str(
+                    strategy_metadata.get("strategy_family") or ML_STRATEGY_FAMILY
+                ),
                 "filter_reasons": [asdict(reason) for reason in filter_result.reasons],
                 "scores": {
                     "ml_lifecycle_score": final_score,
@@ -625,6 +640,7 @@ def _ml_guardrail(
 def _ml_strategy_details(
     row: pd.Series,
     config: MLLifecycleConfig,
+    strategy_metadata: dict[str, Any],
 ) -> dict[str, Any]:
     """Build auditable ML serving details for one security.
 
@@ -636,9 +652,16 @@ def _ml_strategy_details(
         dict[str, Any]: .
     """
     return {
-        "model_family": ML_MODEL_FAMILY,
+        "model_family": str(strategy_metadata.get("model_family") or ML_MODEL_FAMILY),
+        "implementation": str(
+            strategy_metadata.get("implementation") or ML_IMPLEMENTATION
+        ),
         "strategy_version": config.strategy_version,
-        "profile_id": ML_OFFLINE_PROFILE_ID,
+        "profile_id": str(
+            strategy_metadata.get("calibration_report_id")
+            or strategy_metadata.get("profile_id")
+            or ML_OFFLINE_PROFILE_ID
+        ),
         "feature_coverage": _object_dict(row.get("ml_feature_coverage")),
         "score_components": _object_dict(row.get("ml_score_components")),
         "risk_controls": _object_dict(row.get("ml_risk_controls")),
@@ -660,7 +683,10 @@ def _ml_strategy_details(
     }
 
 
-def _empty_ml_strategy(config: MLLifecycleConfig) -> dict[str, Any]:
+def _empty_ml_strategy(
+    config: MLLifecycleConfig,
+    strategy_metadata: dict[str, Any],
+) -> dict[str, Any]:
     """Return ML metadata for hard-filtered securities.
 
     Args:
@@ -670,9 +696,16 @@ def _empty_ml_strategy(config: MLLifecycleConfig) -> dict[str, Any]:
         dict[str, Any]: .
     """
     return {
-        "model_family": ML_MODEL_FAMILY,
+        "model_family": str(strategy_metadata.get("model_family") or ML_MODEL_FAMILY),
+        "implementation": str(
+            strategy_metadata.get("implementation") or ML_IMPLEMENTATION
+        ),
         "strategy_version": config.strategy_version,
-        "profile_id": ML_OFFLINE_PROFILE_ID,
+        "profile_id": str(
+            strategy_metadata.get("calibration_report_id")
+            or strategy_metadata.get("profile_id")
+            or ML_OFFLINE_PROFILE_ID
+        ),
         "feature_coverage": {
             "required_features": [],
             "present_features": 0,
@@ -739,7 +772,7 @@ def _ml_ai_quant_profile(
         if _optional_score(row.get(key)) is not None
     }
     risk_reasons = tuple(ml_strategy.get("risk_controls", {}).get("risk_reasons", ()))
-    hints = ["核对 ML 生命周期信号对应的行业景气和基本面持续性"]
+    hints = ["核对加权生命周期信号对应的行业景气和基本面持续性"]
     if risk_reasons:
         hints.append("复核短期过热、波动或回撤风险是否削弱研究结论")
     return {
@@ -775,7 +808,7 @@ def _ml_reason_summary(
     target_weight = float(ml_strategy.get("target_weight") or 0.0)
     risk_gate = ml_strategy.get("risk_controls", {}).get("risk_gate", "normal")
     return (
-        f"ML lifecycle screen {status.value}: final_score={final_score:.2f}, "
+        f"Weighted lifecycle screen {status.value}: final_score={final_score:.2f}, "
         f"target_weight={target_weight:.4f}, risk_gate={risk_gate}."
     )
 

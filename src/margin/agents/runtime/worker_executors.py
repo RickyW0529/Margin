@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, TypedDict
 
@@ -11,6 +9,7 @@ from langgraph.graph import END, START, StateGraph
 
 from margin.agent_runtime.context_store import ContextArtifact, make_context_artifact
 from margin.agents.context.readiness import CandidateLoadResult, ReadinessStatus
+from margin.agents.context.turn_context import ResolvedTurnContext, resolve_turn_context
 from margin.agents.protocol.models import AgentExecutionStatus, WorkerTaskRequest, WorkerTaskResult
 from margin.agents.runtime.execution_context import (
     WorkerExecutionBundle,
@@ -42,6 +41,7 @@ class DataQuestionWorkerExecutor:
         worker_inputs = financial_metric_worker_inputs(
             current_user_message=context.command.message,
             planner_worker_inputs=request.constraints.get("worker_inputs"),
+            resolved_turn_context=context.command.resolved_turn_context,
         )
         if worker_inputs is None:
             return _financial_metric_clarification_bundle(
@@ -106,221 +106,21 @@ class DataQuestionWorkerExecutor:
         )
 
 
-@dataclass(frozen=True)
-class FinancialMetricRequest:
-    """Current-turn financial metric intent accepted by DataQuestionWorker."""
-
-    user_query: str
-    security_query: str
-    indicator_id: str
-    chart_type: str = "line"
-
-
-_METRIC_TERM_RE = re.compile(
-    r"(?i)(?<![A-Za-z])roe(?:\s*ttm)?(?![A-Za-z])|return\s+on\s+equity|净资产收益率|净资产回报率|净资产回报"
-)
-_CURRENT_USER_MARKER_RE = re.compile(r"(?i)\bcurrent_user\s*:\s*")
-_ROLE_MARKER_RE = re.compile(r"(?im)^\s*(?:system|user|assistant|current_user)\s*:")
-_INLINE_ROLE_MARKER_RE = re.compile(r"(?i)\b(?:system|user|assistant|current_user)\s*:")
-_SECURITY_CODE_RE = re.compile(r"\b(\d{6})(?:\.(SH|SZ|BJ))?\b", flags=re.IGNORECASE)
-_SECURITY_TOKEN_RE = re.compile(
-    r"(?:\d{6}(?:\.(?:SH|SZ|BJ))?|[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z0-9·（）().-]{1,40})",
-    flags=re.IGNORECASE,
-)
-_SECURITY_PREFIXES = (
-    "请帮我看一下",
-    "请帮我查一下",
-    "帮我看一下",
-    "帮我查一下",
-    "我想看一下",
-    "我想看看",
-    "我想查询",
-    "我想查",
-    "我想看",
-    "请问",
-    "麻烦",
-    "帮我",
-    "给我看一下",
-    "给我查一下",
-    "给我看看",
-    "给我",
-    "想看一下",
-    "想看看",
-    "想查询",
-    "想查",
-    "想看",
-    "查看一下",
-    "查一下",
-    "看一下",
-    "查询",
-    "查看",
-    "查查",
-    "看看",
-    "看",
-    "查",
-)
-_SECURITY_STOPWORDS = {
-    "user",
-    "assistant",
-    "current_user",
-    "system",
-    "roe",
-    "ttm",
-    "return",
-    "equity",
-    "净资产收益率",
-    "净资产回报率",
-    "历史记录",
-    "趋势",
-    "指标",
-    "标的",
-    "股票",
-    "请问",
-    "我想",
-    "想看",
-    "查看",
-    "查询",
-}
-
-
 def financial_metric_worker_inputs(
     *,
     current_user_message: str,
     planner_worker_inputs: object | None,
-) -> dict[str, str] | None:
-    """Return safe DataQuestionWorker inputs derived from the current user turn only.
+    resolved_turn_context: ResolvedTurnContext | None = None,
+) -> dict[str, Any] | None:
+    """Return canonical DataQuestionWorker inputs from resolved user state.
 
-    The LLM planner is allowed to choose a worker, but it is not trusted to fill
-    data lookup keys.  This prevents previous assistant replies or whole prompt
-    transcripts from being used as ``security_query``.
+    The planner may choose the worker, but never supplies lookup keys. This
+    compatibility entry point resolves an isolated current turn; the runtime
+    passes its persisted ``ResolvedTurnContext`` via the overload below.
     """
-    current_query = _current_turn_text(current_user_message, max_chars=300)
-    indicator_id = _detect_supported_financial_indicator(current_query)
-    if indicator_id is None:
-        return None
-    security_query = _extract_security_query_from_metric_question(current_query)
-    planner_inputs = planner_worker_inputs if isinstance(planner_worker_inputs, dict) else {}
-    if not security_query:
-        planner_security = _safe_security_query_text(planner_inputs.get("security_query"))
-        if planner_security and planner_security in current_query:
-            security_query = planner_security
-    if not security_query:
-        return None
-    chart_type = _safe_chart_type(planner_inputs.get("chart_type"), current_query=current_query)
-    request = FinancialMetricRequest(
-        user_query=current_query,
-        security_query=security_query,
-        indicator_id=indicator_id,
-        chart_type=chart_type,
-    )
-    return {
-        "user_query": request.user_query,
-        "security_query": request.security_query,
-        "indicator_id": request.indicator_id,
-        "chart_type": request.chart_type,
-    }
-
-
-def _current_turn_text(value: object, *, max_chars: int) -> str:
-    text = str(value or "").strip()
-    if not text:
-        return ""
-    parts = _CURRENT_USER_MARKER_RE.split(text)
-    if len(parts) > 1:
-        text = parts[-1]
-    lines: list[str] = []
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        if re.match(r"(?i)^(?:assistant|system)\s*:", line):
-            continue
-        line = re.sub(r"(?i)^(?:user|current_user)\s*:\s*", "", line).strip()
-        if line:
-            lines.append(line)
-    compact = re.sub(r"\s+", " ", " ".join(lines)).strip()
-    return compact[:max_chars].strip()
-
-
-def _detect_supported_financial_indicator(query: str) -> str | None:
-    if _METRIC_TERM_RE.search(query or ""):
-        return "roe_ttm"
-    return None
-
-
-def _extract_security_query_from_metric_question(query: str) -> str:
-    text = _current_turn_text(query, max_chars=300)
-    if not text:
-        return ""
-    code_match = _SECURITY_CODE_RE.search(text)
-    if code_match is not None:
-        raw_code = code_match.group(1)
-        suffix = code_match.group(2)
-        if suffix:
-            return f"{raw_code}.{suffix.upper()}"
-        if raw_code.startswith(("6", "9")):
-            return f"{raw_code}.SH"
-        if raw_code.startswith(("0", "2", "3")):
-            return f"{raw_code}.SZ"
-        return raw_code
-    metric_match = _METRIC_TERM_RE.search(text)
-    if metric_match is None:
-        return ""
-    before_metric = text[: metric_match.start()]
-    after_metric = text[metric_match.end() :]
-    candidate = _clean_security_candidate(before_metric)
-    if not candidate:
-        candidate = _clean_security_candidate(after_metric)
-    return _last_security_token(candidate)
-
-
-def _clean_security_candidate(value: str) -> str:
-    text = str(value or "")
-    text = _INLINE_ROLE_MARKER_RE.sub(" ", text)
-    text = re.sub(r"[：:，,。；;？?！!、/\\|]+", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    text = text.strip(" 的关于一下这个这只该只股票标的公司")
-    changed = True
-    while changed:
-        changed = False
-        for prefix in _SECURITY_PREFIXES:
-            if text.startswith(prefix):
-                text = text[len(prefix) :].strip()
-                changed = True
-    text = text.strip(" 的关于一下这个这只该只股票标的公司")
-    text = _METRIC_TERM_RE.sub(" ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text[:80]
-
-
-def _last_security_token(value: str) -> str:
-    tokens = [
-        token.strip(" 的关于一下这个这只该只股票标的公司")
-        for token in _SECURITY_TOKEN_RE.findall(value)
-    ]
-    cleaned = [token for token in tokens if token and token.casefold() not in _SECURITY_STOPWORDS]
-    if not cleaned:
-        return ""
-    candidate = cleaned[-1]
-    if _ROLE_MARKER_RE.search(candidate) or len(candidate) > 64:
-        return ""
-    return candidate
-
-
-def _safe_security_query_text(value: object) -> str:
-    text = _current_turn_text(value, max_chars=160)
-    if not text or _ROLE_MARKER_RE.search(text):
-        return ""
-    if _METRIC_TERM_RE.search(text):
-        return _extract_security_query_from_metric_question(text)
-    return _last_security_token(_clean_security_candidate(text))
-
-
-def _safe_chart_type(value: object, *, current_query: str) -> str:
-    raw = str(value or "").casefold()
-    if raw == "bar" or "柱" in current_query:
-        return "bar"
-    return "line"
+    del planner_worker_inputs
+    context = resolved_turn_context or resolve_turn_context(current_user_message)
+    return context.financial_metric_worker_inputs()
 
 
 def _financial_metric_clarification_bundle(

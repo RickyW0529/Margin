@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from margin.agents.cards.domain_cards import DomainAgentCard
+from margin.agents.context.turn_context import ResolvedTurnContext
 from margin.agents.prompts.main_agent import (
     MAIN_AGENT_QNA_PLANNER_V1,
     MAIN_AGENT_SCHEDULED_PLANNER_V1,
@@ -47,6 +48,7 @@ class MainPlanningContext(BaseModel):
     user_goal: str
     context_pack_ref: str
     conversation_context: tuple[dict[str, str], ...] = ()
+    resolved_turn_context: ResolvedTurnContext | None = None
     domain_agent_names: tuple[str, ...]
     domain_agent_catalog: tuple[dict[str, object], ...] = ()
     context_status: tuple[dict[str, object], ...] = ()
@@ -293,6 +295,7 @@ class MainRuntime:
             user_goal=user_goal,
             context_pack_ref=context_pack.context_pack_id,
             conversation_context=tuple(conversation_context[-8:]),
+            resolved_turn_context=context_pack.resolved_turn_context,
             domain_agent_names=tuple(card.name for card in visible_domain_cards),
             domain_agent_catalog=tuple(_card_catalog_item(card) for card in visible_domain_cards),
             context_status=_context_status_from_pack(context_pack),
@@ -336,7 +339,7 @@ class MainRuntime:
                         ),
                         "missing_inputs": list(step.missing_inputs),
                         "user_safe_message": step.user_safe_message
-                        or "当前环境没有开放该能力的可执行 worker/tool。",
+                        or "当前环境没有开放该能力。",
                     }
                 )
                 continue
@@ -361,7 +364,7 @@ class MainRuntime:
                         ),
                         "missing_inputs": [],
                         "user_safe_message": (
-                            "当前可执行 worker 无法产出计划要求的结果类型。"
+                            "当前能力无法产出计划要求的结果类型。"
                         ),
                     }
                 )
@@ -518,10 +521,10 @@ def _build_planning_prompt(
             MAIN_AGENT_SYSTEM_V1,
             planner_text,
             (
-                "Current-turn authority rule: planning_context.user_goal is the "
-                "only current user request. conversation_context is background "
-                "only; never delegate a previous user request when user_goal lacks "
-                "the required target or metric."
+                "Current-turn authority rule: planning_context.user_goal plus "
+                "resolved_turn_context are the only query authority. The resolved "
+                "state contains user-confirmed inherited slots. conversation_context "
+                "is background only and must never supply lookup keys."
             ),
             (
                 "Use each visible capability's input contract to decide whether the "
@@ -584,7 +587,7 @@ def _prune_unavailable_dependency_tasks(
                         + ", ".join(missing_dependencies)
                     ),
                     "missing_inputs": [],
-                    "user_safe_message": "前置 Agent 能力不可执行，已跳过依赖任务。",
+                    "user_safe_message": "当前请求的前置能力不可用，本轮未继续执行。",
                 }
             )
     return (

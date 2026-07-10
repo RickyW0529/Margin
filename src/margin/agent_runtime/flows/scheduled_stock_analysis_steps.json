@@ -42,7 +42,7 @@
       "order": 2,
       "expert_agent": "QuantAgent",
       "skill_id": "run_ml_lifecycle_quant_analysis",
-      "description": "Run the fixed QuantAgent ML lifecycle strategy profile from PIT-safe structured data and publish quant plus Analysis Mart artifacts.",
+      "description": "MLQuantWorker freezes the effective profile, runs the deterministic weighted-signal serving implementation on PIT-safe data, and emits passed candidates with base weights.",
       "required_artifacts": [
         "data_readiness"
       ],
@@ -136,7 +136,7 @@
       "order": 4,
       "expert_agent": "FundamentalAnalystAgent",
       "skill_id": "analyze_fundamental_rag_evidence",
-      "description": "Read scoped RAG evidence for financial reports, prospectuses, announcements, and research materials to produce a frozen fundamental thesis.",
+      "description": "EarningsCatalystWorker reads scoped RAG filings and the prior effective thesis during reporting windows or after a new filing is indexed, then performs counter-evidence WebSearch review.",
       "required_artifacts": [
         "fundamental_target_pool",
         "rag_coverage_report",
@@ -200,7 +200,7 @@
       "order": 6,
       "expert_agent": "FusionResearchAgent",
       "skill_id": "fuse_quant_fundamental_and_sentiment",
-      "description": "Read frozen quant, fundamental, and sentiment artifacts, then publish auditable research priorities and dashboard projection events.",
+      "description": "RecommendationFusionWorker combines MLQuantWorker and EarningsCatalystWorker artifacts, applies risk gates, preserves cash, and only then emits the Dashboard projection event.",
       "required_artifacts": [
         "quant_result",
         "analysis_mart_snapshot",

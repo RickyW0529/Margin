@@ -77,6 +77,9 @@ def test_document_format_router_detects_common_input_formats() -> None:
     assert (
         router.detect(content_type=None, source_url="https://x/report.xlsx") == DocumentFormat.XLSX
     )
+    assert (
+        router.detect(content_type=None, source_url="https://x/deck.pptx") == DocumentFormat.PPTX
+    )
     assert router.detect(content_type="text/csv", source_url=None) == DocumentFormat.CSV
     assert router.detect(content_type="application/json", source_url=None) == DocumentFormat.JSON
     assert router.detect(content_type="text/plain", source_url=None) == DocumentFormat.TEXT
@@ -89,6 +92,7 @@ def test_document_format_router_detects_common_input_formats() -> None:
         ("text/html", "https://example.com/news.html", DocumentFormat.HTML),
         (None, "https://example.com/report.docx", DocumentFormat.DOCX),
         (None, "https://example.com/table.xlsx", DocumentFormat.XLSX),
+        (None, "https://example.com/deck.pptx", DocumentFormat.PPTX),
         ("text/csv", "https://example.com/table.csv", DocumentFormat.CSV),
         ("application/json", "https://example.com/data.json", DocumentFormat.JSON),
         ("text/plain", "https://example.com/article.txt", DocumentFormat.TEXT),

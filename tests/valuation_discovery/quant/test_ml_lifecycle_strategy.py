@@ -74,9 +74,14 @@ def test_ml_lifecycle_strategy_routes_from_snapshot_metadata() -> None:
 
     assert quant_run.strategy_version_id == "ml-lifecycle-v1"
     assert strong.factor_details["strategy_family"] == "ml_lgbm_lifecycle"
-    assert strong.factor_details["ml_strategy"]["model_family"] == "lgbm_lifecycle"
+    assert strong.factor_details["ml_strategy"]["model_family"] == (
+        "deterministic_weighted_signal"
+    )
+    assert strong.factor_details["ml_strategy"]["implementation"] == (
+        "deterministic_weighted_signal_formula_v1"
+    )
     assert strong.factor_details["ml_strategy"]["profile_id"] == (
-        "liquid-large-mid-lgbm-recent-trend80-ddstop-v1"
+        "liquid-large-mid-weighted-signal-trend80-ddstop-v2"
     )
     assert (
         strong.factor_details["ml_strategy"]["portfolio_construction"]["score_temperature"] == 0.2

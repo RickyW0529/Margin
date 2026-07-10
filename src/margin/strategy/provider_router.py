@@ -36,6 +36,7 @@ _PROVIDER_NAME_CATEGORY: dict[str, ProviderCategory] = {
     "vllm": "llm",
     "local": "llm",
     "tavily": "web_search",
+    "firecrawl": "web_search",
     "exa": "web_search",
     "serpapi": "web_search",
     "bing": "web_search",
@@ -114,6 +115,11 @@ _RULES: dict[ProviderCategory, tuple[_ProviderRule, ...]] = {
     ),
     "web_search": (
         _ProviderRule("tavily", "Tavily", re.compile(r"tavily\.com", re.I)),
+        _ProviderRule(
+            "firecrawl",
+            "Firecrawl",
+            re.compile(r"firecrawl\.dev|firecrawl\.com", re.I),
+        ),
         _ProviderRule("exa", "Exa", re.compile(r"exa\.ai", re.I)),
         _ProviderRule("serpapi", "SerpAPI", re.compile(r"serpapi\.com", re.I)),
         _ProviderRule(

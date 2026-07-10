@@ -443,8 +443,10 @@ test("provider settings renders active provider as active after page reload", ()
 
   const section = screen.getByRole("heading", { name: "LLM 配置" }).closest("section");
   expect(section).not.toBeNull();
-  expect(section as HTMLElement).toHaveTextContent("active");
+  expect(section as HTMLElement).toHaveTextContent("已激活");
   expect(within(section as HTMLElement).queryByText("not tested")).not.toBeInTheDocument();
+  expect(within(section as HTMLElement).queryByText("provider-llm-active")).not
+    .toBeInTheDocument();
 });
 
 test("provider settings updates the selected category after activation", async () => {
@@ -502,6 +504,8 @@ test("provider settings updates the selected category after activation", async (
   );
 
   await waitFor(() => expect(activate).toHaveBeenCalledWith("provider-llm-draft"));
-  expect(section as HTMLElement).toHaveTextContent("active");
+  expect(section as HTMLElement).toHaveTextContent("已激活");
   expect(within(section as HTMLElement).queryByText("not tested")).not.toBeInTheDocument();
+  expect(within(section as HTMLElement).queryByText("provider-llm-draft")).not
+    .toBeInTheDocument();
 });

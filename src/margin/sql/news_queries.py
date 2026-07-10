@@ -52,6 +52,16 @@ def unique_document_events() -> Select:
     )
 
 
+def document_event_by_document_id(document_id: str) -> Select:
+    """Return the latest event carrying one canonical document identifier."""
+    return (
+        select(DocumentEventRow)
+        .where(DocumentEventRow.document_id == document_id)
+        .order_by(DocumentEventRow.retrieved_at.desc(), DocumentEventRow.event_id.desc())
+        .limit(1)
+    )
+
+
 def outbox_pending_by_topic(topic: str, limit: int) -> Select:
     """Claim pending outbox messages with SKIP LOCKED.
 

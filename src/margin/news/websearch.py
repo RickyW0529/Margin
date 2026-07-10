@@ -46,10 +46,7 @@ from margin.documents.markdown import DoclingMarkdownConverter
 from margin.documents.pipeline import DocumentNormalizationPipeline, DocumentPipelineRequest
 from margin.news.acquirer import (
     ComplianceError,
-    DocumentParser,
     Downloader,
-    DownloadError,
-    ParseError,
     SnapshotStore,
     SourceRegistry,
 )
@@ -494,6 +491,7 @@ class VerifiedContent(BaseModel):
 
     result: SearchResult
     snapshot: RawSnapshot
+    document_id: str
     title: str
     content: str
 
@@ -741,7 +739,6 @@ class OriginalContentVerifier:
         """
         self._downloader = Downloader(registry, snapshot_store)
         self._snapshot_store = snapshot_store
-        self._parser = DocumentParser()
         self._compliance = ComplianceChecker
         self._normalization_pipeline = normalization_pipeline or DocumentNormalizationPipeline(
             converter=markdown_converter or DoclingMarkdownConverter()
@@ -771,10 +768,11 @@ class OriginalContentVerifier:
                 self._snapshot_store.delete(snapshot)
                 return None
 
+            document_id = f"doc_{snapshot.snapshot_id}"
             normalized = self._normalization_pipeline.normalize(
                 DocumentPipelineRequest(
                     content=content,
-                    document_id=snapshot.snapshot_id,
+                    document_id=document_id,
                     source_url=result.url,
                     content_type=snapshot.content_type,
                 )
@@ -803,10 +801,11 @@ class OriginalContentVerifier:
             return VerifiedContent(
                 result=verified_result,
                 snapshot=snapshot,
+                document_id=document_id,
                 title=title,
                 content=original_content,
             )
-        except (ComplianceError, DownloadError, ParseError, RuntimeError, ValueError):
+        except Exception:  # noqa: BLE001 - acquisition failures must not admit partial evidence
             return None
 
     def verify_batch(
@@ -943,6 +942,7 @@ class WebSearchService:
                 available_at=verified_content.snapshot.downloaded_at,
                 snapshot_id=verified_content.snapshot.snapshot_id,
                 snapshot_hash=verified_content.snapshot.content_hash,
+                document_id=verified_content.document_id,
             )
             events.append(event)
             if self._repository is not None:

@@ -2,11 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  MessageCircle,
-  MonitorUp,
-  Settings,
-} from "lucide-react";
+import { MessageCircle, MonitorUp, Settings } from "lucide-react";
 
 import { LanguageToggle } from "@/components/language-toggle";
 import { useAgentChatSessions } from "@/lib/agent-chat-history";
@@ -35,19 +31,14 @@ export function MobileNavigation() {
       <div className="flex min-w-0 items-center justify-between gap-3">
         <Link
           href="/"
-          className="inline-flex min-w-0 items-center gap-2.5 no-underline"
+          className="min-w-0 text-[15px] font-semibold tracking-tight text-foreground no-underline"
         >
-          <BrandMark className="size-8" />
-          <span className="min-w-0 leading-tight">
-            <span className="block truncate text-[15px] font-semibold tracking-tight text-foreground">
-              Margin
-            </span>
-          </span>
+          Margin
         </Link>
         <LanguageToggle />
       </div>
       <nav
-        className="grid grid-cols-3 gap-1 rounded-xl border border-border/80 bg-card/80 p-1 shadow-xs"
+        className="grid grid-cols-3 gap-1 rounded-xl border border-border bg-card p-1"
         aria-label={t("navSettings")}
       >
         {NAV_ITEMS.map((item) => {
@@ -63,8 +54,8 @@ export function MobileNavigation() {
               className={cn(
                 "flex min-h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg px-1.5 text-xs font-medium no-underline transition-colors duration-150",
                 active
-                  ? "bg-foreground text-background shadow-xs"
-                  : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
               <Icon className="size-3.5 shrink-0" />
@@ -88,105 +79,82 @@ export function Sidebar() {
   } = useAgentChatSessions();
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-[15.5rem] shrink-0 flex-col self-start overflow-y-auto border-r border-sidebar-border bg-sidebar p-4 text-sidebar-foreground md:flex">
-      <Link href="/" className="inline-flex items-center gap-3 no-underline">
-        <BrandMark className="size-8" light />
-        <span className="leading-none">
-          <span className="block text-[15px] font-semibold tracking-tight text-sidebar-accent-foreground">
-            Margin
-          </span>
-          <span className="mt-1 block text-[11px] font-medium tracking-[0.08em] text-sidebar-foreground/55 uppercase">
-            Research
-          </span>
-        </span>
-      </Link>
+    <aside className="sticky top-0 hidden h-screen w-[17rem] shrink-0 flex-col self-start border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-5">
+        <Link
+          href="/"
+          className="px-3 text-lg font-semibold tracking-tight text-sidebar-accent-foreground no-underline"
+        >
+          Margin
+        </Link>
 
-      <nav className="mt-10 grid content-start gap-1" aria-label="main navigation">
-        {NAV_ITEMS.map((item) => {
-          const Icon = item.icon;
-          const active =
-            pathname === item.href ||
-            (item.href !== "/" && pathname.startsWith(`${item.href}/`));
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium no-underline transition-colors duration-150",
-                active
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/75 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
-              )}
-            >
-              <Icon
-                className={cn(
-                  "size-4 shrink-0 transition-colors",
-                  active
-                    ? "text-sidebar-ring"
-                    : "text-sidebar-foreground/45 group-hover:text-sidebar-foreground/80",
-                )}
-              />
-              {t(item.labelKey)}
-            </Link>
-          );
-        })}
-      </nav>
-
-      <div className="mt-10 grid gap-2">
-        <h2 className="px-3 text-[11px] font-medium tracking-[0.12em] text-sidebar-foreground/45 uppercase">
-          {t("navRecent")}
-        </h2>
-        {recentLoading ? (
-          <p className="px-3 py-2 text-[13px] text-sidebar-foreground/40">
-            {t("chatReadingData")}
-          </p>
-        ) : recentError ? (
-          <p className="px-3 py-2 text-[13px] text-sidebar-foreground/40">
-            {t("chatError")}
-          </p>
-        ) : recentSessions.length > 0 ? (
-          <div className="grid gap-0.5">
-            {recentSessions.map((session) => (
+        <nav
+          className="mt-10 grid content-start gap-1"
+          aria-label="main navigation"
+        >
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const active =
+              pathname === item.href ||
+              (item.href !== "/" && pathname.startsWith(`${item.href}/`));
+            return (
               <Link
-                key={session.session_id}
-                className="truncate rounded-lg px-3 py-2 text-[13px] text-sidebar-foreground/70 no-underline transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-                href={`/?chat=${encodeURIComponent(session.session_id)}`}
-                title={session.title}
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium no-underline transition-colors duration-150",
+                  active
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                )}
               >
-                {session.title}
+                <Icon
+                  className={cn(
+                    "size-[1.125rem] shrink-0",
+                    active
+                      ? "text-sidebar-ring"
+                      : "text-sidebar-foreground/40",
+                  )}
+                />
+                {t(item.labelKey)}
               </Link>
-            ))}
-          </div>
-        ) : (
-          <p className="px-3 py-2 text-[13px] leading-relaxed text-sidebar-foreground/40">
-            {t("navRecentEmpty")}
-          </p>
-        )}
+            );
+          })}
+        </nav>
+
+        <div className="mt-10 grid gap-1.5">
+          <h2 className="px-3 text-xs font-medium tracking-wide text-sidebar-foreground/40">
+            {t("navRecent")}
+          </h2>
+          {recentLoading ? (
+            <p className="px-3 py-2 text-sm text-sidebar-foreground/40">
+              {t("chatReadingData")}
+            </p>
+          ) : recentError ? (
+            <p className="px-3 py-2 text-sm text-sidebar-foreground/40">
+              {t("chatError")}
+            </p>
+          ) : recentSessions.length > 0 ? (
+            <div className="grid gap-0.5">
+              {recentSessions.map((session) => (
+                <Link
+                  key={session.session_id}
+                  className="truncate rounded-xl px-3 py-2 text-sm text-sidebar-foreground/65 no-underline transition-colors duration-150 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                  href={`/?chat=${encodeURIComponent(session.session_id)}`}
+                  title={session.title}
+                >
+                  {session.title}
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="px-3 py-2 text-sm text-sidebar-foreground/40">
+              {t("navRecentEmpty")}
+            </p>
+          )}
+        </div>
       </div>
     </aside>
-  );
-}
-
-function BrandMark({
-  className,
-  light = false,
-}: {
-  className?: string;
-  light?: boolean;
-}) {
-  return (
-    <span
-      className={cn(
-        "grid place-items-center rounded-xl shadow-xs",
-        light
-          ? "bg-sidebar-primary text-sidebar-primary-foreground"
-          : "bg-foreground text-background",
-        className,
-      )}
-      aria-hidden="true"
-    >
-      <span className="text-[13px] font-semibold tracking-tight">M</span>
-    </span>
   );
 }

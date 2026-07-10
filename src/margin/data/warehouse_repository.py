@@ -206,6 +206,7 @@ class IndicatorHistoryValue:
     fetched_at: datetime
     numeric_value: Decimal
     quality_score: Decimal
+    raw_snapshot_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -478,6 +479,7 @@ class SQLAlchemyWarehouseRepository:
                 fetched_at=row.fetched_at,
                 numeric_value=row.numeric_value,
                 quality_score=row.quality_score,
+                raw_snapshot_id=row.raw_snapshot_id,
             )
             for row in rows
         ]

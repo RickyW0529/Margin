@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from margin.agents.context.turn_context import ResolvedTurnContext
 from margin.core.hashing import stable_json_hash
 
 PROTOCOL_VERSION = "margin-a2a-v1"
@@ -111,6 +112,7 @@ class ContextPack(BaseModel):
     included_artifact_refs: tuple[str, ...] = ()
     included_capsule_refs: tuple[str, ...] = ()
     included_chat_summary_ref: str | None = None
+    resolved_turn_context: ResolvedTurnContext | None = None
     facts: tuple[ContextFact, ...]
     evidence_refs: tuple[str, ...] = ()
     source_refs: tuple[str, ...] = ()

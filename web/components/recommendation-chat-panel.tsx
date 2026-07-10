@@ -6,12 +6,12 @@
 
 import {
   ArrowUp,
+  BookOpenText,
   Check,
   CircleAlert,
   Clock3,
   LoaderCircle,
   PanelRight,
-  Plus,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -24,6 +24,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { EvidenceReader } from "@/components/evidence-reader";
+import { MarkdownContent } from "@/components/markdown-content";
 import { Textarea } from "@/components/ui/textarea";
 import { notifyAgentChatSessionsChanged } from "@/lib/agent-chat-history";
 import {
@@ -62,10 +64,24 @@ type ChatDisplayMessage = {
   role: "assistant" | "user";
 };
 
+type ActiveEvidence = {
+  detailUrl: string | null;
+  evidenceId: string;
+};
+
 function formatReferenceLabel(
   reference: Record<string, string>,
   language: UiLanguage,
 ) {
+  if (reference.type === "warehouse_fact") {
+    return reference.title ?? reference.label ?? (language === "zh" ? "数据仓库事实" : "Warehouse fact");
+  }
+  if (reference.type === "document_evidence" || reference.evidence_id) {
+    const readableLabel = reference.label && !/^ev[_:-]/i.test(reference.label)
+      ? reference.label
+      : null;
+    return reference.title ?? readableLabel ?? (language === "zh" ? "文档证据" : "Document evidence");
+  }
   const api = reference.api ?? "";
   if (api.includes("/api/v1/research/items")) {
     return language === "zh" ? "公司详情" : "Company detail";
@@ -73,7 +89,7 @@ function formatReferenceLabel(
   if (api.includes("/api/v1/research")) {
     return language === "zh" ? "推荐列表" : "Recommendation list";
   }
-  return reference.title ?? (language === "zh" ? "证据来源" : "Evidence source");
+  return reference.title ?? reference.label ?? (language === "zh" ? "证据来源" : "Evidence source");
 }
 
 /** Renders the first-screen Q&A entry backed by read-only recommendation data. */
@@ -251,19 +267,14 @@ export function RecommendationChatPanel({
   return (
     <section
       aria-label={t("navAsk")}
-      className="relative grid h-[calc(100vh-3.5rem)] grid-rows-[minmax(0,1fr)_auto]"
+      className="relative grid h-[calc(100dvh-6.5rem)] grid-rows-[minmax(0,1fr)_auto] md:h-[calc(100dvh-3.5rem)]"
     >
       {!hasConversation ? (
-        <div className="grid min-h-0 place-items-center px-5 pb-12 pt-24 md:px-10">
-          <div className="mx-auto grid w-full max-w-3xl gap-10 text-center">
-            <div className="grid justify-items-center gap-4">
-              <p className="text-[11px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
-                Margin Research
-              </p>
-              <h1 className="text-display max-w-2xl text-[2rem] leading-[1.15] text-foreground md:text-[2.75rem]">
-                {t("homeTitle")}
-              </h1>
-            </div>
+        <div className="grid min-h-0 place-items-center px-5 pb-12 pt-16 md:px-10">
+          <div className="mx-auto grid w-full max-w-2xl gap-8">
+            <h1 className="text-center text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
+              {t("homeTitle")}
+            </h1>
             <ChatComposer
               busy={busy}
               message={message}
@@ -275,8 +286,8 @@ export function RecommendationChatPanel({
           </div>
         </div>
       ) : (
-        <div className="min-h-0 overflow-y-auto px-5 pb-40 pt-16 md:px-10 md:pb-44 md:pt-20">
-          <div className="mx-auto grid min-h-full w-full max-w-3xl content-start gap-7">
+        <div className="min-h-0 overflow-y-auto px-5 pb-40 pt-10 md:px-10 md:pb-44 md:pt-12">
+          <div className="mx-auto grid min-h-full w-full max-w-2xl content-start gap-6">
             {loadingSession ? (
               <AssistantBlock>
                 <p className="text-base leading-8 text-foreground">
@@ -308,10 +319,11 @@ export function RecommendationChatPanel({
 
             {busy ? (
               <AssistantBlock>
-                <p className="text-base leading-8 text-foreground">
+                <div className="flex items-center gap-3 text-base text-foreground">
+                  <span className="size-2 animate-pulse rounded-full bg-accent" />
                   {t("chatThinking")}
-                </p>
-                <p className="mt-7 text-base text-muted-foreground">
+                </div>
+                <p className="mt-4 text-[15px] text-muted-foreground">
                   {t("chatReadingData")}
                 </p>
               </AssistantBlock>
@@ -319,7 +331,7 @@ export function RecommendationChatPanel({
 
             {submitError ? (
               <AssistantBlock>
-                <p className="text-base leading-8 text-negative" role="alert">
+                <p className="text-[15px] leading-8 text-negative" role="alert">
                   {submitError}
                 </p>
               </AssistantBlock>
@@ -327,6 +339,7 @@ export function RecommendationChatPanel({
 
             {activityState ? (
               <ChatActivityDock
+                language={language}
                 state={activityState}
                 onOpen={() => setActivityPanelOpen(true)}
               />
@@ -338,14 +351,15 @@ export function RecommendationChatPanel({
       <Sheet open={activityPanelOpen} onOpenChange={setActivityPanelOpen}>
         <SheetContent side="right" className="max-w-md">
           <SheetHeader>
-            <p className="text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-              Timeline
-            </p>
-            <SheetTitle>思考活动</SheetTitle>
+            <SheetTitle>{language === "zh" ? "思考活动" : "Activity"}</SheetTitle>
             <SheetDescription>
               {activityState === "thinking"
-                ? "正在规划并读取上下文"
-                : "本轮回答的 Agent 协作轨迹"}
+                ? language === "zh"
+                  ? "正在规划并读取上下文"
+                  : "Planning and reading context"
+                : language === "zh"
+                  ? "本轮回答的协作轨迹"
+                  : "Auditable collaboration trace for this answer"}
             </SheetDescription>
           </SheetHeader>
           <SheetBody>
@@ -355,7 +369,9 @@ export function RecommendationChatPanel({
               <QnaActivityLine language={language} response={latestActivityResponse} />
             ) : (
               <p className="rounded-2xl border border-border/80 bg-muted/30 p-4 text-sm text-muted-foreground">
-                暂无可展示的思考活动。
+                {language === "zh"
+                  ? "暂无可展示的思考活动。"
+                  : "No activity is available for this answer."}
               </p>
             )}
           </SheetBody>
@@ -363,7 +379,7 @@ export function RecommendationChatPanel({
       </Sheet>
 
       {hasConversation ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-background via-background/95 to-transparent px-5 pb-6 pt-20 md:px-10">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 px-5 py-5 backdrop-blur-sm md:px-10">
           <ChatComposer
             busy={busy}
             message={message}
@@ -381,7 +397,7 @@ export function RecommendationChatPanel({
 function UserMessageBubble({ message }: { message: string }) {
   return (
     <div className="flex justify-end">
-      <div className="max-w-[82%] rounded-2xl rounded-br-md bg-foreground px-4 py-3 text-[15px] leading-relaxed text-background shadow-xs md:max-w-[36rem]">
+      <div className="max-w-[88%] rounded-2xl bg-foreground px-5 py-3.5 text-base leading-7 text-background md:max-w-[36rem]">
         {message}
       </div>
     </div>
@@ -397,24 +413,45 @@ function ChatMessageBubble({
   language: UiLanguage;
   message: ChatDisplayMessage;
 }) {
+  const [activeEvidence, setActiveEvidence] = useState<ActiveEvidence | null>(null);
   if (message.role === "user") {
     return <UserMessageBubble message={message.content} />;
   }
   return (
     <AssistantBlock>
-      <p className="text-[15px] leading-8 text-foreground md:text-base md:leading-8">
-        {message.content}
-      </p>
+      <MarkdownContent content={message.content} />
       {message.response ? (
         <div className="mt-5 grid gap-3 text-sm text-muted-foreground">
           {message.response.references.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
+            <div
+              aria-label={language === "zh" ? "回答证据" : "Answer evidence"}
+              className="flex flex-wrap gap-2"
+            >
               {message.response.references.map((reference, index) => {
                 const label = formatReferenceLabel(reference, language);
+                const evidenceId = reference.evidence_id ?? reference.fact_id;
+                if (evidenceId) {
+                  return (
+                    <button
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground shadow-xs transition-colors hover:border-accent/35 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      key={`${evidenceId}-${index}`}
+                      onClick={() =>
+                        setActiveEvidence({
+                          detailUrl: reference.detail_url ?? null,
+                          evidenceId,
+                        })
+                      }
+                      type="button"
+                    >
+                      <BookOpenText className="size-3.5 text-accent" />
+                      {label}
+                    </button>
+                  );
+                }
                 return (
                   <span
                     key={`${label}-${index}`}
-                    className="rounded-full border border-border/80 bg-muted/60 px-2.5 py-1 text-[11px] font-medium tracking-tight text-muted-foreground"
+                    className="rounded-md bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
                   >
                     {label}
                   </span>
@@ -428,6 +465,16 @@ function ChatMessageBubble({
           />
         </div>
       ) : null}
+      <EvidenceReader
+        detailUrl={activeEvidence?.detailUrl}
+        evidenceId={activeEvidence?.evidenceId ?? null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setActiveEvidence(null);
+          }
+        }}
+        open={activeEvidence !== null}
+      />
     </AssistantBlock>
   );
 }
@@ -596,9 +643,11 @@ function LineChartArtifact({ detail }: { detail: AgentArtifactDetail }) {
 }
 
 function ChatActivityDock({
+  language,
   onOpen,
   state,
 }: {
+  language: UiLanguage;
   onOpen: () => void;
   state: "completed" | "thinking" | null;
 }) {
@@ -609,7 +658,7 @@ function ChatActivityDock({
   return (
     <div className="max-w-[min(100%,56rem)]">
       <button
-        aria-label="查看思考活动"
+        aria-label={language === "zh" ? "查看思考活动" : "View activity"}
         className="inline-flex items-center gap-2 py-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         type="button"
         onClick={onOpen}
@@ -621,10 +670,14 @@ function ChatActivityDock({
             <PanelRight className="size-4" />
           )}
         </span>
-        <span className="font-medium">查看思考活动</span>
+        <span className="font-medium">
+          {language === "zh" ? "查看思考活动" : "View activity"}
+        </span>
         <span aria-hidden="true">·</span>
         <span className={cn("text-xs", thinking ? "text-accent" : "text-muted-foreground")}>
-          {thinking ? "正在思考" : "思考完成"}
+          {thinking
+            ? language === "zh" ? "正在思考" : "Thinking"
+            : language === "zh" ? "思考完成" : "Completed"}
         </span>
       </button>
     </div>
@@ -656,7 +709,7 @@ function ThinkingActivityLine({ language }: { language: UiLanguage }) {
           {language === "zh" ? "本次活动" : "Activity"}
         </p>
         <span className="rounded-full bg-accent/10 px-2 py-1 text-[11px] text-accent">
-          正在思考
+          {language === "zh" ? "正在思考" : "Thinking"}
         </span>
       </div>
       <div className="grid">
@@ -680,30 +733,40 @@ function QnaActivityLine({
   language: UiLanguage;
   response: MainAgentQnaResponse;
 }) {
-  const rows = [
-    {
-      caption:
-        language === "zh"
-          ? "读取上下文并规划本次回答"
-          : "Read context and planned this answer",
-      id: "main-agent-plan",
-      label: formatAgentName("MainAgent", language),
-      skill: language === "zh" ? "上下文规划" : "context_planning",
-      status: "planned",
-      state: "completed" as const,
-    },
-    ...response.agent_trace.steps.map((step) => ({
-      caption:
-        language === "zh"
-          ? "执行专家步骤并返回产物"
-          : "Executed expert step and returned artifacts",
-      id: step.step_id,
-      label: formatAgentName(step.expert_agent_name, language),
-      skill: step.skill_id,
-      status: step.status,
-      state: qnaStepState(step.status),
-    })),
-  ];
+  const activities = response.agent_trace.activities ?? [];
+  const rows = activities.length > 0
+    ? activities.map((activity) => ({
+        caption: activitySummaryLabel(activity, language),
+        id: activity.activity_id,
+        label: formatAgentName(activity.actor, language),
+        skill: activityActionLabel(activity.action, activity.stage, language),
+        status: activity.status,
+        state: qnaStepState(activity.status),
+      }))
+    : [
+        {
+          caption:
+            language === "zh"
+              ? "读取上下文并规划本次回答"
+              : "Read context and planned this answer",
+          id: "main-agent-plan",
+          label: formatAgentName("MainAgent", language),
+          skill: language === "zh" ? "上下文规划" : "Context planning",
+          status: "planned",
+          state: "completed" as const,
+        },
+        ...response.agent_trace.steps.map((step) => ({
+          caption:
+            language === "zh"
+              ? "执行专家步骤并返回可验证产物"
+              : "Executed an expert step and returned verifiable artifacts",
+          id: step.step_id,
+          label: formatAgentName(step.expert_agent_name, language),
+          skill: activityActionLabel(step.skill_id, "execution", language),
+          status: step.status,
+          state: qnaStepState(step.status),
+        })),
+      ];
 
   return (
     <section
@@ -772,30 +835,47 @@ function QnaActivityRow({
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-sm font-medium text-foreground">{row.label}</h3>
           <span className={cn("rounded-full px-2 py-0.5 text-[11px]", tone.badge)}>
-            {qnaActivityStatusText(row.state)}
+            {qnaActivityStatusText(row.state, language)}
           </span>
         </div>
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
           {row.caption}
         </p>
-        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-          <span className="rounded border border-border bg-muted px-2 py-1">
-            {formatActivitySkill(row.skill, language)}
-          </span>
-          <span
-            className={cn(
-              "rounded border px-2 py-1",
-              row.state === "failed"
-                ? "border-negative/20 bg-negative-soft text-negative"
-                : "border-border bg-muted",
-            )}
-          >
+        <p className="mt-2 text-[11px] font-medium text-accent">{row.skill}</p>
+        {row.state === "failed" ? (
+          <p className="mt-2 text-[11px] text-negative">
             {formatActivityStatusDetail(row.status, row.state, language)}
-          </span>
-        </div>
+          </p>
+        ) : null}
       </div>
     </article>
   );
+}
+
+function activityActionLabel(
+  action: string,
+  stage: string,
+  language: UiLanguage,
+): string {
+  const labels: Record<string, Record<UiLanguage, string>> = {
+    answer_financial_metric: { en: "Query financial metrics", zh: "查询财务指标" },
+    answer_general_qna: { en: "Synthesize answer", zh: "整理回答" },
+    answer_research_question: { en: "Review research data", zh: "复核研究数据" },
+    context_planning: { en: "Resolve context", zh: "解析上下文" },
+    final_validation: { en: "Validate evidence and output", zh: "校验依据与输出" },
+    planning: { en: "Plan task", zh: "规划任务" },
+  };
+  const normalized = action.trim().toLowerCase();
+  if (labels[normalized]) {
+    return labels[normalized][language];
+  }
+  if (stage === "validation") {
+    return language === "zh" ? "校验结果" : "Validate result";
+  }
+  if (stage === "planning") {
+    return language === "zh" ? "规划任务" : "Plan task";
+  }
+  return prettifyActivityIdentifier(action);
 }
 
 function ChatComposer({
@@ -815,24 +895,16 @@ function ChatComposer({
 }) {
   return (
     <form
-      className="pointer-events-auto mx-auto grid w-full max-w-3xl gap-3"
+      className="pointer-events-auto mx-auto grid w-full max-w-2xl gap-3"
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
       }}
     >
-      <div className="flex min-h-[3.75rem] items-end gap-2 rounded-2xl border border-border/90 bg-card px-3 py-2.5 shadow-md ring-1 ring-black/[0.02]">
-        <button
-          aria-label={t("chatAttach")}
-          className="mb-0.5 grid size-9 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground disabled:opacity-40"
-          disabled={busy}
-          type="button"
-        >
-          <Plus className="size-4" />
-        </button>
+      <div className="flex min-h-14 items-end gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-xs">
         <Textarea
           aria-label={t("chatLabel")}
-          className="max-h-40 min-h-10 flex-1 resize-none border-0 bg-transparent px-0 py-2 text-[15px] leading-6 text-foreground shadow-none outline-none placeholder:text-muted-foreground/75 focus-visible:ring-0"
+          className="max-h-44 min-h-11 flex-1 resize-none border-0 bg-transparent px-0 py-2.5 text-base leading-7 text-foreground shadow-none outline-none placeholder:text-muted-foreground focus-visible:ring-0"
           disabled={busy}
           placeholder={placeholder}
           value={message}
@@ -846,7 +918,7 @@ function ChatComposer({
         />
         <button
           aria-label={t("chatSend")}
-          className="mb-0.5 grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground shadow-xs transition-all duration-150 hover:bg-primary/90 active:scale-[0.98] disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none"
+          className="mb-0.5 grid size-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground transition-colors duration-150 hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
           disabled={busy || !message.trim()}
           type="submit"
         >
@@ -857,7 +929,7 @@ function ChatComposer({
           )}
         </button>
       </div>
-      <p className="text-center text-[11px] leading-relaxed text-muted-foreground/80">
+      <p className="text-center text-xs text-muted-foreground">
         {t("chatDisclaimer")}
       </p>
     </form>
@@ -866,7 +938,7 @@ function ChatComposer({
 
 function AssistantBlock({ children }: { children: ReactNode }) {
   return (
-    <div className="max-w-[min(100%,40rem)] text-left">
+    <div className="max-w-[min(100%,44rem)] text-left text-base leading-7">
       {children}
     </div>
   );
@@ -889,9 +961,13 @@ function formatAgentName(agentName: string, language: UiLanguage): string {
     CodeSandboxAgent: { en: "Code sandbox", zh: "代码沙箱" },
     DataAnalystAgent: { en: "Data analyst", zh: "数据分析师" },
     DataInspectionAgent: { en: "Data check", zh: "数据检查" },
+    DataQuestionWorker: { en: "Data query", zh: "数据查询" },
+    EarningsCatalystWorker: { en: "Earnings catalyst", zh: "财报催化研究" },
     MainAgent: { en: "Research agent", zh: "研究智能体" },
+    MLQuantWorker: { en: "ML quant", zh: "ML 量化" },
     NewsAcquisitionAgent: { en: "News research", zh: "新闻获取" },
     QuantAgent: { en: "Quant analysis", zh: "量化分析" },
+    RecommendationFusionWorker: { en: "Recommendation fusion", zh: "推荐融合" },
     StockAnalystAgent: { en: "Stock analyst", zh: "股票分析师" },
   };
   return labels[agentName]?.[language] ?? agentName;
@@ -923,26 +999,37 @@ function QnaActivityIcon({
 
 function qnaActivityStatusText(
   state: "completed" | "failed" | "pending",
+  language: UiLanguage,
 ): string {
   if (state === "completed") {
-    return "已完成";
+    return language === "zh" ? "已完成" : "Completed";
   }
   if (state === "failed") {
-    return "失败";
+    return language === "zh" ? "失败" : "Failed";
   }
-  return "处理中";
+  return language === "zh" ? "处理中" : "In progress";
 }
 
-function formatActivitySkill(skill: string, language: UiLanguage): string {
-  const labels: Record<string, Record<UiLanguage, string>> = {
-    answer_research_question: { en: "Generate answer", zh: "生成回答" },
-    context_planning: { en: "Context planning", zh: "上下文规划" },
-    data_question: { en: "Analyze data", zh: "分析数据" },
-    evidence_lookup: { en: "Check evidence", zh: "核验证据" },
-    news_review: { en: "Review news", zh: "舆情复核" },
-    quant_review: { en: "Review quant result", zh: "量化复核" },
-  };
-  return labels[skill]?.[language] ?? prettifyActivityIdentifier(skill);
+function activitySummaryLabel(
+  activity: NonNullable<
+    MainAgentQnaResponse["agent_trace"]["activities"]
+  >[number],
+  language: UiLanguage,
+): string {
+  if (language === "zh") {
+    return activity.summary;
+  }
+  if (activity.stage === "planning") {
+    return activity.status === "succeeded"
+      ? "Created an execution plan from the current question and resolved context."
+      : "Could not find a verifiable execution path; diagnostics remain in the audit log.";
+  }
+  if (activity.stage === "validation") {
+    return "The step did not produce a complete verifiable result; diagnostics remain in the audit log.";
+  }
+  return activity.status === "succeeded"
+    ? "Completed the step and passed structured validation."
+    : "The step did not complete; its retryable state was recorded in the activity log.";
 }
 
 function formatActivityStatusDetail(

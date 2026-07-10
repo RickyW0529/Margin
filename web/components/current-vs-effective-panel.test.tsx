@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe("CurrentVsEffectivePanel", () => {
-  it("distinguishes deferred current review from valid carry-forward", () => {
+  it("distinguishes deferred current review from a stale effective thesis", () => {
     render(
       <LanguageProvider>
         <CurrentVsEffectivePanel
@@ -23,7 +23,6 @@ describe("CurrentVsEffectivePanel", () => {
             reason: "news_target_incomplete",
           }}
           effectiveAssessment={{
-            assessment_id: "assess-old",
             freshness: "stale",
           }}
         />
@@ -31,7 +30,9 @@ describe("CurrentVsEffectivePanel", () => {
     );
 
     expect(screen.getByText("本轮复核：延期")).toBeInTheDocument();
-    expect(screen.getByText("当前有效结论：assess-old")).toBeInTheDocument();
-    expect(screen.getByText("news_target_incomplete")).toBeInTheDocument();
+    expect(screen.getByText("当前有效结论：已过期")).toBeInTheDocument();
+    expect(
+      screen.getByText("本轮复核所需新闻尚未齐全。"),
+    ).toBeInTheDocument();
   });
 });

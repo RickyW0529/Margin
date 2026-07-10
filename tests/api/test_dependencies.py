@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from uuid import uuid4
 
 import margin.api.dependencies as dependencies
@@ -155,6 +156,24 @@ def test_runtime_factory_dependency_uses_active_versioned_config(
 
     assert runtime.config_version_id == "provider-llm-dependency-v1"
     engine.dispose()
+
+
+def test_optional_firecrawl_adapter_uses_active_runtime_descriptor() -> None:
+    """Agent dependency wiring should expose only a Firecrawl websearch adapter."""
+    firecrawl = SimpleNamespace(
+        descriptor=SimpleNamespace(name="firecrawl_websearch")
+    )
+    factory = SimpleNamespace(
+        build_websearch=lambda: SimpleNamespace(adapter=firecrawl)
+    )
+
+    assert dependencies._optional_firecrawl_adapter(factory) is firecrawl
+
+    tavily = SimpleNamespace(descriptor=SimpleNamespace(name="tavily_websearch"))
+    non_firecrawl_factory = SimpleNamespace(
+        build_websearch=lambda: SimpleNamespace(adapter=tavily)
+    )
+    assert dependencies._optional_firecrawl_adapter(non_firecrawl_factory) is None
 
 
 def test_provider_health_dependency_allows_minimax_llm_host() -> None:

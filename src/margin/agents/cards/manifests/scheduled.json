@@ -17,7 +17,7 @@
       "name": "QuantExpertAgent",
       "version": "2.0",
       "domain": "quant",
-      "description": "Plans and reviews scheduled valuation-refresh work.",
+      "description": "Dispatches the durable ML quant, earnings-catalyst, recommendation-fusion, and final Dashboard pipeline.",
       "worker_agent_names": ["ValuationRefreshWorker"],
       "required_output_types": ["quant_result"],
       "data_access_policy": ["read_analysis_mart"],
@@ -52,10 +52,10 @@
       "name": "ValuationRefreshWorker",
       "version": "2.0",
       "domain": "quant",
-      "description": "Starts valuation discovery through an audited tool.",
+      "description": "Starts the durable recommendation pipeline; MLQuantWorker and EarningsCatalystWorker execute as separate recoverable steps before fusion.",
       "skills": [{
         "skill_id": "start_valuation_refresh",
-        "description": "Start the configured valuation refresh and return a run receipt.",
+        "description": "Start the configured recommendation refresh and return its durable run receipt; no Dashboard result is published at dispatch time.",
         "input_artifact_types": ["context_pack", "data_readiness"],
         "output_artifact_types": ["valuation_refresh", "quant_result", "worker_activity"],
         "tool_allowlist": ["valuation.start_refresh"]

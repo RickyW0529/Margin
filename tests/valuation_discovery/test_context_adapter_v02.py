@@ -99,6 +99,7 @@ def test_context_builder_freezes_quant_news_evidence_and_previous_state(
         trigger_type=TargetTriggerType.REVIEW_DUE,
         decision_at=DECISION_AT,
         priority=120,
+        filing_event_ids=("filing-discovered",),
     )
 
     [context_id] = adapter.build(
@@ -119,6 +120,7 @@ def test_context_builder_freezes_quant_news_evidence_and_previous_state(
     assert payload["news_context_bundle_id"] == "bundle-1"
     assert payload["evidence_package_id"] == "package-1"
     assert payload["evidence_ids"] == ["evidence-1"]
+    assert payload["new_filing_document_ids"] == ["filing-discovered", "event-1"]
     assert payload["quant_ai_profile"]["scores"]["manual_all_a_score"] == 78.5
     assert payload["quant_ai_profile"]["raw_factors"]["market_cap"] == 120_000_000_000.0
     assert payload["analysis_snapshot_id"].startswith("asnap_")

@@ -388,8 +388,9 @@ function ProviderCategorySection({
   onSave,
   onTest,
 }: ProviderCategorySectionProps) {
-  const statusLabel =
-    health?.status ?? (provider?.lifecycle === "active" ? "active" : "not tested");
+  const statusLabel = health
+    ? healthStatusLabel(health.status)
+    : providerLifecycleLabel(provider?.lifecycle);
   const providerOptions = providerPresetOptions(category.id);
   const selectedPreset = providerPresetForId(category.id, draft.providerId);
   const isCustomProvider = selectedPreset?.isCustom ?? detection.isCustom;
@@ -418,14 +419,20 @@ function ProviderCategorySection({
             {category.title}
           </h2>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {provider?.lifecycle ?? "未保存"} · {provider?.version_id ?? "new"}
+            {providerLifecycleLabel(provider?.lifecycle)} ·{" "}
+            {detection.label}
           </p>
         </div>
         <div className="flex min-w-0 shrink-0 flex-wrap justify-end gap-2">
           <Badge tone={detection.isCustom ? "muted" : "positive"}>
             {detection.label}
           </Badge>
-          <Badge tone={healthTone(statusLabel)}>
+          <Badge
+            tone={healthTone(
+              health?.status ??
+                (provider?.lifecycle === "active" ? "active" : "not_tested"),
+            )}
+          >
             {statusLabel}
           </Badge>
         </div>
@@ -516,7 +523,10 @@ function ProviderCategorySection({
 
       {health ? (
         <p className="min-w-0 truncate text-xs text-muted-foreground">
-          {health.status} · {health.latency_ms ?? "--"} ms
+          {healthStatusLabel(health.status)}
+          {typeof health.latency_ms === "number"
+            ? ` · ${health.latency_ms} ms`
+            : ""}
         </p>
       ) : null}
       {error ? (
@@ -573,6 +583,32 @@ function chooseProviderFromSelection(
     }
   }
   return chooseProviderForCategory(providers, category);
+}
+
+function providerLifecycleLabel(lifecycle: string | null | undefined): string {
+  if (!lifecycle) {
+    return "未保存";
+  }
+  const labels: Record<string, string> = {
+    active: "已激活",
+    archived: "已归档",
+    deprecated: "已停用",
+    draft: "草稿",
+    review: "待审核",
+  };
+  return labels[lifecycle] ?? "已保存";
+}
+
+function healthStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    active: "已激活",
+    degraded: "降级",
+    failed: "失败",
+    not_tested: "未测试",
+    ok: "正常",
+    unhealthy: "异常",
+  };
+  return labels[status] ?? "未知";
 }
 
 function providerSummaryFromRecord(

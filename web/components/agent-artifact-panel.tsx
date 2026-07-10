@@ -94,18 +94,10 @@ export function AgentArtifactPanel({
             key={artifact.artifact_id}
             className="overflow-hidden rounded-md border border-border bg-card text-foreground"
           >
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-3 py-2">
-              <div className="grid gap-0.5">
-                <h3 className="text-sm font-medium">
-                  {formatArtifactType(artifact.artifact_type, language)}
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  {artifact.producer_agent}
-                </p>
-              </div>
-              <code className="max-w-full truncate rounded border border-border bg-background px-2 py-1 text-[11px] text-muted-foreground">
-                {artifact.payload_hash}
-              </code>
+            <div className="border-b border-border bg-muted/40 px-3 py-2">
+              <h3 className="text-sm font-medium">
+                {formatArtifactType(artifact.artifact_type, language)}
+              </h3>
             </div>
             <div className="p-3">
               {state.status === "loading" ? (

@@ -11,12 +11,9 @@ import { useLanguage, type UiLanguage } from "@/lib/i18n";
 type CurrentReview = {
   outcome?: unknown;
   reason?: unknown;
-  run_id?: unknown;
-  workflow_run_id?: unknown;
 };
 
 type EffectiveAssessment = {
-  assessment_id?: unknown;
   freshness?: unknown;
   stale_reason?: unknown;
 };
@@ -34,21 +31,13 @@ export function CurrentVsEffectivePanel({
   const { language, t } = useLanguage();
   const outcome = text(currentReview?.outcome) || "unknown";
   const reason = text(currentReview?.reason);
-  const assessmentId = text(effectiveAssessment?.assessment_id) || t("currentNoAssessment");
   const freshness = text(effectiveAssessment?.freshness) || "unknown";
   const staleReason = text(effectiveAssessment?.stale_reason);
 
   return (
     <Card aria-labelledby="current-effective-title">
       <CardHeader>
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-accent">
-            {t("currentStateEyebrow")}
-          </p>
-          <CardTitle id="current-effective-title" className="mt-1">
-            {t("currentStateTitle")}
-          </CardTitle>
-        </div>
+        <CardTitle id="current-effective-title">{t("currentStateTitle")}</CardTitle>
         <Badge tone={freshnessTone(freshness)}>
           {freshnessLabel(freshness, language)}
         </Badge>
@@ -58,25 +47,23 @@ export function CurrentVsEffectivePanel({
           <strong className="text-sm font-semibold text-foreground">
             {t("currentReview")}：{outcomeLabel(outcome, language)}
           </strong>
-          <span className="text-xs text-muted-foreground">
-            {reason || t("currentNoReason")}
+          <span className="text-xs leading-relaxed text-muted-foreground">
+            {reason ? humanizeReason(reason, language) : t("currentNoReason")}
           </span>
-          {text(currentReview?.workflow_run_id) ? (
-            <span className="text-xs text-muted-foreground">
-              {t("currentWorkflow")} {text(currentReview?.workflow_run_id)}
-            </span>
-          ) : null}
         </article>
         <article className="grid gap-1.5 rounded-md border border-border bg-muted/40 p-4">
           <strong className="text-sm font-semibold text-foreground">
-            {t("effectiveAssessment")}：{assessmentId}
+            {t("effectiveAssessment")}：{freshnessLabel(freshness, language)}
           </strong>
-          <span className="text-xs text-muted-foreground">
-            {freshnessLabel(freshness, language)}
+          <span className="text-xs leading-relaxed text-muted-foreground">
+            {staleReason
+              ? humanizeReason(staleReason, language)
+              : freshness === "fresh"
+                ? language === "zh"
+                  ? "当前结论仍可作为展示依据。"
+                  : "The current thesis is still usable."
+                : t("currentNoAssessment")}
           </span>
-          {staleReason ? (
-            <span className="text-xs text-muted-foreground">{staleReason}</span>
-          ) : null}
         </article>
       </CardContent>
     </Card>
@@ -100,6 +87,7 @@ function outcomeLabel(outcome: string, language: UiLanguage): string {
     invalidate_thesis: { en: "Invalidated", zh: "失效候选" },
     review_deferred: { en: "Deferred", zh: "延期" },
     update_assessment: { en: "Updated", zh: "更新" },
+    unknown: { en: "Unknown", zh: "未知" },
   };
   return labels[outcome]?.[language] ?? outcome;
 }
@@ -112,6 +100,26 @@ function freshnessLabel(freshness: string, language: UiLanguage): string {
     unknown: { en: "Unknown", zh: "未知" },
   };
   return labels[freshness]?.[language] ?? freshness;
+}
+
+function humanizeReason(value: string, language: UiLanguage): string {
+  const known: Record<string, Record<UiLanguage, string>> = {
+    news_target_incomplete: {
+      en: "News coverage for this review is incomplete.",
+      zh: "本轮复核所需新闻尚未齐全。",
+    },
+    evidence_unavailable: {
+      en: "Supporting evidence is not available yet.",
+      zh: "支撑证据尚不可用。",
+    },
+  };
+  if (known[value]) {
+    return known[value][language];
+  }
+  if (!/[_-]/.test(value)) {
+    return value;
+  }
+  return value.replace(/[_-]+/g, " ").trim();
 }
 
 function text(value: unknown): string {

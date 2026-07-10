@@ -275,6 +275,7 @@ def indicator_history_pit(
             StandardizedIndicatorFactRow.fetched_at.label("fetched_at"),
             StandardizedIndicatorFactRow.numeric_value.label("numeric_value"),
             StandardizedIndicatorFactRow.quality_score.label("quality_score"),
+            StandardizedIndicatorFactRow.raw_snapshot_id.label("raw_snapshot_id"),
             func.row_number()
             .over(
                 partition_by=(
@@ -308,6 +309,7 @@ def indicator_history_pit(
         base.c.fetched_at,
         base.c.numeric_value,
         base.c.quality_score,
+        base.c.raw_snapshot_id,
     ).where(base.c.revision_rank == 1)
     if max_points_per_indicator is not None:
         ranked_base = deduped.subquery()
@@ -336,6 +338,7 @@ def indicator_history_pit(
                 ranked.c.fetched_at,
                 ranked.c.numeric_value,
                 ranked.c.quality_score,
+                ranked.c.raw_snapshot_id,
             )
             .where(ranked.c.point_rank <= max_points_per_indicator)
             .order_by(

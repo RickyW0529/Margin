@@ -272,6 +272,24 @@ class ResearchCandidateListItemV2(BaseModel):
         return ensure_utc(value)
 
 
+class PortfolioSummary(BaseModel):
+    """Cash-aware summary of the latest recommendation fusion result."""
+
+    stock_weight: float
+    cash_weight: float
+    max_stock_exposure: float
+    fusion_run_id: str
+
+    model_config = {"frozen": True}
+
+    @field_validator("stock_weight", "cash_weight", "max_stock_exposure")
+    @classmethod
+    def validate_weight(cls, value: float) -> float:
+        if not 0.0 <= value <= 1.0:
+            raise ValueError("portfolio weights must be in [0, 1]")
+        return value
+
+
 class ResearchCandidateListResponse(BaseModel):
     """Paged v0.2 research candidate list response.."""
 
@@ -280,6 +298,7 @@ class ResearchCandidateListResponse(BaseModel):
     facets: dict[str, dict[str, int]] = Field(default_factory=dict)
     as_of: datetime = Field(default_factory=utc_now)
     scope_version_id: str
+    portfolio_summary: PortfolioSummary | None = None
 
     model_config = {"frozen": True}
 

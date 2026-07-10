@@ -57,6 +57,17 @@ def test_user_qna_agent_run_returns_main_agent_trace() -> None:
     assert body["answer"] == "LLM 基于当前推荐数据回答：000001.SZ。"
     assert body["guardrail"]["allowed"] is True
     assert body["agent_trace"]["steps"][0]["expert_agent_name"].endswith("ExpertAgent")
+    assert body["agent_trace"]["activities"][0] == {
+        "activity_id": f"{body['run_id']}:planning",
+        "stage": "planning",
+        "actor": "MainAgent",
+        "action": "route_request",
+        "status": "succeeded",
+        "summary": "已根据当前问题和结构化上下文生成执行计划。",
+        "tool_name": None,
+        "evidence_refs": [],
+    }
+    assert body["agent_trace"]["activities"][1]["stage"] == "execution"
     assert {artifact["artifact_type"] for artifact in body["artifacts"]} >= {
         "analysis_table",
         "qna_answer",
@@ -149,6 +160,50 @@ def test_user_qna_persists_chat_session_and_uses_context_for_followup() -> None:
     assert any(
         "今日推荐股票是什么？" in prompt and "LLM 基于当前推荐数据回答：000001.SZ。" in prompt
         for prompt in llm_provider.prompts
+    )
+
+
+def test_user_qna_persists_and_passes_resolved_incremental_state(monkeypatch) -> None:
+    """Only typed state on prior user messages may fill an elliptical follow-up."""
+    commands: list[UserQnaCommand] = []
+
+    def record_command(
+        _runtime: AgentRuntimeService,
+        command: UserQnaCommand,
+    ) -> SimpleNamespace:
+        commands.append(command)
+        return _fake_user_qna_result()
+
+    monkeypatch.setattr(AgentRuntimeService, "run_user_qna", record_command)
+    chat_repository = MemoryAgentChatRepository()
+    client = _client_with_agent_runtime(chat_repository=chat_repository)
+    first = client.post(
+        "/api/v1/agent-runs/user-qna",
+        headers=_idempotency_headers("resolved-context-1"),
+        json={"scope_version_id": "scope-1", "message": "中国平安 ROE"},
+    )
+    second = client.post(
+        "/api/v1/agent-runs/user-qna",
+        headers=_idempotency_headers("resolved-context-2"),
+        json={
+            "scope_version_id": "scope-1",
+            "session_id": first.json()["session_id"],
+            "message": "深交所000001.SZ 最近4期的",
+        },
+    )
+
+    assert second.status_code == 200
+    resolved = commands[-1].resolved_turn_context
+    assert resolved is not None
+    assert resolved.security_query == "000001.SZ"
+    assert resolved.indicator_id == "roe_ttm"
+    assert resolved.max_points_per_indicator == 4
+    user_messages = [
+        message for message in chat_repository.list_messages(first.json()["session_id"])
+        if message.role == "user"
+    ]
+    assert user_messages[-1].payload["resolved_turn_context"] == resolved.model_dump(
+        mode="json"
     )
 
 

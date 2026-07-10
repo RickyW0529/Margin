@@ -5,6 +5,7 @@
  */
 
 import type { Metadata } from "next";
+import { DM_Sans, JetBrains_Mono } from "next/font/google";
 
 import { AppProviders } from "@/components/app-providers";
 import { LanguageToggle } from "@/components/language-toggle";
@@ -12,6 +13,18 @@ import { MobileNavigation, Sidebar } from "@/components/sidebar";
 import { LanguageProvider } from "@/lib/i18n";
 
 import "./globals.css";
+
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-dm-sans",
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Margin",
@@ -29,19 +42,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" className={`${dmSans.variable} ${jetbrainsMono.variable}`}>
       <body className="min-h-screen font-sans antialiased">
         <LanguageProvider>
           <AppProviders>
-            <div className="grid min-h-screen grid-cols-1 md:grid-cols-[15.5rem_minmax(0,1fr)]">
+            <div className="grid min-h-screen grid-cols-1 md:grid-cols-[17rem_minmax(0,1fr)]">
               <Sidebar />
-              <div className="grid min-h-screen grid-rows-[auto_minmax(0,1fr)] bg-background">
-                <header className="sticky top-0 z-20 flex min-h-14 min-w-0 items-center justify-between gap-4 border-b border-border/80 bg-background/75 px-4 py-3 backdrop-blur-md md:justify-end md:px-8 md:py-3">
+              <div className="grid min-h-screen grid-rows-[auto_minmax(0,1fr)]">
+                <header className="sticky top-0 z-20 flex min-h-14 min-w-0 items-center justify-between gap-4 border-b border-border bg-background/90 px-5 py-3 backdrop-blur-sm md:justify-end md:px-8">
                   <MobileNavigation />
-                  <div className="hidden items-center gap-3 md:inline-flex">
-                    <kbd className="hidden rounded-lg border border-border/80 bg-card px-2 py-1 text-[10px] font-medium tracking-wide text-muted-foreground lg:inline">
-                      ⌘K
-                    </kbd>
+                  <div className="hidden items-center gap-2 md:inline-flex">
                     <LanguageToggle />
                   </div>
                 </header>

@@ -13,7 +13,7 @@ from margin.config_runtime.models import (
 from margin.config_runtime.repository import ConfigAdminService, ConfigResolver
 
 DEFAULT_AGENT_FLOW_VERSION_ID = "agent-flow-scheduled-stock-analysis-v0.5.0"
-DEFAULT_QUANT_AGENT_PROFILE_VERSION_ID = "quant-agent-profile-scheduled-v0.4.1"
+DEFAULT_QUANT_AGENT_PROFILE_VERSION_ID = "quant-agent-profile-scheduled-v0.4.2"
 SCHEDULED_QUANT_PROFILE_KEY = "scheduled_stock_analysis"
 DEFAULT_VALID_FROM = datetime(2020, 1, 1, tzinfo=UTC)
 

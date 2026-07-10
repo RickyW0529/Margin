@@ -530,6 +530,7 @@ class DocumentNormalizationPipeline:
             "document_format": conversion.document_format.value,
             "parser_name": conversion.parser_name,
             "parse_status": conversion.parse_status,
+            "parse_warnings": list(conversion.warnings),
             "verification_level": verification_level.value,
             "visual_verification": visual_verification.status.value,
             "issue_count": len(issues),
@@ -655,17 +656,42 @@ def _make_rag_chunks(
         chunks.append(current)
 
     total = len(chunks)
-    return tuple(
-        RagChunk(
-            chunk_id=_rag_chunk_id(document_id, content, index),
-            document_id=document_id,
-            content=content,
-            chunk_index=index,
-            total_chunks=total,
-            metadata={"source": "document_normalization_pipeline"},
+    cursor = 0
+    results: list[RagChunk] = []
+    for index, content in enumerate(chunks):
+        start = markdown.find(content, cursor)
+        if start < 0:
+            start = markdown.find(content)
+        end = start + len(content) if start >= 0 else None
+        metadata: dict[str, Any] = {
+            "source": "document_normalization_pipeline",
+            "paragraph_index": index,
+        }
+        if start >= 0 and end is not None:
+            metadata["quote_span"] = [start, end]
+            section = _markdown_section_at(markdown, start)
+            if section:
+                metadata["section"] = section
+            cursor = end
+        results.append(
+            RagChunk(
+                chunk_id=_rag_chunk_id(document_id, content, index),
+                document_id=document_id,
+                content=content,
+                chunk_index=index,
+                total_chunks=total,
+                metadata=metadata,
+            )
         )
-        for index, content in enumerate(chunks)
-    )
+    return tuple(results)
+
+
+def _markdown_section_at(markdown: str, offset: int) -> str | None:
+    """Return the nearest Markdown heading at or before a character offset."""
+    section: str | None = None
+    for match in re.finditer(r"(?m)^#{1,6}\s+(.+?)\s*$", markdown[:offset]):
+        section = match.group(1).strip()
+    return section
 
 
 def _split_long_block(block: str, max_chunk_chars: int) -> list[str]:

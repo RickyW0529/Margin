@@ -51,6 +51,7 @@ from margin.valuation_discovery.db_models import (
     QuantScreenResultRow,
     QuantScreenRunRow,
     ResearchContextSnapshotRow,
+    ValuationAssessmentRow,
 )
 from margin.valuation_discovery.etl import AnalysisResultMartETLPipeline
 from margin.valuation_discovery.models import (
@@ -411,6 +412,11 @@ class ResearchContextBuilderAdapter:
                 security_id=security_id,
                 scope_version_id=scope_version_id,
             )
+            previous_assessment = (
+                self._valuation_assessment(previous_pointer.effective_assessment_id)
+                if previous_pointer is not None
+                else None
+            )
             quant_lineage = self._quant_lineage(quant_run_id)
             quant_input_snapshot_id = quant_lineage["input_snapshot_id"]
             previous_result = self._previous_quant_result(
@@ -431,6 +437,11 @@ class ResearchContextBuilderAdapter:
                 evidence_ids=(
                     evidence_package.evidence_ids if evidence_package is not None else ()
                 ),
+            )
+            new_filing_document_ids = _new_filing_document_ids(
+                target=target,
+                news_bundle=news_bundle,
+                previous_pointer=previous_pointer,
             )
             payload: dict[str, Any] = {
                 "quant_run_id": quant_run_id,
@@ -462,6 +473,9 @@ class ResearchContextBuilderAdapter:
                     if previous_pointer is not None
                     else None
                 ),
+                "previous_effective_conclusion": (
+                    previous_assessment.conclusion if previous_assessment is not None else ""
+                ),
                 "screening_status": (result.screening_status.value if result else None),
                 "final_score": result.final_score if result else 0.0,
                 "quant_factor_details": quant_factor_details,
@@ -486,6 +500,7 @@ class ResearchContextBuilderAdapter:
                     if news_bundle is not None
                     else ()
                 ),
+                "new_filing_document_ids": new_filing_document_ids,
                 "evidence_package_id": (
                     evidence_package.package_id if evidence_package is not None else None
                 ),
@@ -571,6 +586,14 @@ class ResearchContextBuilderAdapter:
         """
         with self._session_factory() as session:
             return session.scalar(latest_effective_pointer(security_id, scope_version_id))
+
+    def _valuation_assessment(
+        self,
+        assessment_id: str,
+    ) -> ValuationAssessmentRow | None:
+        """Load the prior effective conclusion used by counter-evidence review."""
+        with self._session_factory() as session:
+            return session.get(ValuationAssessmentRow, assessment_id)
 
     def _evidence_blocks(self, package: Any | None) -> tuple[dict[str, Any], ...]:
         """Load immutable evidence text and locator metadata for prompting.
@@ -837,6 +860,51 @@ def _research_questions() -> tuple[str, ...]:
         "当前估值假设是否仍然成立？",
         "有哪些风险或反方证据可能推翻原结论？",
     )
+
+
+def _is_filing_document(document: Any) -> bool:
+    """Classify normalized documents while supporting older context DTOs."""
+    doc_type = str(getattr(document, "doc_type", "") or "").lower()
+    if doc_type in {"filing", "report"}:
+        return True
+    title = str(getattr(document, "title", "") or "")
+    source_level = getattr(getattr(document, "source_level", None), "value", None)
+    return source_level == 1 and any(
+        marker in title for marker in ("财报", "年报", "季报", "半年报", "业绩", "公告")
+    )
+
+
+def _new_filing_document_ids(
+    *,
+    target: Any,
+    news_bundle: Any | None,
+    previous_pointer: Any | None,
+) -> tuple[str, ...]:
+    """Preserve independently discovered filing IDs through context creation."""
+    discovered_ids = tuple(str(value) for value in getattr(target, "filing_event_ids", ()) or ())
+    bundle_ids = (
+        tuple(
+            str(document.event_id)
+            for document in news_bundle.documents
+            if _is_filing_document(document)
+            and (
+                previous_pointer is None
+                or previous_pointer.last_successful_news_check_at is None
+                or _document_available_at(document) > previous_pointer.last_successful_news_check_at
+            )
+        )
+        if news_bundle is not None
+        else ()
+    )
+    return tuple(dict.fromkeys((*discovered_ids, *bundle_ids)))
+
+
+def _document_available_at(document: Any) -> datetime:
+    """Return the PIT availability timestamp across old/new document DTOs."""
+    value = getattr(document, "available_at", None) or getattr(document, "published_at", None)
+    if not isinstance(value, datetime):
+        raise ValueError("news context document availability timestamp is missing")
+    return value
 
 
 def _is_material_quant_change(
@@ -1119,6 +1187,7 @@ class ValuationPublisherAdapter:
         quant_run_id: str | None = None,
         quant_results: Any = (),
         agent_run_id: str | None = None,
+        recommendation_result: Any | None = None,
     ) -> DashboardProjectionResult:
         """Persist and read the dashboard projection for the latest refresh.
 
@@ -1134,7 +1203,33 @@ class ValuationPublisherAdapter:
         """
         dashboard_run_id: str | None = None
         visible_item_count = 0
-        if self._dashboard_repository is not None and quant_run_id:
+        if self._dashboard_repository is not None and recommendation_result is not None:
+            dashboard_run_id = _fusion_dashboard_run_id(
+                scope_version_id=scope_version_id,
+                fusion_result_id=str(recommendation_result.artifact_id),
+            )
+            dashboard_items = tuple(
+                _dashboard_item_from_fused_recommendation(
+                    run_id=dashboard_run_id,
+                    fusion_result_id=str(recommendation_result.artifact_id),
+                    quant_run_id=str(recommendation_result.quant_run_id),
+                    fusion_policy=recommendation_result.policy,
+                    recommendation=item,
+                    decision_at=decision_at,
+                )
+                for item in tuple(recommendation_result.recommendations)
+            )
+            self._dashboard_repository.add_run(
+                _dashboard_run_from_fusion(
+                    run_id=dashboard_run_id,
+                    scope_version_id=scope_version_id,
+                    fusion_result=recommendation_result,
+                    decision_at=decision_at,
+                )
+            )
+            self._dashboard_repository.add_items(dashboard_items)
+            visible_item_count = len(dashboard_items)
+        elif self._dashboard_repository is not None and quant_run_id:
             visible_results = _dashboard_visible_quant_results(quant_results)
             dashboard_run_id = _dashboard_run_id(
                 scope_version_id=scope_version_id,
@@ -1266,6 +1361,95 @@ def _dashboard_run_from_quant_results(
         abstained_count=abstained_count,
         aborted_count=0,
         created_at=created_at,
+    )
+
+
+def _dashboard_run_from_fusion(
+    *,
+    run_id: str,
+    scope_version_id: str,
+    fusion_result: Any,
+    decision_at: datetime,
+) -> ResearchRun:
+    """Build the only user-visible projection after both research lines fuse."""
+    recommendations = tuple(fusion_result.recommendations)
+    portfolio_summary = {
+        "stock_weight": float(fusion_result.stock_weight),
+        "cash_weight": float(fusion_result.cash_weight),
+        "max_stock_exposure": float(fusion_result.max_stock_exposure),
+        "fusion_run_id": str(fusion_result.artifact_id),
+    }
+    return ResearchRun(
+        run_id=run_id,
+        decision_at=decision_at,
+        strategy_id=f"recommendation_fusion:{fusion_result.artifact_id}",
+        version_id=scope_version_id,
+        universe=[item.security_id for item in recommendations],
+        status=RunStatus.PUBLISHED if recommendations else RunStatus.ABSTAINED,
+        summary=json.dumps(
+            {"type": "recommendation_fusion", "portfolio_summary": portfolio_summary},
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+        item_count=len(recommendations),
+        published_count=len(recommendations),
+        abstained_count=0,
+        aborted_count=0,
+        created_at=datetime.now(UTC),
+    )
+
+
+def _dashboard_item_from_fused_recommendation(
+    *,
+    run_id: str,
+    fusion_result_id: str,
+    quant_run_id: str,
+    fusion_policy: Any,
+    recommendation: Any,
+    decision_at: datetime,
+) -> ResearchItem:
+    """Project fusion lineage, reasons, evidence, and both portfolio weights."""
+    evidence = tuple(recommendation.evidence)
+    evidence_ids = [
+        str(item.source_id)
+        for item in evidence
+        if str(item.source_type) in {"rag", "warehouse_quant_result"}
+    ]
+    reasons = [str(value) for value in recommendation.reasons]
+    sources = [str(value) for value in recommendation.sources]
+    agent_adjustment = {
+        "source": "RecommendationFusionWorker",
+        "sources": sources,
+        "quant_score": recommendation.quant_score,
+        "fusion_confidence": float(recommendation.fusion_confidence),
+        "quant_contribution": float(recommendation.quant_contribution),
+        "catalyst_contribution": float(recommendation.catalyst_contribution),
+        "reasons": reasons,
+        "risk_flags": [str(value) for value in recommendation.risk_flags],
+        "evidence_ids": evidence_ids,
+        "evidence": [item.model_dump(mode="json") for item in evidence],
+        "fusion_result_id": fusion_result_id,
+        "quant_run_id": quant_run_id,
+        "fusion_policy": fusion_policy.model_dump(mode="json"),
+    }
+    return ResearchItem(
+        item_id=_dashboard_item_id(run_id, str(recommendation.security_id)),
+        run_id=run_id,
+        symbol=str(recommendation.security_id),
+        signal_type="recommendation_fusion",
+        confidence=float(recommendation.fusion_confidence),
+        statement="；".join(reasons[:3]) or "量化与财报催化融合通过",
+        workflow_run_id=quant_run_id,
+        snapshot_id=None,
+        status=ItemStatus.PUBLISHED,
+        rejection_reasons=[],
+        evidence_ids=evidence_ids,
+        risk_score=None,
+        target_weight=float(recommendation.target_weight),
+        adjusted_weight=float(recommendation.adjusted_weight),
+        agent_adjustment=agent_adjustment,
+        counter_arguments=[reason for reason in reasons if "counter" in reason or "反" in reason],
+        created_at=decision_at,
     )
 
 
@@ -1427,6 +1611,12 @@ def _dashboard_run_id(*, scope_version_id: str, quant_run_id: str) -> str:
         str: .
     """
     material = f"{scope_version_id}|{quant_run_id}"
+    return "dr_" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
+
+
+def _fusion_dashboard_run_id(*, scope_version_id: str, fusion_result_id: str) -> str:
+    """Build an idempotent Dashboard run ID from the terminal fusion artifact."""
+    material = f"{scope_version_id}|{fusion_result_id}|recommendation-fusion"
     return "dr_" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
 
 

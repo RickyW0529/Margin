@@ -23,6 +23,7 @@ backtest_output/
 backtest_output_*/
 web/node_modules/
 web/.next/
+web/*.tsbuildinfo
 dist/
 build/
 .env

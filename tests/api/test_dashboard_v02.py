@@ -35,7 +35,15 @@ def test_research_list_returns_paged_items_and_facets() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"items", "page_info", "facets", "as_of", "scope_version_id"}
+    assert set(body) == {
+        "items",
+        "page_info",
+        "facets",
+        "as_of",
+        "scope_version_id",
+        "portfolio_summary",
+    }
+    assert body["portfolio_summary"] is None
     assert len(body["items"]) <= 50
     assert body["items"][0]["current_review_outcome"] == "update_assessment"
 

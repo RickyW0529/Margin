@@ -9,7 +9,10 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from margin.agent_runtime.context_store import AgentContextStore, make_context_artifact
-from margin.agent_runtime.quant_agent import current_quant_agent_strategy_profile
+from margin.agent_runtime.quant_agent import (
+    current_quant_agent_strategy_profile,
+    normalize_quant_agent_strategy_profile,
+)
 from margin.agent_runtime.schedules import AgentScheduleRepository, StockAnalysisSchedule
 from margin.agents.a2a import InProcessA2ATransport
 from margin.agents.context.persistence import ContextPersistence
@@ -254,7 +257,7 @@ class ScheduledAgentRuntimeRunner:
                 decision_at=decision_at,
             )
             return (
-                version.to_profile(),
+                normalize_quant_agent_strategy_profile(version.to_profile()),
                 ConfigReference.from_version("quant_agent_profile", version),
             )
         except LookupError:
@@ -347,6 +350,7 @@ def _scheduled_plan_artifact(
             "worker_runtime": "langgraph",
             "global_plan": global_plan.model_dump(mode="json"),
             "scheduled_task_intent": scheduled_task_intent,
+            "durable_recommendation_plan": _durable_recommendation_plan(),
             "main_agent_plan": _global_plan_summary(global_plan),
             "plan_validation": plan_validation.model_dump(mode="json"),
             "context_pack_ref": context_pack_ref,
@@ -389,6 +393,7 @@ def _scheduled_plan_metadata(
         "config_resolution_snapshot_id": config_snapshot_id,
         "quant_agent_strategy_profile": quant_profile.to_metadata(),
         "quant_strategy": quant_profile.to_quant_strategy_metadata(),
+        "durable_recommendation_plan": _durable_recommendation_plan(),
         "execution_boundary": SCHEDULED_EXECUTION_BOUNDARY,
         "dispatch_protocol": "A2A",
         "worker_runtime": "langgraph",
@@ -446,6 +451,7 @@ def _scheduled_main_review_artifact(
             "dispatch_protocol": "A2A",
             "worker_runtime": "langgraph",
             "completion_scope": "refresh_dispatch_only",
+            "durable_recommendation_plan": _durable_recommendation_plan(),
             "research_status": (
                 "refresh_pending" if decision == "dispatched" else "incomplete"
             ),
@@ -499,8 +505,30 @@ def _scheduled_task_prompt(schedule: StockAnalysisSchedule) -> str:
     """Return the natural-language scheduled goal given to MainAgent."""
     return (
         f"今天对 {schedule.universe} 做本地研究更新。先检查数据和 PIT 可用性；"
-        "然后让量化专家启动估值发现刷新流水线，发布 Dashboard 研究候选。"
+        "然后启动异步推荐刷新：ML 量化与财报催化是两条独立研究分支，"
+        "两者完成并融合、通过风险门控后，才发布 Dashboard 持仓建议。"
     )
+
+
+def _durable_recommendation_plan() -> dict[str, Any]:
+    """Describe the downstream async fan-out/join without claiming completion."""
+    return {
+        "execution_mode": "durable_async_after_dispatch",
+        "branches": [
+            {
+                "worker": "MLQuantWorker",
+                "output": "ml_quant_result",
+                "role": "structured_quant_candidates_and_base_weights",
+            },
+            {
+                "worker": "EarningsCatalystWorker",
+                "output": "earnings_catalyst_result",
+                "role": "reporting_window_rag_and_counter_evidence_candidates",
+            },
+        ],
+        "join_worker": "RecommendationFusionWorker",
+        "publish_boundary": "DashboardPublisher_after_fusion_only",
+    }
 
 
 def _scheduled_context_pack(

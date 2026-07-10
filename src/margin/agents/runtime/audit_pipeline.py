@@ -17,6 +17,7 @@ class AuditPipeline:
         required_artifact_refs: tuple[str, ...],
         available_artifacts: Mapping[str, object],
         approved_capsule_refs: tuple[str, ...],
+        evidence_refs: tuple[str, ...] = (),
     ) -> FinalAuditReport:
         """Audit final answer.
 
@@ -25,6 +26,7 @@ class AuditPipeline:
             required_artifact_refs: tuple[str, ...]: .
             available_artifacts: Mapping[str, object]: .
             approved_capsule_refs: tuple[str, ...]: .
+            evidence_refs: Canonical evidence IDs approved by domain capsules.
 
         Returns:
             FinalAuditReport: .
@@ -46,4 +48,5 @@ class AuditPipeline:
             final_user_message_constraints=("research_support_not_advice",),
             checked_artifact_refs=tuple(required_artifact_refs),
             checked_capsule_refs=approved_capsule_refs,
+            evidence_refs=evidence_refs,
         )

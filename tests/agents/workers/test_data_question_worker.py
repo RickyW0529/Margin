@@ -136,6 +136,11 @@ def test_data_question_worker_answers_financial_metric_with_chart_artifact() -> 
         "x": "2024-12-31",
         "y": 12.3,
     }
+    assert result.table_artifact.payload_json["rows"][-1]["fact_id"] == "roe-2024"
+    assert result.table_artifact.payload_json["rows"][-1]["indicator_id"] == "roe_ttm"
+    assert result.table_artifact.payload_json["rows"][-1]["locator"].startswith(
+        "warehouse://standardized_indicator_facts/roe-2024"
+    )
     assert warehouse.search_queries[0].query_text == "中国平安"
     assert warehouse.indicator_discovery_calls[0]["query_text"] == "中国平安最近 ROE 是多少？"
     assert warehouse.indicator_queries[0].indicator_ids == ("roe_ttm",)
@@ -156,6 +161,26 @@ def test_data_question_worker_can_render_bar_visualization() -> None:
     assert result.image_artifact.payload_json["image_format"] == "svg"
     assert "rect" in result.image_artifact.payload_json["svg"]
     assert "polyline" not in result.image_artifact.payload_json["svg"]
+
+
+def test_data_question_worker_honors_requested_history_point_limit() -> None:
+    warehouse = _Warehouse()
+    result = DataQuestionWorker(warehouse).answer_financial_metric(
+        run_id="ar_test_four_periods",
+        message="深交所000001.SZ 最近4期的",
+        worker_inputs={
+            "user_query": "深交所000001.SZ 最近4期的 ROE",
+            "security_query": "000001.SZ",
+            "indicator_id": "roe_ttm",
+            "chart_type": "line",
+            "max_points_per_indicator": 4,
+        },
+        decision_at=datetime(2026, 7, 9, tzinfo=UTC),
+    )
+
+    assert result is not None
+    assert warehouse.indicator_queries[0].max_points_per_indicator == 4
+    assert result.worker_activity_artifact.payload_json["max_points_per_indicator"] == 4
 
 
 def test_data_question_worker_answers_parent_net_profit_metric() -> None:

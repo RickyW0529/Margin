@@ -27,11 +27,24 @@ export type ResearchCandidateListItemV2 = {
   risk_flags: string[];
   review_required: boolean;
   research_guardrail: string;
-  current_review_outcome: string;
+  current_review_outcome: string | null;
   effective_assessment_id: string | null;
-  assessment_freshness: string;
+  assessment_freshness: string | null;
   stale_reason: string | null;
   final_score: number | null;
+  target_weight?: number | null;
+  adjusted_weight?: number | null;
+  agent_adjustment?: {
+    source?: string;
+    action?: string;
+    reason?: string;
+    sources?: string[];
+    quant_contribution?: number | null;
+    catalyst_contribution?: number | null;
+    reasons?: string[];
+    evidence_ids?: string[];
+    [key: string]: unknown;
+  };
   discount_rate: number | null;
   confidence: number | null;
   last_checked_at: string;
@@ -44,6 +57,12 @@ export type ResearchCandidateListResponse = {
   facets: Record<string, Record<string, number>>;
   as_of: string;
   scope_version_id: string;
+  portfolio_summary?: {
+    stock_weight: number;
+    cash_weight: number;
+    max_stock_exposure: number;
+    fusion_run_id: string;
+  } | null;
 };
 
 /** v0.2 research item detail aggregate for the company detail page. */
@@ -167,6 +186,22 @@ export type MainAgentQnaResponse = {
       skill_id: string;
       status: string;
     }>;
+    activities?: Array<{
+      activity_id: string;
+      stage: "planning" | "execution" | "validation";
+      actor: string;
+      action: string;
+      status: string;
+      summary: string;
+      tool_name?: string | null;
+      evidence_refs: string[];
+    }>;
+    diagnostics?: Array<{
+      step_id: string;
+      status: string;
+      code: string;
+      summary: string;
+    }>;
   };
   artifacts: AgentArtifactSummary[];
   references: Array<Record<string, string>>;
@@ -230,15 +265,41 @@ export type StockAnalysisScheduleUpdate = {
 /** Evidence locator row rendered in the v0.2 detail page. */
 export type EvidenceLocatorListItem = {
   evidence_id: string;
+  detail_url?: string | null;
+  source_kind?: string | null;
   title?: string | null;
   source_level: string;
-  locator: string;
+  locator: string | Record<string, unknown>;
   snapshot_id?: string | null;
   source_url?: string | null;
   pit_timestamp?: string | null;
   source_name?: string | null;
   snippet?: string | null;
   linked_to_security?: boolean | null;
+};
+
+/** One exact cited range in a canonical evidence document. */
+export type EvidenceHighlight = {
+  start: number;
+  end: number;
+  quote: string;
+  label?: string | null;
+};
+
+/** Canonical in-app evidence detail for documents, warehouse facts, and quant results. */
+export type EvidenceDetail = {
+  evidence_id: string;
+  source_kind: "document" | "quant_result" | "warehouse_fact";
+  title: string;
+  source_level: string;
+  source_url?: string | null;
+  document_id?: string | null;
+  markdown: string;
+  highlights: EvidenceHighlight[];
+  locator: string | Record<string, unknown>;
+  snapshot_id?: string | null;
+  pit_timestamp?: string | null;
+  source_name?: string | null;
 };
 
 /** Query filters accepted by the v0.2 research candidate list BFF. */
@@ -483,6 +544,35 @@ export function fetchResearchItemDetailV2(
   itemId: string,
 ): Promise<ResearchItemDetailV2> {
   return request<ResearchItemDetailV2>(`/api/v1/research/items/${itemId}`);
+}
+
+/** Fetches canonical full-text evidence with exact cited ranges. */
+export function fetchEvidenceDetail(
+  evidenceId: string,
+  detailUrl?: string | null,
+): Promise<EvidenceDetail> {
+  const canonicalPath = `/api/v1/evidence/${encodeURIComponent(evidenceId)}`;
+  const path = safeEvidenceDetailPath(detailUrl) ?? canonicalPath;
+  return request<EvidenceDetail>(
+    path,
+    { cache: "no-store" },
+  );
+}
+
+function safeEvidenceDetailPath(value: string | null | undefined): string | null {
+  const match = value?.match(/^\/api\/v1\/evidence\/([^/?#]+)(\?[^#]*)?$/);
+  if (!match) {
+    return null;
+  }
+  try {
+    const evidenceId = decodeURIComponent(match[1]);
+    if (!evidenceId || evidenceId === "." || evidenceId === ".." || /[\\/]/.test(evidenceId)) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+  return value ?? null;
 }
 
 /**

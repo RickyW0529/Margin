@@ -1,9 +1,11 @@
-"""Provider-free ML lifecycle quant scoring.
+"""Provider-free lifecycle quant scoring for the ML research branch.
 
 This module is the production serving side of the offline ML research line. It
-does not train models and never calls source providers. It consumes only the
-PIT-safe cross-section supplied by ``QuantRepository`` and emits an auditable
-score/weight contract for downstream Analysis Mart and Agent use.
+does not train or load a fitted estimator and never calls source providers.
+The current serving implementation is an explicit deterministic weighted
+formula over the PIT-safe cross-section supplied by ``QuantRepository``.  A
+trained model can replace it behind ``MLQuantWorker`` without changing the
+downstream score/weight contract.
 """
 
 from __future__ import annotations
@@ -14,10 +16,12 @@ from typing import Any
 
 import pandas as pd
 
-STRATEGY_FAMILY = "ml_lgbm_lifecycle"
-MODEL_FAMILY = "lgbm_lifecycle"
+STRATEGY_FAMILY = "deterministic_weighted_signal_lifecycle"
+LEGACY_STRATEGY_FAMILY = "ml_lgbm_lifecycle"
+MODEL_FAMILY = "deterministic_weighted_signal"
+IMPLEMENTATION = "deterministic_weighted_signal_formula_v1"
 EXECUTION_BOUNDARY = "research_only_no_order"
-OFFLINE_PROFILE_ID = "liquid-large-mid-lgbm-recent-trend80-ddstop-v1"
+OFFLINE_PROFILE_ID = "liquid-large-mid-weighted-signal-trend80-ddstop-v2"
 
 BASE_FEATURES = (
     "roe_ttm",

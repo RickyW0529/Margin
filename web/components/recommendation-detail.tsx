@@ -8,6 +8,7 @@ import { CurrentVsEffectivePanel } from "@/components/current-vs-effective-panel
 import { EvidenceLocatorList } from "@/components/evidence-locator-list";
 import { FactorScoreBar } from "@/components/factor-score-bar";
 import { MetricTrendChart } from "@/components/metric-trend-chart";
+import { MarkdownContent } from "@/components/markdown-content";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Stat } from "@/components/ui/stat";
@@ -18,6 +19,10 @@ import type {
   ValuationState,
 } from "@/lib/api";
 import { useLanguage, type UiLanguage } from "@/lib/i18n";
+import {
+  recommendationReasonLabel,
+  recommendationSourceLabel,
+} from "@/lib/recommendation-labels";
 import { formatNumber, formatScore } from "@/lib/utils";
 
 type RecommendationDetailProps = {
@@ -38,23 +43,22 @@ export function RecommendationDetail({ detail }: RecommendationDetailProps) {
   );
 
   return (
-    <section className="page-shell grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
-      <header className="flex min-w-0 flex-wrap items-end justify-between gap-4">
+    <section className="page-shell grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8">
+      <header className="flex min-w-0 flex-wrap items-start justify-between gap-5">
         <div className="min-w-0">
-          <p className="text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-            {t("detailRecommendation")}
-          </p>
-          <h1 className="text-display mt-2 text-3xl text-foreground">
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">
             {item.name}
           </h1>
-          <p className="mt-1 text-sm tabular text-muted-foreground">{item.security_id}</p>
+          <p className="mt-2 text-base tabular text-muted-foreground">
+            {item.symbol || item.security_id}
+          </p>
         </div>
         <Badge tone={statusTone(item.screening_status)}>
           {statusLabel(item.screening_status, language)}
         </Badge>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat
           label={t("detailConfidence")}
           value={formatPercentOne(
@@ -63,6 +67,11 @@ export function RecommendationDetail({ detail }: RecommendationDetailProps) {
           progress={Math.round(
             (reviewConfidence(detail.current_review, item.confidence) ?? 0) * 100,
           )}
+        />
+        <Stat
+          label={language === "zh" ? "融合后仓位" : "Fused weight"}
+          value={formatPercentOne(item.adjusted_weight)}
+          progress={Math.round((item.adjusted_weight ?? 0) * 100)}
         />
         <Stat
           label={t("dashboardQuantScore")}
@@ -74,8 +83,8 @@ export function RecommendationDetail({ detail }: RecommendationDetailProps) {
         />
       </div>
 
-      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5">
           <Card>
             <CardHeader>
               <div>
@@ -88,22 +97,15 @@ export function RecommendationDetail({ detail }: RecommendationDetailProps) {
               </div>
             </CardHeader>
             <CardContent className="grid gap-3">
-              <p className="text-sm leading-relaxed text-foreground">
-                {safeText(detail.thesis.statement) ?? t("detailNoConclusion")}
-              </p>
+              <MarkdownContent
+                className="text-sm leading-7"
+                content={safeText(detail.thesis.statement) ?? t("detailNoConclusion")}
+              />
               {reviewReason ? (
                 <div className="rounded-xl border border-caution/15 bg-caution-soft px-3 py-2 text-sm text-caution">
-                  {reviewReason}
+                  {humanizeCode(reviewReason, language)}
                 </div>
               ) : null}
-              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                <span>
-                  {t("detailScope")} {item.scope_version_id}
-                </span>
-                <span>
-                  {t("detailSnapshot")} {detail.versions.snapshot_id ?? "--"}
-                </span>
-              </div>
             </CardContent>
           </Card>
 
@@ -111,10 +113,11 @@ export function RecommendationDetail({ detail }: RecommendationDetailProps) {
             currentReview={detail.current_review}
             effectiveAssessment={detail.effective_assessment}
           />
+          <FusionDecisionCard item={item} language={language} />
           <EvidenceLocatorList evidence={detail.evidence} />
         </div>
 
-        <aside className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-4">
+        <aside className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-5">
           <ValuationCard
             itemDiscount={item.discount_rate}
             labels={{
@@ -135,30 +138,12 @@ export function RecommendationDetail({ detail }: RecommendationDetailProps) {
             <CardHeader>
               <CardTitle>{t("detailQuantTitle")}</CardTitle>
               <Badge tone="muted">
-                {guardrailLabel(item.research_guardrail, language)}
+                {dataStatusLabel(item.data_status, language)}
               </Badge>
             </CardHeader>
             <CardContent className="grid gap-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <MetricTile
-                  label={t("detailScreeningStatus")}
-                  value={statusLabel(item.screening_status, language)}
-                />
-                <MetricTile
-                  label={t("detailDataStatus")}
-                  value={dataStatusLabel(item.data_status, language)}
-                />
-                <MetricTile
-                  label={t("detailFinalScore")}
-                  value={formatScore(item.final_score)}
-                />
-                <MetricTile
-                  label={t("detailConfidence")}
-                  value={formatPercentOne(item.confidence, language)}
-                />
-              </div>
               {factorEntries.length > 0 ? (
-                <div className="grid gap-3 border-t border-border pt-3">
+                <div className="grid gap-3">
                   {factorEntries.map(([key, value]) => (
                     <FactorScoreBar
                       key={key}
@@ -193,7 +178,7 @@ export function RecommendationDetail({ detail }: RecommendationDetailProps) {
               {item.risk_flags.length > 0 ? (
                 item.risk_flags.map((flag) => (
                   <Badge key={flag} tone="caution">
-                    {flag}
+                    {recommendationReasonLabel(flag, language)}
                   </Badge>
                 ))
               ) : (
@@ -207,6 +192,72 @@ export function RecommendationDetail({ detail }: RecommendationDetailProps) {
       </div>
     </section>
   );
+}
+
+function FusionDecisionCard({
+  item,
+  language,
+}: {
+  item: ResearchItemDetailV2["item"];
+  language: UiLanguage;
+}) {
+  const adjustment = item.agent_adjustment;
+  if (!adjustment || Object.keys(adjustment).length === 0) {
+    return null;
+  }
+  const reasons = Array.isArray(adjustment.reasons) ? adjustment.reasons : [];
+  const sources = Array.isArray(adjustment.sources) ? adjustment.sources : [];
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <p className="text-xs font-medium tracking-[0.12em] text-accent uppercase">
+            {language === "zh" ? "双路融合" : "Dual-path fusion"}
+          </p>
+          <CardTitle className="mt-1">
+            {language === "zh" ? "推荐形成过程" : "How this recommendation was formed"}
+          </CardTitle>
+        </div>
+        <Badge tone="positive">{language === "zh" ? "已复核" : "Reviewed"}</Badge>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <MetricTile
+            label={language === "zh" ? "ML 量化贡献" : "ML contribution"}
+            value={formatContribution(adjustment.quant_contribution)}
+          />
+          <MetricTile
+            label={language === "zh" ? "财报催化贡献" : "Catalyst contribution"}
+            value={formatContribution(adjustment.catalyst_contribution)}
+          />
+          <MetricTile
+            label={language === "zh" ? "最终仓位" : "Final weight"}
+            value={formatPercentOne(item.adjusted_weight, language)}
+          />
+        </div>
+        {sources.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {sources.map((source) => (
+              <Badge key={source} tone={source.includes("catalyst") ? "caution" : "accent"}>
+                {recommendationSourceLabel(source, language)}
+              </Badge>
+            ))}
+          </div>
+        ) : null}
+        {reasons.length > 0 ? (
+          <ul className="grid list-disc gap-2 pl-5 text-sm leading-6 text-foreground marker:text-muted-foreground">
+            {reasons.map((reason) => (
+              <li key={reason}>{recommendationReasonLabel(reason, language)}</li>
+            ))}
+          </ul>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function formatContribution(value: unknown): string {
+  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(2) : "—";
 }
 
 function ValuationCard({
@@ -313,9 +364,11 @@ function TrendCard({
 
 function MetricTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid min-w-0 gap-1 rounded-md border border-border bg-muted/40 px-3 py-2.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <strong className="break-words text-sm text-foreground">{value}</strong>
+    <div className="grid min-w-0 gap-1.5 rounded-xl border border-border bg-muted/40 px-4 py-3.5">
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <strong className="break-words text-[15px] font-semibold text-foreground">
+        {value}
+      </strong>
     </div>
   );
 }
@@ -393,14 +446,6 @@ function formatPercentOne(
   }).format(value);
 }
 
-function guardrailLabel(value: string, language: UiLanguage): string {
-  const labels: Record<string, Record<UiLanguage, string>> = {
-    allow_research: { en: "Research allowed", zh: "研究允许" },
-    blocked: { en: "Blocked", zh: "已阻止" },
-  };
-  return labels[value]?.[language] ?? value;
-}
-
 function factorLabel(value: string, language: UiLanguage): string {
   const labels: Record<string, Record<UiLanguage, string>> = {
     final_score: { en: "Final score", zh: "最终分数" },
@@ -408,6 +453,26 @@ function factorLabel(value: string, language: UiLanguage): string {
     risk_score: { en: "Risk", zh: "风险" },
   };
   return labels[value]?.[language] ?? value;
+}
+
+function humanizeCode(value: string, language: UiLanguage): string {
+  const known: Record<string, Record<UiLanguage, string>> = {
+    news_target_incomplete: {
+      en: "News coverage is still incomplete for this review.",
+      zh: "本轮复核所需新闻尚未齐全。",
+    },
+    evidence_unavailable: {
+      en: "Supporting evidence is not available yet.",
+      zh: "支撑证据尚不可用。",
+    },
+  };
+  if (known[value]) {
+    return known[value][language];
+  }
+  if (!value.includes("_") && !value.includes("-")) {
+    return value;
+  }
+  return value.replace(/[_-]+/g, " ").trim();
 }
 
 function formatRawMetric(metric: RawMetricCard): string {

@@ -59,6 +59,13 @@ def test_v1_scheduled_runner_starts_refresh_and_writes_v1_artifacts() -> None:
     assert metadata["execution_boundary"] == "a2a_hierarchical_runtime"
     assert metadata["dispatch_protocol"] == "A2A"
     assert metadata["worker_runtime"] == "langgraph"
+    durable_plan = metadata["durable_recommendation_plan"]
+    assert [branch["worker"] for branch in durable_plan["branches"]] == [
+        "MLQuantWorker",
+        "EarningsCatalystWorker",
+    ]
+    assert durable_plan["join_worker"] == "RecommendationFusionWorker"
+    assert durable_plan["publish_boundary"] == "DashboardPublisher_after_fusion_only"
     assert "data_readiness" in {
         item["artifact_type"] for item in metadata["input_artifacts"]
     }

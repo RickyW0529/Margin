@@ -46,6 +46,7 @@ class FinancialMetricWorkflowState(BaseModel):
     user_query_text: str = ""
     security_query_text: str = ""
     requested_indicator_id: str = ""
+    max_points_per_indicator: int = Field(default=12, ge=1, le=100)
     metric: dict[str, Any] | None = None
     profiles: list[Any] = Field(default_factory=list)
     indicator_catalog: list[Any] = Field(default_factory=list)
@@ -112,6 +113,7 @@ class DataQuestionWorker:
                 message=state.security_query_text or state.user_query_text,
                 workflow_tool_calls=state.tool_calls,
                 audit_event_refs=state.audit_event_refs,
+                max_points_per_indicator=state.max_points_per_indicator,
             )
         return _financial_metric_analysis_from_history(
             run_id=run_id,
@@ -121,6 +123,7 @@ class DataQuestionWorker:
             chart_type=state.chart_type,
             workflow_tool_calls=state.tool_calls,
             audit_event_refs=state.audit_event_refs,
+            max_points_per_indicator=state.max_points_per_indicator,
         )
 
 
@@ -129,7 +132,7 @@ def _run_financial_metric_workflow(
     repository: Any,
     run_id: str,
     message: str,
-    worker_inputs: dict[str, str],
+    worker_inputs: dict[str, Any],
     conversation_context: tuple[dict[str, str], ...],
     chart_type: str,
     decision_at: datetime,
@@ -165,6 +168,10 @@ def _run_financial_metric_workflow(
             "user_query_text": user_query_text,
             "security_query_text": security_query_text,
             "requested_indicator_id": worker_inputs.get("indicator_id", ""),
+            "max_points_per_indicator": worker_inputs.get(
+                "max_points_per_indicator",
+                12,
+            ),
         }
 
     def describe_schema(state: FinancialMetricWorkflowState) -> dict[str, Any]:
@@ -232,6 +239,7 @@ def _run_financial_metric_workflow(
                 ),
                 indicator_ids=(state.metric["indicator_id"],),
                 decision_at=state.decision_at,
+                max_points_per_indicator=state.max_points_per_indicator,
             )
             history = history_result.output.get("history", [])
             audit_event_refs = _append_audit_ref(
@@ -417,7 +425,7 @@ def _analysis_text_with_context(
     return "\n".join((current, "recent_user_turns:", *recent_user_turns))
 
 
-def _normalize_worker_inputs(worker_inputs: dict[str, Any] | None) -> dict[str, str] | None:
+def _normalize_worker_inputs(worker_inputs: dict[str, Any] | None) -> dict[str, Any] | None:
     """Validate ExpertAgent-filled worker placeholders.
 
     The LLM planner may provide ``worker_inputs``, but these values cross a
@@ -430,6 +438,9 @@ def _normalize_worker_inputs(worker_inputs: dict[str, Any] | None) -> dict[str, 
     security_query = _sanitize_worker_security_text(worker_inputs.get("security_query"))
     indicator_id = _sanitize_indicator_id(worker_inputs.get("indicator_id"))
     chart_type = _normalize_chart_type(str(worker_inputs.get("chart_type") or "line"))
+    max_points_per_indicator = _normalize_max_points(
+        worker_inputs.get("max_points_per_indicator")
+    )
     if not user_query or not security_query:
         return None
     if indicator_id == "roe_ttm" and _WORKER_METRIC_TERM_RE.search(user_query) is None:
@@ -439,6 +450,7 @@ def _normalize_worker_inputs(worker_inputs: dict[str, Any] | None) -> dict[str, 
         "security_query": security_query,
         "indicator_id": indicator_id,
         "chart_type": chart_type,
+        "max_points_per_indicator": max_points_per_indicator,
     }
 
 
@@ -590,6 +602,15 @@ def _normalize_chart_type(chart_type: str) -> str:
     return "line"
 
 
+def _normalize_max_points(value: object) -> int:
+    """Return a bounded history-point count for warehouse reads."""
+    try:
+        count = int(value) if value is not None else 12
+    except (TypeError, ValueError):
+        return 12
+    return count if 1 <= count <= 100 else 12
+
+
 def _metric_from_indicator_id(indicator_id: str) -> dict[str, str] | None:
     """Return the supported financial metric selected by ExpertAgent."""
     if indicator_id == "roe_ttm":
@@ -686,6 +707,18 @@ def _history_provider(value: Any) -> str:
     return str(getattr(value, "provider", "") or "")
 
 
+def _history_fact_id(value: Any) -> str:
+    if isinstance(value, dict):
+        return str(value.get("fact_id") or "")
+    return str(getattr(value, "fact_id", "") or "")
+
+
+def _history_raw_snapshot_id(value: Any) -> str:
+    if isinstance(value, dict):
+        return str(value.get("raw_snapshot_id") or "")
+    return str(getattr(value, "raw_snapshot_id", "") or "")
+
+
 def _history_numeric_value(value: Any) -> Any:
     if isinstance(value, dict):
         return value.get("numeric_value")
@@ -726,6 +759,7 @@ def _financial_metric_analysis_from_history(
     chart_type: str,
     workflow_tool_calls: tuple[str, ...],
     audit_event_refs: tuple[str, ...] = (),
+    max_points_per_indicator: int = 12,
 ) -> FinancialMetricAnalysis:
     """Build table/chart/metric artifacts and a user-facing answer from history."""
     profile_by_security_id = {_profile_security_id(profile): profile for profile in profiles}
@@ -735,11 +769,23 @@ def _financial_metric_analysis_from_history(
             "security_id": _history_security_id(value),
             "name": _profile_name(profile_by_security_id.get(_history_security_id(value)))
             or _history_security_id(value),
+            "indicator_id": metric["indicator_id"],
             "metric": metric["label"],
             "value": _metric_display_value(metric, _history_numeric_value(value)),
             "unit": metric["unit"],
             "available_at": _history_datetime(value, "available_at").isoformat(),
             "source": _history_provider(value),
+            "fact_id": _history_fact_id(value),
+            "raw_snapshot_id": _history_raw_snapshot_id(value),
+            "locator": (
+                "warehouse://standardized_indicator_facts/"
+                f"{_history_fact_id(value) or _history_datetime(value, 'event_at').date()}"
+                f"?security_id={_history_security_id(value)}"
+                f"&indicator_id={metric['indicator_id']}"
+                f"&event_at={_history_datetime(value, 'event_at').isoformat()}"
+                f"&available_at={_history_datetime(value, 'available_at').isoformat()}"
+                f"&raw_snapshot_id={_history_raw_snapshot_id(value)}"
+            ),
         }
         for value in sorted(
             history,
@@ -754,9 +800,13 @@ def _financial_metric_analysis_from_history(
             chart_type=chart_type,
             workflow_tool_calls=workflow_tool_calls,
             audit_event_refs=audit_event_refs,
+            max_points_per_indicator=max_points_per_indicator,
         )
     latest = rows[-1]
     previous = rows[-2] if len(rows) > 1 else None
+    evidence_refs = tuple(
+        dict.fromkeys(str(row["fact_id"]) for row in rows if row.get("fact_id"))
+    )
     delta = (
         round(float(latest["value"]) - float(previous["value"]), 2)
         if previous is not None
@@ -777,15 +827,20 @@ def _financial_metric_analysis_from_history(
                 "date",
                 "security_id",
                 "name",
+                "indicator_id",
                 "metric",
                 "value",
                 "unit",
                 "available_at",
                 "source",
+                "fact_id",
+                "raw_snapshot_id",
+                "locator",
             ],
             "rows": rows,
         },
         source_refs=("warehouse:indicator_history_pit",),
+        evidence_refs=evidence_refs,
     )
     chart_artifact = make_context_artifact(
         artifact_id=f"ctx_{run_id}_financial_metric_chart",
@@ -807,6 +862,7 @@ def _financial_metric_analysis_from_history(
             ],
         },
         source_refs=("warehouse:indicator_history_pit",),
+        evidence_refs=evidence_refs,
     )
     svg = _render_financial_metric_svg(
         title=f"{latest['name']} {metric['label']} 趋势",
@@ -826,6 +882,7 @@ def _financial_metric_analysis_from_history(
             "svg": svg,
         },
         source_refs=("warehouse:indicator_history_pit",),
+        evidence_refs=evidence_refs,
     )
     metric_artifact = make_context_artifact(
         artifact_id=f"ctx_{run_id}_financial_metric_latest",
@@ -845,6 +902,7 @@ def _financial_metric_analysis_from_history(
             "available_at": latest["available_at"],
         },
         source_refs=("warehouse:indicator_history_pit",),
+        evidence_refs=evidence_refs,
     )
     worker_activity_artifact = _worker_activity_artifact(
         run_id=run_id,
@@ -854,6 +912,8 @@ def _financial_metric_analysis_from_history(
         rows=rows,
         security_ids=tuple(_profile_security_id(profile) for profile in profiles[:3]),
         tool_calls=workflow_tool_calls,
+        max_points_per_indicator=max_points_per_indicator,
+        evidence_refs=evidence_refs,
     )
     return FinancialMetricAnalysis(
         answer=answer,
@@ -875,6 +935,7 @@ def _empty_financial_metric_analysis(
     chart_type: str = "line",
     workflow_tool_calls: tuple[str, ...] = (),
     audit_event_refs: tuple[str, ...] = (),
+    max_points_per_indicator: int = 12,
 ) -> FinancialMetricAnalysis:
     """Return a traceable empty analysis when the warehouse has no matching facts."""
     display_message = (
@@ -948,6 +1009,7 @@ def _empty_financial_metric_analysis(
         rows=[],
         security_ids=(),
         tool_calls=workflow_tool_calls,
+        max_points_per_indicator=max_points_per_indicator,
     )
     return FinancialMetricAnalysis(
         answer=answer,
@@ -970,6 +1032,8 @@ def _worker_activity_artifact(
     rows: list[dict[str, Any]],
     security_ids: tuple[str, ...],
     tool_calls: tuple[str, ...],
+    max_points_per_indicator: int = 12,
+    evidence_refs: tuple[str, ...] = (),
 ) -> ContextArtifact:
     """Return a frontend-safe activity log for the DataQuestionWorker."""
     python_code = "\n".join(
@@ -985,7 +1049,7 @@ def _worker_activity_artifact(
             "        start_date=decision_at.date() - timedelta(days=1460),",
             "        end_date=decision_at.date(),",
             "        decision_at=decision_at,",
-            "        max_points_per_indicator=12,",
+            f"        max_points_per_indicator={max_points_per_indicator},",
             "    )",
             ")",
             "rows = normalize_metric_history(history)",
@@ -1004,6 +1068,7 @@ def _worker_activity_artifact(
             "workflow_runtime": "langgraph",
             "summary": "读取 PIT 财务指标并生成可视化产物。",
             "tool_calls": list(tool_calls),
+            "max_points_per_indicator": max_points_per_indicator,
             "actions": [
                 {
                     "name": "恢复上下文",
@@ -1031,6 +1096,7 @@ def _worker_activity_artifact(
             "python_code": python_code,
         },
         source_refs=("warehouse:indicator_history_pit", "agent:DataQuestionWorker"),
+        evidence_refs=evidence_refs,
     )
 
 

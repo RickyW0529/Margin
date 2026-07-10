@@ -142,6 +142,7 @@ class NewsTarget(BaseModel):
     last_error_code: str | None = None
     aliases: tuple[str, ...] = Field(default_factory=tuple)
     industry_terms: tuple[str, ...] = Field(default_factory=tuple)
+    filing_event_ids: tuple[str, ...] = Field(default_factory=tuple)
 
     @field_validator("decision_at", "next_attempt_at")
     @classmethod
@@ -505,6 +506,7 @@ def make_document_event(
     snapshot_hash: str | None = None,
     processing_status: DocumentStatus = DocumentStatus.READY,
     processing_error: str | None = None,
+    document_id: str | None = None,
 ) -> DocumentEvent:
     """Create a normalized DocumentEvent, auto-generating IDs and content hash.
 
@@ -523,6 +525,7 @@ def make_document_event(
         snapshot_hash: str | None: .
         processing_status: DocumentStatus: .
         processing_error: str | None: .
+        document_id: Optional canonical document identifier supplied by normalization.
 
     Returns:
         DocumentEvent: .
@@ -535,7 +538,7 @@ def make_document_event(
     now = utc_now()
     return DocumentEvent(
         event_id=f"evt_{uuid.uuid4().hex[:12]}",
-        document_id=f"doc_{uuid.uuid4().hex[:12]}",
+        document_id=document_id or f"doc_{uuid.uuid4().hex[:12]}",
         source_url=source_url,
         source_name=source_name,
         source_level=source_level,

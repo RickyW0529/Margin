@@ -663,22 +663,23 @@ def _review_domain_execution(
         status = AgentExecutionStatus.BLOCKED
     summaries = tuple(
         dict.fromkeys(
-            envelope.answer or envelope.result.safe_summary
+            envelope.answer
             for envelope in worker_envelopes
-            if envelope.answer or envelope.result.safe_summary
+            if envelope.answer
+            and envelope.result.status
+            in {AgentExecutionStatus.SUCCEEDED, AgentExecutionStatus.PARTIAL}
         )
     )
-    answer = "\n\n".join(summaries) or "ExpertAgent received no usable worker output."
-    if missing:
-        answer = answer + "\n\nmissing required artifacts: " + ", ".join(missing)
-    if invalid_hash_refs:
-        answer = answer + "\n\ninvalid artifact payload hashes: " + ", ".join(
-            invalid_hash_refs
+    answer = "\n\n".join(summaries) or (
+        "当前查询暂时无法完成。请确认查询对象、指标和时间范围，或稍后重试。"
+    )
+    evidence_refs = tuple(
+        dict.fromkeys(
+            evidence_ref
+            for artifact in artifacts
+            for evidence_ref in artifact.evidence_refs
         )
-    if missing_source_refs:
-        answer = answer + "\n\nworker artifacts are missing source references: " + ", ".join(
-            missing_source_refs
-        )
+    )
     suffix = request.domain_task_id.removeprefix("dt_")
     capsule = DomainContextCapsule(
         capsule_id=f"dcc_{request.run_id}_{suffix}",
@@ -688,6 +689,7 @@ def _review_domain_execution(
         status=status,
         summary=answer,
         artifact_refs=tuple(artifact.artifact_id for artifact in artifacts),
+        evidence_refs=evidence_refs,
         open_questions=review_failures,
         source_refs=("a2a:message/send",),
         compression_policy_version="domain-capsule-v2",
@@ -720,6 +722,7 @@ def _review_domain_execution(
         producer_agent=request.to_domain_agent,
         payload_json=capsule.model_dump(mode="json"),
         source_refs=capsule.source_refs,
+        evidence_refs=capsule.evidence_refs,
     )
     audit_artifact = make_context_artifact(
         artifact_id=audit.audit_report_id,
@@ -1023,7 +1026,7 @@ def _non_execute_worker_envelope(
     step: WorkerPlanStepDraft,
     attempt: int,
 ) -> WorkerExecutionEnvelope:
-    summary = step.user_safe_message or step.reason or f"Worker plan returned {step.kind}."
+    summary = step.user_safe_message or "当前步骤需要补充信息后才能继续。"
     return WorkerExecutionEnvelope(
         result=WorkerTaskResult(
             run_id=domain_task.run_id,
@@ -1039,7 +1042,7 @@ def _non_execute_worker_envelope(
             retryable=step.kind is PlanActionKind.ASK_CLARIFICATION,
             safe_summary=summary,
         ),
-        answer=summary,
+        answer=step.user_safe_message or None,
     )
 
 
@@ -1066,7 +1069,7 @@ def _skipped_worker_envelope(
             error_code="upstream_failed",
             safe_summary=summary,
         ),
-        answer=summary,
+        answer=None,
     )
 
 
@@ -1093,7 +1096,7 @@ def _failed_worker_envelope(
             retryable=False,
             safe_summary=summary,
         ),
-        answer=summary,
+        answer=None,
     )
 
 

@@ -14,9 +14,10 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from margin.core.ssrf import SSRFError, assert_public_http_url
+from margin.documents.pipeline import DocumentNormalizationPipeline, DocumentPipelineRequest
 from margin.news.models import (
     DocumentEvent,
     DocumentStatus,
@@ -425,6 +426,14 @@ class SnapshotStore:
             return "json"
         if "csv" in ct:
             return "csv"
+        if "wordprocessingml" in ct or "msword" in ct:
+            return "docx"
+        if "spreadsheetml" in ct or "excel" in ct:
+            return "xlsx"
+        if "presentationml" in ct or "powerpoint" in ct:
+            return "pptx"
+        if "markdown" in ct:
+            return "md"
         if "xml" in ct:
             return "xml"
         return "txt"
@@ -779,6 +788,7 @@ class FilingAcquirer:
         snapshot_store: SnapshotStore,
         parser: DocumentParser | None = None,
         security_mapper: SecurityMapper | None = None,
+        normalization_pipeline: Any | None = None,
     ) -> None:
         """Initialize the filing acquirer.
 
@@ -787,13 +797,16 @@ class FilingAcquirer:
             snapshot_store: SnapshotStore: .
             parser: DocumentParser | None: .
             security_mapper: SecurityMapper | None: .
+            normalization_pipeline: Shared canonical document normalization pipeline.
 
         Returns:
             None: .
         """
         self._registry = registry
         self._downloader = Downloader(registry, snapshot_store)
-        self._parser = parser or DocumentParser()
+        self._snapshot_store = snapshot_store
+        self._legacy_parser = parser
+        self._normalization_pipeline = normalization_pipeline or DocumentNormalizationPipeline()
         self._mapper = security_mapper or SecurityMapper()
 
     def acquire(
@@ -818,17 +831,40 @@ class FilingAcquirer:
         """
         descriptor = self._registry.get(source_name)
         snapshot = self._downloader.download(source_name, url, **kwargs)
+        document_id = _document_id_for_snapshot(snapshot.snapshot_id)
 
         processing_status = DocumentStatus.READY
         processing_error = None
         try:
-            parsed = self._parser.parse(snapshot)
-        except ParseError:
+            if self._legacy_parser is not None:
+                parsed = self._legacy_parser.parse(snapshot)
+            else:
+                raw_content = self._snapshot_store.read_snapshot(snapshot)
+                if raw_content is None:
+                    raise ParseError("raw snapshot content is unavailable")
+                normalized = self._normalization_pipeline.normalize(
+                    DocumentPipelineRequest(
+                        document_id=document_id,
+                        content=raw_content,
+                        source_url=url,
+                        content_type=snapshot.content_type,
+                        filename=Path(urlparse(url).path).name or None,
+                    )
+                )
+                if normalized.conversion.parse_status != "ready" or not normalized.final_markdown:
+                    reason = ",".join(normalized.conversion.warnings) or "normalization_failed"
+                    raise ParseError(reason)
+                parsed = {
+                    "title": _title_from_markdown(normalized.final_markdown, url),
+                    "content": normalized.final_markdown,
+                    "doc_type": "filing",
+                }
+        except Exception as exc:  # noqa: BLE001 - parser failures must preserve the raw snapshot
             parsed = {
                 "title": title_override or url,
                 "content": None,
                 "doc_type": "filing",
-                "parse_note": "parse failed, raw snapshot preserved",
+                "parse_note": f"parse failed, raw snapshot preserved: {exc}",
             }
             processing_status = DocumentStatus.PARSE_FAILED
             processing_error = parsed["parse_note"]
@@ -858,6 +894,7 @@ class FilingAcquirer:
             snapshot_hash=snapshot.content_hash,
             processing_status=processing_status,
             processing_error=processing_error,
+            document_id=document_id,
         )
         return event
 
@@ -885,3 +922,23 @@ class FilingAcquirer:
             except (DownloadError, ComplianceError):
                 continue
         return events
+
+
+def _document_id_for_snapshot(snapshot_id: str) -> str:
+    """Return a stable canonical document ID for one immutable snapshot."""
+    return f"doc_{snapshot_id}"
+
+
+def _title_from_markdown(markdown: str, fallback: str) -> str:
+    """Extract a readable title from canonical Markdown."""
+    for line in markdown.splitlines():
+        value = line.strip()
+        if value.startswith("#"):
+            title = value.lstrip("# ").strip()
+            if title:
+                return title
+    for line in markdown.splitlines():
+        title = line.strip().lstrip("# ").strip()
+        if title:
+            return title[:500]
+    return fallback

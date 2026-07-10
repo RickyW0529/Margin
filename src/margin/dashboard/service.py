@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -131,8 +131,15 @@ class DashboardQueryService:
         effective_assessment = _merge_dicts(
             {
                 "assessment_id": item.snapshot_id,
-                "freshness": ("current" if item.status == ItemStatus.PUBLISHED else "stale"),
-                "stale_reason": item.abstain_reason,
+                "freshness": _dashboard_assessment_freshness(item),
+                "stale_reason": (
+                    item.abstain_reason
+                    or (
+                        "no_effective_assessment"
+                        if _dashboard_assessment_freshness(item) == "missing"
+                        else None
+                    )
+                ),
             },
             _dict_value(context, "effective_assessment"),
         )
@@ -145,18 +152,9 @@ class DashboardQueryService:
             _dict_value(context, "thesis"),
         )
         context_evidence = context.get("evidence") if isinstance(context, dict) else None
-        evidence = (
-            tuple(context_evidence)
-            if isinstance(context_evidence, list | tuple)
-            else tuple(
-                {
-                    "evidence_id": evidence_id,
-                    "source_level": "unknown",
-                    "locator": "stored evidence reference",
-                    "snapshot_id": item.snapshot_id,
-                }
-                for evidence_id in item.evidence_ids
-            )
+        evidence = _merge_evidence_rows(
+            _recommendation_evidence_rows(item),
+            (tuple(context_evidence) if isinstance(context_evidence, list | tuple) else ()),
         )
         versions = _merge_dicts(
             {
@@ -303,6 +301,7 @@ class DashboardQueryService:
             facets=page.facets,
             as_of=page.as_of,
             scope_version_id=page.scope_version_id,
+            portfolio_summary=page.portfolio_summary,
         )
 
     def _enrich_candidate(
@@ -572,7 +571,7 @@ def _candidate_item_from_research_item(
         scope_version_id=run.version_id,
         screening_status=screening_status,
         data_status="complete" if item.status == ItemStatus.PUBLISHED else "partial",
-        risk_flags=tuple(item.rejection_reasons),
+        risk_flags=_dashboard_risk_flags(item),
         review_required=item.status != ItemStatus.PUBLISHED,
         research_guardrail=(
             "allow_research" if item.status == ItemStatus.PUBLISHED else "review_required"
@@ -581,9 +580,9 @@ def _candidate_item_from_research_item(
             "update_assessment" if item.status == ItemStatus.PUBLISHED else "abstain"
         ),
         effective_assessment_id=item.snapshot_id,
-        assessment_freshness=("current" if item.status == ItemStatus.PUBLISHED else "stale"),
+        assessment_freshness=_dashboard_assessment_freshness(item),
         stale_reason=item.abstain_reason,
-        final_score=round(item.confidence * 100, 4),
+        final_score=_dashboard_final_score(item),
         target_weight=item.target_weight,
         adjusted_weight=item.adjusted_weight,
         agent_adjustment=dict(item.agent_adjustment),
@@ -606,6 +605,113 @@ def _screening_status_from_item(item: ResearchItem) -> str:
     if item.signal_type.startswith(prefix):
         return item.signal_type.removeprefix(prefix)
     return "pass" if item.status == ItemStatus.PUBLISHED else item.status.value
+
+
+def _dashboard_final_score(item: ResearchItem) -> float | None:
+    """Return an explicit fusion quant score without conflating confidence."""
+    adjustment = item.agent_adjustment
+    if "quant_score" in adjustment:
+        return _optional_float(adjustment.get("quant_score"))
+    return round(item.confidence * 100, 4)
+
+
+def _dashboard_risk_flags(item: ResearchItem) -> tuple[str, ...]:
+    """Return projected fusion risk flags, falling back to legacy storage."""
+    values = item.agent_adjustment.get("risk_flags")
+    if isinstance(values, list | tuple):
+        return tuple(str(value) for value in values)
+    return tuple(item.rejection_reasons)
+
+
+def _dashboard_assessment_freshness(item: ResearchItem) -> str:
+    """Never claim a current assessment when a fusion item has no assessment ID."""
+    if item.signal_type == "recommendation_fusion" and item.snapshot_id is None:
+        return "missing"
+    return "current" if item.status == ItemStatus.PUBLISHED else "stale"
+
+
+def _recommendation_evidence_rows(item: ResearchItem) -> tuple[dict[str, Any], ...]:
+    """Project exact worker evidence before broader contextual documents."""
+    rows: list[dict[str, Any]] = []
+    raw_evidence = item.agent_adjustment.get("evidence")
+    if isinstance(raw_evidence, list | tuple):
+        for raw in raw_evidence:
+            if not isinstance(raw, Mapping):
+                continue
+            source_id = str(raw.get("source_id") or "").strip()
+            if not source_id:
+                continue
+            source_type = str(raw.get("source_type") or "unknown")
+            source_url = str(raw.get("url") or "").strip() or None
+            rows.append(
+                {
+                    "evidence_id": source_id,
+                    "source_kind": _evidence_source_kind(source_type),
+                    "detail_url": (
+                        None if source_type == "websearch" else f"/api/v1/evidence/{source_id}"
+                    ),
+                    "title": str(raw.get("title") or source_id),
+                    "source_level": (
+                        "L3"
+                        if source_type == "warehouse_quant_result"
+                        else "web"
+                        if source_type == "websearch"
+                        else "unknown"
+                    ),
+                    "locator": {
+                        "source_type": source_type,
+                        **(
+                            dict(raw.get("locator"))
+                            if isinstance(raw.get("locator"), Mapping)
+                            else {}
+                        ),
+                    },
+                    "snapshot_id": item.snapshot_id,
+                    "source_url": source_url,
+                    "snippet": str(raw.get("excerpt") or "") or None,
+                    "cited": True,
+                }
+            )
+    projected_ids = {row["evidence_id"] for row in rows}
+    rows.extend(
+        {
+            "evidence_id": evidence_id,
+            "source_kind": "document",
+            "detail_url": f"/api/v1/evidence/{evidence_id}",
+            "source_level": "unknown",
+            "locator": "stored evidence reference",
+            "snapshot_id": item.snapshot_id,
+            "cited": True,
+        }
+        for evidence_id in item.evidence_ids
+        if evidence_id not in projected_ids
+    )
+    return tuple(rows)
+
+
+def _evidence_source_kind(source_type: str) -> str:
+    """Map worker lineage kinds to evidence-detail source kinds."""
+    if source_type == "warehouse_quant_result":
+        return "quant_result"
+    if source_type == "websearch":
+        return "websearch"
+    return "document"
+
+
+def _merge_evidence_rows(
+    exact_rows: Iterable[dict[str, Any]],
+    context_rows: Iterable[dict[str, Any]],
+) -> tuple[dict[str, Any], ...]:
+    """Merge exact citations with contextual documents without replacing either."""
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in (*tuple(exact_rows), *tuple(context_rows)):
+        evidence_id = str(row.get("evidence_id") or "").strip()
+        if not evidence_id or evidence_id in seen:
+            continue
+        seen.add(evidence_id)
+        merged.append(dict(row))
+    return tuple(merged)
 
 
 def _merge_dicts(base: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:

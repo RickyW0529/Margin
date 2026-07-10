@@ -124,6 +124,11 @@ export const PROVIDER_PRESETS: Record<ProviderCategoryId, ProviderPreset[]> = {
       label: "Tavily",
       baseUrl: "https://api.tavily.com/search",
     },
+    {
+      providerId: "firecrawl",
+      label: "Firecrawl",
+      baseUrl: "https://api.firecrawl.dev",
+    },
     CUSTOM_PROVIDER_PRESET,
   ],
   data_source: [
@@ -183,6 +188,11 @@ const RULES: Record<ProviderCategoryId, ProviderRule[]> = {
   ],
   web_search: [
     { providerId: "tavily", label: "Tavily", pattern: /tavily\.com/i },
+    {
+      providerId: "firecrawl",
+      label: "Firecrawl",
+      pattern: /firecrawl\.dev|firecrawl\.com/i,
+    },
     { providerId: "exa", label: "Exa", pattern: /exa\.ai/i },
     { providerId: "serpapi", label: "SerpAPI", pattern: /serpapi\.com/i },
     { providerId: "bing", label: "Bing", pattern: /bing\.microsoft\.com|api\.bing\.microsoft/i },

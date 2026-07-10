@@ -21,6 +21,7 @@ from margin.dashboard.models import (
     DashboardSort,
     FeedbackRecord,
     ItemStatus,
+    PortfolioSummary,
     ResearchCandidateListItemV2,
     ResearchCandidateListResponse,
     ResearchItem,
@@ -309,6 +310,7 @@ class MemoryDashboardRepository:
             sort=sort,
             cursor=cursor,
             limit=limit,
+            portfolio_summary=(_portfolio_summary_from_run(runs[0]) if runs else None),
         )
 
 
@@ -504,6 +506,7 @@ class SQLAlchemyDashboardRepository:
             sort=sort,
             cursor=cursor,
             limit=limit,
+            portfolio_summary=_portfolio_summary_from_run(next(iter(run_by_id.values()))),
         )
 
 
@@ -644,7 +647,7 @@ def _candidate_from_item(
         scope_version_id=run.version_id,
         screening_status=screening_status,
         data_status=data_status,
-        risk_flags=tuple(item.rejection_reasons),
+        risk_flags=_dashboard_risk_flags(item),
         review_required=item.status != ItemStatus.PUBLISHED,
         research_guardrail=(
             "allow_research" if item.status == ItemStatus.PUBLISHED else "review_required"
@@ -653,9 +656,9 @@ def _candidate_from_item(
             "update_assessment" if item.status == ItemStatus.PUBLISHED else "abstain"
         ),
         effective_assessment_id=item.snapshot_id,
-        assessment_freshness="current" if item.status == ItemStatus.PUBLISHED else "stale",
+        assessment_freshness=_dashboard_assessment_freshness(item),
         stale_reason=item.abstain_reason,
-        final_score=round(item.confidence * 100, 4),
+        final_score=_dashboard_final_score(item),
         target_weight=item.target_weight,
         adjusted_weight=item.adjusted_weight,
         agent_adjustment=dict(item.agent_adjustment),
@@ -680,6 +683,35 @@ def _screening_status_from_item(item: ResearchItem) -> str:
     return "pass" if item.status == ItemStatus.PUBLISHED else item.status.value
 
 
+def _dashboard_final_score(item: ResearchItem) -> float | None:
+    """Return the real quant score when fusion projected one explicitly."""
+    adjustment = item.agent_adjustment
+    if "quant_score" in adjustment:
+        value = adjustment.get("quant_score")
+        if value is None:
+            return None
+        try:
+            return round(float(value), 4)
+        except (TypeError, ValueError):
+            return None
+    return round(item.confidence * 100, 4)
+
+
+def _dashboard_risk_flags(item: ResearchItem) -> tuple[str, ...]:
+    """Keep fusion risk flags separate from rejection reasons in storage."""
+    values = item.agent_adjustment.get("risk_flags")
+    if isinstance(values, list | tuple):
+        return tuple(str(value) for value in values)
+    return tuple(item.rejection_reasons)
+
+
+def _dashboard_assessment_freshness(item: ResearchItem) -> str:
+    """Never present a fusion item without an assessment ID as current."""
+    if item.signal_type == "recommendation_fusion" and item.snapshot_id is None:
+        return "missing"
+    return "current" if item.status == ItemStatus.PUBLISHED else "stale"
+
+
 def _candidate_page(
     candidates: list[ResearchCandidateListItemV2],
     *,
@@ -688,6 +720,7 @@ def _candidate_page(
     sort: DashboardSort,
     cursor: str | None,
     limit: int,
+    portfolio_summary: PortfolioSummary | None = None,
 ) -> ResearchCandidateListResponse:
     """Filter, sort, and paginate candidates into a cursor-paged response.
 
@@ -720,7 +753,25 @@ def _candidate_page(
         facets=_facets(filtered),
         as_of=datetime.now(UTC),
         scope_version_id=scope_version_id,
+        portfolio_summary=portfolio_summary,
     )
+
+
+def _portfolio_summary_from_run(run: ResearchRun) -> PortfolioSummary | None:
+    """Safely decode typed fusion portfolio metadata from the latest run."""
+    try:
+        payload = json.loads(run.summary)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("type") != "recommendation_fusion":
+        return None
+    summary = payload.get("portfolio_summary")
+    if not isinstance(summary, dict):
+        return None
+    try:
+        return PortfolioSummary.model_validate(summary)
+    except ValueError:
+        return None
 
 
 def _apply_filters(

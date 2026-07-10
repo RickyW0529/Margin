@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from margin.agent_runtime.models import ContextArtifact
+from margin.agents.context.turn_context import ResolvedTurnContext
 from margin.agents.protocol.models import (
     ContextPack,
     DomainAuditReport,
@@ -30,6 +31,7 @@ class AgentRunContext(BaseModel):
     scope_version_id: str = ""
     universe: str = ""
     conversation_context: tuple[dict[str, str], ...] = ()
+    resolved_turn_context: ResolvedTurnContext | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @property
@@ -81,4 +83,3 @@ class DomainExecutionEnvelope(BaseModel):
     worker_results: tuple[WorkerTaskResult, ...] = ()
     answer: str
     table_rows: tuple[dict[str, Any], ...] = ()
-

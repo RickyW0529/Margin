@@ -91,6 +91,16 @@ def test_router_falls_back_to_custom_with_user_url() -> None:
     assert detected.is_custom is True
 
 
+def test_web_search_router_detects_firecrawl_from_url() -> None:
+    """Firecrawl hosted API URLs should map to the firecrawl web_search provider."""
+    detected = detect_provider_from_url("web_search", "https://api.firecrawl.dev")
+
+    assert detected.provider_id == "firecrawl"
+    assert detected.label == "Firecrawl"
+    assert detected.is_custom is False
+    assert provider_category_for_config("websearch", "firecrawl", {}) == "web_search"
+
+
 def test_provider_category_uses_type_and_config_fallbacks() -> None:
     """Provider categories should normalize old and new config shapes.
 

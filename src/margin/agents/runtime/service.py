@@ -29,6 +29,7 @@ from margin.agents.context.persistence import ContextPersistence
 from margin.agents.context.readiness_builder import DataReadinessBuilder
 from margin.agents.context.repository import ContextRepository, MemoryContextRepository
 from margin.agents.context.router import ContextRouter
+from margin.agents.context.turn_context import ResolvedTurnContext, resolve_turn_context
 from margin.agents.protocol.execution import AgentRunContext
 from margin.agents.protocol.models import (
     AgentExecutionStatus,
@@ -83,6 +84,7 @@ class UserQnaCommand:
     universe: str
     language: Literal["zh", "en"]
     conversation_context: Sequence[dict[str, str]] = ()
+    resolved_turn_context: ResolvedTurnContext | None = None
     allow_workspace_tools: bool = False
 
 
@@ -107,6 +109,20 @@ class AgentTraceStep:
 
 
 @dataclass(frozen=True)
+class AgentTraceActivity:
+    """Safe execution activity, never prompts, raw errors, or private reasoning."""
+
+    activity_id: str
+    stage: Literal["planning", "execution", "validation"]
+    actor: str
+    action: str
+    status: AgentExecutionStatus
+    summary: str
+    tool_name: str | None = None
+    evidence_refs: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class DomainAnswerFragment:
     """One domain's user-safe answer fragment."""
 
@@ -128,6 +144,7 @@ class UserQnaRunResult:
     artifacts: tuple[ContextArtifact, ...]
     references: tuple[dict[str, str], ...]
     final_answer: FinalUserAnswerArtifact
+    activities: tuple[AgentTraceActivity, ...] = ()
 
 
 class AgentInputBlockedError(RuntimeError):
@@ -161,6 +178,7 @@ class AgentRuntimeService:
         code_tools_enabled: bool = False,
         main_max_concurrency: int = 1,
         expert_max_concurrency: int = 1,
+        firecrawl_adapter: Any | None = None,
     ) -> None:
         """Initialize the application-facing v1 Agent runtime service."""
         self._context_store = context_store
@@ -182,6 +200,7 @@ class AgentRuntimeService:
         tool_catalog = default_tool_catalog(
             warehouse_repository=warehouse_repository,
             dashboard_services=dashboard_services,
+            firecrawl_adapter=firecrawl_adapter,
         )
         if code_tools_enabled:
             register_workspace_tools(tool_catalog, workspace_root or Path.cwd())
@@ -307,6 +326,11 @@ class AgentRuntimeService:
         if not raw_guardrail.allowed:
             raise AgentInputBlockedError(raw_guardrail)
         command = _command_with_current_user_message(command)
+        if command.resolved_turn_context is None:
+            command = replace(
+                command,
+                resolved_turn_context=resolve_turn_context(command.message),
+            )
         guardrail = _evaluate_user_input(command.message)
         if not guardrail.allowed:
             raise AgentInputBlockedError(guardrail)
@@ -366,8 +390,19 @@ class AgentRuntimeService:
         artifacts: list[ContextArtifact] = []
         available_artifacts: dict[str, ContextArtifact] = {}
         approved_capsule_refs: list[str] = []
+        approved_evidence_refs: list[str] = []
         used_artifact_refs: list[str] = []
         trace_steps: list[AgentTraceStep] = []
+        activities: list[AgentTraceActivity] = [
+            AgentTraceActivity(
+                activity_id=f"{command.run_id}:planning",
+                stage="planning",
+                actor="MainAgent",
+                action="route_request",
+                status=AgentExecutionStatus.SUCCEEDED,
+                summary="已根据当前问题和结构化上下文生成执行计划。",
+            )
+        ]
         table_rows: list[dict[str, Any]] = []
         domain_answer_fragments: list[DomainAnswerFragment] = []
 
@@ -381,6 +416,7 @@ class AgentRuntimeService:
                 scope_version_id=command.scope_version_id,
                 universe=command.universe,
                 conversation_context=tuple(command.conversation_context),
+                resolved_turn_context=command.resolved_turn_context,
             ),
             context_pack=context_pack,
         )
@@ -411,6 +447,7 @@ class AgentRuntimeService:
                     edge_type="source_ref",
                 )
             for evidence_ref in domain_capsule.evidence_refs:
+                approved_evidence_refs.append(evidence_ref)
                 self._context_repository.record_lineage_edge(
                     run_id=command.run_id,
                     from_ref=domain_capsule.capsule_id,
@@ -445,6 +482,22 @@ class AgentRuntimeService:
                     status=execution.result.status,
                 )
             )
+            activities.append(
+                _safe_trace_activity(
+                    activity_id=f"{command.run_id}:{domain_task.domain_task_id}",
+                    actor=domain_task.to_domain_agent,
+                    action=(
+                        reviewed_worker.skill_id
+                        if reviewed_worker is not None
+                        else "review_result"
+                    ),
+                    status=execution.result.status,
+                    has_missing_requirements=bool(
+                        execution.result.missing_requirements
+                    ),
+                    evidence_refs=tuple(domain_capsule.evidence_refs),
+                )
+            )
 
         answer = _synthesize_domain_answer_fragments(domain_answer_fragments)
         answer, writing_artifact = _writing_revision_artifact(
@@ -462,6 +515,7 @@ class AgentRuntimeService:
             required_artifact_refs=tuple(approved_capsule_refs),
             available_artifacts=available_artifacts,
             approved_capsule_refs=tuple(approved_capsule_refs),
+            evidence_refs=tuple(dict.fromkeys(approved_evidence_refs)),
         )
         final_answer = FinalUserAnswerArtifact(
             artifact_id=f"fua_{command.run_id}",
@@ -470,6 +524,7 @@ class AgentRuntimeService:
             language=command.language,
             used_domain_capsule_refs=tuple(approved_capsule_refs),
             used_artifact_refs=tuple(dict.fromkeys(used_artifact_refs)),
+            evidence_refs=tuple(dict.fromkeys(approved_evidence_refs)),
             source_refs=("agent:v1:user_qna",),
             disclaimers=("research_support_not_financial_advice",),
             limitations=("offline_research_context_may_be_incomplete",),
@@ -482,6 +537,7 @@ class AgentRuntimeService:
             producer_agent="MainAgent",
             payload_json=final_answer.model_dump(mode="json"),
             source_refs=final_answer.source_refs,
+            evidence_refs=final_answer.evidence_refs,
         )
         final_audit_artifact = make_context_artifact(
             artifact_id=final_audit.audit_report_id,
@@ -490,6 +546,7 @@ class AgentRuntimeService:
             producer_agent="MainAgent",
             payload_json=final_audit.model_dump(mode="json"),
             source_refs=("agent:v1:user_qna",),
+            evidence_refs=final_audit.evidence_refs,
         )
         artifacts.extend((final_audit_artifact, final_answer_artifact))
         for artifact in artifacts:
@@ -500,8 +557,12 @@ class AgentRuntimeService:
             global_plan=global_plan,
             trace_steps=tuple(trace_steps),
             artifacts=tuple(artifacts),
-            references=_references_from_rows(table_rows),
+            references=_references_from_rows(
+                table_rows,
+                evidence_refs=tuple(dict.fromkeys(approved_evidence_refs)),
+            ),
             final_answer=final_answer,
+            activities=tuple(activities),
         )
 
     def get_context_artifact(self, artifact_id: str) -> ContextArtifact | None:
@@ -572,6 +633,18 @@ class AgentRuntimeService:
             artifacts=artifacts,
             references=(),
             final_answer=final_answer,
+            activities=(
+                AgentTraceActivity(
+                    activity_id=f"{command.run_id}:planning",
+                    stage="planning",
+                    actor="MainAgent",
+                    action="route_request",
+                    status=AgentExecutionStatus.BLOCKED,
+                    summary=(
+                        "规划阶段未找到可验证的执行路径；详细诊断已保留在审计记录中。"
+                    ),
+                ),
+            ),
         )
 
     def _build_and_store_context_pack(
@@ -594,6 +667,7 @@ class AgentRuntimeService:
             token_budget=4000,
             artifacts=(readiness_artifact,),
             included_chat_summary_ref=f"chat_summary:{_conversation_hash(command)}",
+            resolved_turn_context=command.resolved_turn_context,
         )
         return self._context_persistence.persist_context_pack(
             context_pack,
@@ -681,64 +755,94 @@ def _artifact_tool_requirements(
     return {output: tuple(tool_names) for output, tool_names in requirements.items()}
 
 
+def _safe_trace_activity(
+    *,
+    activity_id: str,
+    actor: str,
+    action: str,
+    status: AgentExecutionStatus,
+    has_missing_requirements: bool,
+    evidence_refs: tuple[str, ...],
+) -> AgentTraceActivity:
+    """Build a bounded activity record without model reasoning or raw errors."""
+    return AgentTraceActivity(
+        activity_id=activity_id,
+        stage="validation" if has_missing_requirements else "execution",
+        actor=actor,
+        action=action,
+        status=status,
+        summary=(
+            "该步骤未产出完整的可验证结果；详细诊断已保留在审计记录中。"
+            if has_missing_requirements
+            else "该步骤已完成并通过结构化校验。"
+            if status is AgentExecutionStatus.SUCCEEDED
+            else "该步骤未完成；可重试状态已记录在执行活动中。"
+        ),
+        evidence_refs=evidence_refs,
+    )
+
+
 def _synthesize_domain_answer_fragments(
     fragments: list[DomainAnswerFragment],
 ) -> str:
     """Synthesize final answer text from approved domain fragments."""
     if not fragments:
         raise AgentRuntimeUnavailableError("No domain answer fragments available")
-    if len(fragments) == 1:
-        fragment = fragments[0]
-        if fragment.status is AgentExecutionStatus.SUCCEEDED:
-            return fragment.answer
-        return "\n\n".join(
-            (
-                "### 暂时无法完成",
-                f"- {fragment.answer}",
-                "### 下一步",
-                "- 补充缺失输入、启用对应能力，或稍后重试不可用的数据源。",
-            )
+    completed_answers = tuple(
+        dict.fromkeys(
+            safe_answer
+            for fragment in fragments
+            if fragment.status
+            in {AgentExecutionStatus.SUCCEEDED, AgentExecutionStatus.PARTIAL}
+            and (safe_answer := _public_safe_message(fragment.answer))
         )
-    if all(fragment.status is not AgentExecutionStatus.SUCCEEDED for fragment in fragments):
-        sections = ["### 暂时无法完成"]
-        for fragment in fragments:
-            sections.append(f"#### {fragment.domain_agent}\n{fragment.answer}")
-        sections.append("### 下一步\n- 补充缺失输入、启用对应能力，或稍后重试不可用的数据源。")
-        return "\n\n".join(sections)
-    sections = ["### 综合回答"]
-    for fragment in fragments:
-        sections.append(
-            "\n".join(
-                (
-                    f"#### {fragment.domain_agent} ({fragment.status})",
-                    fragment.answer,
-                )
-            )
-        )
-    return "\n\n".join(sections)
+    )
+    if len(completed_answers) == 1:
+        return completed_answers[0]
+    if completed_answers:
+        return "\n\n".join(("### 综合回答", *completed_answers))
+    return (
+        "### 暂时无法完成\n\n"
+        "当前查询尚未得到可验证结果。请确认查询对象、指标和时间范围，或稍后重试。"
+    )
 
 
 def _planner_messages_answer(messages: tuple[dict[str, Any], ...]) -> str:
     """Return a concise blocked answer from non-executable MainAgent plan messages."""
     details = []
     for message in messages:
-        text = str(
+        text = _public_safe_message(
             message.get("user_safe_message")
             or message.get("reason")
             or "当前能力不可执行。"
-        ).strip()
+        )
         if text:
             details.append(text)
     if not details:
-        details.append("MainAgent 没有找到当前环境中可执行的专家能力。")
+        details.append("当前环境暂时无法完成这项查询。")
     lines = ["### 暂时无法完成", *[f"- {detail}" for detail in dict.fromkeys(details)]]
     lines.extend(
         [
             "### 下一步",
-            "- 启用对应 worker/tool/repository 后重试，或改问当前已开放的数据/普通问答能力。",
+            "- 请补充查询对象、指标和时间范围，或稍后重试。",
         ]
     )
     return "\n\n".join(lines)
+
+
+_INTERNAL_RUNTIME_TERM_RE = re.compile(
+    r"(?i)\b(?:worker|tool|repository|executor|artifact)s?\b|"
+    r"missing\s+(?:required\s+)?artifacts?|依赖(?:任务|步骤)?|跳过依赖|"
+    r"前置\s*agent|agent\s+(?:capability|execution)"
+)
+
+
+def _public_safe_message(value: object) -> str:
+    """Return user-facing text only when it contains no runtime diagnostics."""
+    text = strip_thinking_blocks(str(value or "")).strip()
+    if not text or _INTERNAL_RUNTIME_TERM_RE.search(text):
+        return ""
+    return text
 
 
 def _command_with_current_user_message(command: UserQnaCommand) -> UserQnaCommand:
@@ -1012,17 +1116,89 @@ def _build_user_answer_prompt(
     )
 
 
-def _references_from_rows(rows: list[dict[str, Any]]) -> tuple[dict[str, str], ...]:
-    """Return safe frontend references for table rows."""
-    references = [
-        {
-            "type": "dashboard_candidate",
-            "id": str(row["security_id"]),
-            "label": str(row["security_id"]),
-        }
-        for row in rows[:10]
-    ]
+def _references_from_rows(
+    rows: list[dict[str, Any]],
+    *,
+    evidence_refs: tuple[str, ...] = (),
+) -> tuple[dict[str, str], ...]:
+    """Return safe frontend references for warehouse rows and RAG evidence artifacts."""
+    references: list[dict[str, str]] = []
+    for row in rows[:10]:
+        security_id = str(row.get("security_id") or "")
+        indicator_id = str(row.get("indicator_id") or "")
+        fact_id = str(row.get("fact_id") or "")
+        if indicator_id and row.get("date") and row.get("source"):
+            locator = str(
+                row.get("locator")
+                or (
+                    "warehouse://indicator-history/"
+                    f"{security_id}/{indicator_id}/{fact_id or row['date']}"
+                )
+            )
+            reference = {
+                    "type": "warehouse_fact",
+                    "source_kind": "warehouse_fact",
+                    "id": fact_id or locator,
+                    "label": (
+                        f"{security_id} {row.get('metric') or indicator_id} {row['date']}"
+                    ),
+                    "security_id": security_id,
+                    "indicator": indicator_id,
+                    "indicator_id": indicator_id,
+                    "date": str(row["date"]),
+                    "source": str(row["source"]),
+                    "source_name": str(row["source"]),
+                    "source_level": "L3",
+                    "fact_id": fact_id,
+                    "locator": locator,
+                    "snapshot_id": str(row.get("raw_snapshot_id") or ""),
+                    "pit_timestamp": str(row.get("available_at") or ""),
+                }
+            if fact_id:
+                reference.update(
+                    {
+                        "evidence_id": fact_id,
+                        "detail_url": f"/api/v1/evidence/{fact_id}",
+                    }
+                )
+            references.append(reference)
+            continue
+        if security_id:
+            references.append(
+                {
+                    "type": "dashboard_candidate",
+                    "id": security_id,
+                    "label": security_id,
+                }
+            )
+    existing_ids = {item.get("evidence_id") or item.get("id") for item in references}
+    for raw_ref in evidence_refs:
+        evidence_id = _canonical_evidence_id(raw_ref)
+        if not evidence_id or evidence_id in existing_ids:
+            continue
+        references.append(
+            {
+                "type": "document_evidence",
+                "source_kind": "document",
+                "id": evidence_id,
+                "evidence_id": evidence_id,
+                "detail_url": f"/api/v1/evidence/{evidence_id}",
+                "label": evidence_id,
+                "locator": f"evidence_id:{evidence_id}",
+            }
+        )
+        existing_ids.add(evidence_id)
     return tuple(references)
+
+
+def _canonical_evidence_id(reference: str) -> str:
+    """Normalize an artifact evidence reference into the canonical detail ID."""
+    value = str(reference or "").strip()
+    if value.startswith("evidence://"):
+        return value.removeprefix("evidence://").strip("/")
+    if value.startswith("evidence:"):
+        return value.removeprefix("evidence:").strip()
+    return value
 
 
 def _conversation_hash(command: UserQnaCommand) -> str:

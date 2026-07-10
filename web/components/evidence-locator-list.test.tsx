@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe("EvidenceLocatorList", () => {
-  it("renders escaped source titles and hides technical locator details by default", () => {
+  it("renders escaped titles without technical locator plumbing", () => {
     const { container } = render(
       <LanguageProvider>
         <EvidenceLocatorList
@@ -32,13 +32,14 @@ describe("EvidenceLocatorList", () => {
     );
 
     expect(screen.getByText("<img src=x onerror=alert(1)>")).toBeInTheDocument();
-    expect(screen.getByText("来源可信度 L1")).toBeInTheDocument();
-    expect(screen.getByText("技术定位")).toBeInTheDocument();
-    expect(screen.queryByText("snapshot")).not.toBeInTheDocument();
+    expect(screen.getByText("L1")).toBeInTheDocument();
+    expect(screen.queryByText("技术定位")).not.toBeInTheDocument();
+    expect(screen.queryByText("page 3")).not.toBeInTheDocument();
+    expect(screen.queryByText("snap-1")).not.toBeInTheDocument();
     expect(container.querySelector("img")).toBeNull();
   });
 
-  it("renders news snippets and security-link status", () => {
+  it("shows snippets and only flags unlinked evidence for review", () => {
     render(
       <LanguageProvider>
         <EvidenceLocatorList
@@ -69,5 +70,31 @@ describe("EvidenceLocatorList", () => {
     expect(screen.getByText("证券代码：002416 证券简称：爱施德")).toBeInTheDocument();
     expect(screen.getByText("已关联本股票")).toBeInTheDocument();
     expect(screen.getByText("需要人工复核关联股票")).toBeInTheDocument();
+  });
+
+  it("keeps direct WebSearch results on the source link instead of the evidence reader", () => {
+    render(
+      <LanguageProvider>
+        <EvidenceLocatorList
+          evidence={[
+            {
+              detail_url: "https://example.com/counter-evidence",
+              evidence_id: "https://example.com/counter-evidence",
+              locator: { source_type: "websearch" },
+              source_kind: "websearch",
+              source_level: "web",
+              source_url: "https://example.com/counter-evidence",
+              title: "公开信息反证",
+            },
+          ]}
+        />
+      </LanguageProvider>,
+    );
+
+    expect(screen.queryByRole("button", { name: "公开信息反证" })).toBeNull();
+    expect(screen.getByRole("link", { name: /原文/ })).toHaveAttribute(
+      "href",
+      "https://example.com/counter-evidence",
+    );
   });
 });

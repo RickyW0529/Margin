@@ -21,6 +21,15 @@ from margin.agents.context.repository import SQLAlchemyContextRepository
 from margin.agents.runtime.service import AgentRuntimeService
 from margin.agents.tools.audit import SQLAlchemyToolAuditStore
 from margin.agents.workers.dashboard_publisher_worker import DashboardPublisherWorker
+from margin.agents.workers.recommendation_repository import (
+    SQLAlchemyCatalystContextLoader,
+    SQLAlchemyRecommendationArtifactRepository,
+)
+from margin.agents.workers.recommendation_workers import (
+    EarningsCatalystWorker,
+    MLQuantWorker,
+    RecommendationFusionWorker,
+)
 from margin.bootstrap.container import AppContainer
 from margin.config_runtime.repository import ConfigResolver, SQLAlchemyConfigRepository
 from margin.core.orchestration_repository import SQLAlchemyOrchestrationRepository
@@ -95,7 +104,10 @@ from margin.valuation_discovery.etl import (
     SQLAlchemyQuantFeatureMartETLPipeline,
     build_feature_mart_cross_section_loader,
 )
-from margin.valuation_discovery.news_targets import NewsTargetSelector
+from margin.valuation_discovery.news_targets import (
+    NewsTargetSelector,
+    SQLAlchemyFilingCatalystCandidateLoader,
+)
 from margin.valuation_discovery.orchestrator import (
     ValuationDiscoveryDependencies,
     ValuationDiscoveryOrchestrationRepository,
@@ -496,6 +508,7 @@ def get_agent_runtime_service() -> AgentRuntimeService:
         code_tools_enabled=settings.agent_code_tools_enabled,
         main_max_concurrency=settings.graph_max_concurrency,
         expert_max_concurrency=settings.graph_max_concurrency,
+        firecrawl_adapter=_optional_firecrawl_adapter(runtime_factory),
     )
 
 
@@ -793,7 +806,9 @@ def get_valuation_discovery_service() -> ValuationDiscoveryService:
         feature_mart_pipeline=feature_mart_etl,
     )
 
-    news_target_selector = NewsTargetSelector()
+    news_target_selector = NewsTargetSelector(
+        filing_candidate_loader=SQLAlchemyFilingCatalystCandidateLoader(session_factory)
+    )
 
     runtime_factory = get_provider_runtime_factory()
     market_runtime = runtime_factory.build_market_data("quant_required_financials")
@@ -850,12 +865,28 @@ def get_valuation_discovery_service() -> ValuationDiscoveryService:
         research_service,
         session_factory=session_factory,
     )
+    recommendation_repository = SQLAlchemyRecommendationArtifactRepository(session_factory)
+    research_delta_repository = SQLAlchemyResearchDeltaRepository(session_factory)
+    ml_quant_worker = MLQuantWorker(
+        quant_service=quant_adapter,
+        repository=recommendation_repository,
+    )
+    earnings_catalyst_worker = EarningsCatalystWorker(
+        review_service=ai_review_service,
+        repository=recommendation_repository,
+        context_loader=SQLAlchemyCatalystContextLoader(session_factory),
+        review_loader=research_delta_repository.get_review,
+        websearch_provider=runtime_factory.build_websearch().adapter,
+    )
+    recommendation_fusion_worker = RecommendationFusionWorker(
+        repository=recommendation_repository,
+    )
 
     assessment_service = EffectiveAssessmentService()
     dashboard_repository = SQLAlchemyDashboardRepository(session_factory)
     valuation_publisher = ValuationPublisherAdapter(
         assessment_service=assessment_service,
-        review_repository=SQLAlchemyResearchDeltaRepository(session_factory),
+        review_repository=research_delta_repository,
         valuation_repository=valuation_repository,
         dashboard_repository=dashboard_repository,
         stock_analyst_agent=DashboardPublisherWorker(
@@ -875,6 +906,9 @@ def get_valuation_discovery_service() -> ValuationDiscoveryService:
         research_context_builder=research_context_builder,
         ai_review_service=ai_review_service,
         valuation_publisher=valuation_publisher,
+        ml_quant_worker=ml_quant_worker,
+        earnings_catalyst_worker=earnings_catalyst_worker,
+        recommendation_fusion_worker=recommendation_fusion_worker,
     )
     orchestrator = ValuationDiscoveryOrchestrator(dependencies)
     return ValuationDiscoveryService(orchestrator)
@@ -972,11 +1006,11 @@ def _build_news_refresh_adapter(
     Returns:
         NewsRefreshAdapter: .
     """
-    tavily_adapter = runtime_factory.build_websearch().adapter
+    websearch_adapter = runtime_factory.build_websearch().adapter
     repository = NewsRepository(session_factory)
     provider = WebSearchProvider(
-        name="tavily_websearch",
-        search_func=tavily_adapter.search,
+        name=_websearch_provider_name(websearch_adapter),
+        search_func=websearch_adapter.search,
     )
     registry = SourceRegistry()
     registry.register(
@@ -1077,7 +1111,7 @@ def get_news_service() -> NewsService:
     """
     settings = get_settings()
     try:
-        tavily_adapter = get_provider_runtime_factory().build_websearch().adapter
+        websearch_adapter = get_provider_runtime_factory().build_websearch().adapter
     except (LookupError, RuntimeError, ValueError) as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1086,8 +1120,8 @@ def get_news_service() -> NewsService:
     session_factory = get_app_container().session_factory
     repository = NewsRepository(session_factory)
     provider = WebSearchProvider(
-        name="tavily_websearch",
-        search_func=tavily_adapter.search,
+        name=_websearch_provider_name(websearch_adapter),
+        search_func=websearch_adapter.search,
     )
     registry = SourceRegistry()
     registry.register(
@@ -1122,7 +1156,7 @@ def get_agentic_news_service() -> AgenticNewsAcquisitionService:
     """
     settings = get_settings()
     try:
-        llm_provider, tavily_adapter = _build_agentic_news_providers(settings)
+        llm_provider, websearch_adapter = _build_agentic_news_providers(settings)
     except (LookupError, RuntimeError, ValueError) as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1131,8 +1165,8 @@ def get_agentic_news_service() -> AgenticNewsAcquisitionService:
     session_factory = get_app_container().session_factory
     repository = NewsRepository(session_factory)
     provider = WebSearchProvider(
-        name="tavily_websearch",
-        search_func=tavily_adapter.search,
+        name=_websearch_provider_name(websearch_adapter),
+        search_func=websearch_adapter.search,
     )
     registry = SourceRegistry()
     registry.register(
@@ -1177,6 +1211,26 @@ def _build_agentic_news_providers(_settings: MarginSettings) -> tuple[Any, Any]:
         )
     except (LookupError, RuntimeError, ValueError) as exc:
         raise RuntimeError("active LLM or websearch provider is not available") from exc
+
+
+def _optional_firecrawl_adapter(runtime_factory: Any) -> Any | None:
+    """Return Firecrawl adapter when the active web_search provider is Firecrawl."""
+    try:
+        adapter = runtime_factory.build_websearch().adapter
+    except (LookupError, RuntimeError, ValueError):
+        return None
+    if getattr(adapter, "descriptor", None) is not None:
+        name = str(getattr(adapter.descriptor, "name", "") or "")
+        if name == "firecrawl_websearch":
+            return adapter
+    return None
+
+
+def _websearch_provider_name(adapter: Any) -> str:
+    """Return a stable WebSearchProvider name from an adapter descriptor."""
+    descriptor = getattr(adapter, "descriptor", None)
+    name = str(getattr(descriptor, "name", "") or "").strip()
+    return name or "websearch"
 
 
 def _build_agentic_news_llm_service(llm_provider: Any) -> LLMService:

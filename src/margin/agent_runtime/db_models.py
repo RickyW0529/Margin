@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Index, String, Text
+from sqlalchemy import DateTime, Index, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -101,6 +101,34 @@ class AgentRuntimeScheduleRow(Base):
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RecommendationWorkerArtifactRow(Base):
+    """Immutable durable output of one recommendation pipeline worker."""
+
+    __tablename__ = "recommendation_worker_artifacts"
+    __table_args__ = (
+        UniqueConstraint(
+            "orchestration_run_id",
+            "worker_name",
+            name="uq_recommendation_worker_artifacts_run_worker",
+        ),
+        Index(
+            "ix_recommendation_worker_artifacts_scope_decision",
+            "scope_version_id",
+            "decision_at",
+        ),
+    )
+
+    artifact_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    orchestration_run_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    worker_name: Mapped[str] = mapped_column(String(96), nullable=False)
+    artifact_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    scope_version_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    decision_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    payload_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(96), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class AgentChatSessionRow(Base):

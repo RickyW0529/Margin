@@ -113,8 +113,15 @@ def test_scheduled_runner_triggers_v1_plan_and_refresh() -> None:
     assert metadata["execution_boundary"] == "a2a_hierarchical_runtime"
     assert metadata["dispatch_protocol"] == "A2A"
     assert metadata["worker_runtime"] == "langgraph"
-    assert metadata["quant_agent_strategy_profile"]["strategy_family"] == ("ml_lgbm_lifecycle")
-    assert metadata["quant_strategy"]["strategy_family"] == "ml_lgbm_lifecycle"
+    assert metadata["quant_agent_strategy_profile"]["strategy_family"] == (
+        "deterministic_weighted_signal_lifecycle"
+    )
+    assert metadata["quant_agent_strategy_profile"]["implementation"] == (
+        "deterministic_weighted_signal_formula_v1"
+    )
+    assert metadata["quant_strategy"]["strategy_family"] == (
+        "deterministic_weighted_signal_lifecycle"
+    )
     assert metadata["scheduled_task_intent"] == {
         "planner": "MainAgent",
         "intent_type": "scheduled_stock_analysis",
@@ -150,7 +157,7 @@ def test_scheduled_runner_triggers_v1_plan_and_refresh() -> None:
     assert refresh.payload_json["worker_layer"] == "L3"
     assert (
         refresh.payload_json["quant_agent_strategy_profile"]["profile_id"]
-        == "liquid-large-mid-lgbm-recent-trend80-ddstop-v1"
+        == "liquid-large-mid-weighted-signal-trend80-ddstop-v2"
     )
     assert repository.saved.last_triggered_at == datetime(2026, 7, 7, 0, 31, tzinfo=UTC)
 

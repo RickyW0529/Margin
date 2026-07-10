@@ -19,14 +19,11 @@ export function ScheduleSettingsPageClient({
 }) {
   const { t } = useLanguage();
   return (
-    <main className="mx-auto max-w-3xl space-y-6 px-6 py-8 md:px-10">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-sm text-muted-foreground">{t("settingsEyebrow")}</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
-            {t("scheduleTitle")}
-          </h1>
-        </div>
+    <main className="page-shell space-y-6">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          {t("scheduleTitle")}
+        </h1>
         <Button asChild size="sm" variant="secondary">
           <Link href="/settings">{t("scheduleBack")}</Link>
         </Button>

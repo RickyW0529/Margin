@@ -33,6 +33,7 @@ vi.mock("next/navigation", () => ({
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
   navigationMocks.replace.mockClear();
   navigationMocks.search = "";
 });
@@ -79,9 +80,8 @@ describe("RecommendationChatPanel", () => {
     expect(screen.getByRole("dialog", { name: "思考活动" })).toBeInTheDocument();
     expect(screen.getByText("研究智能体")).toBeInTheDocument();
     expect(screen.getByText("数据分析师")).toBeInTheDocument();
-    expect(screen.getByText("生成回答")).toBeInTheDocument();
     expect(screen.queryByText("answer_research_question")).toBeNull();
-    expect(screen.getAllByText("状态：已完成").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("已完成").length).toBeGreaterThan(0);
 
     const href = navigationMocks.replace.mock.calls[0]?.[0] as string;
     const chatId = new URL(`http://localhost${href}`).searchParams.get("chat");
@@ -355,9 +355,75 @@ describe("RecommendationChatPanel", () => {
       }),
     );
   });
+
+  it("renders assistant Markdown instead of exposing formatting syntax", async () => {
+    const ask = vi.fn().mockResolvedValue(
+      makeQnaResponse({
+        answer: "### 回答\n\n- 最近四期 ROE\n- 数据仓库来源",
+        sessionId: "acs_markdown",
+      }),
+    );
+
+    render(
+      <LanguageProvider>
+        <RecommendationChatPanel ask={ask} fetchArtifact={makeArtifactFetcher()} />
+      </LanguageProvider>,
+    );
+    fireEvent.change(screen.getByLabelText("投资研究问题"), {
+      target: { value: "最近四期的" },
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "发送" })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+
+    expect(await screen.findByRole("heading", { name: "回答", level: 3 }))
+      .toBeInTheDocument();
+    expect(screen.getByRole("list")).toBeInTheDocument();
+    expect(screen.queryByText("### 回答")).toBeNull();
+  });
+
+  it("renders the safe activity surface fully in English mode", async () => {
+    window.localStorage.setItem("margin-ui-language", "en");
+    const ask = vi.fn().mockResolvedValue(
+      makeQnaResponse({
+        activities: [
+          {
+            activity_id: "activity-1",
+            action: "route_request",
+            actor: "MainAgent",
+            evidence_refs: [],
+            stage: "planning",
+            status: "succeeded",
+            summary: "已根据当前问题生成执行计划。",
+          },
+        ],
+        answer: "Done.",
+        sessionId: "acs-english",
+      }),
+    );
+
+    render(
+      <LanguageProvider>
+        <RecommendationChatPanel ask={ask} fetchArtifact={makeArtifactFetcher()} />
+      </LanguageProvider>,
+    );
+    fireEvent.change(screen.getByLabelText("Investment research question"), {
+      target: { value: "Review the latest result" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await screen.findByText("Done.");
+    fireEvent.click(screen.getByRole("button", { name: "View activity" }));
+    expect(screen.getByRole("dialog", { name: "Activity" })).toBeInTheDocument();
+    expect(screen.getByText(/Created an execution plan/)).toBeInTheDocument();
+    expect(screen.queryByText("已根据当前问题生成执行计划。"))
+      .not.toBeInTheDocument();
+  });
 });
 
 function makeQnaResponse({
+  activities,
   answer,
   artifacts,
   assistantMessageId = "acm_assistant_1",
@@ -365,6 +431,9 @@ function makeQnaResponse({
   sessionId,
   userMessageId = "acm_user_1",
 }: {
+  activities?: NonNullable<
+    MainAgentQnaResponse["agent_trace"]["activities"]
+  >;
   answer: string;
   artifacts?: MainAgentQnaResponse["artifacts"];
   assistantMessageId?: string;
@@ -385,6 +454,7 @@ function makeQnaResponse({
       triggered_policies: [],
     },
     agent_trace: {
+      activities,
       steps: [
         {
           step_id: "qna_1_dataanalyst",

@@ -160,11 +160,14 @@ export function DashboardRefreshControl({
                     className="mt-1 max-w-xl truncate text-xs text-muted-foreground"
                     id={descriptionId}
                   >
-                    {state.latestRun?.run_id ?? state.latestRunId}
+                    {runSummaryLabel(state.latestRun, t("refreshLoading"))}
                   </p>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <span className="rounded-full border border-border/80 bg-muted/60 px-2.5 py-1 text-xs text-muted-foreground">
-                      {state.latestRun?.status ?? t("refreshLoading")}
+                      {runStatusLabel(
+                        state.latestRun?.status,
+                        t("refreshLoading"),
+                      )}
                     </span>
                     <div className="min-w-40 flex-1">
                       <Progress value={progressValue} />
@@ -235,4 +238,43 @@ function estimateProgress(
     return Math.min(96, Math.max(12, ratio || 18));
   }
   return Math.min(100, ratio);
+}
+
+function runStatusLabel(
+  status: string | null | undefined,
+  loadingLabel: string,
+): string {
+  if (!status) {
+    return loadingLabel;
+  }
+  const labels: Record<string, string> = {
+    accepted: "已接受",
+    cancelled: "已取消",
+    failed: "失败",
+    failed_final: "失败",
+    failed_retryable: "待重试",
+    pending: "排队中",
+    running: "进行中",
+    succeeded: "已完成",
+    succeeded_with_degradation: "已完成（部分降级）",
+    waiting_provider: "等待数据源",
+    waiting_rate_limit: "等待限流恢复",
+    waiting_retry: "等待重试",
+  };
+  return labels[status] ?? "处理中";
+}
+
+function runSummaryLabel(
+  run: ResearchRunDetailV2 | null | undefined,
+  loadingLabel: string,
+): string {
+  if (!run) {
+    return loadingLabel;
+  }
+  const total = Math.max(run.target_count || run.steps?.length || 0, 0);
+  const completed = Math.max(run.completed_count || 0, 0);
+  if (total > 0) {
+    return `已完成 ${completed} / ${total} 步`;
+  }
+  return runStatusLabel(run.status, loadingLabel);
 }

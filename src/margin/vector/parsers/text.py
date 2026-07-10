@@ -39,17 +39,22 @@ class PlainTextParser:
         """
         text = content.decode("utf-8", errors="replace")
         blocks: list[ParsedBlock] = []
+        current_section: str | None = None
         for index, match in enumerate(re.finditer(r"\S.*?(?=\n\s*\n|$)", text, re.S)):
             paragraph = match.group().strip()
             if not paragraph:
                 continue
             start = match.start()
             end = start + len(paragraph)
+            heading = re.match(r"^#{1,6}\s+(.+?)\s*(?:\n|$)", paragraph)
+            if heading:
+                current_section = heading.group(1).strip()
             blocks.append(
                 ParsedBlock(
                     text=paragraph,
-                    block_type="paragraph",
+                    block_type="heading" if heading and "\n" not in paragraph else "paragraph",
                     locator=SourceLocator(
+                        section=current_section,
                         paragraph_index=index,
                         quote_span=(start, end),
                     ),

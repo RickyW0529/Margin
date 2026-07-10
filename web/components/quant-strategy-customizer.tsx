@@ -114,7 +114,7 @@ export function QuantStrategyCustomizer({
       weights,
     });
     try {
-      const created = await createConfig("quant-strategies", {
+      await createConfig("quant-strategies", {
         version_id: versionId,
         owner_id: "local-admin",
         strategy_family: "default",
@@ -123,9 +123,9 @@ export function QuantStrategyCustomizer({
         calibration_report_id: `ui-custom-${universe.toLowerCase()}`,
         lifecycle: "review",
       });
-      setSuccess(`${String(created.version_id ?? versionId)} 已保存，激活前不会生效。`);
+      setSuccess("策略版本已保存，激活前不会影响线上筛选。");
     } catch {
-      setError("保存失败，请检查版本内容或后端策略配置服务。");
+      setError("保存失败，请稍后重试。");
     } finally {
       setBusy(false);
     }

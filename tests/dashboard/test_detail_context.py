@@ -97,6 +97,8 @@ def test_detail_context_exposes_ai_empty_evidence_and_news_documents() -> None:
     assert result["factors"]["raw_metrics"][0]["metric"] == "pe_ttm"
     assert result["factors"]["trends"] == trends
     assert result["evidence"][0]["linked_to_security"] is True
+    assert result["evidence"][0]["source_kind"] == "document"
+    assert result["evidence"][0]["detail_url"] == "/api/v1/evidence/evt_match"
     assert result["evidence"][1]["linked_to_security"] is False
 
 

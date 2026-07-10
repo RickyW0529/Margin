@@ -465,21 +465,50 @@ class StructuredChunker:
         current: list[VectorParsedBlock] = []
         current_key: tuple[str | None, int | None, str | None] | None = None
         current_len = 0
-        for block in blocks:
-            key = self._boundary_key(block)
-            block_len = len(block.text)
-            crosses_boundary = current_key is not None and key != current_key
-            exceeds = current and current_len + block_len > self.max_chars
-            if crosses_boundary or exceeds:
-                groups.append(current)
-                current = []
-                current_len = 0
-            current.append(block)
-            current_key = key
-            current_len += block_len
+        for source_block in blocks:
+            for block in self._split_oversized_block(source_block):
+                key = self._boundary_key(block)
+                block_len = len(block.text)
+                crosses_boundary = current_key is not None and key != current_key
+                separator_len = 1 if current else 0
+                exceeds = current and current_len + separator_len + block_len > self.max_chars
+                if crosses_boundary or exceeds:
+                    groups.append(current)
+                    current = []
+                    current_len = 0
+                    separator_len = 0
+                current.append(block)
+                current_key = key
+                current_len += separator_len + block_len
         if current:
             groups.append(current)
         return groups
+
+    def _split_oversized_block(self, block: VectorParsedBlock) -> list[VectorParsedBlock]:
+        """Split one large parsed block while adjusting its document character span."""
+        if len(block.text) <= self.max_chars:
+            return [block]
+        pieces: list[VectorParsedBlock] = []
+        original_span = block.locator.quote_span
+        for start in range(0, len(block.text), self.max_chars):
+            text = block.text[start : start + self.max_chars]
+            quote_span = None
+            if original_span is not None:
+                quote_span = (
+                    original_span[0] + start,
+                    min(original_span[0] + start + len(text), original_span[1]),
+                )
+            pieces.append(
+                block.model_copy(
+                    update={
+                        "text": text,
+                        "locator": block.locator.model_copy(
+                            update={"quote_span": quote_span}
+                        ),
+                    }
+                )
+            )
+        return pieces
 
     @staticmethod
     def _boundary_key(block: VectorParsedBlock) -> tuple[str | None, int | None, str | None]:
@@ -517,11 +546,13 @@ class StructuredChunker:
             )
         return SourceLocator(
             page=first.page,
+            bbox=first.bbox,
             section=first.section,
             dom_path=first.dom_path,
             paragraph_index=first.paragraph_index,
             table_id=first.table_id,
             row_id=first.row_id,
+            column_id=first.column_id,
             quote_span=quote_span,
         )
 

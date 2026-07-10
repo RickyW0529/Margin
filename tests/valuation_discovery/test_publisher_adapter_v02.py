@@ -13,8 +13,15 @@ from datetime import UTC, datetime
 
 from margin.agent_runtime.context_store import MemoryAgentContextStore
 from margin.agents.workers.dashboard_publisher_worker import DashboardPublisherWorker
+from margin.agents.workers.recommendation_workers import (
+    FusedRecommendation,
+    RecommendationEvidenceRef,
+    RecommendationFusionPolicy,
+    RecommendationFusionResult,
+)
 from margin.dashboard.models import DashboardFilters, DashboardSort
 from margin.dashboard.repository import MemoryDashboardRepository
+from margin.dashboard.service import DashboardQueryService
 from margin.research.delta_repository import (
     MemoryResearchDeltaRepository,
     ResearchDeltaReview,
@@ -269,6 +276,175 @@ def test_dashboard_refresh_publishes_latest_quant_projection_items() -> None:
     assert response.items[1].adjusted_weight is None
     assert response.items[1].screening_status == "near_threshold"
     assert response.items[1].review_required is True
+
+
+def test_dashboard_refresh_publishes_fusion_lineage_and_portfolio_summary() -> None:
+    """Fusion projection is the terminal source for weights, reasons, and evidence."""
+    dashboard = MemoryDashboardRepository()
+    publisher = ValuationPublisherAdapter(
+        assessment_service=EffectiveAssessmentService(),
+        review_repository=MemoryResearchDeltaRepository(),
+        valuation_repository=MemoryValuationDiscoveryRepository(),
+        dashboard_repository=dashboard,
+    )
+    fusion = RecommendationFusionResult(
+        artifact_id="fusion-1",
+        orchestration_run_id="run-1",
+        quant_run_id="quant-1",
+        max_stock_exposure=0.8,
+        policy=RecommendationFusionPolicy(),
+        stock_weight=0.8,
+        cash_weight=0.2,
+        recommendations=(
+            FusedRecommendation(
+                security_id="000001.SZ",
+                target_weight=0.7,
+                adjusted_weight=0.8,
+                quant_score=82.0,
+                fusion_confidence=0.88,
+                quant_contribution=0.7,
+                catalyst_contribution=0.1,
+                sources=("ml_quant", "earnings_catalyst"),
+                reasons=("量化通过", "财报需求增长"),
+                risk_flags=("high_leverage",),
+                evidence=(
+                    RecommendationEvidenceRef(source_type="rag", source_id="ev-1"),
+                    RecommendationEvidenceRef(
+                        source_type="warehouse_quant_result",
+                        source_id="qres-1",
+                    ),
+                    RecommendationEvidenceRef(
+                        source_type="websearch",
+                        source_id="web-1",
+                        title="反证搜索",
+                        url="https://example.com/counter",
+                        excerpt="未发现足以推翻原结论的信息。",
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    projection = publisher.refresh_dashboard(
+        scope_version_id="scope-1",
+        decision_at=DECISION_AT,
+        quant_run_id="quant-1",
+        recommendation_result=fusion,
+    )
+
+    response = dashboard.list_research_candidates_v2(
+        scope_version_id="scope-1",
+        universe_code="ALL_A",
+        filters=DashboardFilters(),
+        sort=DashboardSort(field="final_score", direction="desc"),
+        cursor=None,
+        limit=20,
+    )
+    assert projection.visible_item_count == 1
+    assert response.portfolio_summary is not None
+    assert response.portfolio_summary.stock_weight == 0.8
+    assert response.portfolio_summary.cash_weight == 0.2
+    [item] = response.items
+    assert item.target_weight == 0.7
+    assert item.adjusted_weight == 0.8
+    assert item.final_score == 82.0
+    assert item.confidence == 0.88
+    assert item.risk_flags == ("high_leverage",)
+    assert item.effective_assessment_id is None
+    assert item.assessment_freshness == "missing"
+    assert item.agent_adjustment["sources"] == ["ml_quant", "earnings_catalyst"]
+    assert item.agent_adjustment["evidence_ids"] == ["ev-1", "qres-1"]
+    assert item.agent_adjustment["fusion_policy"]["catalyst_only_max_weight"] == 0.02
+
+    [stored_item] = dashboard.list_items(projection.dashboard_run_id or "")
+    assert stored_item.workflow_run_id == "quant-1"
+    assert stored_item.snapshot_id is None
+
+    detail = DashboardQueryService(
+        dashboard,
+        detail_context_loader=lambda projected_item, _run: {
+            "effective_assessment": {
+                "assessment_id": "assess-real-1",
+                "freshness": "current",
+                "stale_reason": None,
+            },
+            "evidence": [
+                {
+                    "evidence_id": "evt-context",
+                    "source_kind": "document",
+                    "detail_url": "/api/v1/evidence/evt-context",
+                    "source_level": "L1",
+                    "locator": "context document",
+                }
+            ],
+            "versions": {"context_quant_run_id": projected_item.workflow_run_id},
+        },
+    ).get_item_detail_v2(stored_item.item_id)
+    assert detail.effective_assessment["assessment_id"] == "assess-real-1"
+    assert detail.versions["context_quant_run_id"] == "quant-1"
+    assert [row["evidence_id"] for row in detail.evidence] == [
+        "ev-1",
+        "qres-1",
+        "web-1",
+        "evt-context",
+    ]
+    assert detail.evidence[1]["source_kind"] == "quant_result"
+    assert detail.evidence[2]["source_url"] == "https://example.com/counter"
+    assert detail.evidence[2]["detail_url"] is None
+
+
+def test_catalyst_only_dashboard_item_has_no_quant_score() -> None:
+    """Catalyst-only research keeps its confidence without inventing ML output."""
+    dashboard = MemoryDashboardRepository()
+    publisher = ValuationPublisherAdapter(
+        assessment_service=EffectiveAssessmentService(),
+        review_repository=MemoryResearchDeltaRepository(),
+        valuation_repository=MemoryValuationDiscoveryRepository(),
+        dashboard_repository=dashboard,
+    )
+    fusion = RecommendationFusionResult(
+        artifact_id="fusion-catalyst-only",
+        orchestration_run_id="run-catalyst-only",
+        quant_run_id="quant-catalyst-only",
+        max_stock_exposure=0.8,
+        policy=RecommendationFusionPolicy(),
+        stock_weight=0.02,
+        cash_weight=0.98,
+        recommendations=(
+            FusedRecommendation(
+                security_id="000003.SZ",
+                target_weight=0.02,
+                adjusted_weight=0.02,
+                quant_score=None,
+                fusion_confidence=0.91,
+                quant_contribution=0.0,
+                catalyst_contribution=0.91,
+                sources=("earnings_catalyst",),
+                reasons=("财报供不应求",),
+                evidence=(RecommendationEvidenceRef(source_type="rag", source_id="ev-3"),),
+            ),
+        ),
+    )
+
+    publisher.refresh_dashboard(
+        scope_version_id="scope-catalyst-only",
+        decision_at=DECISION_AT,
+        recommendation_result=fusion,
+    )
+    response = dashboard.list_research_candidates_v2(
+        scope_version_id="scope-catalyst-only",
+        universe_code="ALL_A",
+        filters=DashboardFilters(),
+        sort=DashboardSort(field="final_score", direction="desc"),
+        cursor=None,
+        limit=20,
+    )
+
+    [item] = response.items
+    assert item.final_score is None
+    assert item.confidence == 0.91
+    assert item.agent_adjustment["quant_score"] is None
+    assert item.agent_adjustment["fusion_confidence"] == 0.91
 
 
 def test_dashboard_refresh_can_publish_agent_adjusted_projection() -> None:

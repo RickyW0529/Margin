@@ -14,6 +14,7 @@ import {
   createResearchItemFeedback,
   fetchProviderConfigs,
   fetchProviderStatus,
+  fetchEvidenceDetail,
   fetchQuantStrategyDefaults,
   fetchResearchCandidates,
   fetchResearchRunDetailV2,
@@ -201,6 +202,22 @@ describe("api mutation helpers", () => {
       expect.objectContaining({
         next: { revalidate: 30 },
       }),
+    );
+  });
+
+  it("uses only same-origin canonical evidence detail paths", async () => {
+    await fetchEvidenceDetail("qres-1", "/api/v1/evidence/qres-1");
+    await fetchEvidenceDetail("ev-2", "/api/v1/evidence/../../provider-status");
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/evidence/qres-1",
+      expect.objectContaining({ cache: "no-store" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/evidence/ev-2",
+      expect.objectContaining({ cache: "no-store" }),
     );
   });
 

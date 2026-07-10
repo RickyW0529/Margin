@@ -81,7 +81,7 @@
         "description": "Discover and query PIT financial indicator history.",
         "input_artifact_types": ["context_pack"],
         "output_artifact_types": ["analysis_table", "chart_spec", "computed_metric", "qna_answer", "visualization_image", "worker_activity"],
-        "input_contract": {"required_fields": ["user_query", "security_query", "chart_type"], "missing_input_policy": "ask_clarification"},
+        "input_contract": {"required_fields": ["user_query", "security_query", "indicator_id", "chart_type", "max_points_per_indicator"], "missing_input_policy": "ask_clarification"},
         "tool_allowlist": ["warehouse.describe_schema", "warehouse.resolve_security", "warehouse.discover_indicators", "warehouse.query_indicator_history"]
       }],
       "supported_runtimes": ["langgraph"],

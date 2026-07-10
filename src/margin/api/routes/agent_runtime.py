@@ -20,6 +20,7 @@ from margin.agent_runtime.schedules import (
     AgentScheduleRepository,
     StockAnalysisSchedule,
 )
+from margin.agents.context.turn_context import resolve_turn_context
 from margin.agents.runtime.service import (
     AgentInputBlockedError,
     AgentRuntimeService,
@@ -107,10 +108,24 @@ class AgentTraceStepResponse(BaseModel):
     status: str
 
 
+class AgentTraceActivityResponse(BaseModel):
+    """Safe activity record without prompts, raw errors, or private reasoning."""
+
+    activity_id: str
+    stage: Literal["planning", "execution", "validation"]
+    actor: str
+    action: str
+    status: str
+    summary: str
+    tool_name: str | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
 class AgentTraceResponse(BaseModel):
     """User-visible MainAgent trace.."""
 
     steps: list[AgentTraceStepResponse]
+    activities: list[AgentTraceActivityResponse] = Field(default_factory=list)
 
 
 class ContextArtifactSummaryResponse(BaseModel):
@@ -336,8 +351,12 @@ def _run_user_qna_agent(
             )
         )
 
-    previous_messages = chat_repository.list_messages(session_id, limit=8)
-    conversation_context = summarize_messages_for_prompt(previous_messages)
+    previous_messages = chat_repository.list_messages(session_id, limit=20)
+    conversation_context = summarize_messages_for_prompt(previous_messages[-8:])
+    resolved_turn_context = resolve_turn_context(
+        request.message,
+        previous_messages=previous_messages,
+    )
     user_message_id = f"acm_{uuid4().hex}"
     chat_repository.add_message(
         new_chat_message(
@@ -349,6 +368,7 @@ def _run_user_qna_agent(
                 "scope_version_id": request.scope_version_id,
                 "universe": request.universe,
                 "language": request.language,
+                "resolved_turn_context": resolved_turn_context.model_dump(mode="json"),
             },
             now=now,
         )
@@ -364,6 +384,7 @@ def _run_user_qna_agent(
                 universe=request.universe,
                 language=request.language,
                 conversation_context=tuple(conversation_context),
+                resolved_turn_context=resolved_turn_context,
                 allow_workspace_tools=allow_workspace_tools,
             )
         )
@@ -406,7 +427,20 @@ def _run_user_qna_agent(
                     status=step.status.value,
                 )
                 for step in execution.trace_steps
-            ]
+            ],
+            activities=[
+                AgentTraceActivityResponse(
+                    activity_id=activity.activity_id,
+                    stage=activity.stage,
+                    actor=activity.actor,
+                    action=activity.action,
+                    status=activity.status.value,
+                    summary=activity.summary,
+                    tool_name=activity.tool_name,
+                    evidence_refs=list(activity.evidence_refs),
+                )
+                for activity in getattr(execution, "activities", ())
+            ],
         ),
         artifacts=[
             ContextArtifactSummaryResponse(

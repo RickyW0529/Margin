@@ -48,6 +48,24 @@ describe("RecommendationDetail", () => {
     expect(screen.getByText("24.0%")).toBeInTheDocument();
     expect(screen.getByText("¥18.50")).toBeInTheDocument();
   });
+
+  it("labels fusion, RAG, and counter-evidence sources accurately", () => {
+    const detail = makeDetail();
+    detail.item.agent_adjustment = {
+      sources: ["RecommendationFusionWorker", "rag", "websearch"],
+    };
+
+    render(
+      <LanguageProvider>
+        <RecommendationDetail detail={detail} />
+      </LanguageProvider>,
+    );
+
+    expect(screen.getByText("推荐融合")).toBeInTheDocument();
+    expect(screen.getByText("RAG 文档证据")).toBeInTheDocument();
+    expect(screen.getByText("公开信息反证")).toBeInTheDocument();
+    expect(screen.queryByText("ML 量化")).not.toBeInTheDocument();
+  });
 });
 
 function makeDetail(overrides: Partial<ResearchItemDetailV2> = {}): ResearchItemDetailV2 {

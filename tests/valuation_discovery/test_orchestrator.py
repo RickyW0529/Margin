@@ -11,6 +11,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+from margin.agents.workers.recommendation_workers import (
+    EarningsCatalystWorker,
+    MemoryRecommendationArtifactRepository,
+    MLQuantWorker,
+    RecommendationFusionWorker,
+)
+from margin.core.run_states import OrchestrationRun, RunState, StepAttempt, StepState
 from margin.valuation_discovery.orchestrator import (
     ValuationDiscoveryDependencies,
     ValuationDiscoveryOrchestrationRepository,
@@ -54,20 +61,21 @@ def test_step_worker_runs_pipeline_in_order() -> None:
         assert processed <= 20
 
     steps = dependencies.repository.list_steps(run.run_id)
-    assert processed == 12
+    assert processed == 13
     assert list(steps) == [
         "DATA_FRESHNESS_CHECK",
         "DATA_SYNC",
         "SCOPE_RESOLVE",
         "QUANT_INPUT_BUILD",
-        "QUANT_RUN",
+        "ML_QUANT_WORKER",
         "NEWS_TARGET_SELECTION",
         "NEWS_REFRESH",
         "NEWS_INDEXING",
         "RESEARCH_CONTEXT_BUILD",
-        "DASHBOARD_REFRESH",
-        "AI_DELTA_REVIEW",
+        "EARNINGS_CATALYST_WORKER",
+        "RECOMMENDATION_FUSION_WORKER",
         "VALUATION_PUBLISH",
+        "DASHBOARD_REFRESH",
     ]
     assert all(step.state == "succeeded" for step in steps.values())
     assert dependencies.quant_service.call_count == 1
@@ -95,12 +103,157 @@ def test_pipeline_recovers_all_artifacts_after_worker_restart() -> None:
         processed += 1
         assert processed <= 20
 
-    assert processed == 12
+    assert processed == 13
     assert dependencies.repository.get_run(run.run_id).state == "succeeded"
 
 
+def test_configured_recommendation_workers_reload_and_publish_fusion_last() -> None:
+    """All three worker artifacts survive a fresh step-worker per durable claim."""
+    dependencies = _dependencies()
+    artifact_repository = MemoryRecommendationArtifactRepository()
+    dependencies.ml_quant_worker = MLQuantWorker(
+        quant_service=dependencies.quant_service,
+        repository=artifact_repository,
+    )
+    dependencies.earnings_catalyst_worker = EarningsCatalystWorker(
+        review_service=dependencies.ai_review_service,
+        repository=artifact_repository,
+    )
+    dependencies.recommendation_fusion_worker = RecommendationFusionWorker(
+        repository=artifact_repository,
+    )
+    service = ValuationDiscoveryService(ValuationDiscoveryOrchestrator(dependencies))
+    response = service.start_refresh(
+        scope_version_id="scope-1",
+        decision_at=_decision_at(),
+        idempotency_key="recommendation-workers",
+        metadata={
+            "quant_agent_strategy_profile": {
+                "profile_id": "weighted-v2",
+                "model_family": "deterministic_weighted_signal",
+                "implementation": "deterministic_weighted_signal_formula_v1",
+            },
+            "quant_strategy": {
+                "strategy_family": "deterministic_weighted_signal_lifecycle",
+                "thresholds": {"max_stock_exposure": 0.8, "min_cash": 0.2},
+            },
+        },
+    )
+
+    processed = 0
+    while service.create_step_worker(worker_id=f"worker-{processed}").run_once(now=_decision_at()):
+        processed += 1
+
+    assert processed == 13
+    steps = service.get_refresh_status(response.run_id).steps
+    assert [step["step_id"] for step in steps][-3:] == [
+        "RECOMMENDATION_FUSION_WORKER",
+        "VALUATION_PUBLISH",
+        "DASHBOARD_REFRESH",
+    ]
+    recommendation = dependencies.valuation_publisher.dashboard_kwargs["recommendation_result"]
+    assert recommendation.cash_weight == 1.0
+    assert recommendation.stock_weight == 0.0
+
+
+def test_legacy_run_lazily_materializes_missing_fusion_before_dashboard() -> None:
+    """A run paused after old AI review resumes without repeating upstream work."""
+    dependencies = _dependencies()
+    artifact_repository = MemoryRecommendationArtifactRepository()
+    dependencies.ml_quant_worker = MLQuantWorker(
+        quant_service=dependencies.quant_service,
+        repository=artifact_repository,
+    )
+    dependencies.earnings_catalyst_worker = EarningsCatalystWorker(
+        review_service=dependencies.ai_review_service,
+        repository=artifact_repository,
+    )
+    dependencies.recommendation_fusion_worker = RecommendationFusionWorker(
+        repository=artifact_repository,
+    )
+    quant_run = dependencies.quant_service.run()
+    dependencies.research_context_builder.build()
+    dependencies.ai_review_service.review()
+    run = OrchestrationRun(
+        run_id="legacy-run-1",
+        run_type="valuation_discovery",
+        state=RunState.RUNNING,
+        scope_version_id="scope-1",
+        trace_id="trace-legacy-run-1",
+        metadata_json={
+            "decision_at": _decision_at().isoformat(),
+            "quant_agent_strategy_profile": {"profile_id": "legacy-profile"},
+            "quant_strategy": {
+                "strategy_family": "deterministic_weighted_signal_lifecycle",
+                "thresholds": {"max_stock_exposure": 0.8, "min_cash": 0.2},
+            },
+        },
+        created_at=_decision_at(),
+        started_at=_decision_at(),
+    )
+    dependencies.repository.create_run(run)
+    dependencies.repository.append_step_event(
+        _persisted_step(
+            run,
+            step_id="QUANT_RUN",
+            state=StepState.SUCCEEDED,
+            output_ref=f"quant:{quant_run.quant_run_id}",
+        )
+    )
+    dependencies.repository.append_step_event(
+        _persisted_step(
+            run,
+            step_id="RESEARCH_CONTEXT_BUILD",
+            state=StepState.SUCCEEDED,
+            output_ref=f"contexts:{quant_run.quant_run_id}",
+        )
+    )
+    dependencies.repository.append_step_event(
+        _persisted_step(
+            run,
+            step_id="AI_DELTA_REVIEW",
+            state=StepState.SUCCEEDED,
+            output_ref=f"reviews:{run.run_id}",
+        )
+    )
+    dependencies.repository.append_step_event(
+        _persisted_step(
+            run,
+            step_id="VALUATION_PUBLISH",
+            state=StepState.PENDING,
+        )
+    )
+
+    processed = 0
+    while ValuationDiscoveryStepWorker(
+        dependencies,
+        worker_id=f"upgrade-worker-{processed}",
+    ).run_once(now=_decision_at()):
+        processed += 1
+        assert processed <= 3
+
+    assert processed == 2
+    assert dependencies.quant_service.call_count == 1
+    assert dependencies.ai_review_service.calls == 1
+    assert dependencies.repository.get_run(run.run_id).state == RunState.SUCCEEDED
+    steps = dependencies.repository.list_steps(run.run_id)
+    assert list(steps) == [
+        "ML_QUANT_WORKER",
+        "RESEARCH_CONTEXT_BUILD",
+        "EARNINGS_CATALYST_WORKER",
+        "RECOMMENDATION_FUSION_WORKER",
+        "VALUATION_PUBLISH",
+        "DASHBOARD_REFRESH",
+    ]
+    assert steps["ML_QUANT_WORKER"].step_id == "ML_QUANT_WORKER"
+    assert steps["EARNINGS_CATALYST_WORKER"].step_id == "EARNINGS_CATALYST_WORKER"
+    assert steps["RECOMMENDATION_FUSION_WORKER"].output_ref is not None
+    recommendation = dependencies.valuation_publisher.dashboard_kwargs["recommendation_result"]
+    assert recommendation.orchestration_run_id == run.run_id
+
+
 def test_quant_run_receives_reloaded_input_after_worker_restart() -> None:
-    """Verify QUANT_RUN consumes the persisted input artifact after restart.
+    """Verify ML_QUANT_WORKER consumes the persisted input after restart.
 
     Returns:
         None: .
@@ -283,6 +436,30 @@ def _decision_at() -> datetime:
         datetime: .
     """
     return datetime(2026, 6, 22, tzinfo=UTC)
+
+
+def _persisted_step(
+    run: OrchestrationRun,
+    *,
+    step_id: str,
+    state: StepState,
+    output_ref: str | None = None,
+) -> StepAttempt:
+    """Build one old-format persisted step for rolling-upgrade tests."""
+    return StepAttempt(
+        run_id=run.run_id,
+        step_id=step_id,
+        attempt_no=1,
+        state_seq=0,
+        state=state,
+        input_payload={"step": step_id},
+        input_ref=f"scope:{run.scope_version_id}",
+        output_ref=output_ref,
+        trace_id=run.trace_id,
+        started_at=_decision_at(),
+        finished_at=_decision_at() if state.is_terminal else None,
+        created_at=_decision_at(),
+    )
 
 
 def _dependencies() -> ValuationDiscoveryDependencies:
@@ -611,6 +788,7 @@ class _FakeAIReviewService:
             None: .
         """
         self.summary: _FakeReviewSummary | None = None
+        self.calls = 0
 
     def review(self, **_: object) -> _FakeReviewSummary:
         """Review frozen contexts and return a deterministic summary.
@@ -621,6 +799,7 @@ class _FakeAIReviewService:
         Returns:
             _FakeReviewSummary: .
         """
+        self.calls += 1
         self.summary = _FakeReviewSummary()
         return self.summary
 

@@ -128,8 +128,71 @@ describe("buildRefreshRunNodes", () => {
       status: "1/1 completed",
     });
     expect(nodes.find((node) => node.id === "quant_analysis")).toMatchObject({
-      owner: "QuantAgent",
+      owner: "MLQuantWorker",
       state: "active",
+    });
+  });
+
+  it("renders ML, earnings catalyst, and fusion as distinct workers", () => {
+    const nodes = buildRefreshRunNodes({
+      completed_count: 5,
+      failed_count: 0,
+      pending_count: 7,
+      retry_after_seconds: null,
+      run_id: "run-workers",
+      status: "running",
+      steps: [
+        { status: "succeeded", step: "QUANT_INPUT_BUILD" },
+        { status: "succeeded", step: "ML_QUANT_WORKER" },
+        { status: "succeeded", step: "RESEARCH_CONTEXT_BUILD" },
+        { status: "succeeded", step: "EARNINGS_CATALYST_WORKER" },
+        { status: "running", step: "RECOMMENDATION_FUSION_WORKER" },
+      ],
+      supported_wait_states: [],
+      target_count: 12,
+      trace_id: "run-workers",
+      wait_state: null,
+    });
+
+    expect(nodes.find((node) => node.id === "quant_analysis")).toMatchObject({
+      owner: "MLQuantWorker",
+      state: "completed",
+    });
+    expect(nodes.find((node) => node.id === "fundamental_analysis")).toMatchObject({
+      owner: "EarningsCatalystWorker",
+      state: "completed",
+    });
+    expect(nodes.find((node) => node.id === "fusion_research")).toMatchObject({
+      owner: "RecommendationFusionWorker",
+      state: "active",
+    });
+  });
+
+  it("does not invent a MainAgent review for terminal valuation runs", () => {
+    const nodes = buildRefreshRunNodes({
+      completed_count: 13,
+      failed_count: 0,
+      pending_count: 0,
+      retry_after_seconds: null,
+      run_id: "valuation-run",
+      status: "succeeded",
+      steps: [
+        { status: "succeeded", step: "ML_QUANT_WORKER" },
+        { status: "succeeded", step: "EARNINGS_CATALYST_WORKER" },
+        { status: "succeeded", step: "RECOMMENDATION_FUSION_WORKER" },
+        { status: "succeeded", step: "VALUATION_PUBLISH" },
+        { status: "succeeded", step: "DASHBOARD_REFRESH" },
+      ],
+      supported_wait_states: [],
+      target_count: 13,
+      trace_id: "valuation-run",
+      wait_state: null,
+    });
+
+    expect(nodes.find((node) => node.id === "main_agent_final_review"))
+      .toBeUndefined();
+    expect(nodes.find((node) => node.id === "dashboard_publish")).toMatchObject({
+      state: "completed",
     });
   });
 });

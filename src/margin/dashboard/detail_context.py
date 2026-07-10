@@ -328,6 +328,7 @@ def _document_row(row: DocumentEventRow) -> dict[str, Any]:
     """
     return {
         "event_id": row.event_id,
+        "document_id": row.document_id,
         "title": row.title,
         "source_name": row.source_name,
         "source_url": row.source_url,
@@ -556,6 +557,9 @@ def _document_context(document: dict[str, Any], security_id: str) -> dict[str, A
     linked = security_id in symbols or code in symbols or code in snippet or code in str(title)
     return {
         "evidence_id": document.get("event_id"),
+        "document_id": document.get("document_id"),
+        "source_kind": "document",
+        "detail_url": f"/api/v1/evidence/{document.get('event_id')}",
         "title": title,
         "source_level": f"L{document.get('source_level')}",
         "locator": "news_document",

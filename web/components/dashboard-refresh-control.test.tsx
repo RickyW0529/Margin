@@ -82,10 +82,9 @@ describe("DashboardRefreshControl", () => {
     });
     expect(dialog).toBeInTheDocument();
     expect(dialog).toHaveClass("fixed");
-    expect(screen.getByText("run-1")).toBeInTheDocument();
+    expect(screen.getByText("已完成 1 / 12 步")).toBeInTheDocument();
+    expect(screen.queryByText("run-1")).not.toBeInTheDocument();
     expect(screen.getByTestId("agent-collaboration-feed")).toBeInTheDocument();
-    expect(screen.getByTestId("agent-activity-main_agent_dispatch"))
-      .toBeInTheDocument();
     expect(screen.getByTestId("agent-activity-data_inspection")).toHaveAttribute(
       "data-agent-state",
       "queued",
@@ -94,9 +93,8 @@ describe("DashboardRefreshControl", () => {
       "data-agent-state",
       "pending",
     );
-    expect(
-      screen.getByRole("progressbar", { name: "量化分析 progress" }),
-    ).toHaveAttribute("aria-valuenow", "6");
+    expect(screen.queryByRole("progressbar", { name: "量化分析 progress" }))
+      .toBeNull();
     expect(screen.queryByRole("link", { name: "查看详情" })).toBeNull();
     expect(startRefresh).toHaveBeenCalledWith({
       decision_at: "2026-07-01T04:00:00.000Z",
@@ -137,7 +135,7 @@ describe("DashboardRefreshControl", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "启动今日研究" }));
-    expect(await screen.findByText("run-old")).toBeInTheDocument();
+    expect(await screen.findByText("已完成 12 / 12 步")).toBeInTheDocument();
 
     // Close the first run dialog so the start control is available again.
     fireEvent.click(screen.getByRole("button", { name: "收起 Agent 进度" }));
@@ -146,8 +144,9 @@ describe("DashboardRefreshControl", () => {
         .toBeInTheDocument(),
     );
     fireEvent.click(screen.getByRole("button", { name: "启动今日研究" }));
-    expect(await screen.findByText("run-new")).toBeInTheDocument();
+    expect(await screen.findByText("已完成 1 / 12 步")).toBeInTheDocument();
     expect(screen.queryByText("run-old")).not.toBeInTheDocument();
+    expect(screen.queryByText("run-new")).not.toBeInTheDocument();
   });
 
   it("shows the exact blocked node and retryable failure reason", async () => {
@@ -182,13 +181,14 @@ describe("DashboardRefreshControl", () => {
       />,
     );
 
-    expect(await screen.findByText("run-blocked")).toBeInTheDocument();
+    expect(await screen.findByText("待重试")).toBeInTheDocument();
+    expect(screen.queryByText("run-blocked")).not.toBeInTheDocument();
     expect(screen.getByTestId("agent-activity-news_acquisition")).toHaveAttribute(
       "data-agent-state",
       "waiting",
     );
-    expect(screen.getByText("断点：news_refresh_incomplete")).toBeInTheDocument();
-    expect(screen.getByText("状态：failed_retryable")).toBeInTheDocument();
+    expect(screen.getByText("news refresh incomplete")).toBeInTheDocument();
+    expect(screen.queryByText("failed_retryable")).not.toBeInTheDocument();
   });
 
   it("allows users to collapse and reopen the latest run graph", async () => {
@@ -206,7 +206,10 @@ describe("DashboardRefreshControl", () => {
       />,
     );
 
-    expect(await screen.findByText("run-latest")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("dialog", { name: "Agent 协作进度" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("run-latest")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "收起 Agent 进度" }));
     await waitFor(() =>
       expect(screen.queryByRole("dialog", { name: "Agent 协作进度" }))
@@ -238,7 +241,10 @@ describe("DashboardRefreshControl", () => {
       />,
     );
 
-    expect(await screen.findByText("run-active")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("dialog", { name: "Agent 协作进度" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("run-active")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "收起 Agent 进度" }));
     await waitFor(() =>
       expect(screen.queryByRole("dialog", { name: "Agent 协作进度" }))

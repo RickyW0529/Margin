@@ -206,7 +206,7 @@ def test_bootstrap_creates_v03_defaults_when_v02_history_exists(
     assert "mf_lg_net_amount" in feature_set.optional_indicators
     assert "limit_trade_blocked" in feature_set.optional_indicators
     assert strategy is not None
-    assert strategy.strategy_family == "ml_lgbm_lifecycle"
+    assert strategy.strategy_family == "deterministic_weighted_signal_lifecycle"
     assert strategy.thresholds["top_n"] == 40
     assert strategy.thresholds["max_stock_exposure"] == 0.8
     assert repository.get_research_scope("scope-default-v0.2.0") is not None

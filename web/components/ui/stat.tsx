@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { TrendingDown, TrendingUp } from "lucide-react";
 
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
@@ -24,46 +23,30 @@ export function Stat({
   progress,
   className,
 }: StatProps) {
-  const positive = typeof delta === "number" && delta > 0;
-  const negative = typeof delta === "number" && delta < 0;
   return (
     <div
       className={cn(
-        "grid gap-2 rounded-2xl border border-border/90 bg-card p-4 shadow-xs",
+        "grid gap-2.5 rounded-2xl border border-border bg-card p-5 shadow-xs",
         className,
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
-          {label}
-        </p>
-        {typeof delta === "number" ? (
-          <span
-            className={cn(
-              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
-              positive && "bg-positive-soft text-positive",
-              negative && "bg-negative-soft text-negative",
-              !positive && !negative && "bg-muted text-muted-foreground",
-            )}
-          >
-            {positive ? (
-              <TrendingUp className="size-3" />
-            ) : negative ? (
-              <TrendingDown className="size-3" />
-            ) : null}
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        {typeof delta === "number" && delta !== 0 ? (
+          <span className="text-xs tabular text-muted-foreground">
             {delta > 0 ? "+" : ""}
-            {delta.toFixed(1)}
+            {delta}
           </span>
         ) : null}
       </div>
-      <p className="text-2xl font-semibold tracking-tight tabular text-foreground">
+      <p className="text-3xl font-semibold leading-none tracking-tight tabular text-foreground">
         {value}
       </p>
       {hint ? (
-        <p className="text-xs leading-relaxed text-muted-foreground">{hint}</p>
+        <p className="text-sm text-muted-foreground">{hint}</p>
       ) : null}
       {typeof progress === "number" ? (
-        <Progress className="mt-1" value={progress} />
+        <Progress className="mt-1 h-1.5" value={progress} />
       ) : null}
     </div>
   );

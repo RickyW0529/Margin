@@ -34,10 +34,10 @@ export const REFRESH_RUN_STEPS = [
     owner: "DataInspectionAgent",
   },
   {
-    aliases: ["QUANT_INPUT_BUILD", "QUANT_RUN"],
+    aliases: ["QUANT_INPUT_BUILD", "ML_QUANT_WORKER"],
     id: "quant_analysis",
-    label: "量化分析",
-    owner: "QuantAgent",
+    label: "ML 量化",
+    owner: "MLQuantWorker",
   },
   {
     aliases: ["NEWS_TARGET_SELECTION", "NEWS_REFRESH", "NEWS_INDEXING"],
@@ -52,10 +52,22 @@ export const REFRESH_RUN_STEPS = [
     owner: "StockAnalystAgent",
   },
   {
-    aliases: ["AI_DELTA_REVIEW", "VALUATION_PUBLISH"],
-    id: "stock_analysis",
-    label: "综合分析",
-    owner: "StockAnalystAgent",
+    aliases: ["EARNINGS_CATALYST_WORKER"],
+    id: "fundamental_analysis",
+    label: "财报催化",
+    owner: "EarningsCatalystWorker",
+  },
+  {
+    aliases: ["RECOMMENDATION_FUSION_WORKER"],
+    id: "fusion_research",
+    label: "反证与仓位融合",
+    owner: "RecommendationFusionWorker",
+  },
+  {
+    aliases: ["VALUATION_PUBLISH"],
+    id: "valuation_publish",
+    label: "推荐发布",
+    owner: "ResearchPublisher",
   },
   {
     aliases: ["FINAL_REVIEW"],
@@ -70,6 +82,20 @@ export const REFRESH_RUN_STEPS = [
     owner: "Dashboard",
   },
 ] as const satisfies readonly RefreshRunStepDefinition[];
+
+const LEGACY_STEP_ALIASES: Record<string, string> = {
+  AI_DELTA_REVIEW: "EARNINGS_CATALYST_WORKER",
+  QUANT_RUN: "ML_QUANT_WORKER",
+};
+
+const VALUATION_DISCOVERY_MARKERS = new Set([
+  "ML_QUANT_WORKER",
+  "QUANT_RUN",
+  "EARNINGS_CATALYST_WORKER",
+  "AI_DELTA_REVIEW",
+  "RECOMMENDATION_FUSION_WORKER",
+  "VALUATION_PUBLISH",
+]);
 
 const COMPLETED_STATES = new Set([
   "completed",
@@ -114,12 +140,22 @@ export function isRefreshRunTerminalState(
 export function buildRefreshRunNodes(
   run: ResearchRunDetailV2 | null,
 ): RefreshRunNode[] {
+  const rawStepIds = (run?.steps ?? []).map(extractStepId);
+  const valuationDiscoveryRun = rawStepIds.some((stepId) =>
+    VALUATION_DISCOVERY_MARKERS.has(stepId),
+  );
   const stepsById = new Map(
-    (run?.steps ?? []).map((step) => [extractStepId(step), step]),
+    (run?.steps ?? []).map((step) => {
+      const stepId = extractStepId(step);
+      return [LEGACY_STEP_ALIASES[stepId] ?? stepId, step] as const;
+    }),
   );
-  const nodes = REFRESH_RUN_STEPS.map((definition) =>
-    buildRefreshRunNode(definition, stepsById, run),
-  );
+  const nodes = REFRESH_RUN_STEPS
+    .filter(
+      (definition) =>
+        !valuationDiscoveryRun || definition.id !== "main_agent_final_review",
+    )
+    .map((definition) => buildRefreshRunNode(definition, stepsById, run));
 
   if (
     run &&

@@ -65,6 +65,7 @@ from margin.news.websearch import SearchQueryRecord, SearchResult
 from margin.sql.news_queries import (
     claimable_news_targets,
     delete_search_results_by_query,
+    document_event_by_document_id,
     document_events_by_ids,
     materiality_score_by_event_security_version,
     news_agent_tasks_by_run,
@@ -250,6 +251,12 @@ class NewsRepository:
         """
         with self._session_factory() as session:
             row = session.get(DocumentEventRow, event_id)
+            return _event_from_row(row) if row is not None else None
+
+    def get_document_event_by_document_id(self, document_id: str) -> DocumentEvent | None:
+        """Fetch the latest event for one canonical document identifier."""
+        with self._session_factory() as session:
+            row = session.scalar(document_event_by_document_id(document_id))
             return _event_from_row(row) if row is not None else None
 
     def list_unique_events(self) -> list[DocumentEvent]:

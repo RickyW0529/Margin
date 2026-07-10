@@ -232,10 +232,10 @@ function PoolStatusBadge({
   if (!isConfigured) {
     return <Badge tone="caution">等待数据同步</Badge>;
   }
-  if (lifecycle === "active") {
+  if (lifecycle === "active" || lifecycle === "draft" || lifecycle === "review") {
     return <Badge tone="neutral">可切换</Badge>;
   }
-  return <Badge tone="muted">{lifecycle}</Badge>;
+  return <Badge tone="muted">可切换</Badge>;
 }
 
 function stringField(

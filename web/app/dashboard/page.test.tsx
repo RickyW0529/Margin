@@ -2,8 +2,8 @@
  * @fileoverview Tests for the user-facing recommendation dashboard.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   fetchResearchItemDetailV2,
@@ -30,6 +30,7 @@ vi.mock("next/navigation", () => ({
 
 describe("RecommendationDashboardPage", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.mocked(fetchResearchRunDetailV2).mockResolvedValue({
       completed_count: 0,
       failed_count: 0,
@@ -113,6 +114,15 @@ describe("RecommendationDashboardPage", () => {
           discount_rate: 0.18,
           effective_assessment_id: "assess-1",
           final_score: 86,
+          target_weight: 0.12,
+          adjusted_weight: 0.1,
+          agent_adjustment: {
+            source: "RecommendationFusionWorker",
+            sources: ["ml_quant", "earnings_catalyst"],
+            quant_contribution: 0.86,
+            catalyst_contribution: 0.08,
+            reasons: ["量化通过，财报需求增长得到验证"],
+          },
           item_id: "item-1",
           last_checked_at: "2026-07-01T00:00:00Z",
           name: "平安银行",
@@ -132,8 +142,16 @@ describe("RecommendationDashboardPage", () => {
         page_size: 20,
       },
       scope_version_id: "scope-current",
+      portfolio_summary: {
+        stock_weight: 0.8,
+        cash_weight: 0.2,
+        max_stock_exposure: 0.8,
+        fusion_run_id: "recfusion-1",
+      },
     });
   });
+
+  afterEach(cleanup);
 
   it("renders today's recommendations without exposing backend plumbing", async () => {
     render(
@@ -142,7 +160,7 @@ describe("RecommendationDashboardPage", () => {
 
     expect(fetchResearchCandidates).toHaveBeenCalledWith(
       {
-        limit: 20,
+        limit: 200,
         scope_version_id: "scope-current",
         universe: "ALL_A",
       },
@@ -159,6 +177,14 @@ describe("RecommendationDashboardPage", () => {
     expect(screen.getByText("86")).toBeInTheDocument();
     expect(screen.getByText("估值折价")).toBeInTheDocument();
     expect(screen.getByText("18.0%")).toBeInTheDocument();
+    expect(screen.getByText("股票仓位")).toBeInTheDocument();
+    expect(screen.getByText("80.0%")).toBeInTheDocument();
+    expect(screen.getByText("现金仓位")).toBeInTheDocument();
+    expect(screen.getByText("20.0%")).toBeInTheDocument();
+    expect(screen.getByText("融合后仓位")).toBeInTheDocument();
+    expect(screen.getAllByText("10.0%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("ML 量化").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("财报催化").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/需复核/).length).toBeGreaterThan(0);
     expect(screen.queryByText("评分分布")).not.toBeInTheDocument();
     expect(screen.queryByText("风险提示")).not.toBeInTheDocument();
@@ -188,5 +214,80 @@ describe("RecommendationDashboardPage", () => {
     expect(screen.queryByText("推荐详情")).not.toBeInTheDocument();
     expect(screen.queryByText("量化视图")).not.toBeInTheDocument();
     expect(screen.queryByText("年报 第 2 页")).not.toBeInTheDocument();
+  });
+
+  it("loads every recommendation page instead of truncating the list", async () => {
+    vi.mocked(fetchResearchCandidates)
+      .mockResolvedValueOnce({
+        as_of: "2026-07-01T00:00:00Z",
+        facets: {},
+        items: [],
+        page_info: {
+          has_next_page: true,
+          next_cursor: "cursor-2",
+          page_size: 200,
+        },
+        scope_version_id: "scope-current",
+      })
+      .mockResolvedValueOnce({
+        as_of: "2026-07-01T00:00:00Z",
+        facets: {},
+        items: [],
+        page_info: {
+          has_next_page: false,
+          next_cursor: null,
+          page_size: 0,
+        },
+        scope_version_id: "scope-current",
+      });
+
+    render(
+      <LanguageProvider>{await RecommendationDashboardPage()}</LanguageProvider>,
+    );
+
+    expect(fetchResearchCandidates).toHaveBeenNthCalledWith(2, {
+      cursor: "cursor-2",
+      limit: 200,
+      scope_version_id: "scope-current",
+      universe: "ALL_A",
+    });
+  });
+
+  it("does not report a completed fusion when loading recommendations fails", async () => {
+    vi.mocked(fetchResearchCandidates).mockRejectedValueOnce(
+      new Error("backend unavailable"),
+    );
+
+    render(
+      <LanguageProvider>{await RecommendationDashboardPage()}</LanguageProvider>,
+    );
+
+    expect(screen.getByText("数据暂不可用")).toBeInTheDocument();
+    expect(screen.getByText("推荐数据暂不可用")).toBeInTheDocument();
+    expect(screen.queryByText("融合完成")).not.toBeInTheDocument();
+    expect(screen.queryByText("0.0%")).not.toBeInTheDocument();
+  });
+
+  it("distinguishes a not-yet-run portfolio from a zero-weight result", async () => {
+    vi.mocked(fetchResearchCandidates).mockResolvedValueOnce({
+      as_of: "2026-07-01T00:00:00Z",
+      facets: {},
+      items: [],
+      page_info: {
+        has_next_page: false,
+        next_cursor: null,
+        page_size: 0,
+      },
+      portfolio_summary: null,
+      scope_version_id: "scope-current",
+    });
+
+    render(
+      <LanguageProvider>{await RecommendationDashboardPage()}</LanguageProvider>,
+    );
+
+    expect(screen.getByText("尚未运行")).toBeInTheDocument();
+    expect(screen.queryByText("融合完成")).not.toBeInTheDocument();
+    expect(screen.queryByText("100.0%")).not.toBeInTheDocument();
   });
 });

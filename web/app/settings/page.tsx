@@ -59,30 +59,27 @@ export default function SettingsPage() {
   return (
     <main className="page-shell space-y-8">
       <header>
-        <p className="text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-          {t("settingsEyebrow")}
-        </p>
-        <h1 className="text-display mt-2 text-3xl text-foreground">
+        <h1 className="text-3xl font-semibold tracking-tight text-foreground">
           {t("settingsTitle")}
         </h1>
       </header>
-      <section className="grid gap-3 md:grid-cols-2">
+      <section className="grid gap-3">
         {SETTINGS.map((item) => {
           const Icon = item.icon;
           return (
             <Link
               key={item.href}
               href={item.href}
-              className="group grid gap-4 rounded-2xl border border-border/90 bg-card p-5 no-underline shadow-xs transition-all duration-150 hover:border-border hover:shadow-sm"
+              className="flex items-start gap-4 rounded-2xl border border-border bg-card px-5 py-5 shadow-xs no-underline transition-colors duration-150 hover:bg-muted/40"
             >
-              <span className="grid size-10 place-items-center rounded-xl bg-muted/70 text-accent transition-colors group-hover:bg-accent/10">
-                <Icon className="size-4" />
+              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground">
+                <Icon className="size-5" />
               </span>
-              <span className="grid gap-1.5">
-                <strong className="text-[15px] font-semibold tracking-tight text-foreground">
+              <span className="grid min-w-0 gap-1 pt-0.5">
+                <strong className="text-base font-semibold text-foreground">
                   {t(item.titleKey)}
                 </strong>
-                <span className="text-sm leading-relaxed text-muted-foreground">
+                <span className="text-[15px] leading-relaxed text-muted-foreground">
                   {t(item.descriptionKey)}
                 </span>
               </span>

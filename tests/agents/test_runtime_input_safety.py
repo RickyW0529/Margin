@@ -30,6 +30,7 @@ def test_financial_metric_inputs_use_current_turn_not_planner_transcript() -> No
         "security_query": "中国平安",
         "indicator_id": "roe_ttm",
         "chart_type": "line",
+        "max_points_per_indicator": 12,
     }
 
 

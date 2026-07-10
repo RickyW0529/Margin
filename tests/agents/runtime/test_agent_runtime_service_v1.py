@@ -21,6 +21,7 @@ from margin.agents.protocol.models import AgentExecutionStatus
 from margin.agents.runtime.service import (
     AgentRuntimeService,
     UserQnaCommand,
+    _references_from_rows,
 )
 from margin.dashboard.models import ResearchItem, ResearchRun
 from margin.dashboard.repository import MemoryDashboardRepository
@@ -36,6 +37,55 @@ from margin.storage.database import (
 
 DECISION_AT = datetime(2026, 6, 22, tzinfo=UTC)
 
+
+def test_rag_artifact_evidence_refs_become_openable_answer_references() -> None:
+    """Approved RAG artifact IDs must survive into frontend references."""
+    references = _references_from_rows(
+        [],
+        evidence_refs=("ev_rag_1", "evidence://ev_rag_2", "ev_rag_1"),
+    )
+
+    assert references == (
+        {
+            "type": "document_evidence",
+            "source_kind": "document",
+            "id": "ev_rag_1",
+            "evidence_id": "ev_rag_1",
+            "detail_url": "/api/v1/evidence/ev_rag_1",
+            "label": "ev_rag_1",
+            "locator": "evidence_id:ev_rag_1",
+        },
+        {
+            "type": "document_evidence",
+            "source_kind": "document",
+            "id": "ev_rag_2",
+            "evidence_id": "ev_rag_2",
+            "detail_url": "/api/v1/evidence/ev_rag_2",
+            "label": "ev_rag_2",
+            "locator": "evidence_id:ev_rag_2",
+        },
+    )
+
+
+def test_warehouse_reference_without_fact_id_is_not_exposed_as_openable() -> None:
+    """A synthetic warehouse locator is context, not a resolvable evidence ID."""
+    references = _references_from_rows(
+        [
+            {
+                "security_id": "000001.SZ",
+                "indicator_id": "roe_ttm",
+                "metric": "ROE TTM",
+                "date": "2026-03-31",
+                "source": "warehouse",
+            }
+        ]
+    )
+
+    assert len(references) == 1
+    assert references[0]["type"] == "warehouse_fact"
+    assert references[0]["id"].startswith("warehouse://indicator-history/")
+    assert "evidence_id" not in references[0]
+    assert "detail_url" not in references[0]
 
 def test_v1_user_qna_service_creates_plan_and_final_answer_artifact() -> None:
     """User Q&A should run through v1 plan/capsule/final-answer objects."""
@@ -168,9 +218,10 @@ def test_v1_user_qna_service_answers_financial_metric_with_data_artifacts() -> N
         ),
         answers=(),
     )
+    context_repository = MemoryContextRepository()
     service = AgentRuntimeService(
         context_store=MemoryAgentContextStore(),
-        context_repository=MemoryContextRepository(),
+        context_repository=context_repository,
         dashboard_services=_dashboard_services(),
         llm_provider_factory=lambda: llm_provider,
         warehouse_repository=warehouse,
@@ -204,11 +255,36 @@ def test_v1_user_qna_service_answers_financial_metric_with_data_artifacts() -> N
     assert llm_provider.calls == ["main_plan", "expert_plan"]
     assert warehouse.indicator_queries
     assert warehouse.indicator_queries[0].indicator_ids == ("roe_ttm",)
+    context_pack = context_repository.get_context_pack("ctxpack_ar_qna_roe_mainagent")
+    assert context_pack is not None
+    assert context_pack.resolved_turn_context is not None
+    assert context_pack.resolved_turn_context.security_query == "中国平安"
+    assert context_pack.resolved_turn_context.indicator_id == "roe_ttm"
+    assert '"resolved_turn_context"' in llm_provider.prompts[0]
     artifact_by_type = {artifact.artifact_type: artifact for artifact in result.artifacts}
     assert artifact_by_type["analysis_table"].payload_json["rows"][-1]["value"] == 12.3
     assert artifact_by_type["chart_spec"].payload_json["series"][0]["metric"] == "roe_ttm"
     assert artifact_by_type["computed_metric"].payload_json["latest_value"] == 12.3
     assert artifact_by_type["visualization_image"].payload_json["image_format"] == "svg"
+    latest_reference = result.references[-1]
+    assert latest_reference["type"] == "warehouse_fact"
+    assert latest_reference["source_kind"] == "warehouse_fact"
+    assert latest_reference["security_id"] == "601318.SH"
+    assert latest_reference["indicator_id"] == "roe_ttm"
+    assert latest_reference["fact_id"] == "fact_roe_2024"
+    assert latest_reference["evidence_id"] == "fact_roe_2024"
+    assert latest_reference["detail_url"] == "/api/v1/evidence/fact_roe_2024"
+    assert latest_reference["source_level"] == "L3"
+    assert "available_at=" in latest_reference["locator"]
+    assert "fact_roe_2024" in result.final_answer.evidence_refs
+    final_audit = next(
+        artifact for artifact in result.artifacts if artifact.artifact_type == "final_audit_report"
+    )
+    assert "fact_roe_2024" in final_audit.payload_json["evidence_refs"]
+    final_answer_artifact = next(
+        artifact for artifact in result.artifacts if artifact.artifact_type == "final_user_answer"
+    )
+    assert "fact_roe_2024" in final_answer_artifact.evidence_refs
 
 
 def test_v1_user_qna_code_worker_writes_and_verifies_workspace(tmp_path: Path) -> None:
@@ -489,8 +565,8 @@ def test_v1_user_qna_service_executes_all_main_planned_domain_tasks() -> None:
     assert context_repository.get_domain_capsule("dcc_ar_qna_multi_domain_s_data") is not None
     assert context_repository.get_domain_capsule("dcc_ar_qna_multi_domain_s_general") is not None
     assert "### 综合回答" in result.answer
-    assert "#### DataExpertAgent" in result.answer
-    assert "#### GeneralQnaExpertAgent" in result.answer
+    assert "DataExpertAgent" not in result.answer
+    assert "GeneralQnaExpertAgent" not in result.answer
     assert "ROE TTM" in result.answer
     assert "综合看，中国平安 ROE 数据已整理完成。" in result.answer
 

@@ -11,12 +11,16 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from margin.evidence.models import (
+    Claim,
+    ClaimEvidenceLink,
     ClaimEvidenceRole,
     ClaimStatus,
+    ClaimType,
     EvidencePackage,
     EvidencePackageQualityStatus,
+    FactOrInference,
 )
-from margin.evidence.package_builder import EvidencePackageBuilder
+from margin.evidence.package_builder import EvidencePackageBuilder, make_stable_evidence_id
 from margin.news.models import SourceLevel
 from margin.vector.models import DocType, RetrievalResult, SourceLocator, make_chunk
 
@@ -145,6 +149,72 @@ def test_builder_is_idempotent_for_the_same_persisted_chunk() -> None:
     assert len(evidence_repository.evidences) == 1
 
 
+def test_builder_persists_explicit_claim_support_and_refute_links() -> None:
+    """Claims enter a package only with explicit support/refute evidence relationships."""
+    support = retrieval_result(
+        "chunk-support",
+        available_at=datetime(2026, 6, 20, tzinfo=UTC),
+    )
+    refute = retrieval_result(
+        "chunk-refute",
+        available_at=datetime(2026, 6, 21, tzinfo=UTC),
+    )
+    support_id = make_stable_evidence_id("000001.SZ", support.chunk)
+    refute_id = make_stable_evidence_id("000001.SZ", refute.chunk)
+    claim = Claim(
+        claim_id="claim-demand",
+        claim_type=ClaimType.GROWTH_SIGNAL,
+        statement="需求正在加速增长",
+        status=ClaimStatus.CONFLICTED,
+        fact_or_inference=FactOrInference.INFERENCE,
+        evidence_ids=[support_id, refute_id],
+        confidence=0.5,
+        symbol="000001.SZ",
+    )
+    links = (
+        ClaimEvidenceLink(
+            claim_id=claim.claim_id,
+            evidence_id=support_id,
+            role=ClaimEvidenceRole.SUPPORTS,
+            rank=0,
+        ),
+        ClaimEvidenceLink(
+            claim_id=claim.claim_id,
+            evidence_id=refute_id,
+            role=ClaimEvidenceRole.REFUTES,
+            rank=1,
+        ),
+    )
+    repository = FakeEvidenceRepository()
+    builder = EvidencePackageBuilder(
+        FakeVectorRepository(
+            {
+                ("chunk-support", "000001.SZ"),
+                ("chunk-refute", "000001.SZ"),
+            }
+        ),
+        repository,
+    )
+
+    package = builder.build(
+        security_id="000001.SZ",
+        decision_at=datetime(2026, 6, 22, tzinfo=UTC),
+        questions=("需求是否增长？",),
+        retrieval_results=[support, refute],
+        news_bundle_id=None,
+        scope_hash="scope-claim",
+        claims=(claim,),
+        claim_evidence_links=links,
+    )
+
+    assert package.claim_ids == (claim.claim_id,)
+    assert repository.claims[claim.claim_id] == claim
+    assert [link.role for link in repository.claim_links] == [
+        ClaimEvidenceRole.SUPPORTS,
+        ClaimEvidenceRole.REFUTES,
+    ]
+
+
 class FakeVectorRepository:
     """Fake vector repository that checks chunk-security links by membership.."""
 
@@ -184,6 +254,8 @@ class FakeEvidenceRepository:
         self.evidences = {}
         self.packages = []
         self.news_links = []
+        self.claims = {}
+        self.claim_links = []
 
     def add_evidence(self, evidence) -> None:
         """Store an evidence item, rejecting mutation of an existing one.
@@ -236,6 +308,26 @@ class FakeEvidenceRepository:
             for stored_bundle_id, evidence_id in self.news_links
             if stored_bundle_id == bundle_id
         ]
+
+    def add_claim(self, claim: Claim) -> None:
+        self.claims[claim.claim_id] = claim
+
+    def link_claim_evidence(
+        self,
+        claim_id: str,
+        evidence_id: str,
+        *,
+        role: ClaimEvidenceRole,
+        rank: int,
+    ) -> None:
+        self.claim_links.append(
+            ClaimEvidenceLink(
+                claim_id=claim_id,
+                evidence_id=evidence_id,
+                role=role,
+                rank=rank,
+            )
+        )
 
 
 def retrieval_result(chunk_id: str, *, available_at: datetime) -> RetrievalResult:

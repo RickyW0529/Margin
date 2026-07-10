@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -24,17 +25,40 @@ class ValuationDiscoveryStep(StrEnum):
     DATA_SYNC = "DATA_SYNC"
     SCOPE_RESOLVE = "SCOPE_RESOLVE"
     QUANT_INPUT_BUILD = "QUANT_INPUT_BUILD"
-    QUANT_RUN = "QUANT_RUN"
+    ML_QUANT_WORKER = "ML_QUANT_WORKER"
     NEWS_TARGET_SELECTION = "NEWS_TARGET_SELECTION"
     NEWS_REFRESH = "NEWS_REFRESH"
     NEWS_INDEXING = "NEWS_INDEXING"
     RESEARCH_CONTEXT_BUILD = "RESEARCH_CONTEXT_BUILD"
-    DASHBOARD_REFRESH = "DASHBOARD_REFRESH"
-    AI_DELTA_REVIEW = "AI_DELTA_REVIEW"
+    EARNINGS_CATALYST_WORKER = "EARNINGS_CATALYST_WORKER"
+    RECOMMENDATION_FUSION_WORKER = "RECOMMENDATION_FUSION_WORKER"
     VALUATION_PUBLISH = "VALUATION_PUBLISH"
+    DASHBOARD_REFRESH = "DASHBOARD_REFRESH"
+
+    # Historical persisted IDs remain parseable during rolling upgrades.
+    QUANT_RUN = "QUANT_RUN"
+    AI_DELTA_REVIEW = "AI_DELTA_REVIEW"
 
 
-STEP_ORDER: tuple[ValuationDiscoveryStep, ...] = tuple(ValuationDiscoveryStep)
+STEP_ORDER: tuple[ValuationDiscoveryStep, ...] = (
+    ValuationDiscoveryStep.DATA_FRESHNESS_CHECK,
+    ValuationDiscoveryStep.DATA_SYNC,
+    ValuationDiscoveryStep.SCOPE_RESOLVE,
+    ValuationDiscoveryStep.QUANT_INPUT_BUILD,
+    ValuationDiscoveryStep.ML_QUANT_WORKER,
+    ValuationDiscoveryStep.NEWS_TARGET_SELECTION,
+    ValuationDiscoveryStep.NEWS_REFRESH,
+    ValuationDiscoveryStep.NEWS_INDEXING,
+    ValuationDiscoveryStep.RESEARCH_CONTEXT_BUILD,
+    ValuationDiscoveryStep.EARNINGS_CATALYST_WORKER,
+    ValuationDiscoveryStep.RECOMMENDATION_FUSION_WORKER,
+    ValuationDiscoveryStep.VALUATION_PUBLISH,
+    ValuationDiscoveryStep.DASHBOARD_REFRESH,
+)
+LEGACY_STEP_MAP: dict[ValuationDiscoveryStep, ValuationDiscoveryStep] = {
+    ValuationDiscoveryStep.QUANT_RUN: ValuationDiscoveryStep.ML_QUANT_WORKER,
+    ValuationDiscoveryStep.AI_DELTA_REVIEW: ValuationDiscoveryStep.EARNINGS_CATALYST_WORKER,
+}
 
 
 class RetryableStepError(RuntimeError):
@@ -233,6 +257,9 @@ class ValuationDiscoveryDependencies:
     research_context_builder: ResearchContextBuilder | None = None
     ai_review_service: AIReviewService | None = None
     valuation_publisher: ValuationPublisher | None = None
+    ml_quant_worker: Any | None = None
+    earnings_catalyst_worker: Any | None = None
+    recommendation_fusion_worker: Any | None = None
 
 
 class ValuationDiscoveryOrchestrationRepository:
@@ -324,7 +351,7 @@ class ValuationDiscoveryOrchestrationRepository:
         )
 
     def list_steps(self, run_id: str) -> dict[str, StepAttempt]:
-        """Return the latest event for each known step.
+        """Return canonical latest events in pipeline order.
 
         Args:
             run_id: str: .
@@ -333,10 +360,20 @@ class ValuationDiscoveryOrchestrationRepository:
             dict[str, StepAttempt]: .
         """
         latest: dict[str, StepAttempt] = {}
+        legacy_by_canonical = {canonical: legacy for legacy, canonical in LEGACY_STEP_MAP.items()}
         for step in STEP_ORDER:
             event = self._inner.get_latest_step_event(run_id, step.value)
+            if event is None and step in legacy_by_canonical:
+                event = self._inner.get_latest_step_event(
+                    run_id,
+                    legacy_by_canonical[step].value,
+                )
             if event is not None:
-                latest[step.value] = event
+                latest[step.value] = (
+                    event
+                    if event.step_id == step.value
+                    else event.model_copy(update={"step_id": step.value})
+                )
         return latest
 
 
@@ -479,7 +516,7 @@ class ValuationDiscoveryStepWorker:
             dependencies.repository.inner,
             worker_id=worker_id,
             lease_seconds=lease_seconds,
-            allowed_step_ids=frozenset(step.value for step in STEP_ORDER),
+            allowed_step_ids=frozenset(step.value for step in (*STEP_ORDER, *LEGACY_STEP_MAP)),
         )
         # Durable adapters can reconstruct artifacts from output references. This
         # cache avoids repeated reads while one process handles adjacent steps.
@@ -506,7 +543,10 @@ class ValuationDiscoveryStepWorker:
         )
         if latest is None or latest.state is not StepState.RUNNING:
             raise RuntimeError("claimed step is not running")
-        step = ValuationDiscoveryStep(claim.step_id)
+        step = LEGACY_STEP_MAP.get(
+            ValuationDiscoveryStep(claim.step_id),
+            ValuationDiscoveryStep(claim.step_id),
+        )
         decision_at = _decision_at_from_run(run)
         try:
             output_ref = self._execute(
@@ -656,22 +696,49 @@ class ValuationDiscoveryStepWorker:
             return _reference("scope", result)
 
         if step is ValuationDiscoveryStep.QUANT_INPUT_BUILD:
-            result = self._dependencies.quant_service.build_input(
-                scope_version_id=scope_version_id,
-                decision_at=decision_at,
+            builder = self._dependencies.quant_service.build_input
+            result = builder(
+                **_supported_kwargs(
+                    builder,
+                    {
+                        "scope_version_id": scope_version_id,
+                        "decision_at": decision_at,
+                        "strategy_metadata": _quant_strategy_metadata_from_run(run),
+                    },
+                )
             )
             artifacts["quant_input"] = result
             return _reference("quant-input", result)
 
-        if step is ValuationDiscoveryStep.QUANT_RUN:
+        if step is ValuationDiscoveryStep.ML_QUANT_WORKER:
             quant_input = self._quant_input_artifact(run, artifacts)
-            result = self._dependencies.quant_service.run(
+            if self._dependencies.ml_quant_worker is None:
+                runner = self._dependencies.quant_service.run
+                result = runner(
+                    **_supported_kwargs(
+                        runner,
+                        {
+                            "scope_version_id": scope_version_id,
+                            "decision_at": decision_at,
+                            "input_snapshot": quant_input,
+                            "strategy_metadata": _quant_strategy_metadata_from_run(run),
+                        },
+                    )
+                )
+                artifacts["quant_run"] = result
+                return _reference("quant", getattr(result, "quant_run_id", result))
+            result = self._dependencies.ml_quant_worker.run(
+                orchestration_run_id=run.run_id,
                 scope_version_id=scope_version_id,
                 decision_at=decision_at,
                 input_snapshot=quant_input,
+                profile=_quant_profile_from_run(run),
             )
-            artifacts["quant_run"] = result
-            return _reference("quant", getattr(result, "quant_run_id", result))
+            artifacts["ml_quant_result"] = result
+            artifacts["quant_run"] = self._dependencies.quant_service.load_run(
+                str(result.quant_run_id)
+            )
+            return _reference("ml-quant", result)
 
         if step is ValuationDiscoveryStep.NEWS_TARGET_SELECTION:
             quant_run = self._quant_run_artifact(run, artifacts)
@@ -753,7 +820,21 @@ class ValuationDiscoveryStepWorker:
                 getattr(quant_run, "quant_run_id", ""),
             )
 
-        if step is ValuationDiscoveryStep.AI_DELTA_REVIEW:
+        if step is ValuationDiscoveryStep.EARNINGS_CATALYST_WORKER:
+            if self._dependencies.earnings_catalyst_worker is not None:
+                result = self._dependencies.earnings_catalyst_worker.run(
+                    orchestration_run_id=run.run_id,
+                    scope_version_id=scope_version_id,
+                    context_snapshot_ids=self._context_ids_artifact(
+                        run,
+                        artifacts,
+                        scope_version_id=scope_version_id,
+                    ),
+                    decision_at=decision_at,
+                )
+                artifacts["catalyst_result"] = result
+                artifacts["review_summary"] = result
+                return _reference("earnings-catalyst", result)
             reviewer = _require_dependency(
                 self._dependencies.ai_review_service,
                 "AI delta review service",
@@ -768,6 +849,20 @@ class ValuationDiscoveryStepWorker:
             )
             artifacts["review_summary"] = result
             return _reference("reviews", run.run_id)
+
+        if step is ValuationDiscoveryStep.RECOMMENDATION_FUSION_WORKER:
+            if self._dependencies.recommendation_fusion_worker is None:
+                artifacts["fusion_result"] = None
+                return f"recommendation-fusion:compat-{run.run_id}"
+            result = self._dependencies.recommendation_fusion_worker.run(
+                orchestration_run_id=run.run_id,
+                scope_version_id=scope_version_id,
+                decision_at=decision_at,
+                quant_result=self._ml_quant_result_artifact(run, artifacts),
+                catalyst_result=self._catalyst_result_artifact(run, artifacts),
+            )
+            artifacts["fusion_result"] = result
+            return _reference("recommendation-fusion", result)
 
         if step is ValuationDiscoveryStep.VALUATION_PUBLISH:
             publisher = _require_dependency(
@@ -801,6 +896,7 @@ class ValuationDiscoveryStepWorker:
                 quant_run_id=str(getattr(quant_run, "quant_run_id", "")),
                 quant_results=getattr(quant_run, "results", ()),
                 agent_run_id=_agent_run_id_from_run(run),
+                recommendation_result=self._fusion_result_artifact(run, artifacts),
             ),
         )
 
@@ -847,9 +943,16 @@ class ValuationDiscoveryStepWorker:
         """
         if "quant_run" in artifacts:
             return artifacts["quant_run"]
+        if self._dependencies.ml_quant_worker is not None:
+            ml_result = self._ml_quant_result_artifact(run, artifacts)
+            loader = getattr(self._dependencies.quant_service, "load_run", None)
+            if not callable(loader):
+                raise RuntimeError("quant service does not support run recovery")
+            artifacts["quant_run"] = loader(str(ml_result.quant_run_id))
+            return artifacts["quant_run"]
         quant_run_id = self._prior_output_id(
             run.run_id,
-            ValuationDiscoveryStep.QUANT_RUN,
+            ValuationDiscoveryStep.ML_QUANT_WORKER,
             "quant",
         )
         loader = getattr(self._dependencies.quant_service, "load_run", None)
@@ -857,6 +960,133 @@ class ValuationDiscoveryStepWorker:
             raise RuntimeError("quant service does not support run recovery")
         artifacts["quant_run"] = loader(quant_run_id)
         return artifacts["quant_run"]
+
+    def _ml_quant_result_artifact(
+        self,
+        run: OrchestrationRun,
+        artifacts: dict[str, Any],
+    ) -> Any:
+        """Return or reload the durable MLQuantWorker result."""
+        if "ml_quant_result" in artifacts:
+            return artifacts["ml_quant_result"]
+        worker = _require_dependency(
+            self._dependencies.ml_quant_worker,
+            "ML quant worker",
+        )
+        try:
+            artifact_id = self._prior_output_id(
+                run.run_id,
+                ValuationDiscoveryStep.ML_QUANT_WORKER,
+                "ml-quant",
+            )
+            artifacts["ml_quant_result"] = worker.load(artifact_id)
+        except RuntimeError as exc:
+            if "invalid step output reference" not in str(exc):
+                raise
+            quant_run_id = self._prior_output_id(
+                run.run_id,
+                ValuationDiscoveryStep.ML_QUANT_WORKER,
+                "quant",
+            )
+            loader = getattr(self._dependencies.quant_service, "load_run", None)
+            materialize = getattr(worker, "materialize_existing", None)
+            if not callable(loader) or not callable(materialize):
+                raise RuntimeError("legacy quant output cannot be upgraded") from exc
+            quant_run = loader(quant_run_id)
+            artifacts["ml_quant_result"] = materialize(
+                orchestration_run_id=run.run_id,
+                scope_version_id=run.scope_version_id or "",
+                decision_at=_decision_at_from_run(run),
+                quant_run=quant_run,
+                profile=_quant_profile_from_run(run),
+            )
+        return artifacts["ml_quant_result"]
+
+    def _catalyst_result_artifact(
+        self,
+        run: OrchestrationRun,
+        artifacts: dict[str, Any],
+    ) -> Any:
+        """Return or reload the durable EarningsCatalystWorker result."""
+        if "catalyst_result" in artifacts:
+            return artifacts["catalyst_result"]
+        worker = _require_dependency(
+            self._dependencies.earnings_catalyst_worker,
+            "earnings catalyst worker",
+        )
+        try:
+            artifact_id = self._prior_output_id(
+                run.run_id,
+                ValuationDiscoveryStep.EARNINGS_CATALYST_WORKER,
+                "earnings-catalyst",
+            )
+            artifacts["catalyst_result"] = worker.load(artifact_id)
+        except RuntimeError as exc:
+            if "invalid step output reference" not in str(exc):
+                raise
+            materialize = getattr(worker, "materialize_existing", None)
+            if not callable(materialize):
+                raise RuntimeError("legacy AI review output cannot be upgraded") from exc
+            artifacts["catalyst_result"] = materialize(
+                orchestration_run_id=run.run_id,
+                scope_version_id=run.scope_version_id or "",
+                decision_at=_decision_at_from_run(run),
+                context_snapshot_ids=self._context_ids_artifact(
+                    run,
+                    artifacts,
+                    scope_version_id=run.scope_version_id or "",
+                ),
+            )
+        return artifacts["catalyst_result"]
+
+    def _fusion_result_artifact(
+        self,
+        run: OrchestrationRun,
+        artifacts: dict[str, Any],
+    ) -> Any | None:
+        """Return fusion output, lazily upgrading runs paused on the legacy DAG."""
+        if "fusion_result" in artifacts:
+            return artifacts["fusion_result"]
+        if self._dependencies.recommendation_fusion_worker is None:
+            return None
+        existing_step = self._dependencies.repository.inner.get_latest_step_event(
+            run.run_id,
+            ValuationDiscoveryStep.RECOMMENDATION_FUSION_WORKER.value,
+        )
+        if existing_step is not None:
+            artifact_id = self._prior_output_id(
+                run.run_id,
+                ValuationDiscoveryStep.RECOMMENDATION_FUSION_WORKER,
+                "recommendation-fusion",
+            )
+            artifacts["fusion_result"] = self._dependencies.recommendation_fusion_worker.load(
+                artifact_id
+            )
+            return artifacts["fusion_result"]
+
+        # A rolling upgrade can observe an old run where AI_DELTA_REVIEW has
+        # already succeeded and VALUATION_PUBLISH or DASHBOARD_REFRESH is the
+        # pending step. Rehydrate the old quant/review outputs and create only
+        # the newly introduced fusion boundary; neither upstream worker reruns.
+        result = self._dependencies.recommendation_fusion_worker.run(
+            orchestration_run_id=run.run_id,
+            scope_version_id=run.scope_version_id or "",
+            decision_at=_decision_at_from_run(run),
+            quant_result=self._ml_quant_result_artifact(run, artifacts),
+            catalyst_result=self._catalyst_result_artifact(run, artifacts),
+        )
+        output_ref = _reference("recommendation-fusion", result)
+        recovered_at = _utc_now()
+        self._dependencies.repository.append_step_event(
+            _recovered_step_event(
+                run,
+                ValuationDiscoveryStep.RECOMMENDATION_FUSION_WORKER,
+                output_ref=output_ref,
+                now=recovered_at,
+            )
+        )
+        artifacts["fusion_result"] = result
+        return artifacts["fusion_result"]
 
     def _news_refresh_run_id(
         self,
@@ -991,6 +1221,9 @@ class ValuationDiscoveryStepWorker:
         """
         if "review_summary" in artifacts:
             return artifacts["review_summary"]
+        if self._dependencies.earnings_catalyst_worker is not None:
+            artifacts["review_summary"] = self._catalyst_result_artifact(run, artifacts)
+            return artifacts["review_summary"]
         reviewer = _require_dependency(
             self._dependencies.ai_review_service,
             "AI delta review service",
@@ -1027,6 +1260,16 @@ class ValuationDiscoveryStepWorker:
             run_id,
             step.value,
         )
+        if event is None:
+            legacy_step = next(
+                (legacy for legacy, canonical in LEGACY_STEP_MAP.items() if canonical is step),
+                None,
+            )
+            if legacy_step is not None:
+                event = self._dependencies.repository.inner.get_latest_step_event(
+                    run_id,
+                    legacy_step.value,
+                )
         if event is None or event.state is not StepState.SUCCEEDED or not event.output_ref:
             raise RuntimeError(f"required step output missing: {step.value}")
         expected = f"{prefix}:"
@@ -1101,6 +1344,33 @@ def _required_artifact(artifacts: dict[str, Any], name: str) -> Any:
     return artifacts[name]
 
 
+def _supported_kwargs(callable_: Any, values: dict[str, Any]) -> dict[str, Any]:
+    """Pass new profile inputs while retaining narrow legacy test/service adapters."""
+    signature = inspect.signature(callable_)
+    if any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    ):
+        return values
+    return {key: value for key, value in values.items() if key in signature.parameters}
+
+
+def _quant_profile_from_run(run: OrchestrationRun) -> dict[str, Any]:
+    """Return the profile frozen by ScheduledAgentRuntimeRunner for this run."""
+    profile = run.metadata_json.get("quant_agent_strategy_profile")
+    strategy = run.metadata_json.get("quant_strategy")
+    profile_payload = dict(profile) if isinstance(profile, dict) else {}
+    if isinstance(strategy, dict):
+        profile_payload["quant_strategy"] = dict(strategy)
+    return profile_payload
+
+
+def _quant_strategy_metadata_from_run(run: OrchestrationRun) -> dict[str, Any] | None:
+    """Return the selected strategy metadata that controls actual quant serving."""
+    value = run.metadata_json.get("quant_strategy")
+    return dict(value) if isinstance(value, dict) and value else None
+
+
 def _reference(prefix: str, value: Any) -> str:
     """Build a bounded non-secret output reference.
 
@@ -1112,6 +1382,7 @@ def _reference(prefix: str, value: Any) -> str:
         str: .
     """
     for attribute in (
+        "artifact_id",
         "version_id",
         "snapshot_id",
         "run_id",
@@ -1167,6 +1438,34 @@ def _pending_event(
         input_ref=f"scope:{run.scope_version_id}",
         trace_id=run.trace_id,
         started_at=now,
+        created_at=now,
+    )
+
+
+def _recovered_step_event(
+    run: OrchestrationRun,
+    step: ValuationDiscoveryStep,
+    *,
+    output_ref: str,
+    now: datetime,
+) -> StepAttempt:
+    """Record a newly introduced boundary materialized from legacy outputs."""
+    return StepAttempt(
+        run_id=run.run_id,
+        step_id=step.value,
+        attempt_no=1,
+        state_seq=0,
+        state=StepState.SUCCEEDED,
+        input_payload={
+            "scope_version_id": run.scope_version_id,
+            "step": step.value,
+            "recovered_from_legacy_dag": True,
+        },
+        input_ref=f"scope:{run.scope_version_id}",
+        output_ref=output_ref,
+        trace_id=run.trace_id,
+        started_at=now,
+        finished_at=now,
         created_at=now,
     )
 

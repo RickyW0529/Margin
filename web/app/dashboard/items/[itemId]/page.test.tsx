@@ -11,6 +11,7 @@ import { LanguageProvider } from "@/lib/i18n";
 import RecommendationDetailPage from "./page";
 
 vi.mock("@/lib/api", () => ({
+  fetchEvidenceDetail: vi.fn(),
   fetchResearchItemDetailV2: vi.fn(),
 }));
 
